@@ -37,3 +37,4 @@ npm run build
 - PTY 终端会话
 - 多 Agent 工作台 UI
 - 会话档案、项目文件、模型配置、技能管理和 Worktree 入口
+- MCP 配置预览，不写入真实配置文件
