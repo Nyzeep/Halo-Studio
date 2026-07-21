@@ -1,5 +1,6 @@
-import { Activity, Database, KeyRound, Network } from "lucide-react";
+import { Activity, Database, KeyRound } from "lucide-react";
 import type { AgentInfo, TerminalSessionInfo } from "../../shared/agents";
+import { McpPreviewPanel } from "./McpPreviewPanel";
 
 interface InspectorPanelProps {
   agents: AgentInfo[];
@@ -28,15 +29,7 @@ export function InspectorPanel({ agents, activeSession }: InspectorPanelProps) {
         </div>
       </section>
 
-      <section className="mt-6 space-y-3">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
-          <Network size={16} />
-          MCP
-        </div>
-        <div className="rounded border border-dashed border-halo-line p-3 text-sm text-slate-500">
-          MCP 注册中心将在下一阶段接入。
-        </div>
-      </section>
+      <McpPreviewPanel />
 
       <section className="mt-6 grid gap-3">
         <div className="flex items-center gap-2 rounded border border-halo-line bg-halo-panelSoft p-3 text-sm text-slate-300">

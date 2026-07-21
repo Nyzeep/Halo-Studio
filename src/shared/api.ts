@@ -1,4 +1,15 @@
 import type { AgentId, AgentInfo, TerminalSessionInfo } from "./agents.js";
+import type {
+  ConfigRollbackRequest,
+  ConfigRollbackResult,
+  ConfigBackupEntry,
+  ConfirmedConfigWriteRequest,
+  ConfigWriteRequest,
+  ConfigWriteResult,
+  RealConfigWritePlan,
+  RealConfigWritePlanRequest
+} from "./config.js";
+import type { McpConfigPreview, McpServerConfig } from "./mcp.js";
 
 export interface StartSessionRequest {
   agentId: AgentId;
@@ -8,6 +19,17 @@ export interface StartSessionRequest {
 export interface HaloApi {
   agents: {
     detectAll(): Promise<AgentInfo[]>;
+  };
+  config: {
+    applyDemoWrite(request: ConfigWriteRequest): Promise<ConfigWriteResult>;
+    applyConfirmedWrite(request: ConfirmedConfigWriteRequest): Promise<ConfigWriteResult>;
+    listDemoBackups(targetPath: string): Promise<ConfigBackupEntry[]>;
+    planRealWrite(request: RealConfigWritePlanRequest): Promise<RealConfigWritePlan>;
+    rollbackWrite(request: ConfigRollbackRequest): Promise<ConfigRollbackResult>;
+  };
+  mcp: {
+    planProjectMcpWrite(workspaceRoot: string, preview: McpConfigPreview): Promise<RealConfigWritePlan>;
+    previewConfig(server: McpServerConfig): Promise<McpConfigPreview[]>;
   };
   sessions: {
     start(request: StartSessionRequest): Promise<TerminalSessionInfo>;

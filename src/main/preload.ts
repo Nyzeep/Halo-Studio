@@ -5,6 +5,17 @@ const api: HaloApi = {
   agents: {
     detectAll: () => ipcRenderer.invoke("agents:detectAll")
   },
+  config: {
+    applyDemoWrite: (request) => ipcRenderer.invoke("config:applyDemoWrite", request),
+    applyConfirmedWrite: (request) => ipcRenderer.invoke("config:applyConfirmedWrite", request),
+    listDemoBackups: (targetPath) => ipcRenderer.invoke("config:listDemoBackups", targetPath),
+    planRealWrite: (request) => ipcRenderer.invoke("config:planRealWrite", request),
+    rollbackWrite: (request) => ipcRenderer.invoke("config:rollbackWrite", request)
+  },
+  mcp: {
+    planProjectMcpWrite: (workspaceRoot, preview) => ipcRenderer.invoke("mcp:planProjectWrite", workspaceRoot, preview),
+    previewConfig: (server) => ipcRenderer.invoke("mcp:previewConfig", server)
+  },
   sessions: {
     start: (request) => ipcRenderer.invoke("sessions:start", request),
     stop: (sessionId) => ipcRenderer.invoke("sessions:stop", sessionId),
