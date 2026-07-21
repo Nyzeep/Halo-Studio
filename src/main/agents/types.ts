@@ -1,4 +1,4 @@
-import type { AgentId, AgentInfo, AgentIntegrationMode } from "../../shared/agents";
+import type { AgentId, AgentInfo, AgentIntegrationMode } from "../../shared/agents.js";
 
 export interface CommandProbe {
   commandExists(command: string): Promise<boolean>;

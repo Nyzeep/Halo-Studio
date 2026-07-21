@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createAgentRegistry } from "../main/agents/registry";
+import { PtyManager } from "../main/pty/ptyManager";
 
 describe("Agent Registry", () => {
   it("registers the four supported agents", () => {
@@ -24,5 +25,13 @@ describe("Agent Registry", () => {
     expect(agents).toHaveLength(4);
     expect(agents.every((agent) => agent.status === "missing")).toBe(true);
     expect(agents[0]?.installHint).toContain("未检测到");
+  });
+});
+
+describe("PTY Manager", () => {
+  it("starts with no active sessions", () => {
+    const manager = new PtyManager({ onData: () => undefined, onExit: () => undefined });
+
+    expect(manager.list()).toEqual([]);
   });
 });

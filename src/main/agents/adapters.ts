@@ -1,4 +1,4 @@
-import type { AgentAdapter, AgentAdapterDefinition, CommandProbe } from "./types";
+import type { AgentAdapter, AgentAdapterDefinition, CommandProbe } from "./types.js";
 
 const definitions: AgentAdapterDefinition[] = [
   {

@@ -1,7 +1,7 @@
-import type { AgentInfo } from "../../shared/agents";
-import { createAgentAdapters } from "./adapters";
-import { commandExists, readVersion } from "./detect";
-import type { AgentAdapter, CommandProbe } from "./types";
+import type { AgentInfo } from "../../shared/agents.js";
+import { createAgentAdapters } from "./adapters.js";
+import { commandExists, readVersion } from "./detect.js";
+import type { AgentAdapter, CommandProbe } from "./types.js";
 
 export class AgentRegistry {
   constructor(
