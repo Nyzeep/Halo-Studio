@@ -2,6 +2,7 @@ import type { AgentId, AgentInfo, TerminalSessionInfo } from "./agents.js";
 import type {
   ConfigRollbackRequest,
   ConfigRollbackResult,
+  ConfigBackupEntry,
   ConfigWriteRequest,
   ConfigWriteResult
 } from "./config.js";
@@ -18,6 +19,7 @@ export interface HaloApi {
   };
   config: {
     applyDemoWrite(request: ConfigWriteRequest): Promise<ConfigWriteResult>;
+    listDemoBackups(targetPath: string): Promise<ConfigBackupEntry[]>;
     rollbackWrite(request: ConfigRollbackRequest): Promise<ConfigRollbackResult>;
   };
   mcp: {

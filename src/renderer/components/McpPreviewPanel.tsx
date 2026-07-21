@@ -1,17 +1,37 @@
-import { ChevronRight, FileCode2, ShieldCheck } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { ConfigRollbackRequest, ConfigWriteResult } from "../../shared/config";
+import { ChevronRight, FileCode2, History, ShieldCheck } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { ConfigBackupEntry, ConfigRollbackRequest, ConfigWriteResult } from "../../shared/config";
 import { useMcpPreview } from "../hooks/useMcpPreview";
 
 export function McpPreviewPanel() {
   const { previews, loading, server } = useMcpPreview();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("codex-cli");
   const [writeResult, setWriteResult] = useState<ConfigWriteResult | null>(null);
+  const [backups, setBackups] = useState<ConfigBackupEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const selectedPreview = useMemo(
     () => previews.find((preview) => preview.agentId === selectedAgentId) ?? previews[0],
     [previews, selectedAgentId]
   );
+  const demoTargetPath = selectedPreview ? `${selectedPreview.agentId}-${selectedPreview.targetPath}` : "";
+
+  useEffect(() => {
+    if (!demoTargetPath) {
+      setBackups([]);
+      return;
+    }
+
+    let active = true;
+    window.halo.config.listDemoBackups(demoTargetPath).then((result) => {
+      if (active) {
+        setBackups(result);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [demoTargetPath, writeResult]);
 
   async function applyDemoWrite() {
     if (!selectedPreview) {
@@ -21,7 +41,7 @@ export function McpPreviewPanel() {
     setBusy(true);
     try {
       const result = await window.halo.config.applyDemoWrite({
-        targetPath: `${selectedPreview.agentId}-${selectedPreview.targetPath}`,
+        targetPath: demoTargetPath,
         nextContent: selectedPreview.content,
         reason: `${selectedPreview.agentName} MCP 预览`
       });
@@ -41,6 +61,20 @@ export function McpPreviewPanel() {
       const request: ConfigRollbackRequest = {
         targetPath: writeResult.targetPath,
         backupPath: writeResult.backupPath
+      };
+      await window.halo.config.rollbackWrite(request);
+      setWriteResult(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rollbackBackup(backup: ConfigBackupEntry) {
+    setBusy(true);
+    try {
+      const request: ConfigRollbackRequest = {
+        targetPath: backup.targetPath,
+        backupPath: backup.backupPath
       };
       await window.halo.config.rollbackWrite(request);
       setWriteResult(null);
@@ -102,6 +136,11 @@ export function McpPreviewPanel() {
               </div>
 
               <div className="rounded border border-halo-line bg-halo-panelSoft p-3">
+                <div className="mb-3 rounded border border-halo-line bg-[#090d12] px-3 py-2 text-xs text-slate-500">
+                  <div className="text-slate-400">安全演示目标</div>
+                  <div className="mt-1 break-all">{demoTargetPath}</div>
+                </div>
+
                 <div className="flex gap-2">
                   <button
                     className="flex-1 rounded bg-halo-cyan px-3 py-2 text-xs font-medium text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
@@ -129,6 +168,36 @@ export function McpPreviewPanel() {
                   </div>
                 ) : (
                   <div className="mt-3 text-xs text-slate-500">写入按钮只会生成 Halo 演示文件，不会改动真实 Agent 配置。</div>
+                )}
+              </div>
+
+              <div className="rounded border border-halo-line bg-halo-panelSoft p-3">
+                <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
+                  <History size={14} />
+                  备份历史
+                </div>
+                {backups.length === 0 ? (
+                  <div className="mt-3 text-xs text-slate-500">暂无备份。写入演示文件后会在这里出现恢复记录。</div>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {backups.map((backup) => (
+                      <div key={backup.backupPath} className="rounded border border-halo-line bg-[#090d12] p-2">
+                        <div className="break-all text-xs text-slate-400">{backup.backupPath}</div>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <span className="text-xs text-slate-500">
+                            {new Date(backup.createdAt).toLocaleString()} · {backup.size} B
+                          </span>
+                          <button
+                            className="rounded border border-halo-line px-2 py-1 text-xs text-slate-300 disabled:cursor-not-allowed disabled:text-slate-600"
+                            disabled={busy}
+                            onClick={() => void rollbackBackup(backup)}
+                          >
+                            恢复
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>

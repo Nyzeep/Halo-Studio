@@ -7,6 +7,7 @@ const api: HaloApi = {
   },
   config: {
     applyDemoWrite: (request) => ipcRenderer.invoke("config:applyDemoWrite", request),
+    listDemoBackups: (targetPath) => ipcRenderer.invoke("config:listDemoBackups", targetPath),
     rollbackWrite: (request) => ipcRenderer.invoke("config:rollbackWrite", request)
   },
   mcp: {

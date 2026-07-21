@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import { createAgentRegistry } from "./agents/registry.js";
-import { applyConfigWrite, rollbackConfigWrite } from "./config/configFileService.js";
+import { applyConfigWrite, listConfigBackups, rollbackConfigWrite } from "./config/configFileService.js";
 import { createMcpConfigPreviews } from "./mcp/configPreview.js";
 import { PtyManager } from "./pty/ptyManager.js";
 
@@ -18,13 +18,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
 
   ipcMain.handle("agents:detectAll", () => registry.detectAll());
   ipcMain.handle("config:applyDemoWrite", (_event, request) => {
-    const previewDir = path.join(app.getPath("userData"), "preview-configs");
-    const safeName = path.basename(request.targetPath).replace(/[^\w.-]/g, "_");
     return applyConfigWrite({
       ...request,
-      targetPath: path.join(previewDir, safeName || "mcp-preview.txt")
+      targetPath: resolveDemoTargetPath(app.getPath("userData"), request.targetPath)
     });
   });
+  ipcMain.handle("config:listDemoBackups", (_event, targetPath: string) =>
+    listConfigBackups(resolveDemoTargetPath(app.getPath("userData"), targetPath))
+  );
   ipcMain.handle("config:rollbackWrite", (_event, request) => rollbackConfigWrite(request));
   ipcMain.handle("mcp:previewConfig", (_event, server) => createMcpConfigPreviews(server));
   ipcMain.handle("sessions:start", (_event, request) => ptyManager.start(request));
@@ -33,4 +34,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
   ipcMain.handle("sessions:resize", (_event, sessionId: string, cols: number, rows: number) =>
     ptyManager.resize(sessionId, cols, rows)
   );
+}
+
+function resolveDemoTargetPath(userDataPath: string, requestedTargetPath: string) {
+  const previewDir = path.join(userDataPath, "preview-configs");
+  const safeName = path.basename(requestedTargetPath).replace(/[^\w.-]/g, "_");
+  return path.join(previewDir, safeName || "mcp-preview.txt");
 }
