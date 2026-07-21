@@ -1,160 +1,162 @@
-# Halo Studio Design
+# Halo Studio 设计文档
 
-Date: 2026-07-21
+日期：2026-07-21
 
-## Purpose
+## 项目目标
 
-Halo Studio is a Windows-first desktop workbench for developers who use multiple coding agents in the same project. The first release will integrate OpenCode, Pi, Codex CLI, and Claude Code behind one polished desktop shell. It should make each tool easy to launch, configure, compare, and hand off to without forcing the user to remember four sets of config files, MCP formats, credentials, and command-line flags.
+Halo Studio 是一个 Windows 优先的本地桌面开发工作台，用来统一管理和使用多个 AI 编程 Agent。第一版目标是把 OpenCode、Pi、Codex CLI、Claude Code 集成到一个漂亮、稳定、实用的桌面壳里，让用户可以在一个软件中启动、切换、配置、对比和转交任务，而不需要手动记住四套 CLI 命令、配置路径、MCP 格式、账号凭据和环境变量。
 
-The product should not try to replace the official CLIs. The durable value is the orchestration layer around them: a beautiful UI, reliable terminal hosting, unified configuration, safe profile switching, MCP management, and agent-to-agent handoff.
+Halo Studio 不应该重写这些官方 CLI。它真正有价值的地方，是围绕官方 CLI 建立一层可靠的编排能力：现代化 UI、稳定终端托管、统一配置中心、安全 Profile 切换、MCP 管理，以及后续的 Agent 互调和任务交接。
 
-## Reference Inputs
+## 参考输入
 
-The design is informed by these projects and docs:
+设计参考了以下项目和官方文档：
 
-- OpenCode repository and docs: `https://github.com/anomalyco/opencode`, `https://dev.opencode.ai/docs/config`, `https://dev.opencode.ai/docs/mcp-servers`
-- Pi repository and docs: `https://github.com/earendil-works/pi`, `https://pi.dev/docs/latest/rpc`
-- cc-switch repository: `https://github.com/farion1231/cc-switch`
-- Codex CLI config and MCP docs: `https://developers.openai.com/codex/config-reference`, `https://developers.openai.com/codex/mcp`
-- Claude Code settings and MCP docs: `https://docs.anthropic.com/en/docs/claude-code/settings`, `https://docs.anthropic.com/en/docs/claude-code/mcp`
+- OpenCode 仓库与文档：`https://github.com/anomalyco/opencode`、`https://dev.opencode.ai/docs/config`、`https://dev.opencode.ai/docs/mcp-servers`
+- Pi 仓库与文档：`https://github.com/earendil-works/pi`、`https://pi.dev/docs/latest/rpc`
+- cc-switch 仓库：`https://github.com/farion1231/cc-switch`
+- Codex CLI 配置与 MCP 文档：`https://developers.openai.com/codex/config-reference`、`https://developers.openai.com/codex/mcp`
+- Claude Code 设置与 MCP 文档：`https://docs.anthropic.com/en/docs/claude-code/settings`、`https://docs.anthropic.com/en/docs/claude-code/mcp`
 
-These references should be rechecked during implementation because each vendor's CLI and configuration format can change.
+这些外部项目和文档在开发时需要定期复查，因为各厂商 CLI 和配置格式都有更新风险。
 
-## Product Principles
+## 产品原则
 
-1. Keep the official CLIs as the execution source of truth.
-2. Use adapters instead of hard-coded vendor logic in the UI.
-3. Treat configuration writes as sensitive operations with preview, backup, validation, and rollback.
-4. Make terminal mode reliable before building richer native chat integrations.
-5. Prefer local-first storage and Windows-native credential protection.
-6. Build a practical developer workbench, not a marketing dashboard.
+1. 官方 CLI 是执行来源，Halo Studio 负责统一入口和编排。
+2. UI 不直接写死厂商逻辑，所有厂商能力通过 Agent Adapter 暴露。
+3. 配置写入必须有预览、备份、校验和回滚，不能粗暴覆盖。
+4. 第一阶段先保证终端模式可靠，再做更高级的原生聊天或 RPC 集成。
+5. 数据本地优先，敏感凭据使用 Windows 原生安全能力保护。
+6. UI 做成开发者每天会用的工作台，不做营销式落地页。
 
-## Recommended Architecture
+## 推荐技术架构
 
-Halo Studio should use Electron, React, TypeScript, and Node.js for the first Windows release.
+第一版推荐使用 Electron、React、TypeScript 和 Node.js。
 
-Electron is the recommended shell because Halo must run local CLIs, manage pseudo-terminals, stream output, send interrupts, resize terminal sessions, read and write user-level config files, and package cleanly for Windows. The React UI can move quickly, while the Electron main process can host the privileged local orchestration services.
+选择 Electron 的原因很直接：Halo Studio 的核心能力是启动本地 CLI、托管伪终端、读取和写入本地配置、传递 Ctrl+C、处理窗口 resize、管理环境变量、托盘和 Windows 安装包。这些能力在 Electron + Node 生态里最成熟，尤其适合配合 `node-pty` 和 `xterm.js` 做真实终端集成。
 
-Tauri remains a possible later optimization if app size and memory become more important than CLI integration speed. It is not the preferred first implementation path because Windows pseudo-terminal handling and Node ecosystem integration are central to this product.
+Tauri 可以作为后续优化方向。如果未来重点变成更小体积和更低内存占用，可以再评估迁移或做 Tauri 版本。但第一版不推荐从 Tauri 开始，因为多 CLI 伪终端和 Node 工具链集成会更折腾。
 
-## Runtime Layers
+## 运行时分层
 
-### Desktop Shell
+### 桌面壳
 
-The desktop shell owns the window lifecycle, menus, tray, file dialogs, auto-start behavior, and update flow. It should expose a narrow IPC API to the renderer and keep direct filesystem and process access out of the React UI.
+桌面壳负责窗口生命周期、菜单、托盘、文件选择、开机行为、更新流程，以及所有需要本地权限的服务。React 渲染层不能直接访问文件系统和进程能力，必须通过受控 IPC 调用主进程服务。
 
-Initial responsibilities:
+第一版职责：
 
-- Create the main app window.
-- Manage Windows tray quick actions.
-- Launch and stop agent sessions.
-- Expose safe IPC commands for config reads and writes.
-- Store app settings in the user data directory.
+- 创建主窗口。
+- 管理 Windows 托盘快捷操作。
+- 启动和停止 Agent 会话。
+- 暴露安全 IPC 接口，用于配置读取、配置写入和会话管理。
+- 把 Halo Studio 自己的设置保存在应用数据目录中。
 
-### Renderer UI
+### 前端 UI
 
-The UI is a React app using Vite, TypeScript, Tailwind CSS, Radix primitives, shadcn-style components, and lucide icons.
+UI 使用 React、Vite、TypeScript、Tailwind CSS、Radix primitives、shadcn 风格组件和 lucide 图标。
 
-The first screen should be the actual workbench:
+应用启动后直接进入工作台，不做介绍页。
 
-- Left rail: workspaces, agent switcher, profile switcher.
-- Center: terminal tabs and future native chat tabs.
-- Right panel: session context, config preview, MCP servers, command palette results.
-- Bottom/status area: active agent, model, workspace, token/source status when available.
+主要区域：
 
-The design should feel like a modern local IDE companion: dense, calm, high-contrast enough for long coding sessions, and fast to scan.
+- 左侧栏：工作区选择、Agent 列表、Profile 切换、快速启动。
+- 中间区：多标签终端、未来的原生聊天标签、配置 diff 预览。
+- 右侧面板：当前会话上下文、配置状态、MCP 服务器、常用指令。
+- 底部状态栏：当前 Agent、模型、工作区、Profile、运行状态。
 
-### Agent Adapter Layer
+视觉风格应该接近现代 IDE 伴侣：信息密度高、层次清楚、适合长时间编码、少装饰、易扫描。
 
-Each vendor gets an adapter with the same interface. The UI talks only to the adapter registry.
+### Agent Adapter 层
 
-Adapter responsibilities:
+每个厂商一个 Adapter，UI 只和 Adapter Registry 通信，不直接依赖某个 CLI 的实现细节。
 
-- Detect whether the CLI is installed.
-- Read version and capability info.
-- Provide launch command templates.
-- Start terminal sessions.
-- Locate known config files.
-- Read and validate current config.
-- Generate vendor-specific config patches.
-- Report supported integration modes.
+Adapter 负责：
 
-Initial adapters:
+- 检测 CLI 是否安装。
+- 读取版本和能力信息。
+- 提供启动命令模板。
+- 启动终端会话。
+- 定位已知配置文件。
+- 读取和校验当前配置。
+- 生成厂商专属配置补丁。
+- 报告支持的集成模式。
+
+第一版 Adapter：
 
 - `claude-code`
 - `codex-cli`
 - `opencode`
 - `pi`
 
-The adapter interface should support multiple modes:
+Adapter 接口需要支持以下模式：
 
-- `terminal`: run the official CLI in a PTY.
-- `rpc`: use a structured local protocol when supported.
-- `mcp`: expose or consume local MCP tools.
-- `config-only`: manage configuration even when no runtime session is active.
+- `terminal`：在 PTY 中运行官方 CLI。
+- `rpc`：当厂商提供结构化本地协议时使用。
+- `mcp`：暴露或消费本地 MCP 工具。
+- `config-only`：即使没有运行会话，也允许管理配置。
 
-### PTY Session Manager
+### PTY 会话管理器
 
-The PTY manager hosts real terminal sessions for each agent. It should use Node PTY support on Windows ConPTY and stream data to `xterm.js`.
+PTY 会话管理器负责托管真实终端会话。Windows 下使用 ConPTY 能力，通过 `node-pty` 把终端输入输出连接到前端 `xterm.js`。
 
-Core requirements:
+核心要求：
 
-- Create, resize, focus, pause, stop, and restart sessions.
-- Preserve session metadata in local storage.
-- Support Ctrl+C and process termination.
-- Support multiple tabs per workspace.
-- Attach launch environment variables per profile.
-- Write session logs with opt-in retention.
+- 创建、resize、聚焦、停止、重启会话。
+- 保存会话元数据。
+- 支持 Ctrl+C 和进程终止。
+- 每个工作区支持多个终端标签。
+- 支持按 Profile 注入启动环境变量。
+- 会话日志默认关闭，用户选择后才保留。
 
-Terminal mode is the compatibility baseline. If a richer API fails, the user can always fall back to the official CLI in the terminal panel.
+终端模式是兼容性底线。即使未来某个 Agent 的原生 API 集成失败，用户仍然可以在 Halo 的终端面板里正常使用官方 CLI。
 
-### Configuration Service
+### 配置服务
 
-Halo keeps its own normalized configuration model and compiles that model into vendor-specific files.
+Halo Studio 保存一份自己的标准化配置模型，再把它编译成各厂商自己的配置文件。
 
-The service must never blindly overwrite a vendor file. Every write follows this flow:
+配置服务禁止无脑覆盖厂商文件。每次写入都必须经过以下流程：
 
-1. Discover target file.
-2. Parse current file using a structured parser.
-3. Build a minimal patch.
-4. Validate the generated file.
-5. Show a diff preview in the UI.
-6. Write a timestamped backup.
-7. Write atomically.
-8. Verify by reading the file again.
-9. Offer rollback when verification fails.
+1. 发现目标文件。
+2. 使用结构化 parser 读取当前文件。
+3. 生成最小补丁。
+4. 校验生成结果。
+5. 在 UI 中展示 diff 预览。
+6. 写入带时间戳的备份。
+7. 原子写入目标文件。
+8. 重新读取文件确认写入结果。
+9. 写入失败或校验失败时提供回滚。
 
-Supported config formats:
+支持的格式：
 
 - JSON
 - JSONC
 - TOML
-- environment variable templates
+- 环境变量模板
 
-The service should preserve unknown fields whenever possible.
+如果厂商配置文件里有 Halo 不认识的字段，必须尽量保留。
 
-### Credential Service
+### 凭据服务
 
-Sensitive credentials should not be stored in Halo's SQLite database or ordinary JSON settings. The Windows-first implementation should use Windows Credential Manager or DPAPI-backed secure storage through a well-maintained Node library.
+敏感凭据不能保存在 Halo 的 SQLite 数据库或普通 JSON 设置文件里。Windows 第一版应使用 Windows Credential Manager 或 DPAPI 支持的安全存储库。
 
-The credential service stores:
+凭据服务保存：
 
-- API keys
-- provider tokens
-- profile-specific secrets
-- optional environment variable values
+- API Key
+- Provider Token
+- Profile 专属密钥
+- 可选环境变量密钥
 
-The UI should clearly distinguish normal config from secrets. Secret values should be masked, revealable only on explicit user action, and never included in logs or exported config bundles by default.
+UI 必须清楚区分普通配置和敏感凭据。密钥默认掩码展示，只有用户明确操作时才允许临时显示。日志、配置导出和错误信息默认不能包含密钥。
 
-### MCP Registry
+### MCP 注册中心
 
-Halo should expose a unified MCP registry that can write to each supported agent's native config format.
+Halo Studio 提供统一 MCP 注册中心，再把统一模型写入每个 Agent 的原生配置格式。
 
-Normalized MCP server model:
+标准 MCP Server 模型：
 
 - `id`
 - `displayName`
-- `transport`: `stdio`, `sse`, `http`
+- `transport`：`stdio`、`sse`、`http`
 - `command`
 - `args`
 - `env`
@@ -164,20 +166,20 @@ Normalized MCP server model:
 - `scopes`
 - `targetAgents`
 
-Vendor mapping:
+厂商映射：
 
-- Claude Code: support project `.mcp.json`, CLI-scoped MCP commands, and user/local settings where appropriate.
-- Codex CLI: write `[mcp_servers.<name>]` entries in `~/.codex/config.toml` or project `.codex/config.toml`.
-- OpenCode: write the `mcp` object inside OpenCode JSON/JSONC config while respecting global and project config layering.
-- Pi: support the file locations and adapter flow exposed by Pi's MCP integration. If Pi's MCP support changes, prefer invoking Pi's documented adapter commands rather than guessing file structures.
+- Claude Code：支持项目 `.mcp.json`，以及必要时的 user/local scope 配置。
+- Codex CLI：写入 `~/.codex/config.toml` 或项目 `.codex/config.toml` 中的 `[mcp_servers.<name>]`。
+- OpenCode：写入 OpenCode JSON/JSONC 配置中的 `mcp` 对象，并尊重全局和项目配置分层。
+- Pi：优先使用 Pi 文档里提供的 MCP 文件位置和 adapter 流程。如果 Pi 的 MCP 支持变化，优先调用官方命令或文档方式，而不是猜测文件格式。
 
-The UI should show which agents each MCP server is enabled for and whether Halo can verify it.
+UI 需要显示每个 MCP Server 启用了哪些 Agent，以及 Halo 是否能验证它。
 
 ### Halo Broker
 
-Halo should include a local broker service in a later MVP phase. The broker exposes a local MCP server and optional HTTP/IPC APIs so one agent can call another through Halo.
+Halo Broker 是后续阶段的核心差异化能力。它是一个本地服务，可以暴露 MCP Server 和可选 HTTP/IPC API，让一个 Agent 通过 Halo 调用另一个 Agent。
 
-Example tools:
+示例工具：
 
 - `ask_codex`
 - `ask_claude`
@@ -187,107 +189,107 @@ Example tools:
 - `summarize_session`
 - `list_active_agents`
 
-The broker should pass summarized context rather than raw terminal logs by default. Full transcript sharing should require explicit user confirmation.
+Broker 默认只传递摘要上下文，不直接传递完整终端日志。完整 transcript 共享必须由用户明确确认。
 
-## Vendor Integration Notes
+## 厂商集成说明
 
 ### OpenCode
 
-OpenCode has its own configuration and MCP concepts, and should be treated as more than a generic shell command. Halo should detect OpenCode configuration files, respect layered config behavior, and avoid removing unknown fields.
+OpenCode 有自己的配置、Agent 和 MCP 概念，不能只当成普通 shell 命令。Halo 需要检测 OpenCode 配置文件，尊重配置分层，并避免删除未知字段。
 
-First release:
+第一版：
 
-- Launch OpenCode in terminal mode.
-- Read and patch OpenCode project/global config.
-- Manage OpenCode MCP entries.
-- Offer OpenCode command presets.
+- 用终端模式启动 OpenCode。
+- 读取和 patch OpenCode 的项目/全局配置。
+- 管理 OpenCode MCP 条目。
+- 提供常用 OpenCode 指令预设。
 
-Later:
+后续：
 
-- Surface OpenCode agent modes in the UI if stable.
-- Add deeper session metadata if OpenCode exposes a reliable local API.
+- 如果 OpenCode 的 Agent 模式稳定，暴露到 Halo UI。
+- 如果 OpenCode 提供可靠本地 API，增加更深的会话元数据展示。
 
 ### Pi
 
-Pi is the best candidate for an early native adapter because its docs describe an RPC mode over JSONL. Halo should support terminal mode first, then add RPC mode for richer UI interactions.
+Pi 是较适合早期做原生 Adapter 的 Agent，因为它的文档描述了基于 JSONL 的 RPC mode。第一版仍然先支持终端模式，后续再加入 RPC 原生聊天标签。
 
-First release:
+第一版：
 
-- Launch Pi in terminal mode.
-- Detect Pi installation and version.
-- Provide command presets.
-- Manage MCP configuration through documented Pi paths and commands.
+- 用终端模式启动 Pi。
+- 检测 Pi 安装状态和版本。
+- 提供 Pi 指令预设。
+- 通过 Pi 文档路径或命令管理 MCP 配置。
 
-Later:
+后续：
 
-- Add RPC-backed native chat tabs.
-- Render structured status, tool calls, and message events.
+- 增加 RPC 驱动的原生聊天界面。
+- 渲染结构化状态、工具调用和消息事件。
 
 ### Codex CLI
 
-Codex CLI should be integrated through terminal mode and config management first. The important early feature is safe MCP and profile management through `config.toml`.
+Codex CLI 第一版以终端模式和配置管理为主。早期重点是安全管理 `config.toml` 中的 MCP 和 Profile 相关配置。
 
-First release:
+第一版：
 
-- Launch Codex CLI in terminal mode.
-- Read and patch `~/.codex/config.toml` and project `.codex/config.toml` when present.
-- Manage MCP server entries.
-- Expose common model, sandbox, approval, and workspace presets where supported.
+- 用终端模式启动 Codex CLI。
+- 读取和 patch `~/.codex/config.toml`，以及存在时的项目 `.codex/config.toml`。
+- 管理 MCP Server 条目。
+- 在官方支持范围内暴露模型、sandbox、approval、workspace 等常用预设。
 
-Later:
+后续：
 
-- Add support for Codex MCP server mode if it becomes stable for cross-agent orchestration.
+- 如果 Codex MCP server mode 足够稳定，再接入跨 Agent 编排。
 
 ### Claude Code
 
-Claude Code needs careful config handling because it uses multiple config locations and scopes. Halo should treat account/profile switching as a sensitive feature and build backup/rollback from the beginning.
+Claude Code 的配置位置和 scope 较多，必须谨慎处理。Halo 需要把账号/Profile 切换当成敏感功能，从第一版就加入备份和回滚。
 
-First release:
+第一版：
 
-- Launch Claude Code in terminal mode.
-- Manage command presets and MCP entries.
-- Read and patch project `.mcp.json` and `.claude/settings*.json` files where appropriate.
-- Support profile switching with backups.
+- 用终端模式启动 Claude Code。
+- 管理常用指令和 MCP 条目。
+- 读取和 patch 项目 `.mcp.json` 与 `.claude/settings*.json`。
+- 支持带备份的 Profile 切换。
 
-Later:
+后续：
 
-- Add richer cc-switch-like profile snapshots.
-- Add import helpers for existing Claude Code providers, commands, and skills.
+- 增加更完整的 cc-switch 风格 Profile 快照。
+- 导入已有 Claude Code provider、commands、skills。
 
-## Data Storage
+## 数据存储
 
-Halo should use SQLite for local app state.
+Halo Studio 使用 SQLite 保存本地应用状态。
 
-Suggested tables:
+建议表：
 
-- `workspaces`: known project roots and display metadata.
-- `agents`: detected agent installations and versions.
-- `profiles`: named runtime/config profiles.
-- `profile_agents`: per-agent profile settings.
-- `mcp_servers`: normalized MCP registry.
-- `sessions`: terminal/native session records.
-- `config_snapshots`: backup metadata and restore pointers.
-- `command_presets`: reusable prompts and launch commands.
-- `audit_events`: config writes, restore actions, and sensitive operations without secret values.
+- `workspaces`：已知项目根目录和展示信息。
+- `agents`：检测到的 Agent 安装位置和版本。
+- `profiles`：命名运行/配置 Profile。
+- `profile_agents`：每个 Profile 下的 Agent 设置。
+- `mcp_servers`：标准化 MCP 注册表。
+- `sessions`：终端或原生会话记录。
+- `config_snapshots`：配置备份元数据和恢复指针。
+- `command_presets`：可复用 prompt 和启动命令。
+- `audit_events`：配置写入、恢复和敏感操作审计，不记录密钥。
 
-Large logs and backups should live as files, with SQLite storing paths and metadata.
+大型日志和备份文件不要塞进 SQLite。SQLite 只保存路径和元数据。
 
-## UI Information Architecture
+## UI 信息架构
 
-### Main Workbench
+### 主工作台
 
-The default view is not a landing page. It opens directly into the developer workbench.
+默认界面直接打开开发工作台，不做落地页。
 
-Primary zones:
+主要区域：
 
-- Left rail: workspace selector, agent list, profiles, quick launch.
-- Center tabs: terminal sessions, future native chats, diff previews.
-- Right inspector: selected session details, MCP server status, config panel, command presets.
-- Command palette: search actions, launch commands, switch profiles, add MCP server.
+- 左侧栏：工作区选择、Agent 列表、Profile、快速启动。
+- 中间标签区：终端会话、未来原生聊天、diff 预览。
+- 右侧检查器：当前会话详情、MCP 状态、配置面板、指令预设。
+- 命令面板：搜索动作、启动命令、切换 Profile、添加 MCP Server。
 
-### Configuration Center
+### 配置中心
 
-The configuration center should have tabs:
+配置中心包含：
 
 - Profiles
 - Agents
@@ -296,187 +298,189 @@ The configuration center should have tabs:
 - Backups
 - Diagnostics
 
-Each config write should show:
+每次配置写入都需要展示：
 
-- target agent
-- target file
+- 目标 Agent
+- 目标文件
 - scope
-- generated diff
-- backup path
-- validation status
+- 生成 diff
+- 备份路径
+- 校验状态
 
-### Visual Style
+### 视觉风格
 
-The UI should be modern but utilitarian. It should avoid oversized hero sections and decorative marketing layouts. Use compact panels, crisp separators, icons for tools, tabs for modes, toggles for enabled states, and menus for agent/profile choices.
+UI 应该现代、漂亮，但偏实用和工作流导向。避免大面积 hero、营销卡片和纯装饰布局。使用紧凑面板、清晰分隔线、工具图标、模式标签、启用状态开关，以及 Agent/Profile 菜单。
 
-The palette should avoid becoming a single-hue purple or slate app. A good starting palette is:
+建议配色：
 
-- neutral charcoal backgrounds
-- white and zinc text
-- cyan for active runtime state
-- amber for pending config changes
-- green for verified writes
-- red for destructive or failed actions
-- subtle violet only as a secondary accent
+- 中性深色背景
+- 白色和 zinc 色文本
+- cyan 表示活跃运行状态
+- amber 表示待应用配置
+- green 表示校验通过
+- red 表示危险或失败操作
+- violet 只作为少量次级强调色
 
-## MVP Scope
+整体不能做成单一紫色或单一深蓝灰主题。
 
-### Phase 0: Technical Spike
+## MVP 范围
 
-Goal: prove the desktop shell can reliably host Windows CLI agents.
+### Phase 0：技术验证
 
-Deliverables:
+目标：证明桌面壳可以在 Windows 上稳定托管 CLI Agent。
 
-- Electron app scaffold.
-- PTY-backed terminal panel.
-- Agent detection for four CLIs.
-- Manual launch of each available CLI.
-- Ctrl+C, resize, restart, and stop behavior.
+交付物：
 
-Exit criteria:
+- Electron 应用骨架。
+- PTY 终端面板。
+- 四个 CLI 的安装检测。
+- 手动启动可用 CLI。
+- Ctrl+C、resize、重启、停止行为。
 
-- At least one agent can run interactively in the app.
-- Missing agents show clear install/setup states.
-- PTY behavior is reliable enough for daily testing.
+验收标准：
 
-### Phase 1: Workbench MVP
+- 至少一个 Agent 可以在 app 内交互运行。
+- 未安装 Agent 有清晰提示。
+- PTY 行为足够稳定，可以进入日常测试。
 
-Goal: make Halo useful as a daily multi-agent launcher.
+### Phase 1：工作台 MVP
 
-Deliverables:
+目标：让 Halo 作为多 Agent 启动器已经可日常使用。
 
-- Workspace selector.
-- Agent switcher.
-- Multi-tab terminal sessions.
-- Command presets.
-- Local SQLite app state.
-- Basic settings screen.
+交付物：
 
-Exit criteria:
+- 工作区选择。
+- Agent 切换。
+- 多标签终端会话。
+- 指令预设。
+- 本地 SQLite 应用状态。
+- 基础设置页。
 
-- User can open a project, launch agents, switch sessions, and reuse prompts.
+验收标准：
 
-### Phase 2: Config and MCP Center
+- 用户可以打开项目、启动 Agent、切换会话并复用 prompt。
 
-Goal: unify the painful parts of multi-agent setup.
+### Phase 2：配置与 MCP 中心
 
-Deliverables:
+目标：统一多 Agent 使用中最麻烦的配置部分。
 
-- Normalized config model.
-- JSON/JSONC/TOML parsing and patching.
-- MCP registry UI.
-- Vendor-specific MCP writers.
-- Diff preview.
-- Backup and rollback.
-- Credential storage integration.
+交付物：
 
-Exit criteria:
+- 标准化配置模型。
+- JSON/JSONC/TOML 解析和 patch。
+- MCP 注册中心 UI。
+- 各厂商 MCP 写入器。
+- diff 预览。
+- 备份和回滚。
+- 凭据安全存储。
 
-- User can add one MCP server and enable it for supported agents without manually editing files.
+验收标准：
 
-### Phase 3: Profile Switching
+- 用户可以添加一个 MCP Server，并启用到支持的 Agent，无需手动编辑配置文件。
 
-Goal: provide cc-switch-like profile power across all supported agents.
+### Phase 3：Profile 切换
 
-Deliverables:
+目标：提供类似 cc-switch、但覆盖多个 Agent 的 Profile 能力。
 
-- Named profiles.
-- Per-agent launch env and config patches.
-- Secret-backed environment variables.
-- Quick switch from tray or command palette.
-- Config snapshot history.
+交付物：
 
-Exit criteria:
+- 命名 Profile。
+- 每个 Agent 的启动环境变量和配置 patch。
+- 由安全存储保护的环境变量密钥。
+- 托盘或命令面板快速切换。
+- 配置快照历史。
 
-- User can switch between at least two profiles and safely roll back.
+验收标准：
 
-### Phase 4: Broker and Native Integrations
+- 用户可以在至少两个 Profile 之间切换，并能安全回滚。
 
-Goal: make Halo more than a terminal multiplexer.
+### Phase 4：Broker 与原生集成
 
-Deliverables:
+目标：让 Halo 不只是终端复用器，而成为多 Agent 编排层。
 
-- Local Halo Broker MCP server.
-- Agent handoff tools.
-- Pi RPC native chat adapter.
-- Session summarization.
-- Cross-agent task handoff UI.
+交付物：
 
-Exit criteria:
+- 本地 Halo Broker MCP Server。
+- Agent 任务交接工具。
+- Pi RPC 原生聊天 Adapter。
+- 会话摘要。
+- 跨 Agent 任务交接 UI。
 
-- One agent can request a summarized handoff to another agent through Halo-controlled tooling.
+验收标准：
 
-## Testing Strategy
+- 一个 Agent 可以通过 Halo 控制的工具，把摘要上下文交接给另一个 Agent。
 
-The implementation should start with automated tests around the risky local services before polishing UI details.
+## 测试策略
 
-Required early tests:
+开发应优先测试风险最高的本地服务，再打磨 UI。
 
-- Config parser preserves unknown fields.
-- TOML writer generates expected Codex MCP config.
-- JSON/JSONC writer generates expected OpenCode and Claude MCP config.
-- Backup files are created before writes.
-- Rollback restores previous content.
-- Adapter registry reports missing CLIs without crashing.
-- PTY session lifecycle handles start, stop, and restart states.
+早期必须覆盖：
 
-UI tests should cover:
+- 配置 parser 能保留未知字段。
+- TOML writer 能生成预期 Codex MCP 配置。
+- JSON/JSONC writer 能生成预期 OpenCode 和 Claude MCP 配置。
+- 写入前会创建备份。
+- 回滚能恢复旧内容。
+- Adapter Registry 在 CLI 缺失时不会崩溃。
+- PTY 会话生命周期能处理启动、停止和重启状态。
 
-- agent detection states
-- session tab creation
-- MCP form validation
-- diff preview before write
-- credential masking
+UI 测试覆盖：
 
-Manual Windows verification is required for PTY behavior, Ctrl+C, terminal resize, and real CLI interaction.
+- Agent 检测状态。
+- 会话标签创建。
+- MCP 表单校验。
+- diff 预览。
+- 凭据掩码展示。
 
-## Security and Safety
+Windows 手工验证必须覆盖 PTY 行为、Ctrl+C、终端 resize 和真实 CLI 交互。
 
-Sensitive operations:
+## 安全与保护
 
-- writing user-level config files
-- switching credentials
-- exporting profiles
-- running arbitrary agent commands
-- exposing broker tools to agents
+敏感操作包括：
 
-Safety requirements:
+- 写入用户级配置文件。
+- 切换凭据。
+- 导出 Profile。
+- 运行任意 Agent 命令。
+- 把 Broker 工具暴露给 Agent。
 
-- No secrets in renderer logs.
-- No secrets in SQLite.
-- No config write without backup.
-- No broker tool that can run arbitrary shell commands in the first release.
-- Cross-agent handoff should share summarized context by default.
-- Full transcript sharing requires explicit confirmation.
-- Config exports exclude secrets unless the user opts in.
+安全要求：
 
-## Open Questions
+- renderer 日志不出现密钥。
+- SQLite 不保存密钥。
+- 配置写入前必须备份。
+- 第一版 Broker 不提供任意 shell 执行工具。
+- 跨 Agent 交接默认只共享摘要上下文。
+- 完整 transcript 共享必须明确确认。
+- 配置导出默认不包含密钥。
 
-1. Whether to support only PowerShell-compatible environments in the first release, or also Git Bash and WSL shells.
-2. Whether profile switching should patch vendor files immediately or apply overlays only when launching sessions.
-3. Whether the first UI theme should optimize for dark mode only or include light mode from day one.
-4. Whether the first release should include an installer or remain a developer-run app during early testing.
+## 待确认问题
 
-Recommended first decisions:
+1. 第一版只支持 PowerShell 环境，还是同时支持 Git Bash 和 WSL。
+2. Profile 切换是立即 patch 厂商文件，还是只在启动会话时应用 overlay。
+3. 第一版只做 dark mode，还是同时做 light mode。
+4. 第一版是否制作安装包，还是先用开发模式运行。
 
-- Support PowerShell first.
-- Patch project config files only after diff approval.
-- Support dark mode first.
-- Use developer-run app until the PTY and config flows stabilize.
+推荐先这样决定：
 
-## Implementation Recommendation
+- 第一版优先支持 PowerShell。
+- 项目配置文件只有在用户确认 diff 后才 patch。
+- 第一版只做 dark mode。
+- 在 PTY 和配置流稳定前，先使用开发模式运行。
 
-Start with the smallest vertical slice:
+## 实施建议
 
-1. Scaffold Electron + React + TypeScript.
-2. Build the desktop workbench shell.
-3. Add PTY terminal hosting.
-4. Add an adapter registry with mocked detection tests.
-5. Implement real detection and launch for one CLI.
-6. Extend detection to all four CLIs.
-7. Add SQLite.
-8. Add normalized MCP registry.
-9. Add one complete MCP writer, preferably Codex because TOML output is explicit and easy to test.
-10. Add Claude, OpenCode, and Pi MCP writers.
+从最小可用纵切开始：
 
-This route produces a usable app early while protecting the harder config and broker work behind tested service boundaries.
+1. 搭建 Electron + React + TypeScript 项目。
+2. 建立桌面工作台 UI 骨架。
+3. 增加 PTY 终端托管。
+4. 建立 Adapter Registry 和模拟检测测试。
+5. 先实现一个 CLI 的真实检测和启动。
+6. 扩展到四个 CLI。
+7. 接入 SQLite。
+8. 增加标准化 MCP 注册表。
+9. 先完成一个 MCP writer，推荐从 Codex 开始，因为 TOML 输出明确、便于测试。
+10. 再增加 Claude、OpenCode 和 Pi 的 MCP writer。
+
+这条路径能尽早产出可运行软件，同时把更复杂的配置服务和 Broker 功能保护在可测试的服务边界后面。
