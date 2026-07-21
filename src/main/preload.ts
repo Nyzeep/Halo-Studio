@@ -5,6 +5,10 @@ const api: HaloApi = {
   agents: {
     detectAll: () => ipcRenderer.invoke("agents:detectAll")
   },
+  config: {
+    applyDemoWrite: (request) => ipcRenderer.invoke("config:applyDemoWrite", request),
+    rollbackWrite: (request) => ipcRenderer.invoke("config:rollbackWrite", request)
+  },
   mcp: {
     previewConfig: (server) => ipcRenderer.invoke("mcp:previewConfig", server)
   },
