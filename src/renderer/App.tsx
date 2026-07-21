@@ -4,7 +4,6 @@ import { AgentRail } from "./components/AgentRail";
 import { InspectorPanel } from "./components/InspectorPanel";
 import { SessionTabs } from "./components/SessionTabs";
 import { StatusBar } from "./components/StatusBar";
-import { TerminalPane } from "./components/TerminalPane";
 import { UtilityStrip } from "./components/UtilityStrip";
 import { DashboardView } from "./components/DashboardView";
 import { SettingsView } from "./components/SettingsView";
@@ -14,8 +13,62 @@ import { useAgents } from "./hooks/useAgents";
 import { useTerminalSession } from "./hooks/useTerminalSession";
 
 const defaultWorkspace = "D:\\Halo Studio";
+const TerminalPane = React.lazy(() =>
+  import("./components/TerminalPane").then((module) => ({ default: module.TerminalPane }))
+);
 
 export function App() {
+  if (!window.halo) {
+    return <DesktopShellFallback />;
+  }
+
+  return <HaloWorkspace />;
+}
+
+function DesktopShellFallback() {
+  return (
+    <div className="relative flex h-full w-full overflow-hidden bg-[#05030a] text-slate-100">
+      <div className="starfield" />
+      <div className="cosmic-planet-container opacity-50">
+        <div className="cosmic-nebula-glow" />
+        <div className="planet-rings-back" />
+        <div className="planet-sphere" />
+        <div className="planet-rings-front" />
+      </div>
+
+      <main className="relative z-10 flex min-h-full w-full items-center px-6 py-10 md:px-12 lg:px-20">
+        <section className="max-w-2xl space-y-7">
+          <div className="inline-flex items-center gap-2 rounded-full border border-purple-500/20 bg-purple-500/10 px-3.5 py-1 text-xs font-semibold text-purple-300">
+            <Sparkles size={12} className="text-purple-400" />
+            Desktop runtime required
+          </div>
+
+          <div className="space-y-4">
+            <h1 className="text-cosmic-glow bg-gradient-to-r from-violet-200 via-indigo-200 to-purple-300 bg-clip-text text-4xl font-extrabold leading-tight text-transparent sm:text-5xl">
+              需要通过 Halo Studio 桌面壳启动
+            </h1>
+            <p className="max-w-xl text-sm leading-relaxed text-slate-400">
+              当前页面没有检测到桌面桥接服务，所以 Agent 探测、终端会话和配置写入功能不会加载。
+              请使用桌面开发入口启动应用。
+            </p>
+          </div>
+
+          <div className="glass-panel-soft w-full max-w-xl rounded-2xl p-4">
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-300">
+              <Terminal size={14} className="text-purple-400" />
+              推荐启动命令
+            </div>
+            <div className="rounded-xl border border-purple-500/15 bg-black/35 px-4 py-3 font-mono text-sm text-purple-100">
+              npm run dev:electron
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function HaloWorkspace() {
   const { agents, loading, refreshDiscovery } = useAgents();
   const { sessions, activeSession, activeSessionId, setActiveSessionId, start, stop } = useTerminalSession();
 
@@ -125,7 +178,15 @@ export function App() {
               />
               <UtilityStrip />
               <div className="min-h-0 flex-1">
-                <TerminalPane session={activeSession} />
+                <React.Suspense
+                  fallback={
+                    <div className="flex h-full items-center justify-center bg-[#05030a] text-xs font-semibold text-slate-500">
+                      正在加载终端视图...
+                    </div>
+                  }
+                >
+                  <TerminalPane session={activeSession} />
+                </React.Suspense>
               </div>
               <StatusBar activeSession={activeSession} />
             </div>

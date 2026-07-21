@@ -1,10 +1,15 @@
 import { app, BrowserWindow } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { configureElectronRuntime } from "./electronRuntime.js";
 import { registerIpcHandlers } from "./ipc.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+configureElectronRuntime(app, {
+  isDev: Boolean(process.env.VITE_DEV_SERVER_URL)
+});
 
 async function createWindow() {
   const mainWindow = new BrowserWindow({
