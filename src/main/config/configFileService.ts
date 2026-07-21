@@ -3,6 +3,7 @@ import path from "node:path";
 import type {
   ConfigRollbackRequest,
   ConfigRollbackResult,
+  ConfigBackupEntry,
   ConfigWriteRequest,
   ConfigWriteResult
 } from "../../shared/config.js";
@@ -49,6 +50,39 @@ export async function rollbackConfigWrite(request: ConfigRollbackRequest): Promi
     restored: true,
     restoredAt: new Date().toISOString()
   };
+}
+
+export async function listConfigBackups(targetPathInput: string): Promise<ConfigBackupEntry[]> {
+  const targetPath = path.resolve(targetPathInput);
+  const backupDir = path.join(path.dirname(targetPath), ".halo-backups");
+  const backupPrefix = `${path.basename(targetPath)}.`;
+
+  let files: string[];
+  try {
+    files = await fs.readdir(backupDir);
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+
+  const entries = await Promise.all(
+    files
+      .filter((fileName) => fileName.startsWith(backupPrefix) && fileName.endsWith(".bak"))
+      .map(async (fileName) => {
+        const backupPath = path.join(backupDir, fileName);
+        const stat = await fs.stat(backupPath);
+        return {
+          targetPath,
+          backupPath,
+          size: stat.size,
+          createdAt: stat.mtime.toISOString()
+        };
+      })
+  );
+
+  return entries.sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
 }
 
 async function readExistingFile(targetPath: string) {

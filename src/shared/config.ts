@@ -22,3 +22,10 @@ export interface ConfigRollbackResult {
   restored: boolean;
   restoredAt: string;
 }
+
+export interface ConfigBackupEntry {
+  targetPath: string;
+  backupPath: string;
+  size: number;
+  createdAt: string;
+}

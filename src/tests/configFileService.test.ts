@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyConfigWrite, rollbackConfigWrite } from "../main/config/configFileService";
+import { applyConfigWrite, listConfigBackups, rollbackConfigWrite } from "../main/config/configFileService";
 
 let tempDir: string;
 
@@ -48,5 +48,30 @@ describe("config file service", () => {
 
     await expect(fs.readFile(targetPath, "utf8")).resolves.toBe("{\"value\":1}\n");
     expect(rollback.restored).toBe(true);
+  });
+
+  it("lists backups for a target from newest to oldest", async () => {
+    const targetPath = path.join(tempDir, "settings.json");
+    await fs.writeFile(targetPath, "{\"value\":1}\n", "utf8");
+
+    await applyConfigWrite({
+      targetPath,
+      nextContent: "{\"value\":2}\n",
+      reason: "第一次写入"
+    });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await applyConfigWrite({
+      targetPath,
+      nextContent: "{\"value\":3}\n",
+      reason: "第二次写入"
+    });
+
+    const backups = await listConfigBackups(targetPath);
+
+    expect(backups).toHaveLength(2);
+    expect(backups[0]?.backupPath).toContain("settings.json");
+    expect(new Date(backups[0]?.createdAt ?? 0).getTime()).toBeGreaterThanOrEqual(
+      new Date(backups[1]?.createdAt ?? 0).getTime()
+    );
   });
 });
