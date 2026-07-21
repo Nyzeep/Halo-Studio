@@ -1,4 +1,5 @@
 import type { AgentId, AgentInfo, TerminalSessionInfo } from "./agents.js";
+import type { McpConfigPreview, McpServerConfig } from "./mcp.js";
 
 export interface StartSessionRequest {
   agentId: AgentId;
@@ -8,6 +9,9 @@ export interface StartSessionRequest {
 export interface HaloApi {
   agents: {
     detectAll(): Promise<AgentInfo[]>;
+  };
+  mcp: {
+    previewConfig(server: McpServerConfig): Promise<McpConfigPreview[]>;
   };
   sessions: {
     start(request: StartSessionRequest): Promise<TerminalSessionInfo>;

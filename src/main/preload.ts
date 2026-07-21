@@ -5,6 +5,9 @@ const api: HaloApi = {
   agents: {
     detectAll: () => ipcRenderer.invoke("agents:detectAll")
   },
+  mcp: {
+    previewConfig: (server) => ipcRenderer.invoke("mcp:previewConfig", server)
+  },
   sessions: {
     start: (request) => ipcRenderer.invoke("sessions:start", request),
     stop: (sessionId) => ipcRenderer.invoke("sessions:stop", sessionId),
