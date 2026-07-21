@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getPreloadPath } from "./electronPaths.js";
 import { configureElectronRuntime } from "./electronRuntime.js";
 import { registerIpcHandlers } from "./ipc.js";
 
@@ -20,7 +21,7 @@ async function createWindow() {
     backgroundColor: "#0b0f14",
     title: "Halo Studio",
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: getPreloadPath(__dirname),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false

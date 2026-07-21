@@ -10,5 +10,5 @@
     "esModuleInterop": true,
     "types": ["node"]
   },
-  "include": ["src/main/**/*.ts", "src/shared/**/*.ts"]
+  "include": ["src/main/**/*.ts", "src/main/**/*.mts", "src/shared/**/*.ts"]
 }

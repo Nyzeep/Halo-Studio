@@ -22,8 +22,32 @@ export class AgentRegistry {
   }
 
   async detectAll(): Promise<AgentInfo[]> {
-    return Promise.all(this.adapters.map((adapter) => adapter.detect(this.probe)));
+    return Promise.all(
+      this.adapters.map(async (adapter) => {
+        try {
+          return await adapter.detect(this.probe);
+        } catch (error) {
+          return {
+            id: adapter.definition.id,
+            name: adapter.definition.name,
+            command: adapter.definition.command,
+            status: "error",
+            version: null,
+            installHint: `Agent detection failed: ${formatProbeError(error)}`,
+            modes: adapter.definition.modes
+          };
+        }
+      })
+    );
   }
+}
+
+function formatProbeError(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
 }
 
 export function createAgentRegistry(probe: CommandProbe = { commandExists, readVersion }) {

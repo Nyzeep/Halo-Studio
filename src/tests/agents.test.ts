@@ -26,6 +26,20 @@ describe("Agent Registry", () => {
     expect(agents.every((agent) => agent.status === "missing")).toBe(true);
     expect(agents[0]?.installHint).toContain("未检测到");
   });
+  it("keeps the dashboard usable when a command probe is blocked by Windows", async () => {
+    const registry = createAgentRegistry({
+      commandExists: async () => true,
+      readVersion: async () => {
+        throw Object.assign(new Error("spawn EPERM"), { code: "EPERM" });
+      }
+    });
+
+    const agents = await registry.detectAll();
+
+    expect(agents).toHaveLength(4);
+    expect(agents.every((agent) => agent.status === "error")).toBe(true);
+    expect(agents[0]?.installHint).toContain("spawn EPERM");
+  });
 });
 
 describe("PTY Manager", () => {
