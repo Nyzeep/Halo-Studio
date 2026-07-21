@@ -28,6 +28,7 @@ export interface HaloApi {
     rollbackWrite(request: ConfigRollbackRequest): Promise<ConfigRollbackResult>;
   };
   mcp: {
+    planProjectMcpWrite(workspaceRoot: string, preview: McpConfigPreview): Promise<RealConfigWritePlan>;
     previewConfig(server: McpServerConfig): Promise<McpConfigPreview[]>;
   };
   sessions: {

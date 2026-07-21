@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { ConfigBackupEntry, ConfigRollbackRequest, ConfigWriteResult, RealConfigWritePlan } from "../../shared/config";
 import { useMcpPreview } from "../hooks/useMcpPreview";
 
+const workspaceRoot = "D:\\Halo Studio";
+
 export function McpPreviewPanel() {
   const { previews, loading, server } = useMcpPreview();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("codex-cli");
@@ -16,9 +18,6 @@ export function McpPreviewPanel() {
     [previews, selectedAgentId]
   );
   const demoTargetPath = selectedPreview ? `${selectedPreview.agentId}-${selectedPreview.targetPath}` : "";
-  const realTargetPath = selectedPreview
-    ? `D:\\Halo Studio\\.halo-studio\\${selectedPreview.agentId}-mcp-preview.${selectedPreview.language === "toml" ? "toml" : "json"}`
-    : "";
 
   useEffect(() => {
     if (!demoTargetPath) {
@@ -39,20 +38,15 @@ export function McpPreviewPanel() {
   }, [demoTargetPath, writeResult]);
 
   useEffect(() => {
-    if (!selectedPreview || !realTargetPath) {
+    if (!selectedPreview) {
       setRealWritePlan(null);
       setConfirmation("");
       return;
     }
 
     let active = true;
-    window.halo.config
-      .planRealWrite({
-        workspaceRoot: "D:\\Halo Studio",
-        targetPath: realTargetPath,
-        nextContent: selectedPreview.content,
-        reason: `${selectedPreview.agentName} MCP 项目配置预案`
-      })
+    window.halo.mcp
+      .planProjectMcpWrite(workspaceRoot, selectedPreview)
       .then((plan) => {
         if (active) {
           setRealWritePlan(plan);
@@ -63,7 +57,7 @@ export function McpPreviewPanel() {
     return () => {
       active = false;
     };
-  }, [realTargetPath, selectedPreview]);
+  }, [selectedPreview]);
 
   async function applyDemoWrite() {
     if (!selectedPreview) {
@@ -242,8 +236,13 @@ export function McpPreviewPanel() {
                         {realWritePlan.warnings.join(" ")}
                       </div>
                     ) : (
-                      <div className="rounded border border-halo-green/30 bg-halo-green/10 p-2 text-halo-green">
-                        目标位于当前工作区内。写入前仍需要确认短语。
+                      <div className="space-y-2">
+                        <div className="rounded border border-halo-green/30 bg-halo-green/10 p-2 text-halo-green">
+                          目标位于当前工作区内。写入前仍需要确认短语。
+                        </div>
+                        <div className="rounded border border-halo-amber/30 bg-halo-amber/10 p-2 text-halo-amber">
+                          当前会写入完整生成文件；结构化合并将在下一阶段加入。
+                        </div>
                       </div>
                     )}
                     <label className="block text-slate-400">

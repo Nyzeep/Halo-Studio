@@ -13,6 +13,7 @@ const api: HaloApi = {
     rollbackWrite: (request) => ipcRenderer.invoke("config:rollbackWrite", request)
   },
   mcp: {
+    planProjectMcpWrite: (workspaceRoot, preview) => ipcRenderer.invoke("mcp:planProjectWrite", workspaceRoot, preview),
     previewConfig: (server) => ipcRenderer.invoke("mcp:previewConfig", server)
   },
   sessions: {
