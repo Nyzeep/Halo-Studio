@@ -3,8 +3,11 @@ import type {
   ConfigRollbackRequest,
   ConfigRollbackResult,
   ConfigBackupEntry,
+  ConfirmedConfigWriteRequest,
   ConfigWriteRequest,
-  ConfigWriteResult
+  ConfigWriteResult,
+  RealConfigWritePlan,
+  RealConfigWritePlanRequest
 } from "./config.js";
 import type { McpConfigPreview, McpServerConfig } from "./mcp.js";
 
@@ -19,7 +22,9 @@ export interface HaloApi {
   };
   config: {
     applyDemoWrite(request: ConfigWriteRequest): Promise<ConfigWriteResult>;
+    applyConfirmedWrite(request: ConfirmedConfigWriteRequest): Promise<ConfigWriteResult>;
     listDemoBackups(targetPath: string): Promise<ConfigBackupEntry[]>;
+    planRealWrite(request: RealConfigWritePlanRequest): Promise<RealConfigWritePlan>;
     rollbackWrite(request: ConfigRollbackRequest): Promise<ConfigRollbackResult>;
   };
   mcp: {

@@ -1,12 +1,14 @@
 import { ChevronRight, FileCode2, History, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { ConfigBackupEntry, ConfigRollbackRequest, ConfigWriteResult } from "../../shared/config";
+import type { ConfigBackupEntry, ConfigRollbackRequest, ConfigWriteResult, RealConfigWritePlan } from "../../shared/config";
 import { useMcpPreview } from "../hooks/useMcpPreview";
 
 export function McpPreviewPanel() {
   const { previews, loading, server } = useMcpPreview();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("codex-cli");
   const [writeResult, setWriteResult] = useState<ConfigWriteResult | null>(null);
+  const [realWritePlan, setRealWritePlan] = useState<RealConfigWritePlan | null>(null);
+  const [confirmation, setConfirmation] = useState("");
   const [backups, setBackups] = useState<ConfigBackupEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const selectedPreview = useMemo(
@@ -14,6 +16,9 @@ export function McpPreviewPanel() {
     [previews, selectedAgentId]
   );
   const demoTargetPath = selectedPreview ? `${selectedPreview.agentId}-${selectedPreview.targetPath}` : "";
+  const realTargetPath = selectedPreview
+    ? `D:\\Halo Studio\\.halo-studio\\${selectedPreview.agentId}-mcp-preview.${selectedPreview.language === "toml" ? "toml" : "json"}`
+    : "";
 
   useEffect(() => {
     if (!demoTargetPath) {
@@ -32,6 +37,33 @@ export function McpPreviewPanel() {
       active = false;
     };
   }, [demoTargetPath, writeResult]);
+
+  useEffect(() => {
+    if (!selectedPreview || !realTargetPath) {
+      setRealWritePlan(null);
+      setConfirmation("");
+      return;
+    }
+
+    let active = true;
+    window.halo.config
+      .planRealWrite({
+        workspaceRoot: "D:\\Halo Studio",
+        targetPath: realTargetPath,
+        nextContent: selectedPreview.content,
+        reason: `${selectedPreview.agentName} MCP 项目配置预案`
+      })
+      .then((plan) => {
+        if (active) {
+          setRealWritePlan(plan);
+          setConfirmation("");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [realTargetPath, selectedPreview]);
 
   async function applyDemoWrite() {
     if (!selectedPreview) {
@@ -78,6 +110,26 @@ export function McpPreviewPanel() {
       };
       await window.halo.config.rollbackWrite(request);
       setWriteResult(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyRealWrite() {
+    if (!selectedPreview || !realWritePlan) {
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const result = await window.halo.config.applyConfirmedWrite({
+        workspaceRoot: realWritePlan.workspaceRoot,
+        targetPath: realWritePlan.normalizedTargetPath,
+        nextContent: selectedPreview.content,
+        reason: realWritePlan.reason,
+        confirmation
+      });
+      setWriteResult(result);
     } finally {
       setBusy(false);
     }
@@ -170,6 +222,49 @@ export function McpPreviewPanel() {
                   <div className="mt-3 text-xs text-slate-500">写入按钮只会生成 Halo 演示文件，不会改动真实 Agent 配置。</div>
                 )}
               </div>
+
+              {realWritePlan ? (
+                <div className="rounded border border-halo-line bg-halo-panelSoft p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs font-medium text-slate-300">项目级真实写入预案</div>
+                    <span
+                      className={`rounded px-2 py-1 text-xs ${
+                        realWritePlan.allowed ? "bg-halo-green/10 text-halo-green" : "bg-halo-red/10 text-halo-red"
+                      }`}
+                    >
+                      {realWritePlan.risk}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-2 text-xs">
+                    <div className="break-all text-slate-500">目标：{realWritePlan.normalizedTargetPath}</div>
+                    {realWritePlan.warnings.length > 0 ? (
+                      <div className="rounded border border-halo-red/40 bg-halo-red/10 p-2 text-halo-red">
+                        {realWritePlan.warnings.join(" ")}
+                      </div>
+                    ) : (
+                      <div className="rounded border border-halo-green/30 bg-halo-green/10 p-2 text-halo-green">
+                        目标位于当前工作区内。写入前仍需要确认短语。
+                      </div>
+                    )}
+                    <label className="block text-slate-400">
+                      确认短语
+                      <input
+                        className="mt-2 w-full rounded border border-halo-line bg-[#090d12] px-3 py-2 text-slate-200 outline-none focus:border-halo-cyan"
+                        value={confirmation}
+                        onChange={(event) => setConfirmation(event.target.value)}
+                        placeholder={realWritePlan.confirmationPhrase}
+                      />
+                    </label>
+                    <button
+                      className="w-full rounded bg-halo-amber px-3 py-2 text-xs font-medium text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                      disabled={busy || !realWritePlan.allowed || confirmation !== realWritePlan.confirmationPhrase}
+                      onClick={() => void applyRealWrite()}
+                    >
+                      确认写入项目配置
+                    </button>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="rounded border border-halo-line bg-halo-panelSoft p-3">
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-300">

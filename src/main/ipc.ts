@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import { createAgentRegistry } from "./agents/registry.js";
 import { applyConfigWrite, listConfigBackups, rollbackConfigWrite } from "./config/configFileService.js";
+import { applyConfirmedConfigWrite, planRealConfigWrite } from "./config/writeGuard.js";
 import { createMcpConfigPreviews } from "./mcp/configPreview.js";
 import { PtyManager } from "./pty/ptyManager.js";
 
@@ -26,6 +27,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
   ipcMain.handle("config:listDemoBackups", (_event, targetPath: string) =>
     listConfigBackups(resolveDemoTargetPath(app.getPath("userData"), targetPath))
   );
+  ipcMain.handle("config:planRealWrite", (_event, request) => planRealConfigWrite(request));
+  ipcMain.handle("config:applyConfirmedWrite", (_event, request) => applyConfirmedConfigWrite(request));
   ipcMain.handle("config:rollbackWrite", (_event, request) => rollbackConfigWrite(request));
   ipcMain.handle("mcp:previewConfig", (_event, server) => createMcpConfigPreviews(server));
   ipcMain.handle("sessions:start", (_event, request) => ptyManager.start(request));

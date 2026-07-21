@@ -7,7 +7,9 @@ const api: HaloApi = {
   },
   config: {
     applyDemoWrite: (request) => ipcRenderer.invoke("config:applyDemoWrite", request),
+    applyConfirmedWrite: (request) => ipcRenderer.invoke("config:applyConfirmedWrite", request),
     listDemoBackups: (targetPath) => ipcRenderer.invoke("config:listDemoBackups", targetPath),
+    planRealWrite: (request) => ipcRenderer.invoke("config:planRealWrite", request),
     rollbackWrite: (request) => ipcRenderer.invoke("config:rollbackWrite", request)
   },
   mcp: {
