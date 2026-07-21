@@ -29,3 +29,28 @@ export interface ConfigBackupEntry {
   size: number;
   createdAt: string;
 }
+
+export type ConfigWriteRisk = "low" | "blocked";
+
+export interface RealConfigWritePlanRequest {
+  workspaceRoot: string;
+  targetPath: string;
+  nextContent: string;
+  reason: string;
+}
+
+export interface RealConfigWritePlan {
+  workspaceRoot: string;
+  targetPath: string;
+  normalizedTargetPath: string;
+  nextContent: string;
+  reason: string;
+  allowed: boolean;
+  risk: ConfigWriteRisk;
+  confirmationPhrase: string;
+  warnings: string[];
+}
+
+export interface ConfirmedConfigWriteRequest extends RealConfigWritePlanRequest {
+  confirmation: string;
+}
