@@ -10,18 +10,20 @@ const utilities = [
 
 export function UtilityStrip() {
   return (
-    <div className="grid grid-cols-5 gap-2 border-b border-halo-line bg-halo-panel px-3 py-2">
+    <div className="grid grid-cols-5 gap-2 border-b border-white/5 bg-[#0a0814]/40 px-4 py-2">
       {utilities.map((item) => {
         const Icon = item.icon;
         return (
           <button
             key={item.label}
-            className="flex h-14 items-center gap-3 rounded border border-halo-line bg-halo-panelSoft px-3 text-left hover:border-halo-cyan/60"
+            className="flex h-14 items-center gap-3 rounded-xl border border-white/5 bg-white/5 px-3.5 text-left hover:border-purple-500/30 hover:bg-purple-500/5 transition-all duration-300"
           >
-            <Icon size={17} className="shrink-0 text-halo-cyan" />
+            <div className="rounded-lg bg-purple-500/10 p-1.5 text-purple-400">
+              <Icon size={14} />
+            </div>
             <span className="min-w-0">
-              <span className="block truncate text-sm font-medium text-slate-200">{item.label}</span>
-              <span className="block truncate text-xs text-slate-500">{item.description}</span>
+              <span className="block truncate text-xs font-bold text-slate-200">{item.label}</span>
+              <span className="block truncate text-[10px] text-slate-500 leading-tight mt-0.5">{item.description}</span>
             </span>
           </button>
         );

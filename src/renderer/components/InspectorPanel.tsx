@@ -1,4 +1,4 @@
-import { Activity, Database, KeyRound } from "lucide-react";
+import { Activity, Database, KeyRound, Shield } from "lucide-react";
 import type { AgentInfo, TerminalSessionInfo } from "../../shared/agents";
 import { McpPreviewPanel } from "./McpPreviewPanel";
 
@@ -11,34 +11,41 @@ export function InspectorPanel({ agents, activeSession }: InspectorPanelProps) {
   const readyCount = agents.filter((agent) => agent.status === "ready").length;
 
   return (
-    <aside className="h-full w-80 shrink-0 border-l border-halo-line bg-halo-panel p-4">
-      <section>
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
-          <Activity size={16} />
-          会话状态
+    <aside className="h-full w-80 shrink-0 border-l border-white/5 bg-[#0a0814]/70 p-4 space-y-5 overflow-y-auto">
+      {/* Session state segment */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+          <Activity size={14} className="text-purple-400" />
+          运行会话状态
         </div>
-        <div className="mt-3 rounded border border-halo-line bg-halo-panelSoft p-3 text-sm text-slate-300">
+        <div className="rounded-xl border border-white/5 bg-white/5 p-3.5 space-y-2">
           {activeSession ? (
             <>
-              <div>{activeSession.title}</div>
-              <div className="mt-1 break-all text-xs text-slate-500">{activeSession.cwd}</div>
+              <div className="text-xs font-semibold text-purple-300">{activeSession.title}</div>
+              <div className="break-all font-mono text-[10px] text-slate-500 leading-normal">
+                {activeSession.cwd}
+              </div>
             </>
           ) : (
-            "暂无运行会话"
+            <div className="text-xs text-slate-500 leading-normal">
+              暂无处于活动状态的 PTY 终端会话
+            </div>
           )}
         </div>
       </section>
 
+      {/* Embedded MCP configuration segment */}
       <McpPreviewPanel />
 
-      <section className="mt-6 grid gap-3">
-        <div className="flex items-center gap-2 rounded border border-halo-line bg-halo-panelSoft p-3 text-sm text-slate-300">
-          <Database size={16} />
-          已检测 Agent：{readyCount}/{agents.length}
+      {/* Additional telemetry indicators */}
+      <section className="grid gap-2 pt-3 border-t border-white/5">
+        <div className="flex items-center gap-2.5 rounded-xl border border-white/5 bg-white/5 p-3.5 text-xs text-slate-300">
+          <Database size={14} className="text-purple-400 shrink-0" />
+          <span>本地就绪：{readyCount}/{agents.length} Agent</span>
         </div>
-        <div className="flex items-center gap-2 rounded border border-halo-line bg-halo-panelSoft p-3 text-sm text-slate-300">
-          <KeyRound size={16} />
-          凭据服务未启用
+        <div className="flex items-center gap-2.5 rounded-xl border border-white/5 bg-white/5 p-3.5 text-xs text-slate-400">
+          <KeyRound size={14} className="text-slate-500 shrink-0" />
+          <span>安全凭据中继未启用</span>
         </div>
       </section>
     </aside>
