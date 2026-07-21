@@ -14,6 +14,7 @@ Halo Studio 不应该重写这些官方 CLI。它真正有价值的地方，是�
 
 - OpenCode 仓库与文档：`https://github.com/anomalyco/opencode`、`https://dev.opencode.ai/docs/config`、`https://dev.opencode.ai/docs/mcp-servers`
 - Pi 仓库与文档：`https://github.com/earendil-works/pi`、`https://pi.dev/docs/latest/rpc`
+- Pi Web 仓库：`https://github.com/agegr/pi-web`
 - cc-switch 仓库：`https://github.com/farion1231/cc-switch`
 - Codex CLI 配置与 MCP 文档：`https://developers.openai.com/codex/config-reference`、`https://developers.openai.com/codex/mcp`
 - Claude Code 设置与 MCP 文档：`https://docs.anthropic.com/en/docs/claude-code/settings`、`https://docs.anthropic.com/en/docs/claude-code/mcp`
@@ -28,6 +29,7 @@ Halo Studio 不应该重写这些官方 CLI。它真正有价值的地方，是�
 4. 第一阶段先保证终端模式可靠，再做更高级的原生聊天或 RPC 集成。
 5. 数据本地优先，敏感凭据使用 Windows 原生安全能力保护。
 6. UI 做成开发者每天会用的工作台，不做营销式落地页。
+7. 吸收 Pi Web 的实用工作流：会话浏览、项目文件预览、模型配置、技能开关、Git worktree 切换和结构化消息展示，都应进入 Halo 的长期产品能力。
 
 ## 推荐技术架构
 
@@ -213,17 +215,21 @@ OpenCode 有自己的配置、Agent 和 MCP 概念，不能只当成普通 shell
 
 Pi 是较适合早期做原生 Adapter 的 Agent，因为它的文档描述了基于 JSONL 的 RPC mode。第一版仍然先支持终端模式，后续再加入 RPC 原生聊天标签。
 
+Pi Web 提供了一个值得参考的产品形态：读取本地 Pi 会话文件，以 Web 工作区形式展示会话、结构化 Markdown、工具调用、项目文件、模型配置、技能管理和 Git worktree。Halo Studio 应把这些能力抽象为跨 Agent 的通用工作台能力，而不只服务 Pi。
+
 第一版：
 
 - 用终端模式启动 Pi。
 - 检测 Pi 安装状态和版本。
 - 提供 Pi 指令预设。
 - 通过 Pi 文档路径或命令管理 MCP 配置。
+- 在 UI 中预留 Pi 会话档案、模型配置和技能面板入口。
 
 后续：
 
 - 增加 RPC 驱动的原生聊天界面。
 - 渲染结构化状态、工具调用和消息事件。
+- 读取 `~/.pi/agent/sessions` 下的 Pi JSONL 会话，支持按项目浏览、继续会话、从历史消息 fork 会话。
 
 ### Codex CLI
 
@@ -283,9 +289,18 @@ Halo Studio 使用 SQLite 保存本地应用状态。
 主要区域：
 
 - 左侧栏：工作区选择、Agent 列表、Profile、快速启动。
-- 中间标签区：终端会话、未来原生聊天、diff 预览。
-- 右侧检查器：当前会话详情、MCP 状态、配置面板、指令预设。
+- 中间标签区：终端会话、未来原生聊天、会话档案、项目文件预览、diff 预览。
+- 右侧检查器：当前会话详情、MCP 状态、配置面板、指令预设、模型/技能摘要。
 - 命令面板：搜索动作、启动命令、切换 Profile、添加 MCP Server。
+
+参考 Pi Web，Halo 的工作台后续应包含：
+
+- 会话档案：按项目浏览历史会话，显示摘要、时间、Agent、模型和上下文状态。
+- 项目浏览器：安全地浏览工作区文件，预览源码、Markdown、图片、PDF 和 diff。
+- 结构化消息视图：把工具调用、思考状态、命令输出、错误和最终回答拆成清晰块。
+- 会话分叉：从历史消息创建新路线，用于尝试不同实现方向。
+- Git worktree 切换：在多分支开发时让新会话跟随选中的 worktree。
+- 模型与技能管理：集中配置模型、测试可用性、启用/禁用技能或指令集。
 
 ### 配置中心
 
