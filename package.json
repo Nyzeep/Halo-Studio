@@ -1,42 +1,22 @@
 {
   "name": "halo-studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "main": "dist/main/main.js",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "dev:main": "tsc -p tsconfig.node.json --watch --preserveWatchOutput",
-    "dev:electron": "concurrently -k \"npm:dev\" \"npm:dev:main\" \"wait-on tcp:5173 dist/main/main.js && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
-    "build": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && vite build",
-    "test": "vitest run",
-    "preview": "vite preview --host 127.0.0.1"
+    "dev": "node scripts/run-workspace-script.mjs dev",
+    "build": "node scripts/run-workspace-script.mjs build",
+    "typecheck": "node scripts/run-workspace-script.mjs typecheck",
+    "test": "node scripts/run-workspace-script.mjs test",
+    "check:repository": "node scripts/assert-repository.mjs",
+    "verify": "npm run check:repository && npm run typecheck && npm test && npm run build"
   },
-  "dependencies": {
-    "@xterm/addon-fit": "^0.10.0",
-    "@xterm/xterm": "^5.5.0",
-    "electron": "^33.2.1",
-    "lucide-react": "^0.468.0",
-    "node-pty": "^1.0.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "devDependencies": {
-    "@testing-library/jest-dom": "^6.6.3",
-    "@testing-library/react": "^16.1.0",
-    "@types/node": "^22.10.2",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
-    "autoprefixer": "^10.4.20",
-    "concurrently": "^9.1.0",
-    "cross-env": "^7.0.3",
-    "jsdom": "^25.0.1",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.2",
-    "vite": "^6.0.5",
-    "vitest": "^2.1.8",
-    "wait-on": "^8.0.1"
+  "engines": {
+    "node": ">=20.18",
+    "npm": ">=10.8"
   }
 }

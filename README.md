@@ -1,169 +1,55 @@
 # Halo Studio
 
-Halo Studio 的目标是成为一个 Windows 优先的 AI Native Desktop Workspace：把 Claude Code、Codex CLI、OpenCode、Pi Agent 等本地 CLI Agent 统一放进一个原生桌面工作台中，让用户看到 Agent 的思考、工具调用、Shell、Diff、进度、Token 与结果摘要，而不是只面对终端字节流。
+Halo Studio 正在重构为只面向 Pi 与 OpenCode 的精简桌面工作台。项目以跨平台 Electron 应用为目标，Windows 为首发平台。
 
-当前仓库正在从旧的 Electron/React/Web UI 路线迁移到原生桌面路线。Phase 1 先交付可运行、可测试的纵切片：原生桌面壳、三栏 Agent 工作区、`/` 命令补全、fake multi-agent runtime、内置 Agent manifest 和基础并发测试。
+## 当前状态
 
-## 当前方向
+仓库目前处于第一阶段的中间基线：旧实现已经清退，npm workspaces、仓库卫生规则和后续实现边界已经建立。`apps/*` 与 `packages/*` 工作区将在后续任务中逐步加入，当前基线本身不提供可运行的产品界面。
 
-- 原生桌面优先：Windows 先行，目标 UI 为 PySide6/QML。
-- Runtime 分层：高并发 Agent runtime 逐步迁移到 Rust。
-- Agent 是一等公民：每个 Agent 拥有独立状态、消息流、任务队列和工作流事件。
-- 终端退到 Debug 角色：真实 CLI 输出会被解析成工作流事件，原始终端只作为调试抽屉。
-- 少即是多：删除高成本动画、粒子背景、Web fallback 和低价值面板。
-- 安全默认关闭：Phase 1 manifest 声明能力但不执行真实 shell 或文件写入。
+第一阶段只覆盖以下范围：
 
-## Phase 1 目录
+- 新 Electron/TypeScript 工程骨架与明确的包边界。
+- Pi JSONL RPC 和 OpenCode 本地 Server 的运行时探测、版本校验与生命周期接口。
+- Workspace、路径规范化、信任状态和最小权限边界。
+- 类型化 IPC、SQLite migration、凭据保护和安全配置写入基线。
+- 反映真实运行时状态的最小桌面外壳。
 
-```text
-apps/
-  desktop/
-    halo_desktop/
-      main.py
-      app_controller.py
-      completion.py
-      demo_runtime.py
-      plugin_registry.py
-      qml/
-crates/
-  halo-protocol/
-  halo-core/
-  halo-ipc/
-  halo-runtime/
-plugins/
-  agents/
-    claude-code/
-    codex-cli/
-    opencode/
-    pi/
-docs/
-  architecture/
-  superpowers/plans/
-```
+完整编辑器、完整聊天与工具交互、`/` 命令执行、调试终端、MCP 与资源管理界面以及云同步尚未交付。
 
-## Phase 2 Runtime/IPC
+## 环境
 
-Phase 2 新增 Rust runtime 纵切片，但仍然不直接调用真实 CLI、不启动 PTY、不写入用户配置。它的作用是先固定桌面壳与后台 runtime 的协议边界：
+- Node.js 20.18 或更高版本
+- npm 10.8 或更高版本
 
-- `halo-protocol`：共享 Agent、RuntimeEvent、RunSnapshot、RuntimeCommand 等协议类型。
-- `halo-core`：内存 EventBus、按 run 校验事件顺序、每个 run 的 ring buffer snapshot。
-- `halo-ipc`：无外部依赖的 stdio JSONL 编解码，负责 command/event/snapshot/error envelope。
-- `halo-runtime`：可测试的 Rust sidecar，通过 stdin/stdout 接收 `createRun`、`getSnapshot`、`shutdown`。
-- `apps/desktop/halo_desktop/ipc_client.py`：Python IPC client，只在显式调用时连接 sidecar，导入模块不会启动后台进程。
-
-默认桌面启动仍然使用 demo runtime：
+安装锁定依赖：
 
 ```powershell
-cd "D:\Halo Studio"
-.\.venv\Scripts\python.exe -m halo_desktop.main
+npm ci
 ```
 
-构建和单独运行 Rust sidecar：
+运行测试：
 
 ```powershell
-cargo build -p halo-runtime
-cargo run -p halo-runtime
+npm test
 ```
 
-手动测试 sidecar 的 JSONL 输入：
+执行构建：
 
 ```powershell
-@'
-{"type":"createRun","runId":"run-1","agentId":"codex-cli","prompt":"hello"}
-{"type":"getSnapshot","runId":"run-1"}
-{"type":"shutdown"}
-'@ | cargo run -p halo-runtime
+npm run build
 ```
 
-IPC 模式目前是开发接缝，不是默认 UI 路线；后续阶段会把命令提交、事件轮询、真实 CLI 进程管理和权限审批逐步接入。
-
-## Windows 开发环境
-
-建议环境：
-
-- Windows 10 或 Windows 11
-- Python 3.13+
-- Rust 1.95+
-- Git
-- 可选：Claude Code、Codex CLI、OpenCode、Pi Agent 的本地 CLI
-
-安装桌面依赖：
+执行仓库检查、类型检查、测试和构建：
 
 ```powershell
-cd "D:\Halo Studio"
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r apps\desktop\requirements.txt
-python -m pip install -e apps\desktop
+npm run verify
 ```
 
-启动原生桌面壳：
+## 参考资料边界
 
-```powershell
-python -m halo_desktop.main
-```
+`用于参考的几个项目的代码/` 是只读参考资料目录。不得在其中修改文件、安装依赖或执行构建；该目录也不得被 Git 跟踪、提交或包含在发布产物中。引用其中的代码或资源前必须单独核对许可证。
 
-如果你暂时不想安装 editable 包，也可以这样启动：
+## 设计与计划
 
-```powershell
-cd apps\desktop
-python -m halo_desktop.main
-```
-
-如果没有安装 PySide6，入口会给出安装提示；核心 Python 测试不依赖 PySide6。
-
-## 测试
-
-Rust runtime 与协议测试：
-
-```powershell
-cargo test --workspace
-```
-
-Python 桌面后端、命令补全、manifest 读取、QML 静态约束测试：
-
-```powershell
-python -m unittest discover -s apps/desktop/tests -v
-```
-
-Phase 1 验收重点：
-
-- fake runtime 支持 4/16/32 个 Agent 的确定性事件生成。
-- slash completion 支持 `/codex`、`/claude`、`/opencode`、`/pi`、`/test`、`/review` 等命令。
-- QML 主界面包含 AgentSidebar、WorkflowTimeline、InspectorPanel、CommandComposer。
-- QML 不使用粒子、ShaderEffect、DropShadow、FastBlur 或持续坐标动画。
-- 新增代码不引入新的 Electron、React、Vue、WebView 或浏览器 UI。
-
-## 内置 Agent Manifest
-
-Phase 1 已准备四个内置 Agent profile：
-
-| Agent | 命令 | 默认权限 |
-| --- | --- | --- |
-| Claude Code | `claude` | shell/file_write 默认关闭 |
-| Codex CLI | `codex` | shell/file_write 默认关闭 |
-| OpenCode | `opencode` | shell/file_write 默认关闭 |
-| Pi Agent | `pi` | shell/file_write 默认关闭 |
-
-这些 manifest 目前只用于 UI、命令补全、能力声明和后续 runtime 接入。真实进程启动、配置写入、MCP 写入和权限审批会在后续阶段接入。
-
-## 旧 Electron 状态
-
-旧的 Electron/React 代码仍保留在仓库中，用作迁移参考和行为回归参考，但它不再是目标产品路线。后续阶段会逐步将可复用的 Agent 检测、配置写入、MCP preview、备份回滚等能力迁移到原生桌面架构，再清退旧 Web/Electron 入口。
-
-## 文档
-
-- 架构设计：`docs/architecture/2026-07-22-native-agent-workspace-rebuild.md`
-- Phase 1 实施计划：`docs/superpowers/plans/2026-07-22-native-agent-workspace-phase-1.md`
-
-## 当前限制
-
-- Phase 1 使用 fake runtime，不直接调用真实 CLI。
-- QML UI 是原生桌面壳纵切片，不是完整产品功能。
-- 配置写入、MCP 写入、真实 shell、插件执行默认不启用。
-- Windows 打包脚本尚未接入。
-- PySide6 需要本机安装后才能实际打开桌面窗口。
-
-## 提交约定
-
-本项目提交信息优先使用中文。涉及真实配置、shell、文件写入、Agent 调度和并发 runtime 的变更，需要先补测试，再实现。
+- 核心重构规格：`docs/superpowers/specs/2026-07-22-pi-opencode-core-rebuild-design.md`
+- 当前实施计划：`docs/superpowers/plans/2026-07-22-pi-opencode-core-rebuild.md`
