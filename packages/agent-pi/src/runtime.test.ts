@@ -132,6 +132,34 @@ describe("Pi runtime lifecycle", () => {
     expect(detection).toMatchObject({ status: "unavailable", source: "managed" });
   });
 
+  it("removes probe listeners when process events are exposed at the port level", async () => {
+    const processEvents = new EventEmitter();
+    const stdout = new EventEmitter();
+    const stderr = new EventEmitter();
+    const port: ProcessPort = {
+      stdin: { write: () => undefined, end: () => undefined },
+      stdout,
+      stderr,
+      on: processEvents.on.bind(processEvents),
+      off: processEvents.off.bind(processEvents),
+      removeListener: processEvents.removeListener.bind(processEvents),
+    };
+    queueMicrotask(() => {
+      processEvents.emit("exit", 0, null);
+      stdout.emit("data", "pi 0.81.1\n");
+      stdout.emit("end");
+      stderr.emit("end");
+      processEvents.emit("close");
+    });
+    const detection = await detectPi({ hostEnvironment: { PATH: "C:/bin" }, processFactory: () => port });
+    expect(detection).toMatchObject({ status: "detected", executable: "pi", version: "0.81.1" });
+    expect(processEvents.listenerCount("exit")).toBe(0);
+    expect(processEvents.listenerCount("close")).toBe(0);
+    expect(stdout.listenerCount("data")).toBe(0);
+    expect(stdout.listenerCount("end")).toBe(0);
+    expect(stderr.listenerCount("end")).toBe(0);
+  });
+
   it("times out an unresponsive version probe and kills each candidate", async () => {
     const killed: string[] = [];
     const detection = await detectPi({
@@ -292,6 +320,56 @@ describe("Pi runtime lifecycle", () => {
     expect(runtime.state).toBe("crashed");
   });
 
+  it("bounds a pending kill during stop and reports crashed", async () => {
+    const port = new RuntimePort();
+    let killed = false;
+    let rejectKill!: (error: Error) => void;
+    port.wait = () => new Promise(() => undefined);
+    port.kill = () => {
+      killed = true;
+      return new Promise<boolean>((_resolve, reject) => { rejectKill = reject; });
+    };
+    const runtime = new PiRuntime({
+      detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
+      spawn: () => port,
+      cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
+      stopTimeoutMs: 1,
+    });
+    await runtime.start();
+    const result = await Promise.race([
+      runtime.stop().then(() => "resolved", () => "rejected"),
+      new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 100)),
+    ]);
+    expect(result).toBe("rejected");
+    expect(killed).toBe(true);
+    expect(runtime.state).toBe("crashed");
+    rejectKill(new Error("late kill failure"));
+    await Promise.resolve();
+  });
+
+  it("attempts to kill when wait rejects during stop", async () => {
+    const port = new RuntimePort();
+    let killed = false;
+    port.wait = () => Promise.reject(new Error("wait failed"));
+    port.kill = () => {
+      killed = true;
+      port.process.emit("exit", 1, "SIGTERM");
+      return true;
+    };
+    const runtime = new PiRuntime({
+      detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
+      spawn: () => port,
+      cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
+      stopTimeoutMs: 1,
+    });
+    await runtime.start();
+    await expect(runtime.stop()).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+    expect(killed).toBe(true);
+    expect(runtime.state).toBe("crashed");
+  });
+
   it("fails readiness as crashed when get_state times out and terminates the process", async () => {
     const port = new RuntimePort();
     port.stdin.write = (value: string) => { port.stdin.writes.push(value); };
@@ -308,6 +386,48 @@ describe("Pi runtime lifecycle", () => {
     expect(runtime.state).toBe("crashed");
     expect(port.ended).toBe(true);
     expect(killed).toBe(true);
+  });
+
+  it("bounds a pending kill while terminating a failed start", async () => {
+    const port = new RuntimePort();
+    port.stdin.write = (value: string) => { port.stdin.writes.push(value); };
+    port.wait = () => new Promise(() => undefined);
+    port.kill = () => new Promise<boolean>(() => undefined);
+    const runtime = new PiRuntime({
+      detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
+      spawn: () => port,
+      cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
+      readinessTimeoutMs: 1,
+      stopTimeoutMs: 1,
+    });
+    const result = await Promise.race([
+      runtime.start().then(() => "resolved", () => "rejected"),
+      new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 100)),
+    ]);
+    expect(result).toBe("rejected");
+    expect(runtime.state).toBe("crashed");
+  });
+
+  it("does not report failed-start cleanup when wait never settles and kill is unavailable", async () => {
+    const port = new RuntimePort();
+    port.stdin.write = (value: string) => { port.stdin.writes.push(value); };
+    port.wait = () => new Promise(() => undefined);
+    port.kill = undefined;
+    const runtime = new PiRuntime({
+      detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
+      spawn: () => port,
+      cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
+      readinessTimeoutMs: 1,
+      stopTimeoutMs: 1,
+    });
+    const result = await Promise.race([
+      runtime.start().then(() => "resolved", () => "rejected"),
+      new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 100)),
+    ]);
+    expect(result).toBe("rejected");
+    expect(runtime.state).toBe("crashed");
   });
 
   it("rejects a failed get_state response and never becomes ready", async () => {
@@ -330,6 +450,28 @@ describe("Pi runtime lifecycle", () => {
     expect(port.ended).toBe(true);
     expect(killed).toBe(true);
     await expect(runtime.prompt("after failure")).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+  });
+
+  it("does not become ready after the process exits with the readiness response", async () => {
+    const port = new RuntimePort();
+    port.stdin.write = (value: string) => {
+      port.stdin.writes.push(value);
+      const command = JSON.parse(value) as { id: string; type: string };
+      if (command.type === "get_state") queueMicrotask(() => {
+        port.stdout.emit("data", JSON.stringify({ type: "response", id: command.id, command: "get_state", success: true, data: {} }) + "\n");
+        port.process.emit("exit", 1, null);
+        port.process.emit("close");
+      });
+    };
+    const runtime = new PiRuntime({
+      detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
+      spawn: () => port,
+      cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
+    });
+    await expect(runtime.start()).rejects.toMatchObject({ code: "TransportDisconnected" });
+    expect(runtime.state).toBe("crashed");
+    await expect(runtime.prompt("after exit")).rejects.toMatchObject({ code: "RuntimeUnavailable" });
   });
 
   it("does not spawn twice and does not downgrade a running state on detect", async () => {

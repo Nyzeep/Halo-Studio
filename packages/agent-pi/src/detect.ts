@@ -115,29 +115,40 @@ async function probe(executable: string, options: ProbeOptions): Promise<PiDetec
       void exitPromise.then(done, done);
     });
   };
+  const boundedKill = async (): Promise<void> => {
+    try {
+      const result = port.kill?.("SIGTERM");
+      if (!result || typeof (result as PromiseLike<unknown>).then !== "function") return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const settled = Promise.resolve(result).then(() => undefined, () => undefined);
+      const timeout = new Promise<void>((resolve) => { timer = setTimeout(resolve, options.timeoutMs ?? 10_000); });
+      try { await Promise.race([settled, timeout]); } finally { if (timer !== undefined) clearTimeout(timer); }
+    } catch { /* process may already be gone */ }
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const exitPromise: Promise<ProcessExit> = port.wait
       ? port.wait()
       : processEvents
-        ? new Promise<ProcessExit>((resolve) => processEvents.on("close", () => resolve(reportedExit ?? { code: null, signal: null })))
+        ? new Promise<ProcessExit>((resolve) => subscribe(processEvents, "close", () => resolve(reportedExit ?? { code: null, signal: null })))
         : Promise.resolve({ code: null, signal: null });
     const observation = Promise.all([streamClosed(port.stdout), streamClosed(port.stderr), exitPromise.then((value) => value)]);
     const timeoutMs = options.timeoutMs ?? 10_000;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), timeoutMs); });
     const result = await Promise.race([observation, timedOut]);
-    if (timer !== undefined) clearTimeout(timer);
     if (result === undefined) {
       try { port.stdin.end(); } catch { /* process may already be gone */ }
-      try { await port.kill?.("SIGTERM"); } catch { /* process may already be gone */ }
-      unsubscribe();
+      await boundedKill();
       return undefined;
     }
     const [stdoutErrored, stderrErrored, exit] = result;
     await processClosed(exitPromise);
-    unsubscribe();
     if (stdoutErrored || stderrErrored || exit.code !== 0) return undefined;
   } catch { return undefined; }
+  finally {
+    if (timer !== undefined) clearTimeout(timer);
+    unsubscribe();
+  }
   const version = parseVersion(output);
   if (version !== PI_VERSION) return undefined;
   return { status: "detected", source: "system", executable, version };

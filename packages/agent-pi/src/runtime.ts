@@ -3,7 +3,7 @@ import { buildRuntimeEnvironment, mergeRuntimeEnvironment, runtimeTrustPolicy } 
 import { randomUUID } from "node:crypto";
 import { PiJsonlTransport, type ProcessExit, type ProcessPort } from "./jsonlTransport.js";
 import { detectPi, nodeProcessFactory, type ProcessFactory, type ProcessFactoryOptions } from "./detect.js";
-import { PiError, RuntimeUnavailableError, VersionMismatchError } from "./errors.js";
+import { PiError, RuntimeUnavailableError, TransportDisconnectedError, VersionMismatchError } from "./errors.js";
 import { PI_VERSION, type PiDetection, type PiEvent, type PiLifecycleState, type PiResponse } from "./schemas.js";
 
 export interface PiSpawnOptions extends ProcessFactoryOptions {
@@ -98,15 +98,19 @@ export class PiRuntime {
       const baseEnvironment = buildRuntimeEnvironment(this.#options.hostEnvironment, this.#options.providerEnvironment ?? {}, this.#options.allowedProviderKeys ?? new Set());
       const env = mergeRuntimeEnvironment(baseEnvironment, trustPolicy);
       const args = ["--mode", "rpc", "--session", this.#options.session, "--model", this.#options.model, "--thinking", this.#options.thinking, ...trustPolicy.args] as const;
-      this.#port = (this.#options.spawn ?? nodeProcessFactory)(detection.executable, args, { cwd: this.#options.cwd, env });
-      this.#transport = new PiJsonlTransport(this.#port, { onDisconnect: (error) => this.#onDisconnect(error) });
+      const port = (this.#options.spawn ?? nodeProcessFactory)(detection.executable, args, { cwd: this.#options.cwd, env });
+      this.#port = port;
+      this.#transport = new PiJsonlTransport(port, { onDisconnect: (error) => this.#onDisconnect(error) });
       this.#unsubscribe = this.#transport.onEvent((event) => this.#onEvent(event));
       const readiness = await this.#transport.request({ type: "get_state" }, { timeoutMs: this.#options.readinessTimeoutMs ?? 10_000 });
       if (!readiness.success) throw new RuntimeUnavailableError();
+      if (this.#state !== "starting" || this.#transport.closed || this.#port !== port) throw new TransportDisconnectedError();
       this.#state = "ready";
     } catch (error) {
       this.#state = "crashed";
       this.#transport?.close();
+      this.#unsubscribe?.();
+      this.#unsubscribe = undefined;
       await this.#terminateFailedStart();
       if (error instanceof PiError) throw error;
       throw new RuntimeUnavailableError();
@@ -139,24 +143,23 @@ export class PiRuntime {
     this.#state = "stopping";
     const stopTimeoutMs = this.#options.stopTimeoutMs ?? 5_000;
     await this.#endStdin(stopTimeoutMs);
+    const port = this.#port;
     let wait: Promise<ProcessExit>;
-    try { wait = this.#port.wait ? this.#port.wait() : Promise.resolve({ code: 0, signal: null } satisfies ProcessExit); } catch { wait = Promise.reject(new Error()); }
-    let completed = false;
-    let rejected = false;
-    const settled = wait.then(() => { completed = true; }, () => { completed = true; rejected = true; });
-    await Promise.race([settled, this.#delay(stopTimeoutMs)]);
+    try { wait = port.wait ? port.wait() : Promise.resolve({ code: 0, signal: null } satisfies ProcessExit); } catch { wait = Promise.reject(new Error()); }
+    const initialWait = await this.#raceWithTimeout(() => wait, stopTimeoutMs);
     let killFailed = false;
-    if (!completed) {
-      try {
-        const result = await this.#port.kill?.("SIGTERM");
-        killFailed = result === false || this.#port.kill === undefined;
-      } catch { killFailed = true; }
-      await Promise.race([settled, this.#delay(stopTimeoutMs)]);
-      if (!completed) killFailed = true;
+    if (initialWait.status !== "fulfilled") {
+      const killResult = await this.#raceWithTimeout(() => port.kill?.("SIGTERM"), stopTimeoutMs);
+      killFailed = port.kill === undefined || killResult.status !== "fulfilled" || killResult.value === false;
+      if (!killFailed && initialWait.status === "timeout") {
+        const afterKill = await this.#raceWithTimeout(() => wait, stopTimeoutMs);
+        killFailed = afterKill.status !== "fulfilled";
+      }
     }
     this.#transport?.close();
     this.#unsubscribe?.();
-    if (killFailed || rejected) {
+    this.#unsubscribe = undefined;
+    if (killFailed || initialWait.status === "rejected") {
       this.#state = "crashed";
       throw new RuntimeUnavailableError();
     }
@@ -191,20 +194,40 @@ export class PiRuntime {
   async #teardownFailedStart(): Promise<boolean> {
     const port = this.#port;
     if (!port) return true;
-    await this.#endStdin(1_000);
+    const timeoutMs = this.#options.stopTimeoutMs ?? 1_000;
+    await this.#endStdin(timeoutMs);
     let wait: Promise<ProcessExit>;
-    try { wait = port.wait ? port.wait() : Promise.resolve({ code: 0, signal: null } satisfies ProcessExit); } catch { return false; }
-    if (port.kill === undefined) {
-      await Promise.race([wait.catch(() => undefined), this.#delay(1_000)]);
-      return true;
+    try { wait = port.wait ? port.wait() : Promise.resolve({ code: 0, signal: null } satisfies ProcessExit); } catch { wait = Promise.reject(new Error()); }
+    const initialWait = await this.#raceWithTimeout(() => wait, timeoutMs);
+    const killResult = await this.#raceWithTimeout(() => port.kill?.("SIGTERM"), timeoutMs);
+    if (initialWait.status === "fulfilled") {
+      return port.wait !== undefined
+        || (port.kill !== undefined && killResult.status === "fulfilled" && killResult.value !== false);
     }
+    if (port.kill === undefined || killResult.status !== "fulfilled" || killResult.value === false) return false;
+    if (initialWait.status === "rejected") return false;
+    const afterKill = await this.#raceWithTimeout(() => wait, timeoutMs);
+    return afterKill.status === "fulfilled";
+  }
+
+  async #raceWithTimeout<T>(operation: () => T | PromiseLike<T>, timeoutMs: number): Promise<
+    | { readonly status: "fulfilled"; readonly value: T }
+    | { readonly status: "rejected"; readonly error: unknown }
+    | { readonly status: "timeout" }
+  > {
+    const observed = Promise.resolve().then(operation).then(
+      (value) => ({ status: "fulfilled", value } as const),
+      (error: unknown) => ({ status: "rejected", error } as const),
+    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<{ readonly status: "timeout" }>((resolve) => {
+      timer = setTimeout(() => resolve({ status: "timeout" }), Math.max(0, timeoutMs));
+    });
     try {
-      const result = await port.kill("SIGTERM");
-      if (result === false) return false;
-    } catch { return false; }
-    let exited = false;
-    await Promise.race([wait.then(() => { exited = true; }, () => { exited = true; }), this.#delay(1_000)]);
-    return exited;
+      return await Promise.race([observed, timeout]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   async #endStdin(timeoutMs: number): Promise<void> {
@@ -217,8 +240,6 @@ export class PiRuntime {
       }
     } catch { /* process may already be gone */ }
   }
-
-  #delay(timeoutMs: number): Promise<void> { return new Promise((resolve) => setTimeout(resolve, timeoutMs)); }
 
   #exclusive<T>(operation: () => Promise<T>): Promise<T> {
     const previous = this.#operation;
