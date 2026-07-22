@@ -1,3 +1,5 @@
+import { types as utilTypes } from "node:util";
+
 import { CoreError } from "./error.js";
 
 export type EnvironmentInput = Readonly<Record<string, string | undefined>>;
@@ -39,15 +41,53 @@ const BLOCKED_PROVIDER_KEYS = new Set([
   "RUBYOPT",
 ]);
 const PROVIDER_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/u;
+const INVALID_ENVIRONMENT_MESSAGE =
+  "Runtime environment input is not permitted.";
+
+function invalidEnvironment(): never {
+  throw new CoreError("ProtocolViolation", INVALID_ENVIRONMENT_MESSAGE);
+}
+
+function assertInspectableObject(value: unknown): asserts value is object {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    utilTypes.isProxy(value)
+  ) {
+    invalidEnvironment();
+  }
+}
+
+function readEnvironmentValue(
+  source: object,
+  key: string,
+): string | undefined {
+  const descriptor = Object.getOwnPropertyDescriptor(source, key);
+  if (descriptor === undefined) {
+    return undefined;
+  }
+  if (!("value" in descriptor)) {
+    return invalidEnvironment();
+  }
+
+  const value: unknown = descriptor.value;
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string" || value.includes("\0")) {
+    return invalidEnvironment();
+  }
+  return value;
+}
 
 function copyDefined(
   target: Record<string, string>,
-  source: EnvironmentInput,
+  source: object,
   sourceKey: string,
   targetKey = sourceKey,
 ): void {
-  const value = source[sourceKey];
-  if (typeof value === "string") {
+  const value = readEnvironmentValue(source, sourceKey);
+  if (value !== undefined) {
     target[targetKey] = value;
   }
 }
@@ -65,32 +105,59 @@ export function buildRuntimeEnvironment(
   hostEnvironment: EnvironmentInput,
   providerEnvironment: ProviderEnvironment = {},
 ): Record<string, string> {
-  const result: Record<string, string> = {};
+  try {
+    assertInspectableObject(hostEnvironment);
+    assertInspectableObject(providerEnvironment);
+    const result: Record<string, string> = {};
 
-  if (typeof hostEnvironment.PATH === "string") {
-    result.PATH = hostEnvironment.PATH;
-  } else {
-    copyDefined(result, hostEnvironment, "Path", "PATH");
-  }
-
-  for (const key of HOST_KEYS) {
-    copyDefined(result, hostEnvironment, key);
-  }
-
-  for (const [key, value] of Object.entries(providerEnvironment)) {
-    if (
-      !PROVIDER_KEY_PATTERN.test(key) ||
-      isBlockedProviderKey(key) ||
-      typeof value !== "string" ||
-      value.includes("\0")
-    ) {
-      throw new CoreError(
-        "ProtocolViolation",
-        "Provider environment variable is not permitted.",
-      );
+    const pathValue = readEnvironmentValue(hostEnvironment, "PATH");
+    if (pathValue !== undefined) {
+      result.PATH = pathValue;
+    } else {
+      copyDefined(result, hostEnvironment, "Path", "PATH");
     }
-    result[key] = value;
-  }
 
-  return result;
+    for (const key of HOST_KEYS) {
+      copyDefined(result, hostEnvironment, key);
+    }
+
+    for (const key of Reflect.ownKeys(providerEnvironment)) {
+      if (typeof key !== "string") {
+        invalidEnvironment();
+      }
+
+      const descriptor = Object.getOwnPropertyDescriptor(
+        providerEnvironment,
+        key,
+      );
+      if (descriptor === undefined || !descriptor.enumerable) {
+        continue;
+      }
+      if (!("value" in descriptor)) {
+        invalidEnvironment();
+      }
+
+      const value: unknown = descriptor.value;
+      if (
+        !PROVIDER_KEY_PATTERN.test(key) ||
+        isBlockedProviderKey(key) ||
+        typeof value !== "string" ||
+        value.includes("\0")
+      ) {
+        invalidEnvironment();
+      }
+      result[key] = value;
+    }
+
+    return result;
+  } catch (error) {
+    if (
+      error instanceof CoreError &&
+      error.code === "ProtocolViolation" &&
+      error.message === INVALID_ENVIRONMENT_MESSAGE
+    ) {
+      throw error;
+    }
+    return invalidEnvironment();
+  }
 }

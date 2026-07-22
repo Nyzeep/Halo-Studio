@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
+import { types as utilTypes } from "node:util";
 
 import { workspaceSchema } from "@halo-studio/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +26,64 @@ async function temporaryDirectory(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "halo core 中文 "));
   temporaryRoots.push(root);
   return root;
+}
+
+type DirectoryLinkKind = "dir" | "junction";
+type DirectoryLinkCreator = (
+  target: string,
+  link: string,
+  kind: DirectoryLinkKind,
+) => Promise<void>;
+
+interface TestDirectoryLinkOptions {
+  readonly createLink: DirectoryLinkCreator;
+  readonly onSkip: (reason: string) => void;
+  readonly platform: string;
+}
+
+function windowsLinkPermissionCode(error: unknown): string | undefined {
+  if (
+    error === null ||
+    typeof error !== "object" ||
+    utilTypes.isProxy(error)
+  ) {
+    return undefined;
+  }
+
+  const descriptor = Object.getOwnPropertyDescriptor(error, "code");
+  if (descriptor === undefined || !("value" in descriptor)) {
+    return undefined;
+  }
+  return descriptor.value === "EPERM" || descriptor.value === "EACCES"
+    ? descriptor.value
+    : undefined;
+}
+
+async function createDirectoryLinkForTest(
+  target: string,
+  link: string,
+  options: TestDirectoryLinkOptions,
+): Promise<boolean> {
+  try {
+    await options.createLink(
+      target,
+      link,
+      options.platform === "win32" ? "junction" : "dir",
+    );
+    return true;
+  } catch (error) {
+    const permissionCode =
+      options.platform === "win32"
+        ? windowsLinkPermissionCode(error)
+        : undefined;
+    if (permissionCode === undefined) {
+      throw error;
+    }
+    options.onSkip(
+      `Skipping Windows directory-link test because link creation was denied (${permissionCode}).`,
+    );
+    return false;
+  }
 }
 
 afterEach(async () => {
@@ -162,6 +221,55 @@ describe("workspace opening", () => {
     expect(String(thrown)).not.toContain("trust-storage-canary-secret");
   });
 
+  it("does not skip POSIX directory-link failures", async () => {
+    const error = Object.assign(new Error("permission denied"), {
+      code: "EPERM",
+    });
+    const onSkip = vi.fn();
+
+    await expect(
+      createDirectoryLinkForTest("target", "link", {
+        createLink: vi.fn().mockRejectedValue(error),
+        onSkip,
+        platform: "linux",
+      }),
+    ).rejects.toBe(error);
+    expect(onSkip).not.toHaveBeenCalled();
+  });
+
+  it("does not skip non-permission Windows directory-link failures", async () => {
+    const error = Object.assign(new Error("link already exists"), {
+      code: "EEXIST",
+    });
+    const onSkip = vi.fn();
+
+    await expect(
+      createDirectoryLinkForTest("target", "link", {
+        createLink: vi.fn().mockRejectedValue(error),
+        onSkip,
+        platform: "win32",
+      }),
+    ).rejects.toBe(error);
+    expect(onSkip).not.toHaveBeenCalled();
+  });
+
+  it.each(["EPERM", "EACCES"])(
+    "skips Windows directory links only for permission error %s",
+    async (code) => {
+      const onSkip = vi.fn();
+      const created = await createDirectoryLinkForTest("target", "link", {
+        createLink: vi
+          .fn()
+          .mockRejectedValue(Object.assign(new Error("permission denied"), { code })),
+        onSkip,
+        platform: "win32",
+      });
+
+      expect(created).toBe(false);
+      expect(onSkip).toHaveBeenCalledWith(expect.stringContaining(code));
+    },
+  );
+
   it("uses the real target for ids while preserving a link root path", async ({
     skip,
   }) => {
@@ -170,12 +278,15 @@ describe("workspace opening", () => {
     const link = join(parent, "linked workspace");
     await mkdir(target);
 
-    try {
-      await symlink(target, link, process.platform === "win32" ? "junction" : "dir");
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      console.warn(`Skipping real link test because the operating system rejected link creation: ${reason}`);
-      skip();
+    const linkedOnDisk = await createDirectoryLinkForTest(target, link, {
+      createLink: symlink,
+      onSkip: (reason) => {
+        console.warn(reason);
+        skip();
+      },
+      platform: process.platform,
+    });
+    if (!linkedOnDisk) {
       return;
     }
 
@@ -186,6 +297,39 @@ describe("workspace opening", () => {
     expect(linked.rootPath).toBe(resolve(link));
     expect(linked.realPath).toBe(resolve(target));
     expect(linked.id).toBe(direct.id);
+  });
+
+  it("uses the nearest trust ancestor of a linked canonical target", async ({
+    skip,
+  }) => {
+    const parent = await temporaryDirectory();
+    const decisionParent = join(parent, "decision parent");
+    const trustedAncestor = join(decisionParent, "trusted child");
+    const target = join(trustedAncestor, "workspace target");
+    const link = join(parent, "selected workspace");
+    await mkdir(target, { recursive: true });
+
+    const linkedOnDisk = await createDirectoryLinkForTest(target, link, {
+      createLink: symlink,
+      onSkip: (reason) => {
+        console.warn(reason);
+        skip();
+      },
+      platform: process.platform,
+    });
+    if (!linkedOnDisk) {
+      return;
+    }
+
+    const store = new MemoryTrustStore();
+    await store.setDecision(decisionParent, "untrusted");
+    await store.setDecision(trustedAncestor, "trusted");
+
+    const workspace = await openWorkspace(link, store);
+
+    expect(workspace.rootPath).toBe(resolve(link));
+    expect(workspace.realPath).toBe(resolve(target));
+    expect(workspace.trustState).toBe("trusted");
   });
 });
 

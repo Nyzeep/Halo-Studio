@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { buildRuntimeEnvironment } from "./environment.js";
 
 describe("runtime environment allowlist", () => {
+  const invalidEnvironmentError = {
+    code: "ProtocolViolation",
+    message: "Runtime environment input is not permitted.",
+  } as const;
+
   it("copies only audited host variables and omits undefined values", () => {
     const result = buildRuntimeEnvironment({
       ALL_PROXY: "socks://proxy",
@@ -153,4 +158,105 @@ describe("runtime environment allowlist", () => {
       ),
     ).toThrowError(expect.objectContaining({ code: "ProtocolViolation" }));
   });
+
+  it("rejects a host accessor without executing its getter", () => {
+    const getter = vi.fn(() => {
+      throw new Error("host-getter-canary-secret");
+    });
+    const host = Object.defineProperty({}, "PATH", {
+      enumerable: true,
+      get: getter,
+    });
+
+    let thrown: unknown;
+    try {
+      buildRuntimeEnvironment(host);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toMatchObject(invalidEnvironmentError);
+    expect(getter).not.toHaveBeenCalled();
+    expect(String(thrown)).not.toContain("canary-secret");
+  });
+
+  it("rejects a host Proxy without executing its traps", () => {
+    const get = vi.fn(() => {
+      throw new Error("host-proxy-get-canary-secret");
+    });
+    const getOwnPropertyDescriptor = vi.fn(() => {
+      throw new Error("host-proxy-descriptor-canary-secret");
+    });
+    const host = new Proxy({}, { get, getOwnPropertyDescriptor });
+
+    let thrown: unknown;
+    try {
+      buildRuntimeEnvironment(host);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toMatchObject(invalidEnvironmentError);
+    expect(get).not.toHaveBeenCalled();
+    expect(getOwnPropertyDescriptor).not.toHaveBeenCalled();
+    expect(String(thrown)).not.toContain("canary-secret");
+  });
+
+  it("rejects a provider accessor without executing its getter", () => {
+    const getter = vi.fn(() => {
+      throw new Error("provider-getter-canary-secret");
+    });
+    const provider = Object.defineProperty({}, "OPENAI_API_KEY", {
+      enumerable: true,
+      get: getter,
+    }) as Record<string, string>;
+
+    let thrown: unknown;
+    try {
+      buildRuntimeEnvironment({}, provider);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toMatchObject(invalidEnvironmentError);
+    expect(getter).not.toHaveBeenCalled();
+    expect(String(thrown)).not.toContain("canary-secret");
+  });
+
+  it("rejects a provider Proxy without executing enumeration traps", () => {
+    const ownKeys = vi.fn(() => {
+      throw new Error("provider-own-keys-canary-secret");
+    });
+    const getOwnPropertyDescriptor = vi.fn(() => {
+      throw new Error("provider-descriptor-canary-secret");
+    });
+    const provider = new Proxy({}, { ownKeys, getOwnPropertyDescriptor });
+
+    let thrown: unknown;
+    try {
+      buildRuntimeEnvironment({}, provider);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toMatchObject(invalidEnvironmentError);
+    expect(ownKeys).not.toHaveBeenCalled();
+    expect(getOwnPropertyDescriptor).not.toHaveBeenCalled();
+    expect(String(thrown)).not.toContain("canary-secret");
+  });
+
+  it.each(["PATH", "HOME", "HTTPS_PROXY", "http_proxy"])(
+    "rejects NUL in host variable %s",
+    (name) => {
+      let thrown: unknown;
+      try {
+        buildRuntimeEnvironment({ [name]: "host-canary\0secret" });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toMatchObject(invalidEnvironmentError);
+      expect(String(thrown)).not.toContain("canary");
+    },
+  );
 });
