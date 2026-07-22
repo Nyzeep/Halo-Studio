@@ -14,6 +14,13 @@ class MainEntryTests(unittest.TestCase):
         self.assertIn("qml_controller = create_qml_controller", source)
         self.assertIn('setContextProperty("controller", qml_controller)', source)
 
+    def test_main_entry_keeps_runtime_mode_demo_by_default(self):
+        source = MAIN_SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn('HALO_RUNTIME_MODE", "demo"', source)
+        self.assertIn('return mode if mode in {"demo", "ipc"} else "demo"', source)
+        self.assertIn("runtime_mode=runtime_mode", source)
+
 
 if __name__ == "__main__":
     unittest.main()

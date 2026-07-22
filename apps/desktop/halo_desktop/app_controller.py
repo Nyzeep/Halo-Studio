@@ -1,12 +1,42 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from .completion import complete_commands, default_commands
 from .demo_runtime import run_demo_agents
-from .models import AgentProfile
+from .models import AgentProfile, WorkflowEvent
 from .plugin_registry import PluginRegistry
+
+
+class RuntimeProvider(Protocol):
+    def timeline_events(self, agent_count: int = 4) -> tuple[WorkflowEvent, ...]:
+        ...
+
+
+class DemoRuntimeProvider:
+    def timeline_events(self, agent_count: int = 4) -> tuple[WorkflowEvent, ...]:
+        return run_demo_agents(agent_count)
+
+
+class IpcRuntimeProvider:
+    def __init__(self, ipc_client: Any | None) -> None:
+        self._ipc_client = ipc_client
+
+    def timeline_events(self, agent_count: int = 4) -> tuple[WorkflowEvent, ...]:
+        if self._ipc_client is None:
+            return ()
+
+        cached_events = getattr(self._ipc_client, "cached_events", None)
+        if cached_events is None:
+            return ()
+
+        raw_events = cached_events()
+        return tuple(
+            _workflow_event_from_ipc(event)
+            for event in raw_events
+            if event.get("type") == "runtimeEvent"
+        )
 
 
 DEFAULT_AGENTS = (
@@ -50,8 +80,22 @@ DEFAULT_AGENTS = (
 
 
 class AppController:
-    def __init__(self, project_root: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        project_root: str | Path | None = None,
+        *,
+        runtime_mode: str = "demo",
+        ipc_client: Any | None = None,
+    ) -> None:
         self.project_root = Path(project_root) if project_root else _default_project_root()
+        if runtime_mode not in {"demo", "ipc"}:
+            raise ValueError("runtime_mode must be 'demo' or 'ipc'")
+        self.runtime_mode = runtime_mode
+        self._runtime: RuntimeProvider = (
+            IpcRuntimeProvider(ipc_client)
+            if runtime_mode == "ipc"
+            else DemoRuntimeProvider()
+        )
         loaded_agents = PluginRegistry(self.project_root).load_agents()
         self._agents = tuple(loaded_agents) if loaded_agents else DEFAULT_AGENTS
 
@@ -89,7 +133,7 @@ class AppController:
         ]
 
     def timeline_events(self, agent_count: int = 4) -> list[dict[str, Any]]:
-        return [event.to_dict() for event in run_demo_agents(agent_count)]
+        return [event.to_dict() for event in self._runtime.timeline_events(agent_count)]
 
     def inspector_state(self) -> dict[str, Any]:
         events = self.timeline_events(4)
@@ -111,10 +155,19 @@ class AppController:
         return tuple(commands)
 
 
-def create_qml_controller(project_root: str | Path | None = None):
+def create_qml_controller(
+    project_root: str | Path | None = None,
+    *,
+    runtime_mode: str = "demo",
+    ipc_client: Any | None = None,
+):
     from PySide6.QtCore import Property, QObject, Signal, Slot
 
-    base = AppController(project_root)
+    base = AppController(
+        project_root,
+        runtime_mode=runtime_mode,
+        ipc_client=ipc_client,
+    )
 
     class QmlAppController(QObject):
         agentsChanged = Signal()
@@ -141,6 +194,35 @@ def create_qml_controller(project_root: str | Path | None = None):
             return base.inspector_state()
 
     return QmlAppController()
+
+
+def _workflow_event_from_ipc(event: dict[str, Any]) -> WorkflowEvent:
+    run_id = str(event.get("runId", ""))
+    agent_id = str(event.get("agentId", ""))
+    kind = str(event.get("kind", "runtime.event"))
+    message = str(event.get("message", ""))
+    seq = int(event.get("seq", 0))
+
+    return WorkflowEvent(
+        run_id=run_id,
+        agent_id=agent_id,
+        seq=seq,
+        kind=kind,
+        title=f"{kind} - {agent_id} - {run_id}",
+        body=message,
+        role=_role_for_runtime_kind(kind),
+        payload=(("phase", "ipc"),),
+    )
+
+
+def _role_for_runtime_kind(kind: str) -> str:
+    if kind == "message.delta":
+        return "assistant"
+    if kind.startswith("tool."):
+        return "tool"
+    if kind == "run.state":
+        return "system"
+    return "assistant"
 
 
 def _default_project_root() -> Path:

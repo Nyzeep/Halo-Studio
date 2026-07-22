@@ -128,7 +128,7 @@ Item {
     function refreshSuggestions() {
         var query = commandInput.text
         root.selectedSuggestion = 0
-        if (query.trim().indexOf("/") !== 0 || root.controller === undefined) {
+        if (query.trim().indexOf("/") !== 0 || root.controller === undefined || root.controller === null) {
             root.suggestions = []
             return
         }

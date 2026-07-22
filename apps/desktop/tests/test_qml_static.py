@@ -55,6 +55,13 @@ class QmlStaticTests(unittest.TestCase):
         self.assertIn("property var appController", main_qml)
         self.assertIn("appController === null ? []", main_qml)
 
+    def test_command_composer_guards_null_controller_for_completion(self):
+        qml_text = (QML_ROOT / "components" / "CommandComposer.qml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("root.controller === null", qml_text)
+
 
 
 if __name__ == "__main__":

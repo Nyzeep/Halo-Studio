@@ -10,5 +10,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "halo-ipc"
+version = "0.1.0"
+dependencies = [
+ "halo-protocol",
+]
+
+[[package]]
 name = "halo-protocol"
 version = "0.1.0"
+
+[[package]]
+name = "halo-runtime"
+version = "0.1.0"
+dependencies = [
+ "halo-core",
+ "halo-ipc",
+ "halo-protocol",
+]

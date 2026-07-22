@@ -23,7 +23,11 @@ def main(argv: list[str] | None = None) -> int:
 
     app = QGuiApplication(argv or sys.argv)
     engine = QQmlApplicationEngine()
-    qml_controller = create_qml_controller(_default_project_root())
+    runtime_mode = _runtime_mode_from_env()
+    qml_controller = create_qml_controller(
+        _default_project_root(),
+        runtime_mode=runtime_mode,
+    )
     engine.rootContext().setContextProperty("controller", qml_controller)
 
     qml_path = Path(__file__).resolve().parent / "qml" / "Main.qml"
@@ -35,6 +39,11 @@ def main(argv: list[str] | None = None) -> int:
 
 def _default_project_root() -> Path:
     return Path(__file__).resolve().parents[3]
+
+
+def _runtime_mode_from_env() -> str:
+    mode = os.environ.get("HALO_RUNTIME_MODE", "demo").strip().lower()
+    return mode if mode in {"demo", "ipc"} else "demo"
 
 
 if __name__ == "__main__":

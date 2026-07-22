@@ -85,7 +85,7 @@ ApplicationWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "4 agents ready"
+                    text: window.agents.length + " agents ready"
                     color: theme.cyan
                     font.pixelSize: 12
                 }

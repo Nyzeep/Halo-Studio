@@ -28,6 +28,8 @@ apps/
 crates/
   halo-protocol/
   halo-core/
+  halo-ipc/
+  halo-runtime/
 plugins/
   agents/
     claude-code/
@@ -38,6 +40,42 @@ docs/
   architecture/
   superpowers/plans/
 ```
+
+## Phase 2 Runtime/IPC
+
+Phase 2 新增 Rust runtime 纵切片，但仍然不直接调用真实 CLI、不启动 PTY、不写入用户配置。它的作用是先固定桌面壳与后台 runtime 的协议边界：
+
+- `halo-protocol`：共享 Agent、RuntimeEvent、RunSnapshot、RuntimeCommand 等协议类型。
+- `halo-core`：内存 EventBus、按 run 校验事件顺序、每个 run 的 ring buffer snapshot。
+- `halo-ipc`：无外部依赖的 stdio JSONL 编解码，负责 command/event/snapshot/error envelope。
+- `halo-runtime`：可测试的 Rust sidecar，通过 stdin/stdout 接收 `createRun`、`getSnapshot`、`shutdown`。
+- `apps/desktop/halo_desktop/ipc_client.py`：Python IPC client，只在显式调用时连接 sidecar，导入模块不会启动后台进程。
+
+默认桌面启动仍然使用 demo runtime：
+
+```powershell
+cd "D:\Halo Studio"
+.\.venv\Scripts\python.exe -m halo_desktop.main
+```
+
+构建和单独运行 Rust sidecar：
+
+```powershell
+cargo build -p halo-runtime
+cargo run -p halo-runtime
+```
+
+手动测试 sidecar 的 JSONL 输入：
+
+```powershell
+@'
+{"type":"createRun","runId":"run-1","agentId":"codex-cli","prompt":"hello"}
+{"type":"getSnapshot","runId":"run-1"}
+{"type":"shutdown"}
+'@ | cargo run -p halo-runtime
+```
+
+IPC 模式目前是开发接缝，不是默认 UI 路线；后续阶段会把命令提交、事件轮询、真实 CLI 进程管理和权限审批逐步接入。
 
 ## Windows 开发环境
 
