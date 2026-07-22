@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentKind } from "@halo-studio/contracts";
-import { ConfigTransaction, ConfigConflict, ConfigPreviewUnavailable, UnsafeConfigError } from "./configTransaction.js";
+import { ConfigTransaction, ConfigBackupUnavailable, ConfigConflict, ConfigPreviewUnavailable, UnsafeConfigError } from "./configTransaction.js";
 import { TargetRegistry } from "./targetRegistry.js";
 import { createTwoFilesPatch } from "./unifiedDiff.js";
 import { applyJsoncPatch } from "./jsoncPatch.js";
@@ -163,6 +163,50 @@ describe("config transaction", () => {
     const transaction = new ConfigTransaction(registry, { vault });
     const preview = await transaction.preview(targetId, [{ op: "set", path: ["known"], value: false }]);
     await transaction.commit(preview.previewId);
+  });
+
+  it("maps vault availability failure during backup store without leaking details", async () => {
+    const { root, registry, targetId } = await fixture();
+    const canary = `${root}\\vault.bin VAULT-SECRET-CANARY`;
+    const vault: CredentialVault = {
+      isAvailable: () => { throw new Error(canary); },
+      store: async () => { throw new Error("store must not run"); },
+      get: async () => null,
+      delete: async () => undefined,
+    };
+    const transaction = new ConfigTransaction(registry, { vault });
+    const preview = await transaction.preview(targetId, [{ op: "set", path: ["known"], value: false }]);
+    let error: unknown;
+    try { await transaction.commit(preview.previewId); } catch (caught) { error = caught; }
+    expect(error).toBeInstanceOf(ConfigBackupUnavailable);
+    expect(String(error)).toBe("ConfigBackupUnavailable: Encrypted configuration backup unavailable");
+    expect(String(error)).not.toContain(root); expect(String(error)).not.toContain("VAULT-SECRET-CANARY");
+  });
+
+  it("maps vault availability failure during rollback get without leaking details", async () => {
+    const { root, file, registry, targetId } = await fixture();
+    const values = new Map<string, string>();
+    const canary = `${root}\\vault.bin VAULT-SECRET-CANARY`;
+    let availabilityThrows = false;
+    const vault: CredentialVault = {
+      isAvailable: () => {
+        if (availabilityThrows) throw new Error(canary);
+        return true;
+      },
+      store: async (reference, value) => { values.set(reference, value); },
+      get: async (reference) => values.get(reference) ?? null,
+      delete: async (reference) => { values.delete(reference); },
+    };
+    const transaction = new ConfigTransaction(registry, { vault });
+    const preview = await transaction.preview(targetId, [{ op: "set", path: ["known"], value: false }]);
+    const committed = await transaction.commit(preview.previewId);
+    availabilityThrows = true;
+    let error: unknown;
+    try { await transaction.rollback(committed.backupId); } catch (caught) { error = caught; }
+    expect(error).toBeInstanceOf(ConfigBackupUnavailable);
+    expect(String(error)).toBe("ConfigBackupUnavailable: Encrypted configuration backup unavailable");
+    expect(String(error)).not.toContain(root); expect(String(error)).not.toContain("VAULT-SECRET-CANARY");
+    expect(await readFile(file, "utf8")).toContain("false");
   });
 
   it("previews and creates a registered missing target from an empty JSONC baseline", async () => {

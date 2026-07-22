@@ -84,14 +84,18 @@ export class EncryptedBackupStore {
   constructor(vault: CredentialVault) { this.#vault = vault; }
 
   async store(reference: string, value: string): Promise<void> {
-    if (!this.#vault.isAvailable()) throw new ConfigBackupUnavailable();
-    try { await this.#vault.store(reference, value); }
+    try {
+      if (this.#vault.isAvailable() !== true) throw new ConfigBackupUnavailable();
+      await this.#vault.store(reference, value);
+    }
     catch { throw new ConfigBackupUnavailable(); }
   }
 
   async get(reference: string): Promise<string | null> {
-    if (!this.#vault.isAvailable()) throw new ConfigBackupUnavailable();
-    try { return await this.#vault.get(reference); }
+    try {
+      if (this.#vault.isAvailable() !== true) throw new ConfigBackupUnavailable();
+      return await this.#vault.get(reference);
+    }
     catch { throw new ConfigBackupUnavailable(); }
   }
 }
