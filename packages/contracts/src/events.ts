@@ -1,13 +1,13 @@
 import { z } from "zod";
 
 import { workspaceIdSchema } from "./agent.js";
-import { jsonValueSchema } from "./error.js";
+import { optionalJsonValueSchema } from "./json.js";
 
 export const piEventPayloadSchema = z
   .object({
     protocol: z.literal("pi-rpc"),
     type: z.string().min(1),
-    data: jsonValueSchema.optional(),
+    data: optionalJsonValueSchema,
   })
   .strict();
 export type PiEventPayload = z.infer<typeof piEventPayloadSchema>;
@@ -16,7 +16,7 @@ export const openCodeEventPayloadSchema = z
   .object({
     protocol: z.literal("opencode-sse"),
     type: z.string().min(1),
-    data: jsonValueSchema.optional(),
+    data: optionalJsonValueSchema,
     unknown: z.boolean().optional(),
   })
   .strict();

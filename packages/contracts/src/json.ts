@@ -9,6 +9,7 @@ export type JsonValue =
 const MAX_JSON_DEPTH = 64;
 const MAX_JSON_NODES = 10_000;
 const MAX_CONTAINER_ENTRIES = 10_000;
+const JSON_VALUE_ERROR_MESSAGE = "Expected a bounded, acyclic JSON value.";
 
 type VisitFrame = {
   readonly kind: "visit";
@@ -157,6 +158,89 @@ function isJsonValue(input: unknown): input is JsonValue {
   }
 }
 
-export const jsonValueSchema = z.custom<JsonValue>(isJsonValue, {
-  message: "Expected a bounded, acyclic JSON value.",
-});
+type JsonSchemaValue = JsonValue | undefined;
+type JsonSchemaPredicate<TValue extends JsonSchemaValue> = (
+  input: unknown,
+) => input is TValue;
+
+function invalidJsonResult<TValue>(
+  params?: Partial<z.ParseParams>,
+): z.SafeParseReturnType<unknown, TValue> {
+  return {
+    success: false,
+    error: new z.ZodError<unknown>([
+      {
+        code: z.ZodIssueCode.custom,
+        message: JSON_VALUE_ERROR_MESSAGE,
+        path: params?.path ?? [],
+      },
+    ]),
+  };
+}
+
+class JsonValueSchema<
+  TValue extends JsonSchemaValue,
+> extends z.ZodType<TValue, z.ZodTypeDef, unknown> {
+  constructor(private readonly predicate: JsonSchemaPredicate<TValue>) {
+    super({});
+  }
+
+  _parse(input: z.ParseInput): z.ParseReturnType<TValue> {
+    if (this.predicate(input.data)) {
+      return z.OK(input.data);
+    }
+
+    const context: z.ParseContext = {
+      common: input.parent.common,
+      data: input.data,
+      parsedType: z.ZodParsedType.unknown,
+      path: input.path,
+      parent: input.parent,
+      ...(this._def.errorMap === undefined
+        ? {}
+        : { schemaErrorMap: this._def.errorMap }),
+    };
+    z.addIssueToContext(context, {
+      code: z.ZodIssueCode.custom,
+      message: JSON_VALUE_ERROR_MESSAGE,
+    });
+    return z.INVALID;
+  }
+
+  override safeParse(
+    data: unknown,
+    params?: Partial<z.ParseParams>,
+  ): z.SafeParseReturnType<unknown, TValue> {
+    try {
+      return super.safeParse(data, params);
+    } catch {
+      return invalidJsonResult<TValue>(params);
+    }
+  }
+
+  override async safeParseAsync(
+    data: unknown,
+    params?: Partial<z.ParseParams>,
+  ): Promise<z.SafeParseReturnType<unknown, TValue>> {
+    try {
+      return await super.safeParseAsync(data, params);
+    } catch {
+      return invalidJsonResult<TValue>(params);
+    }
+  }
+}
+
+export const jsonValueSchema: z.ZodType<
+  JsonValue,
+  z.ZodTypeDef,
+  unknown
+> = new JsonValueSchema(isJsonValue);
+
+export const optionalJsonValueSchema: z.ZodType<
+  JsonValue | undefined,
+  z.ZodTypeDef,
+  unknown
+> = new JsonValueSchema(
+  (input): input is JsonValue | undefined =>
+    input === undefined || isJsonValue(input),
+);

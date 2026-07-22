@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ZodError } from "zod";
 
 import {
   agentCapabilitiesSchema,
@@ -94,6 +95,32 @@ const storageHealth = {
   schemaVersion: 1,
   diagnostics: [],
 } satisfies DataOf<"storage.health">;
+
+const throwingPrototypeProxy = new Proxy(
+  {},
+  {
+    getPrototypeOf() {
+      throw new Error("prototype trap must not escape safeParse");
+    },
+  },
+);
+
+const revokedProxyController = Proxy.revocable({}, {});
+revokedProxyController.revoke();
+
+const throwingThenGetter = {};
+Object.defineProperty(throwingThenGetter, "then", {
+  enumerable: true,
+  get() {
+    throw new Error("then getter must not escape safeParse");
+  },
+});
+
+const adversarialJsonValues = [
+  ["throwing getPrototypeOf proxy", throwingPrototypeProxy],
+  ["revoked proxy", revokedProxyController.proxy],
+  ["throwing then getter", throwingThenGetter],
+] as const;
 
 function ipcFixture<TChannel extends IpcChannel>(
   channel: TChannel,
@@ -345,6 +372,46 @@ describe("public errors", () => {
       expect(jsonValueSchema.safeParse(value).success).toBe(false);
     }
   });
+
+  it.each(adversarialJsonValues)(
+    "safely rejects direct JSON input with a %s",
+    (_name, value) => {
+      expect(() => jsonValueSchema.safeParse(value)).not.toThrow();
+      const result = jsonValueSchema.safeParse(value);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(ZodError);
+      }
+      expect(() => jsonValueSchema.parse(value)).toThrow(ZodError);
+    },
+  );
+
+  it("keeps direct async JSON parsing on the normal Zod failure path", async () => {
+    const result = await jsonValueSchema.safeParseAsync(
+      revokedProxyController.proxy,
+    );
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBeInstanceOf(ZodError);
+    }
+    await expect(
+      jsonValueSchema.parseAsync(revokedProxyController.proxy),
+    ).rejects.toBeInstanceOf(ZodError);
+  });
+
+  it("safely rejects adversarial JSON in optional error details", () => {
+    for (const [_name, details] of adversarialJsonValues) {
+      const error = {
+        code: "ProtocolViolation",
+        message: "Invalid protocol data",
+        retryable: false,
+        details,
+      };
+
+      expect(() => appErrorSchema.safeParse(error)).not.toThrow();
+      expect(appErrorSchema.safeParse(error).success).toBe(false);
+    }
+  });
 });
 
 describe("agent event envelopes", () => {
@@ -392,6 +459,24 @@ describe("agent event envelopes", () => {
         payload: { protocol: "pi-rpc", type: "event" },
       }).success,
     ).toBe(false);
+  });
+
+  it("safely rejects adversarial JSON in optional event data", () => {
+    for (const [agentKind, protocol] of [
+      ["pi", "pi-rpc"],
+      ["opencode", "opencode-sse"],
+    ] as const) {
+      for (const [_name, data] of adversarialJsonValues) {
+        const event = {
+          ...envelope,
+          agentKind,
+          payload: { protocol, type: "event", data },
+        };
+
+        expect(() => agentEventEnvelopeSchema.safeParse(event)).not.toThrow();
+        expect(agentEventEnvelopeSchema.safeParse(event).success).toBe(false);
+      }
+    }
   });
 
   it("rejects malformed common envelope fields", () => {
@@ -548,6 +633,22 @@ describe("IPC contracts", () => {
         ],
       }).success,
     ).toBe(false);
+  });
+
+  it("safely rejects adversarial JSON nested in config operations", () => {
+    for (const [_name, value] of adversarialJsonValues) {
+      const request = {
+        targetId: "pi:user-settings",
+        operations: [{ op: "set", path: ["model"], value }],
+      };
+
+      expect(() =>
+        ipcContracts["config.preview"].request.safeParse(request),
+      ).not.toThrow();
+      expect(
+        ipcContracts["config.preview"].request.safeParse(request).success,
+      ).toBe(false);
+    }
   });
 
   it("validates success and serializable error envelopes at runtime", () => {

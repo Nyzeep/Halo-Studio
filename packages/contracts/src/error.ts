@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { jsonValueSchema } from "./json.js";
+import { jsonValueSchema, optionalJsonValueSchema } from "./json.js";
 
 export {
   jsonValueSchema,
@@ -28,7 +28,7 @@ export const appErrorSchema = z
     message: z.string().min(1),
     retryable: z.boolean(),
     action: z.string().min(1).optional(),
-    details: jsonValueSchema.optional(),
+    details: optionalJsonValueSchema,
   })
   .strict();
 export type AppError = z.infer<typeof appErrorSchema>;
