@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PiRuntime } from "./runtime.js";
 import type { ProcessPort } from "./jsonlTransport.js";
 import { detectPi } from "./detect.js";
@@ -176,6 +176,29 @@ describe("Pi runtime lifecycle", () => {
     expect(killed).toEqual(["pi", "pi.exe"]);
   });
 
+  it("absorbs a rejected stdin end during a timed-out version probe", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => { unhandled.push(reason); };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const detection = await detectPi({
+        hostEnvironment: { PATH: "C:/bin" },
+        timeoutMs: 1,
+        processFactory: () => {
+          const port = new RuntimePort();
+          port.wait = () => new Promise(() => undefined);
+          port.stdin.end = () => Promise.reject(new Error("end failed"));
+          return port;
+        },
+      });
+      await Promise.resolve();
+      expect(detection).toMatchObject({ status: "unavailable", source: "managed" });
+      expect(unhandled).toHaveLength(0);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   it("accepts only the exact Pi version output format", async () => {
     const detection = await detectPi({
       hostEnvironment: { PATH: "C:/bin" },
@@ -283,6 +306,26 @@ describe("Pi runtime lifecycle", () => {
     expect(port.ended).toBe(true);
     expect(killed).toBe(true);
     expect(runtime.state).toBe("stopped");
+  });
+
+  it("clears the stdin end timeout after an immediately settled Promise", async () => {
+    vi.useFakeTimers();
+    try {
+      const port = new RuntimePort();
+      port.stdin.end = () => Promise.resolve();
+      const runtime = new PiRuntime({
+        detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+        detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
+        spawn: () => port,
+        cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
+        stopTimeoutMs: 5_000,
+      });
+      await runtime.start();
+      await runtime.stop();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("kills even when stdin.end never completes", async () => {

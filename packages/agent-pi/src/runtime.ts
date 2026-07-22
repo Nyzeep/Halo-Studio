@@ -236,7 +236,7 @@ export class PiRuntime {
     try {
       const result = port.stdin.end();
       if (result && typeof (result as PromiseLike<unknown>).then === "function") {
-        await Promise.race([result as PromiseLike<unknown>, new Promise<void>((resolve) => setTimeout(resolve, timeoutMs))]);
+        await this.#raceWithTimeout(() => result as PromiseLike<unknown>, timeoutMs);
       }
     } catch { /* process may already be gone */ }
   }
