@@ -10,30 +10,155 @@ import {
   ipcContracts,
   runtimeBindingSchema,
   workspaceIdSchema,
+  type DataOf,
+  type InputOf,
+  type IpcChannel,
 } from "./index.js";
 
 const workspaceId = "a".repeat(64);
+const selectionId = "13ebf428-5647-4a32-ae2e-55304b4e3e9f";
+const fingerprint = "b".repeat(64);
 
-const capabilities = Object.fromEntries(
-  [
-    "sessions",
-    "streamingMessages",
-    "toolEvents",
-    "permissions",
-    "diff",
-    "commands",
-    "mcp",
-    "skills",
-    "prompts",
-    "extensions",
-    "packages",
-    "models",
-    "usage",
-  ].map((key) => [
-    key,
-    { supported: true, channel: "rpc", restartRequired: false },
-  ]),
-);
+const supportedCapability = {
+  supported: true,
+  channel: "rpc",
+  restartRequired: false,
+} as const;
+
+const capabilities = {
+  sessions: supportedCapability,
+  streamingMessages: supportedCapability,
+  toolEvents: supportedCapability,
+  permissions: supportedCapability,
+  diff: supportedCapability,
+  commands: supportedCapability,
+  mcp: supportedCapability,
+  skills: supportedCapability,
+  prompts: supportedCapability,
+  extensions: supportedCapability,
+  packages: supportedCapability,
+  models: supportedCapability,
+  usage: supportedCapability,
+};
+
+const workspace = {
+  id: workspaceId,
+  rootPath: "D:\\Workspace",
+  realPath: "D:\\Workspace",
+  trustState: "untrusted",
+} as const;
+
+const trustedWorkspace = {
+  ...workspace,
+  trustState: "trusted",
+} as const;
+
+const runtimeBinding = {
+  agentKind: "pi",
+  source: "system",
+  executable: "C:\\Tools\\pi.exe",
+  version: "1.2.3",
+  health: "healthy",
+  capabilities,
+} as const;
+
+const stoppedRuntimeBinding = {
+  ...runtimeBinding,
+  health: "stopped",
+} as const;
+
+const configPreview = {
+  previewId: "preview-1",
+  targetId: "pi:user-settings",
+  fingerprint,
+  unifiedDiff: "--- a/settings.json\n+++ b/settings.json",
+  restartRequired: ["pi"],
+} satisfies DataOf<"config.preview">;
+
+const configCommitResult = {
+  backupId: "backup-1",
+  targetId: "pi:user-settings",
+  fingerprint,
+} as const;
+
+const configRollbackResult = {
+  backupId: "backup-1",
+  targetId: "pi:user-settings",
+  fingerprint: "c".repeat(64),
+} as const;
+
+const storageHealth = {
+  mode: "read-write",
+  schemaVersion: 1,
+  diagnostics: [],
+} satisfies DataOf<"storage.health">;
+
+function ipcFixture<TChannel extends IpcChannel>(
+  channel: TChannel,
+  request: InputOf<TChannel>,
+  data: DataOf<TChannel>,
+) {
+  return { channel, request, data };
+}
+
+const validIpcFixtures = [
+  ipcFixture(
+    "workspace.pick",
+    {},
+    {
+      selectionId,
+      displayPath: "D:\\Workspace",
+    },
+  ),
+  ipcFixture("workspace.open", { selectionId }, workspace),
+  ipcFixture("workspace.snapshot", {}, [workspace]),
+  ipcFixture(
+    "workspace.trust",
+    { workspaceId, trustState: "trusted" },
+    trustedWorkspace,
+  ),
+  ipcFixture("runtime.probe", { workspaceId }, [runtimeBinding]),
+  ipcFixture(
+    "runtime.start",
+    { workspaceId, agentKind: "pi" },
+    runtimeBinding,
+  ),
+  ipcFixture(
+    "runtime.stop",
+    { workspaceId, agentKind: "pi" },
+    stoppedRuntimeBinding,
+  ),
+  ipcFixture("runtime.snapshot", {}, [runtimeBinding]),
+  ipcFixture(
+    "config.preview",
+    {
+      targetId: "pi:user-settings",
+      operations: [
+        {
+          op: "set",
+          path: ["provider", "model"],
+          value: "gpt-5",
+        },
+        {
+          op: "remove",
+          path: ["obsolete", 0],
+        },
+      ],
+    },
+    configPreview,
+  ),
+  ipcFixture(
+    "config.commit",
+    { previewId: configPreview.previewId },
+    configCommitResult,
+  ),
+  ipcFixture(
+    "config.rollback",
+    { backupId: configCommitResult.backupId },
+    configRollbackResult,
+  ),
+  ipcFixture("storage.health", {}, storageHealth),
+];
 
 describe("Agent and capability contracts", () => {
   it("accepts only Pi and OpenCode agent kinds", () => {
@@ -242,6 +367,21 @@ describe("IPC contracts", () => {
       "terminal.write",
     ]) {
       expect(forbidden in ipcContracts).toBe(false);
+    }
+  });
+
+  it("accepts a typed request, data payload, and success response for every channel", () => {
+    expect(validIpcFixtures.map(({ channel }) => channel).sort()).toEqual(
+      Object.keys(ipcContracts).sort(),
+    );
+
+    for (const fixture of validIpcFixtures) {
+      const contract = ipcContracts[fixture.channel];
+      expect(contract.request.parse(fixture.request)).toEqual(fixture.request);
+      expect(contract.data.parse(fixture.data)).toEqual(fixture.data);
+      expect(
+        contract.response.parse({ ok: true, data: fixture.data }),
+      ).toEqual({ ok: true, data: fixture.data });
     }
   });
 
