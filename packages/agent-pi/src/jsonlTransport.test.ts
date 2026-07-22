@@ -167,4 +167,32 @@ describe("Pi JSONL transport", () => {
     await expect(first).rejects.toBeInstanceOf(TransportDisconnectedError);
     await expect(queued).rejects.toBeInstanceOf(TransportDisconnectedError);
   });
+
+  it("treats stdout close and stderr error as transport disconnects", async () => {
+    const stdoutPort = new FakePort();
+    const stdoutTransport = new PiJsonlTransport(stdoutPort);
+    const stdoutPending = stdoutTransport.request({ type: "get_state" });
+    stdoutPort.stdout.emit("close");
+    await expect(stdoutPending).rejects.toBeInstanceOf(TransportDisconnectedError);
+
+    const stderrPort = new FakePort();
+    const stderrTransport = new PiJsonlTransport(stderrPort);
+    const stderrPending = stderrTransport.request({ type: "get_state" });
+    stderrPort.stderr.emit("error", new Error("noise"));
+    await expect(stderrPending).rejects.toBeInstanceOf(TransportDisconnectedError);
+  });
+
+  it("removes stream/process listeners and event subscriptions when closed", async () => {
+    const port = new FakePort();
+    const transport = new PiJsonlTransport(port);
+    const events: unknown[] = [];
+    transport.onEvent((event) => events.push(event));
+    transport.close();
+    expect(port.stdout.listenerCount("data")).toBe(0);
+    expect(port.stdout.listenerCount("close")).toBe(0);
+    expect(port.stderr.listenerCount("data")).toBe(0);
+    expect(port.process.listenerCount("exit")).toBe(0);
+    port.stdout.emit("data", JSON.stringify({ type: "agent_start", data: {} }) + "\n");
+    expect(events).toHaveLength(0);
+  });
 });

@@ -2,6 +2,7 @@ import type { ProcessExit, ProcessPort } from "./jsonlTransport.js";
 import { spawn } from "node:child_process";
 import { PI_VERSION, type PiDetection } from "./schemas.js";
 import { RuntimeUnavailableError } from "./errors.js";
+import { buildRuntimeEnvironment } from "@halo-studio/core";
 
 export interface ProcessFactoryOptions {
   readonly cwd?: string;
@@ -41,15 +42,23 @@ export function nodeProcessFactory(executable: string, args: readonly string[], 
 export interface DetectOptions {
   readonly processFactory?: ProcessFactory;
   readonly cwd?: string;
-  readonly env?: Readonly<Record<string, string>>;
+  readonly hostEnvironment?: Readonly<Record<string, string | undefined>>;
+  readonly providerEnvironment?: Readonly<Record<string, string>>;
+  readonly allowedProviderKeys?: ReadonlySet<string>;
+  readonly timeoutMs?: number;
+}
+
+interface ProbeOptions extends DetectOptions {
+  readonly env: Readonly<Record<string, string>>;
 }
 
 function parseVersion(output: string): string | undefined {
-  const match = /(?:^|\s|v)(\d+\.\d+\.\d+)(?:\s|$)/u.exec(output);
-  return match?.[1];
+  const normalized = output.trim();
+  if (normalized === PI_VERSION || normalized === `pi ${PI_VERSION}`) return PI_VERSION;
+  return undefined;
 }
 
-async function probe(executable: string, options: DetectOptions): Promise<PiDetection | undefined> {
+async function probe(executable: string, options: ProbeOptions): Promise<PiDetection | undefined> {
   let port: ProcessPort;
   try {
     const factoryOptions: ProcessFactoryOptions = {
@@ -59,11 +68,29 @@ async function probe(executable: string, options: DetectOptions): Promise<PiDete
     port = (options.processFactory ?? nodeProcessFactory)(executable, ["--version"], factoryOptions);
   } catch { return undefined; }
   let output = "";
-  port.stdout.on("data", (chunk: Buffer | string) => { output += typeof chunk === "string" ? chunk : chunk.toString("utf8"); });
-  port.stderr?.on("data", () => undefined);
-  const processEvents = port.process ?? (port.on === undefined ? undefined : { on: port.on.bind(port) });
+  const subscriptions: Array<{ target: ProcessPort["stdout"] | ProcessPort | NonNullable<ProcessPort["process"]>; event: string; listener: (...args: any[]) => void }> = [];
+  const subscribe = (target: ProcessPort["stdout"] | ProcessPort | NonNullable<ProcessPort["process"]>, event: string, listener: (...args: any[]) => void): void => {
+    target.on?.(event as never, listener as never);
+    subscriptions.push({ target, event, listener });
+  };
+  const unsubscribe = (): void => {
+    for (const subscription of subscriptions.splice(0)) {
+      subscription.target.off?.(subscription.event as never, subscription.listener as never);
+      subscription.target.removeListener?.(subscription.event as never, subscription.listener as never);
+    }
+  };
+  subscribe(port.stdout, "data", (chunk: Buffer | string) => { output += typeof chunk === "string" ? chunk : chunk.toString("utf8"); });
+  if (port.stderr) subscribe(port.stderr, "data", () => undefined);
+  const processEvents = port.process ?? (() => {
+    if (port.on === undefined) return undefined;
+    return {
+      on: port.on.bind(port),
+      ...(port.off === undefined ? {} : { off: port.off.bind(port) }),
+      ...(port.removeListener === undefined ? {} : { removeListener: port.removeListener.bind(port) }),
+    };
+  })();
   let reportedExit: ProcessExit | undefined;
-  processEvents?.on("exit", (code: unknown, signal: unknown) => {
+  if (processEvents) subscribe(processEvents, "exit", (code: unknown, signal: unknown) => {
     reportedExit = {
       code: typeof code === "number" ? code : null,
       signal: typeof signal === "string" ? signal : null,
@@ -74,9 +101,9 @@ async function probe(executable: string, options: DetectOptions): Promise<PiDete
     return new Promise<boolean>((resolve) => {
       let settled = false;
       const done = (errored = false) => { if (!settled) { settled = true; resolve(errored); } };
-      stream.on("end", done);
-      stream.on("close", done);
-      stream.on("error", () => done(true));
+      subscribe(stream, "end", done);
+      subscribe(stream, "close", done);
+      subscribe(stream, "error", () => done(true));
     });
   };
   const processClosed = (exitPromise: Promise<ProcessExit>): Promise<void> => {
@@ -84,7 +111,7 @@ async function probe(executable: string, options: DetectOptions): Promise<PiDete
     return new Promise<void>((resolve) => {
       let settled = false;
       const done = () => { if (!settled) { settled = true; resolve(); } };
-      processEvents.on("close", done);
+      subscribe(processEvents, "close", done);
       void exitPromise.then(done, done);
     });
   };
@@ -94,8 +121,21 @@ async function probe(executable: string, options: DetectOptions): Promise<PiDete
       : processEvents
         ? new Promise<ProcessExit>((resolve) => processEvents.on("close", () => resolve(reportedExit ?? { code: null, signal: null })))
         : Promise.resolve({ code: null, signal: null });
-    const [stdoutErrored, stderrErrored, exit] = await Promise.all([streamClosed(port.stdout), streamClosed(port.stderr), exitPromise.then((value) => value)]);
+    const observation = Promise.all([streamClosed(port.stdout), streamClosed(port.stderr), exitPromise.then((value) => value)]);
+    const timeoutMs = options.timeoutMs ?? 10_000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), timeoutMs); });
+    const result = await Promise.race([observation, timedOut]);
+    if (timer !== undefined) clearTimeout(timer);
+    if (result === undefined) {
+      try { port.stdin.end(); } catch { /* process may already be gone */ }
+      try { await port.kill?.("SIGTERM"); } catch { /* process may already be gone */ }
+      unsubscribe();
+      return undefined;
+    }
+    const [stdoutErrored, stderrErrored, exit] = result;
     await processClosed(exitPromise);
+    unsubscribe();
     if (stdoutErrored || stderrErrored || exit.code !== 0) return undefined;
   } catch { return undefined; }
   const version = parseVersion(output);
@@ -106,9 +146,14 @@ async function probe(executable: string, options: DetectOptions): Promise<PiDete
 export const detectPiRuntime = detectPi;
 
 export async function detectPi(options: DetectOptions = {}): Promise<PiDetection> {
-  if (options.env === undefined) throw new RuntimeUnavailableError();
+  if (options.hostEnvironment === undefined) throw new RuntimeUnavailableError();
+  let env: Record<string, string>;
+  try {
+    env = buildRuntimeEnvironment(options.hostEnvironment, options.providerEnvironment ?? {}, options.allowedProviderKeys ?? new Set());
+  } catch { throw new RuntimeUnavailableError(); }
+  const probeOptions: ProbeOptions = { ...options, env };
   for (const executable of ["pi", "pi.exe"]) {
-    const found = await probe(executable, options);
+    const found = await probe(executable, probeOptions);
     if (found) return found;
   }
   return { status: "unavailable", source: "managed", managedInstall: "available" };

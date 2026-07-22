@@ -29,6 +29,8 @@ export interface PiRuntimeOptions {
   readonly workspaceId?: string;
 }
 
+export type PiRuntimePublicOptions = Omit<PiRuntimeOptions, "detection" | "detect">;
+
 const lifecycle: readonly PiLifecycleState[] = ["unavailable", "detected", "starting", "ready", "stopping", "stopped", "crashed"];
 
 export class PiRuntime {
@@ -41,6 +43,7 @@ export class PiRuntime {
   #running = false;
   #sequence = 0;
   #stopRequested = false;
+  #operation: Promise<void> = Promise.resolve();
 
   constructor(options: PiRuntimeOptions) {
     this.#options = options;
@@ -54,24 +57,35 @@ export class PiRuntime {
   get running(): boolean { return this.#running; }
   get detection(): PiDetection | undefined { return this.#detection; }
 
-  async detect(): Promise<PiDetection> {
+  detect(): Promise<PiDetection> {
+    return this.#exclusive(() => this.#detectInternal());
+  }
+
+  async #detectInternal(): Promise<PiDetection> {
     if (this.#state === "ready" || this.#state === "starting" || this.#state === "stopping" || this.#state === "stopped" || this.#state === "crashed") {
       if (this.#detection) return this.#detection;
       throw new RuntimeUnavailableError();
     }
-    const trustPolicy = runtimeTrustPolicy("pi", this.#options.trust);
-    const baseEnvironment = buildRuntimeEnvironment(this.#options.hostEnvironment, this.#options.providerEnvironment ?? {}, this.#options.allowedProviderKeys ?? new Set());
-    const env = mergeRuntimeEnvironment(baseEnvironment, trustPolicy);
-    this.#detection = await (this.#options.detect ? this.#options.detect() : detectPi({ processFactory: this.#options.spawn ?? nodeProcessFactory, cwd: this.#options.cwd, env }));
+    this.#detection = await (this.#options.detect ? this.#options.detect() : detectPi({
+      processFactory: this.#options.spawn ?? nodeProcessFactory,
+      cwd: this.#options.cwd,
+      hostEnvironment: this.#options.hostEnvironment,
+      ...(this.#options.providerEnvironment === undefined ? {} : { providerEnvironment: this.#options.providerEnvironment }),
+      ...(this.#options.allowedProviderKeys === undefined ? {} : { allowedProviderKeys: this.#options.allowedProviderKeys }),
+    }));
     this.#state = this.#detection.status === "detected" ? "detected" : "unavailable";
     return this.#detection;
   }
 
-  async start(): Promise<void> {
+  start(): Promise<void> {
+    return this.#exclusive(() => this.#startInternal());
+  }
+
+  async #startInternal(): Promise<void> {
     if (this.#state === "ready" || this.#state === "starting" || this.#state === "stopping" || this.#state === "stopped" || this.#state === "crashed") {
       throw new RuntimeUnavailableError();
     }
-    await this.detect();
+    await this.#detectInternal();
     const detection = this.#detection;
     if (!detection || detection.status !== "detected" || detection.version !== PI_VERSION || !detection.executable) {
       this.#state = "unavailable";
@@ -114,25 +128,38 @@ export class PiRuntime {
     return this.#transport.request({ type: "abort" });
   }
 
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
+    return this.#exclusive(() => this.#stopInternal());
+  }
+
+  async #stopInternal(): Promise<void> {
     if (this.#state === "stopped" || this.#state === "unavailable") { this.#state = "stopped"; return; }
     if (!this.#port) { this.#state = "stopped"; return; }
     this.#stopRequested = true;
     this.#state = "stopping";
     const stopTimeoutMs = this.#options.stopTimeoutMs ?? 5_000;
     await this.#endStdin(stopTimeoutMs);
-    const wait = this.#port.wait ? this.#port.wait() : Promise.resolve({ code: 0, signal: null } satisfies ProcessExit);
+    let wait: Promise<ProcessExit>;
+    try { wait = this.#port.wait ? this.#port.wait() : Promise.resolve({ code: 0, signal: null } satisfies ProcessExit); } catch { wait = Promise.reject(new Error()); }
     let completed = false;
-    await Promise.race([
-      wait.then(() => { completed = true; }, () => { completed = true; }),
-      new Promise<void>((resolve) => setTimeout(resolve, stopTimeoutMs)),
-    ]);
+    let rejected = false;
+    const settled = wait.then(() => { completed = true; }, () => { completed = true; rejected = true; });
+    await Promise.race([settled, this.#delay(stopTimeoutMs)]);
+    let killFailed = false;
     if (!completed) {
-      try { await this.#port.kill?.("SIGTERM"); } catch { /* ignore */ }
-      await Promise.race([wait.catch(() => undefined), new Promise<void>((resolve) => setTimeout(resolve, stopTimeoutMs))]);
+      try {
+        const result = await this.#port.kill?.("SIGTERM");
+        killFailed = result === false || this.#port.kill === undefined;
+      } catch { killFailed = true; }
+      await Promise.race([settled, this.#delay(stopTimeoutMs)]);
+      if (!completed) killFailed = true;
     }
     this.#transport?.close();
     this.#unsubscribe?.();
+    if (killFailed || rejected) {
+      this.#state = "crashed";
+      throw new RuntimeUnavailableError();
+    }
     this.#state = "stopped";
   }
 
@@ -157,8 +184,27 @@ export class PiRuntime {
   }
 
   async #terminateFailedStart(): Promise<void> {
+    const succeeded = await this.#teardownFailedStart();
+    if (!succeeded) throw new RuntimeUnavailableError();
+  }
+
+  async #teardownFailedStart(): Promise<boolean> {
+    const port = this.#port;
+    if (!port) return true;
     await this.#endStdin(1_000);
-    try { await this.#port?.kill?.("SIGTERM"); } catch { /* process may already be gone */ }
+    let wait: Promise<ProcessExit>;
+    try { wait = port.wait ? port.wait() : Promise.resolve({ code: 0, signal: null } satisfies ProcessExit); } catch { return false; }
+    if (port.kill === undefined) {
+      await Promise.race([wait.catch(() => undefined), this.#delay(1_000)]);
+      return true;
+    }
+    try {
+      const result = await port.kill("SIGTERM");
+      if (result === false) return false;
+    } catch { return false; }
+    let exited = false;
+    await Promise.race([wait.then(() => { exited = true; }, () => { exited = true; }), this.#delay(1_000)]);
+    return exited;
   }
 
   async #endStdin(timeoutMs: number): Promise<void> {
@@ -171,8 +217,17 @@ export class PiRuntime {
       }
     } catch { /* process may already be gone */ }
   }
+
+  #delay(timeoutMs: number): Promise<void> { return new Promise((resolve) => setTimeout(resolve, timeoutMs)); }
+
+  #exclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.#operation;
+    const current = previous.then(operation, operation);
+    this.#operation = current.then(() => undefined, () => undefined);
+    return current;
+  }
 }
 
-export function createPiRuntime(options: PiRuntimeOptions): PiRuntime {
+export function createPiRuntime(options: PiRuntimePublicOptions): PiRuntime {
   return new PiRuntime(options);
 }

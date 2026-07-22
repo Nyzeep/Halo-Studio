@@ -5,6 +5,8 @@ import { PiError, ProtocolViolationError, TransportDisconnectedError } from "./e
 
 export interface ProcessStream {
   on(event: "data" | "end" | "error" | "close", listener: (...args: any[]) => void): unknown;
+  off?(event: "data" | "end" | "error" | "close", listener: (...args: any[]) => void): unknown;
+  removeListener?(event: "data" | "end" | "error" | "close", listener: (...args: any[]) => void): unknown;
   once?(event: "end" | "error" | "close", listener: (...args: any[]) => void): unknown;
 }
 
@@ -22,10 +24,12 @@ export interface ProcessPort {
   readonly stdin: ProcessStdin;
   readonly stdout: ProcessStream;
   readonly stderr?: ProcessStream;
-  readonly process?: { on(event: "exit" | "error" | "close", listener: (...args: any[]) => void): unknown; once?(event: "exit" | "error" | "close", listener: (...args: any[]) => void): unknown };
+  readonly process?: { on(event: "exit" | "error" | "close", listener: (...args: any[]) => void): unknown; off?(event: "exit" | "error" | "close", listener: (...args: any[]) => void): unknown; removeListener?(event: "exit" | "error" | "close", listener: (...args: any[]) => void): unknown; once?(event: "exit" | "error" | "close", listener: (...args: any[]) => void): unknown };
   on?(event: "exit" | "error" | "close", listener: (...args: any[]) => void): unknown;
+  off?(event: "exit" | "error" | "close", listener: (...args: any[]) => void): unknown;
+  removeListener?(event: "exit" | "error" | "close", listener: (...args: any[]) => void): unknown;
   wait?(): Promise<ProcessExit>;
-  kill?(signal?: string): void | Promise<void>;
+  kill?(signal?: string): boolean | void | Promise<boolean | void>;
 }
 
 export interface RequestOptions {
@@ -59,24 +63,37 @@ export class PiJsonlTransport {
   #pumping = false;
   readonly #defaultTimeoutMs: number;
   readonly #onDisconnect: (error: PiError) => void;
+  readonly #subscriptions: Array<{ target: ProcessStream | ProcessPort | NonNullable<ProcessPort["process"]>; event: string; listener: (...args: any[]) => void }> = [];
 
   constructor(port: ProcessPort, options: TransportOptions & { readonly onDisconnect?: (error: PiError) => void } = {}) {
     this.#port = port;
     this.#defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
     this.#onDisconnect = options.onDisconnect ?? (() => undefined);
-    port.stdout.on("data", (chunk: Buffer | string) => this.#onData(chunk));
-    port.stdout.on("end", () => {
+    this.#listen(port.stdout, "data", (chunk: Buffer | string) => this.#onData(chunk));
+    this.#listen(port.stdout, "end", () => {
       const tail = this.#decoder.end();
       if (tail.length > 0) this.#onData(tail);
       this.close(new TransportDisconnectedError());
     });
-    port.stdout.on("error", () => this.close(new TransportDisconnectedError()));
-    port.stderr?.on("data", () => undefined);
-    port.stderr?.on("error", () => undefined);
-    const processEvents = port.process ?? (port.on === undefined ? undefined : { on: port.on.bind(port) });
-    processEvents?.on("error", () => this.close(new TransportDisconnectedError()));
-    processEvents?.on("exit", () => this.close(new TransportDisconnectedError()));
-    processEvents?.on("close", () => this.close(new TransportDisconnectedError()));
+    this.#listen(port.stdout, "close", () => this.close(new TransportDisconnectedError()));
+    this.#listen(port.stdout, "error", () => this.close(new TransportDisconnectedError()));
+    if (port.stderr) {
+      this.#listen(port.stderr, "data", () => undefined);
+      this.#listen(port.stderr, "error", () => this.close(new TransportDisconnectedError()));
+    }
+    const processEvents = port.process ?? (() => {
+      if (port.on === undefined) return undefined;
+      return {
+        on: port.on.bind(port),
+        ...(port.off === undefined ? {} : { off: port.off.bind(port) }),
+        ...(port.removeListener === undefined ? {} : { removeListener: port.removeListener.bind(port) }),
+      };
+    })();
+    if (processEvents) {
+      this.#listen(processEvents, "error", () => this.close(new TransportDisconnectedError()));
+      this.#listen(processEvents, "exit", () => this.close(new TransportDisconnectedError()));
+      this.#listen(processEvents, "close", () => this.close(new TransportDisconnectedError()));
+    }
   }
 
   request(command: PiCommand, options: RequestOptions = {}): Promise<PiResponse> {
@@ -119,12 +136,22 @@ export class PiJsonlTransport {
     }
     this.#pending.clear();
     this.#queue.length = 0;
+    for (const subscription of this.#subscriptions.splice(0)) {
+      subscription.target.off?.(subscription.event as never, subscription.listener as never);
+      subscription.target.removeListener?.(subscription.event as never, subscription.listener as never);
+    }
+    this.#events.clear();
     this.#onDisconnect?.(error instanceof PiError ? error : new TransportDisconnectedError());
   }
 
   dispose(): void { this.close(); }
 
   get closed(): boolean { return this.#closed; }
+
+  #listen(target: ProcessStream | ProcessPort | NonNullable<ProcessPort["process"]>, event: string, listener: (...args: any[]) => void): void {
+    target.on?.(event as never, listener as never);
+    this.#subscriptions.push({ target, event, listener });
+  }
 
   async #pump(): Promise<void> {
     if (this.#pumping || this.#closed) return;
