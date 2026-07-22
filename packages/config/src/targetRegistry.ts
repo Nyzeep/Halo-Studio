@@ -41,6 +41,17 @@ function hasParentSegment(value: string): boolean {
 function isInside(child: string, root: string): boolean {
   return isPathWithin(child, root, process.platform === "win32" ? "win32" : "posix");
 }
+function filesystemErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const descriptor = Object.getOwnPropertyDescriptor(error, "code");
+  return descriptor !== undefined && "value" in descriptor && typeof descriptor.value === "string"
+    ? descriptor.value
+    : undefined;
+}
+function isMissingPathError(error: unknown): boolean {
+  const code = filesystemErrorCode(error);
+  return code === "ENOENT" || code === "ENOTDIR";
+}
 
 export class TargetRegistry {
   readonly #targets = new Map<string, ConfigTarget>();
@@ -80,10 +91,18 @@ export class TargetRegistry {
     return target;
   }
 
-  async read(targetId: string): Promise<{ target: ConfigTarget; text: string }> {
+  async read(targetId: string): Promise<{ target: ConfigTarget; text: string; exists: boolean }> {
     const target = await this.verify(targetId);
     const { readFile } = await import("node:fs/promises");
-    try { return { target, text: await readFile(target.path, "utf8") }; } catch { reject(); }
+    try {
+      return { target, text: await readFile(target.path, "utf8"), exists: true };
+    } catch (error) {
+      if (filesystemErrorCode(error) === "ENOENT") {
+        await this.verify(targetId);
+        return { target, text: "{}\n", exists: false };
+      }
+      reject();
+    }
   }
 
   async verifyWritable(targetId: string): Promise<ConfigTarget> {
@@ -98,16 +117,26 @@ export class TargetRegistry {
 
   async #realOrAncestor(path: string): Promise<string> {
     let current = normalize(path);
+    let isOriginalTarget = true;
     while (true) {
-      try { return await realpath(current); } catch {
+      try {
+        const resolved = await realpath(current);
+        if (!isOriginalTarget && !(await stat(resolved)).isDirectory()) reject();
+        return resolved;
+      } catch (error) {
+        if (!isMissingPathError(error)) reject();
         const parent = dirname(current);
         if (parent === current) reject();
         current = parent;
+        isOriginalTarget = false;
       }
     }
   }
 
-  async #exists(path: string): Promise<boolean> { try { await stat(path); return true; } catch { return false; } }
+  async #exists(path: string): Promise<boolean> {
+    try { await stat(path); return true; }
+    catch (error) { if (isMissingPathError(error)) return false; reject(); }
+  }
 }
 
 export interface DefaultConfigTargetPaths {
