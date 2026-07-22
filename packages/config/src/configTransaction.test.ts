@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentKind } from "@halo-studio/contracts";
-import { ConfigTransaction, ConfigBackupUnavailable, ConfigConflict, ConfigPreviewUnavailable, UnsafeConfigError, setConfigTransactionTestHooks } from "./configTransaction.js";
+import { ConfigTransaction, ConfigBackupUnavailable, ConfigConflict, ConfigPreviewUnavailable, ConfigRecoveryError, ConfigWriteError, UnsafeConfigError, setConfigTransactionTestHooks } from "./configTransaction.js";
 import { TargetRegistry } from "./targetRegistry.js";
 import { createTwoFilesPatch } from "./unifiedDiff.js";
 import { applyJsoncPatch } from "./jsoncPatch.js";
@@ -236,6 +236,153 @@ describe("config transaction", () => {
     await transaction.rollback(committed.backupId);
     await expect(stat(file)).rejects.toMatchObject({ code: "ENOENT" });
     expect((await registry.read(targetId)).exists).toBe(false);
+  });
+
+  it("deletes the vault backup after a successful manual rollback", async () => {
+    const { registry, targetId } = await fixture();
+    const values = new Map<string, string>();
+    const deleted: string[] = [];
+    const vault: CredentialVault = {
+      isAvailable: () => true,
+      store: async (reference, value) => { values.set(reference, value); },
+      get: async (reference) => values.get(reference) ?? null,
+      delete: async (reference) => { deleted.push(reference); values.delete(reference); },
+    };
+    const transaction = new ConfigTransaction(registry, { vault });
+    const preview = await transaction.preview(targetId, [{ op: "set", path: ["known"], value: false }]);
+    const committed = await transaction.commit(preview.previewId);
+    await transaction.rollback(committed.backupId);
+    expect(deleted).toEqual([`config-backup:${committed.backupId}`]);
+    expect(values.size).toBe(0);
+  });
+
+  it("retries only vault cleanup after delete failure and never restores twice", async () => {
+    const { file, registry, targetId } = await fixture();
+    const values = new Map<string, string>();
+    let deleteAttempts = 0;
+    const vault: CredentialVault = {
+      isAvailable: () => true,
+      store: async (reference, value) => { values.set(reference, value); },
+      get: async (reference) => values.get(reference) ?? null,
+      delete: async (reference) => {
+        deleteAttempts += 1;
+        if (deleteAttempts <= 2) throw new Error("DELETE-CANARY");
+        values.delete(reference);
+      },
+    };
+    const transaction = new ConfigTransaction(registry, { vault });
+    const preview = await transaction.preview(targetId, [{ op: "set", path: ["known"], value: false }]);
+    const committed = await transaction.commit(preview.previewId);
+    let rollbackWrites = 0;
+    setConfigTransactionTestHooks(transaction, { syncDirectory: async () => { rollbackWrites += 1; } });
+
+    await expect(transaction.rollback(committed.backupId)).rejects.toMatchObject({
+      name: "ConfigRecoveryError",
+      reason: "backup-unavailable",
+    });
+    const restored = await readFile(file, "utf8");
+    await expect(transaction.rollback(committed.backupId)).rejects.toBeInstanceOf(ConfigRecoveryError);
+    expect(await readFile(file, "utf8")).toBe(restored);
+    await expect(transaction.rollback(committed.backupId)).resolves.toMatchObject({ backupId: committed.backupId });
+    expect(rollbackWrites).toBe(1);
+    expect(deleteAttempts).toBe(3);
+    expect(values.size).toBe(0);
+  });
+
+  it("keeps automatic rollback cleanup reachable without masking the write error", async () => {
+    const { file, registry, targetId } = await fixture();
+    const original = await readFile(file, "utf8");
+    const values = new Map<string, string>();
+    let failDelete = true;
+    const vault: CredentialVault = {
+      isAvailable: () => true,
+      store: async (reference, value) => { values.set(reference, value); },
+      get: async (reference) => values.get(reference) ?? null,
+      delete: async (reference) => {
+        if (failDelete) throw new Error("DELETE-CANARY");
+        values.delete(reference);
+      },
+    };
+    const transaction = new ConfigTransaction(registry, {
+      vault,
+      validateAfterWrite: async () => { throw new Error("VALIDATION-CANARY"); },
+    });
+    const preview = await transaction.preview(targetId, [{ op: "set", path: ["known"], value: false }]);
+    await expect(transaction.commit(preview.previewId)).rejects.toMatchObject({
+      name: "ConfigWriteError",
+      message: "Configuration validation failed; original restored",
+    });
+    expect(await readFile(file, "utf8")).toBe(original);
+    expect(values.size).toBe(1);
+    failDelete = false;
+    await (transaction as ConfigTransaction & { cleanup(): Promise<void> }).cleanup();
+    expect(values.size).toBe(0);
+  });
+
+  it("bounds pending vault cleanup and blocks a new commit at the limit", async () => {
+    const { registry, targetId } = await fixture();
+    const values = new Map<string, string>();
+    let stores = 0;
+    const vault: CredentialVault = {
+      isAvailable: () => true,
+      store: async (reference, value) => { stores += 1; values.set(reference, value); },
+      get: async (reference) => values.get(reference) ?? null,
+      delete: async () => { throw new Error("DELETE-CANARY"); },
+    };
+    const transaction = new ConfigTransaction(registry, { vault });
+    for (let index = 0; index < 32; index += 1) {
+      const preview = await transaction.preview(targetId, [{ op: "set", path: ["index"], value: index }]);
+      const committed = await transaction.commit(preview.previewId);
+      await expect(transaction.rollback(committed.backupId)).rejects.toMatchObject({
+        name: "ConfigRecoveryError",
+        reason: "backup-unavailable",
+      });
+    }
+    const blockedPreview = await transaction.preview(targetId, [{ op: "set", path: ["blocked"], value: true }]);
+    await expect(transaction.commit(blockedPreview.previewId)).rejects.toBeInstanceOf(ConfigBackupUnavailable);
+    expect(stores).toBe(32);
+    expect(values.size).toBe(32);
+  }, 15_000);
+
+  it("maps rollback durability failure after replacement and retries as cleanup only", async () => {
+    const { file, registry, targetId } = await fixture();
+    const original = await readFile(file, "utf8");
+    const transaction = new ConfigTransaction(registry, { vault: memoryVault() });
+    const preview = await transaction.preview(targetId, [{ op: "set", path: ["known"], value: false }]);
+    const committed = await transaction.commit(preview.previewId);
+    let durabilityCalls = 0;
+    setConfigTransactionTestHooks(transaction, {
+      syncDirectory: async () => { durabilityCalls += 1; throw new Error("DURABILITY-CANARY"); },
+    });
+    await expect(transaction.rollback(committed.backupId)).rejects.toMatchObject({
+      name: "ConfigRecoveryError",
+      message: "Configuration recovery incomplete",
+      reason: "write-failed",
+    });
+    expect(await readFile(file, "utf8")).toBe(original);
+    await expect(transaction.rollback(committed.backupId)).resolves.toMatchObject({ backupId: committed.backupId });
+    expect(durabilityCalls).toBe(1);
+  });
+
+  it("maps missing-target unlink durability failure and retries as cleanup only", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-missing-durability-")); dirs.push(root);
+    const file = join(root, "new.jsonc");
+    const registry = new TargetRegistry();
+    const targetId = await registry.register({ scope: "project", owner: "opencode", path: file, format: "jsonc", source: "managed", writable: true, allowedRoot: root });
+    const transaction = new ConfigTransaction(registry, { vault: memoryVault() });
+    const preview = await transaction.preview(targetId, [{ op: "set", path: ["created"], value: true }]);
+    const committed = await transaction.commit(preview.previewId);
+    let durabilityCalls = 0;
+    setConfigTransactionTestHooks(transaction, {
+      syncDirectory: async () => { durabilityCalls += 1; throw new Error("DURABILITY-CANARY"); },
+    });
+    await expect(transaction.rollback(committed.backupId)).rejects.toMatchObject({
+      name: "ConfigRecoveryError",
+      reason: "write-failed",
+    });
+    await expect(stat(file)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(transaction.rollback(committed.backupId)).resolves.toMatchObject({ backupId: committed.backupId });
+    expect(durabilityCalls).toBe(1);
   });
 
   it("rejects a preview whose generated configuration exceeds one MiB", async () => {

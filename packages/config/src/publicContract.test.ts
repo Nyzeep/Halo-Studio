@@ -36,5 +36,12 @@ describe("config package public contract", () => {
     expect(security).toContain("exclusive write access");
     expect(security).toContain("POSIX mode");
     expect(security).toContain("Windows ACL");
+    expect(security).toContain("opaque `targetId`");
+    expect(security).toContain("Renderer must never submit a path");
+    expect(security).toContain("backup reference must never be exposed");
+    expect(security).toContain("temporary pathname creation");
+    expect(security).toContain("temporary pathname cleanup");
+    expect(security).toContain("final pathname rename");
+    expect(security).toContain("missing-target unlink");
   });
 });

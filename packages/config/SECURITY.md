@@ -1,9 +1,13 @@
 # Configuration File Security Contract
 
 The config package treats registered paths, configuration bytes, and encrypted
-backup references as security-sensitive data. Callers must register absolute
-target and root paths and must not expose internal target IDs or backup
-references to untrusted renderers.
+backup references as security-sensitive data. Main registers absolute target
+and root paths and may issue an opaque `targetId` to a Renderer as a scoped
+capability. The Renderer must never submit a path; it may only return the
+`targetId` that Main issued. An encrypted backup reference must never be exposed
+to a Renderer. For every preview, commit, and rollback request, Main resolves
+the `targetId` through its registry and revalidates the path, permissions, and
+expected fingerprint before allowing a filesystem mutation.
 
 ## Filesystem Prerequisite
 
@@ -24,13 +28,19 @@ final validation succeeds.
 ## Atomic Replacement And Residual Risk
 
 Node.js does not expose portable `openat` and `renameat` operations or a
-Windows `ReplaceFileW` binding. Consequently, the final rename from the
-validated temporary pathname to the target pathname cannot be bound to the
-already-open parent directory handle. There is a residual race window between
-the last parent/temp identity checks and that pathname-based rename. A process
-with concurrent write access to the parent directory can invalidate the
-checks. The exclusive-write prerequisite above is therefore mandatory, not a
-defense-in-depth recommendation.
+Windows `ReplaceFileW` binding. The following pathname operations therefore
+cannot be bound to the already-open parent directory handle:
+
+- temporary pathname creation after validating the parent;
+- guarded temporary pathname cleanup after checking the temp identity;
+- the final pathname rename after checking parent and temp identities; and
+- missing-target unlink after checking parent and target identities.
+
+Each operation has a residual race window between its final identity check and
+the pathname operation. A process with concurrent write access to the parent
+directory can invalidate those checks. All four windows are governed by the
+same exclusive-write parent-directory prerequisite above. That prerequisite is
+mandatory, not a defense-in-depth recommendation.
 
 The writer records whether replacement occurred. A failure after replacement,
 including a parent-directory sync or close failure, is reported separately and

@@ -17,6 +17,7 @@ export { UnsafeConfigError } from "./targetRegistry.js";
 const MAX_PREVIEWS = 128;
 const MAX_RETAINED_PREVIEW_BYTES = 4 * 1024 * 1024;
 const MAX_BACKUPS_PER_TARGET = 32;
+const MAX_PENDING_BACKUP_CLEANUPS = 32;
 const MAX_AUDIT_ENTRIES = 128;
 
 interface PreviewState {
@@ -38,6 +39,10 @@ interface BackupState {
   readonly committedFingerprint: string;
   readonly reference: string;
   readonly originalExists: boolean;
+}
+
+interface RollbackRestoreResult {
+  readonly durabilityFailed: boolean;
 }
 
 export class ConfigConflict extends CoreError {
@@ -150,6 +155,7 @@ export class ConfigTransaction {
   readonly #previews = new Map<string, PreviewState>();
   readonly #previewTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #backups = new Map<string, BackupState>();
+  readonly #pendingCleanup = new Map<string, BackupState>();
   readonly #audit: Array<{
     targetId: string;
     fingerprint: string;
@@ -223,6 +229,9 @@ export class ConfigTransaction {
     this.#prunePreviews();
     const state = this.#previews.get(previewId);
     if (state === undefined) throw new ConfigPreviewUnavailable();
+    if (this.#pendingCleanup.size >= MAX_PENDING_BACKUP_CLEANUPS) {
+      throw new ConfigBackupUnavailable();
+    }
     this.#deletePreview(previewId);
 
     const target = await this.#registry.verifyWritable(state.targetId);
@@ -275,8 +284,9 @@ export class ConfigTransaction {
       }
       if (error instanceof AtomicWriteError && error.replaced) {
         try {
-          await this.#rollbackInternal(backupId);
+          await this.#recoverAutomatically(backupId);
         } catch (rollbackError) {
+          if (rollbackError instanceof ConfigRecoveryError) throw rollbackError;
           throw new ConfigRecoveryError(recoveryReason(rollbackError));
         }
         throw new ConfigWriteError(
@@ -296,8 +306,9 @@ export class ConfigTransaction {
       await this.#validateAfterWrite(written.text);
     } catch {
       try {
-        await this.#rollbackInternal(backupId);
+        await this.#recoverAutomatically(backupId);
       } catch (rollbackError) {
+        if (rollbackError instanceof ConfigRecoveryError) throw rollbackError;
         throw new ConfigRecoveryError(recoveryReason(rollbackError));
       }
       throw new ConfigWriteError(
@@ -318,15 +329,24 @@ export class ConfigTransaction {
   async rollback(
     backupId: string,
   ): Promise<{ backupId: string; targetId: string; fingerprint: string }> {
+    const pending = this.#pendingCleanup.get(backupId);
+    if (pending !== undefined) {
+      await this.#cleanupPendingBackup(backupId);
+      return this.#rollbackReceipt(pending);
+    }
     const backup = this.#backups.get(backupId);
     if (backup === undefined) throw new ConfigPreviewUnavailable();
-    await this.#rollbackInternal(backupId);
-    this.#backups.delete(backupId);
-    return {
-      backupId,
-      targetId: backup.targetId,
-      fingerprint: backup.originalFingerprint,
-    };
+    const restored = await this.#restoreBackup(backup);
+    this.#queueCleanup(backup);
+    if (restored.durabilityFailed) throw new ConfigRecoveryError("write-failed");
+    await this.#cleanupPendingBackup(backupId);
+    return this.#rollbackReceipt(backup);
+  }
+
+  async cleanup(): Promise<void> {
+    for (const backupId of [...this.#pendingCleanup.keys()]) {
+      await this.#cleanupPendingBackup(backupId);
+    }
   }
 
   get audit(): readonly {
@@ -357,9 +377,7 @@ export class ConfigTransaction {
     }
   }
 
-  async #rollbackInternal(backupId: string): Promise<void> {
-    const backup = this.#backups.get(backupId);
-    if (backup === undefined) throw new ConfigPreviewUnavailable();
+  async #restoreBackup(backup: BackupState): Promise<RollbackRestoreResult> {
     const target = await this.#registry.verifyWritable(backup.targetId);
     await this.#assertFingerprint(
       backup.targetId,
@@ -379,18 +397,29 @@ export class ConfigTransaction {
       );
     };
     const syncDirectory = transactionTestHooks.get(this)?.syncDirectory;
-    if (backup.originalExists) {
-      await atomicWrite(target.path, original, {
-        beforeCreate: assertCommittedUnchanged,
-        beforeRename: assertCommittedUnchanged,
-        ...(syncDirectory === undefined ? {} : { syncDirectory }),
-      });
-    } else {
-      await guardedRemove(target.path, {
-        beforeRemove: assertCommittedUnchanged,
-        ...(syncDirectory === undefined ? {} : { syncDirectory }),
-      });
+    let durabilityFailed = false;
+    try {
+      if (backup.originalExists) {
+        await atomicWrite(target.path, original, {
+          beforeCreate: assertCommittedUnchanged,
+          beforeRename: assertCommittedUnchanged,
+          ...(syncDirectory === undefined ? {} : { syncDirectory }),
+        });
+      } else {
+        await guardedRemove(target.path, {
+          beforeRemove: assertCommittedUnchanged,
+          ...(syncDirectory === undefined ? {} : { syncDirectory }),
+        });
+      }
+    } catch (error) {
+      if (!(error instanceof AtomicWriteError) || !error.replaced) throw error;
+      durabilityFailed = true;
     }
+    await this.#assertRestored(backup);
+    return { durabilityFailed };
+  }
+
+  async #assertRestored(backup: BackupState): Promise<void> {
     const restored = await this.#registry.read(backup.targetId);
     if (
       restored.exists !== backup.originalExists ||
@@ -399,6 +428,40 @@ export class ConfigTransaction {
       throw new ConfigWriteError();
     }
     if (restored.exists) parseJsonc(restored.text);
+  }
+
+  async #recoverAutomatically(backupId: string): Promise<void> {
+    const backup = this.#backups.get(backupId);
+    if (backup === undefined) throw new ConfigPreviewUnavailable();
+    const restored = await this.#restoreBackup(backup);
+    this.#queueCleanup(backup);
+    if (restored.durabilityFailed) throw new ConfigRecoveryError("write-failed");
+    await this.#cleanupPendingBackup(backupId).catch(() => undefined);
+  }
+
+  #queueCleanup(backup: BackupState): void {
+    this.#backups.delete(backup.backupId);
+    this.#pendingCleanup.set(backup.backupId, backup);
+  }
+
+  async #cleanupPendingBackup(backupId: string): Promise<void> {
+    const backup = this.#pendingCleanup.get(backupId);
+    if (backup === undefined) return;
+    if (this.#backupStore === undefined) throw new ConfigRecoveryError("backup-unavailable");
+    try {
+      await this.#backupStore.delete(backup.reference);
+    } catch {
+      throw new ConfigRecoveryError("backup-unavailable");
+    }
+    this.#pendingCleanup.delete(backupId);
+  }
+
+  #rollbackReceipt(backup: BackupState): { backupId: string; targetId: string; fingerprint: string } {
+    return {
+      backupId: backup.backupId,
+      targetId: backup.targetId,
+      fingerprint: backup.originalFingerprint,
+    };
   }
 
   #prunePreviews(): void {

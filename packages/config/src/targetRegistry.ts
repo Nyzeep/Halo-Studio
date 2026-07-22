@@ -27,13 +27,9 @@ export interface ConfigTarget extends TargetRegistration {
   readonly allowedRoot: string;
 }
 
-export interface TargetRegistryReadHooks {
+interface TargetRegistryReadHooks {
   readonly afterOpen?: () => Promise<void>;
   readonly beforePostValidate?: () => Promise<void>;
-}
-
-export interface TargetRegistryOptions {
-  readonly readHooks?: TargetRegistryReadHooks;
 }
 
 export class UnsafeConfigError extends Error {
@@ -114,11 +110,8 @@ function snapshotRegistration(input: TargetRegistration): TargetRegistration {
 
 export class TargetRegistry {
   readonly #targets = new Map<string, ConfigTarget>();
-  readonly #readHooks: TargetRegistryReadHooks;
 
-  constructor(options: TargetRegistryOptions = {}) {
-    this.#readHooks = options.readHooks ?? {};
-  }
+  constructor() {}
 
   async register(input: TargetRegistration): Promise<string> {
     const registration = snapshotRegistration(input);
@@ -165,11 +158,11 @@ export class TargetRegistry {
       const noFollow = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0;
       handle = await open(target.path, constants.O_RDONLY | noFollow);
       const initialHandleIdentity = fileIdentity(await handle.stat({ bigint: true }));
-      await this.#readHooks.afterOpen?.();
+      await targetRegistryTestHooks.get(this)?.afterOpen?.();
       await this.#validateOpenFile(targetId, target.path, initialHandleIdentity);
 
       const bytes = await this.#readBounded(handle);
-      await this.#readHooks.beforePostValidate?.();
+      await targetRegistryTestHooks.get(this)?.beforePostValidate?.();
       const finalHandleIdentity = fileIdentity(await handle.stat({ bigint: true }));
       if (!sameFile(initialHandleIdentity, finalHandleIdentity)) reject();
       await this.#validateOpenFile(targetId, target.path, finalHandleIdentity);
@@ -243,6 +236,16 @@ export class TargetRegistry {
     try { await stat(path); return true; }
     catch (error) { if (isMissingPathError(error)) return false; reject(); }
   }
+}
+
+const targetRegistryTestHooks = new WeakMap<TargetRegistry, TargetRegistryReadHooks>();
+
+/** Source-module-only deterministic seam; intentionally omitted from the package index. */
+export function setTargetRegistryTestHooks(
+  registry: TargetRegistry,
+  hooks: TargetRegistryReadHooks,
+): void {
+  targetRegistryTestHooks.set(registry, hooks);
 }
 
 export interface DefaultConfigTargetPath {

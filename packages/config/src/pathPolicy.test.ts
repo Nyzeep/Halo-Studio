@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm, symlink, rename } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { registerDefaultConfigTargets, TargetRegistry, UnsafeConfigError, type TargetRegistration } from "./targetRegistry.js";
+import { registerDefaultConfigTargets, setTargetRegistryTestHooks, TargetRegistry, UnsafeConfigError, type TargetRegistration } from "./targetRegistry.js";
 import { isPathWithin } from "@halo-studio/core";
 
 const dirs: string[] = [];
@@ -77,9 +77,8 @@ describe("target path policy", () => {
           throw error;
         }
       };
-      const registry = new TargetRegistry({
-        readHooks: { [stage]: replaceParent },
-      });
+      const registry = new TargetRegistry();
+      setTargetRegistryTestHooks(registry, { [stage]: replaceParent });
       const id = await registry.register({ scope: "project", owner: "opencode", path: file, format: "jsonc", source: "native", writable: true, allowedRoot: root });
       let error: unknown;
       try { await registry.read(id); } catch (caught) { error = caught; }

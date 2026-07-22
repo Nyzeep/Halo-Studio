@@ -12,7 +12,7 @@
     "prebuild": "npm run build --workspace @halo-studio/contracts && npm run build --workspace @halo-studio/core && npm run build --workspace @halo-studio/storage",
     "build": "tsc -p tsconfig.json",
     "pretypecheck": "npm run build --workspace @halo-studio/contracts && npm run build --workspace @halo-studio/core && npm run build --workspace @halo-studio/storage",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p type-tests/tsconfig.json",
     "pretest": "npm run build --workspace @halo-studio/contracts && npm run build --workspace @halo-studio/core && npm run build --workspace @halo-studio/storage",
     "test": "vitest run"
   },
