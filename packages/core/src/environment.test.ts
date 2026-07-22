@@ -83,6 +83,114 @@ describe("runtime environment allowlist", () => {
     expect(result.ANTHROPIC_API_KEY).not.toBe(hostEnvironment.ANTHROPIC_API_KEY);
   });
 
+  it("uses the intrinsic has operation for an authorized native Set", () => {
+    const has = vi.fn(() => {
+      throw new Error("authorization-has-canary-secret");
+    });
+    const allowedProviderKeys = new Set(["OPENAI_API_KEY"]);
+    Object.defineProperty(allowedProviderKeys, "has", { value: has });
+
+    const result = buildRuntimeEnvironment(
+      {},
+      { OPENAI_API_KEY: "explicit-openai-value" },
+      allowedProviderKeys,
+    );
+
+    expect(result).toEqual({ OPENAI_API_KEY: "explicit-openai-value" });
+    expect(has).not.toHaveBeenCalled();
+  });
+
+  it("rejects Set subclasses without executing an overridden has method", () => {
+    const has = vi.fn(() => true);
+    class AllowAllSet extends Set<string> {
+      override has(value: string): boolean {
+        return has(value);
+      }
+    }
+    const allowedProviderKeys = new AllowAllSet();
+
+    let thrown: unknown;
+    try {
+      buildRuntimeEnvironment(
+        {},
+        { GIT_SSH_COMMAND: "provider-secret-canary" },
+        allowedProviderKeys,
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toMatchObject(invalidEnvironmentError);
+    expect(has).not.toHaveBeenCalled();
+  });
+
+  it("rejects an authorization Proxy without executing its traps", () => {
+    const get = vi.fn(() => {
+      throw new Error("authorization-proxy-get-canary-secret");
+    });
+    const getPrototypeOf = vi.fn(() => {
+      throw new Error("authorization-proxy-prototype-canary-secret");
+    });
+    const allowedProviderKeys = new Proxy(new Set(["OPENAI_API_KEY"]), {
+      get,
+      getPrototypeOf,
+    });
+
+    let thrown: unknown;
+    try {
+      buildRuntimeEnvironment(
+        {},
+        { OPENAI_API_KEY: "provider-secret-canary" },
+        allowedProviderKeys,
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toMatchObject(invalidEnvironmentError);
+    expect(get).not.toHaveBeenCalled();
+    expect(getPrototypeOf).not.toHaveBeenCalled();
+  });
+
+  it("rejects a forged Set-like object without calling its has method", () => {
+    const has = vi.fn(() => true);
+    const allowedProviderKeys = Object.create(Set.prototype) as ReadonlySet<string>;
+    Object.defineProperty(allowedProviderKeys, "has", { value: has });
+
+    let thrown: unknown;
+    try {
+      buildRuntimeEnvironment(
+        {},
+        { OPENAI_API_KEY: "provider-secret-canary" },
+        allowedProviderKeys,
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toMatchObject(invalidEnvironmentError);
+    expect(has).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["non-string", 42],
+    ["malformed", "lowercase_key"],
+    ["invariant-blocked", "NODE_OPTIONS"],
+  ])("rejects a native authorization Set with a %s entry", (_, invalidKey) => {
+    const allowedProviderKeys = new Set<unknown>([
+      "OPENAI_API_KEY",
+      invalidKey,
+    ]) as ReadonlySet<string>;
+
+    expect(() =>
+      buildRuntimeEnvironment(
+        {},
+        { OPENAI_API_KEY: "provider-secret-canary" },
+        allowedProviderKeys,
+      ),
+    ).toThrowError(expect.objectContaining(invalidEnvironmentError));
+  });
+
   it("returns a fresh object without mutating either input", () => {
     const host = { PATH: "/bin" };
     const provider = { OPENAI_API_KEY: "explicit" };

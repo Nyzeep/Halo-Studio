@@ -102,6 +102,29 @@ function isBlockedProviderKey(key: string): boolean {
   );
 }
 
+function assertNativeProviderKeySet(
+  value: unknown,
+): asserts value is ReadonlySet<string> {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    utilTypes.isProxy(value) ||
+    Object.getPrototypeOf(value) !== Set.prototype
+  ) {
+    invalidEnvironment();
+  }
+
+  Set.prototype.forEach.call(value, (key: unknown) => {
+    if (
+      typeof key !== "string" ||
+      !PROVIDER_KEY_PATTERN.test(key) ||
+      isBlockedProviderKey(key)
+    ) {
+      invalidEnvironment();
+    }
+  });
+}
+
 export function buildRuntimeEnvironment(
   hostEnvironment: EnvironmentInput,
   providerEnvironment: ProviderEnvironment = {},
@@ -110,6 +133,7 @@ export function buildRuntimeEnvironment(
   try {
     assertInspectableObject(hostEnvironment);
     assertInspectableObject(providerEnvironment);
+    assertNativeProviderKeySet(allowedProviderKeys);
     const result: Record<string, string> = {};
 
     const pathValue = readEnvironmentValue(hostEnvironment, "PATH");
@@ -143,7 +167,7 @@ export function buildRuntimeEnvironment(
       if (
         !PROVIDER_KEY_PATTERN.test(key) ||
         isBlockedProviderKey(key) ||
-        !allowedProviderKeys.has(key) ||
+        !Set.prototype.has.call(allowedProviderKeys, key) ||
         typeof value !== "string" ||
         value.includes("\0")
       ) {
