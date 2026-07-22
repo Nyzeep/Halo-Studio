@@ -88,6 +88,9 @@ function dataProperty(
   let remainingPrototypeDepth = 4;
 
   while (current !== null && remainingPrototypeDepth > 0) {
+    if (utilTypes.isProxy(current)) {
+      return UNSERIALIZABLE;
+    }
     const descriptor = Object.getOwnPropertyDescriptor(current, key);
     if (descriptor !== undefined) {
       return "value" in descriptor ? descriptor.value : UNSERIALIZABLE;

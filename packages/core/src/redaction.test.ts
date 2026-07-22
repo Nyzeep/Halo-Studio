@@ -118,6 +118,31 @@ describe("log redaction", () => {
     expect(JSON.stringify(result)).not.toContain("date-canary-secret");
   });
 
+  it("does not execute traps on a native Error prototype Proxy", () => {
+    const getOwnPropertyDescriptor = vi.fn(() => {
+      throw new Error("error-prototype-descriptor-canary-secret");
+    });
+    const getPrototypeOf = vi.fn(() => {
+      throw new Error("error-prototype-chain-canary-secret");
+    });
+    const proxyPrototype = new Proxy(
+      {},
+      { getOwnPropertyDescriptor, getPrototypeOf },
+    );
+    const error = new Error("visible message");
+    Object.setPrototypeOf(error, proxyPrototype);
+
+    const result = redactLogValue(error);
+
+    expect(getOwnPropertyDescriptor).not.toHaveBeenCalled();
+    expect(getPrototypeOf).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      name: UNSERIALIZABLE,
+      message: "visible message",
+    });
+    expect(JSON.stringify(result)).not.toContain("canary-secret");
+  });
+
   it("does not execute accessors while inspecting objects", () => {
     const getter = vi.fn(() => {
       throw new Error("getter-canary-secret");
