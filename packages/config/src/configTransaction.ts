@@ -9,12 +9,15 @@ import { CoreError } from "@halo-studio/core";
 import { applyJsoncPatch, parseJsonc, ConfigParseError } from "./jsoncPatch.js";
 import { createTwoFilesPatch } from "./unifiedDiff.js";
 import { fingerprint } from "./fingerprint.js";
-import { atomicWrite } from "./atomicWrite.js";
-import { TargetRegistry, UnsafeConfigError } from "./targetRegistry.js";
+import { atomicWrite, AtomicWriteError, guardedRemove } from "./atomicWrite.js";
+import { MAX_CONFIG_BYTES, TargetRegistry, UnsafeConfigError } from "./targetRegistry.js";
 
 export { UnsafeConfigError } from "./targetRegistry.js";
 
 const MAX_PREVIEWS = 128;
+const MAX_RETAINED_PREVIEW_BYTES = 4 * 1024 * 1024;
+const MAX_BACKUPS_PER_TARGET = 32;
+const MAX_AUDIT_ENTRIES = 128;
 
 interface PreviewState {
   readonly previewId: string;
@@ -25,6 +28,7 @@ interface PreviewState {
   readonly updated: string;
   readonly restartRequired: readonly AgentKind[];
   readonly expiresAt: number;
+  readonly retainedBytes: number;
 }
 
 interface BackupState {
@@ -33,6 +37,7 @@ interface BackupState {
   readonly originalFingerprint: string;
   readonly committedFingerprint: string;
   readonly reference: string;
+  readonly originalExists: boolean;
 }
 
 export class ConfigConflict extends CoreError {
@@ -98,6 +103,14 @@ export class EncryptedBackupStore {
     }
     catch { throw new ConfigBackupUnavailable(); }
   }
+
+  async delete(reference: string): Promise<void> {
+    try {
+      if (this.#vault.isAvailable() !== true) throw new ConfigBackupUnavailable();
+      await this.#vault.delete(reference);
+    }
+    catch { throw new ConfigBackupUnavailable(); }
+  }
 }
 
 export class CredentialVaultBackupStore extends EncryptedBackupStore {}
@@ -106,6 +119,20 @@ export interface ConfigTransactionOptions {
   readonly vault?: CredentialVault;
   readonly previewTtlMs?: number;
   readonly validateAfterWrite?: (text: string) => Promise<void> | void;
+}
+
+interface ConfigTransactionTestHooks {
+  readonly syncDirectory?: () => Promise<void>;
+}
+
+const transactionTestHooks = new WeakMap<ConfigTransaction, ConfigTransactionTestHooks>();
+
+/** Source-module-only deterministic seam; intentionally omitted from the package index. */
+export function setConfigTransactionTestHooks(
+  transaction: ConfigTransaction,
+  hooks: ConfigTransactionTestHooks,
+): void {
+  transactionTestHooks.set(transaction, hooks);
 }
 
 function recoveryReason(error: unknown): ConfigRecoveryReason {
@@ -121,6 +148,7 @@ export class ConfigTransaction {
   readonly #ttlMs: number;
   readonly #validateAfterWrite: (text: string) => Promise<void> | void;
   readonly #previews = new Map<string, PreviewState>();
+  readonly #previewTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #backups = new Map<string, BackupState>();
   readonly #audit: Array<{
     targetId: string;
@@ -128,6 +156,8 @@ export class ConfigTransaction {
     backupReference: string;
     summary: string;
   }> = [];
+  #retainedPreviewBytes = 0;
+  #disposed = false;
 
   constructor(registry: TargetRegistry, options?: ConfigTransactionOptions) {
     this.#registry = registry;
@@ -144,6 +174,7 @@ export class ConfigTransaction {
     targetId: string,
     operations: readonly ConfigOperation[],
   ): Promise<ConfigPreview> {
+    if (this.#disposed) throw new ConfigPreviewUnavailable();
     this.#prunePreviews();
     const { target, text, exists } = await this.#registry.read(targetId);
     let updated: string;
@@ -154,6 +185,7 @@ export class ConfigTransaction {
       if (error instanceof ConfigParseError) throw error;
       throw new ConfigParseError();
     }
+    if (Buffer.byteLength(updated, "utf8") > MAX_CONFIG_BYTES) throw new UnsafeConfigError();
     const previewId = randomUUID();
     const originalFingerprint = fingerprint(text);
     const restartRequired: readonly AgentKind[] =
@@ -168,8 +200,13 @@ export class ConfigTransaction {
       updated,
       restartRequired,
       expiresAt: Date.now() + this.#ttlMs,
+      retainedBytes: Buffer.byteLength(text, "utf8") + Buffer.byteLength(updated, "utf8"),
     };
     this.#previews.set(previewId, state);
+    this.#retainedPreviewBytes += state.retainedBytes;
+    const timer = setTimeout(() => { this.#deletePreview(previewId); }, this.#ttlMs);
+    timer.unref?.();
+    this.#previewTimers.set(previewId, timer);
     this.#prunePreviews();
     return {
       previewId,
@@ -186,7 +223,7 @@ export class ConfigTransaction {
     this.#prunePreviews();
     const state = this.#previews.get(previewId);
     if (state === undefined) throw new ConfigPreviewUnavailable();
-    this.#previews.delete(previewId);
+    this.#deletePreview(previewId);
 
     const target = await this.#registry.verifyWritable(state.targetId);
     await this.#assertFingerprint(
@@ -206,7 +243,15 @@ export class ConfigTransaction {
       originalFingerprint: state.fingerprint,
       committedFingerprint,
       reference,
+      originalExists: state.originalExists,
     });
+    try {
+      await this.#pruneBackups(target.targetId);
+    } catch (error) {
+      this.#backups.delete(backupId);
+      await this.#backupStore.delete(reference).catch(() => undefined);
+      throw error;
+    }
 
     const assertOriginalUnchanged = async (): Promise<void> => {
       await this.#registry.verifyWritable(target.targetId);
@@ -216,15 +261,29 @@ export class ConfigTransaction {
         state.fingerprint,
       );
     };
+    const syncDirectory = transactionTestHooks.get(this)?.syncDirectory;
 
     try {
       await atomicWrite(target.path, state.updated, {
         beforeCreate: assertOriginalUnchanged,
         beforeRename: assertOriginalUnchanged,
+        ...(syncDirectory === undefined ? {} : { syncDirectory }),
       });
     } catch (error) {
       if (error instanceof ConfigConflict || error instanceof UnsafeConfigError) {
         throw error;
+      }
+      if (error instanceof AtomicWriteError && error.replaced) {
+        try {
+          await this.#rollbackInternal(backupId);
+        } catch (rollbackError) {
+          throw new ConfigRecoveryError(recoveryReason(rollbackError));
+        }
+        throw new ConfigWriteError(
+          error.state === "durability-failed"
+            ? "Configuration durability failed; original restored"
+            : "Configuration replacement failed; original restored",
+        );
       }
       throw new ConfigWriteError();
     }
@@ -246,12 +305,13 @@ export class ConfigTransaction {
       );
     }
 
-    this.#audit.push({
+    this.#audit.push(Object.freeze({
       targetId: target.targetId,
       fingerprint: committedFingerprint,
       backupReference: reference,
       summary: "Configuration updated",
-    });
+    }));
+    while (this.#audit.length > MAX_AUDIT_ENTRIES) this.#audit.shift();
     return { backupId, targetId: target.targetId, fingerprint: committedFingerprint };
   }
 
@@ -275,7 +335,12 @@ export class ConfigTransaction {
     backupReference: string;
     summary: string;
   }[] {
-    return this.#audit.slice();
+    return Object.freeze(this.#audit.map((entry) => Object.freeze({ ...entry })));
+  }
+
+  dispose(): void {
+    this.#disposed = true;
+    for (const previewId of [...this.#previews.keys()]) this.#deletePreview(previewId);
   }
 
   async #assertFingerprint(
@@ -313,29 +378,61 @@ export class ConfigTransaction {
         backup.committedFingerprint,
       );
     };
-    await atomicWrite(target.path, original, {
-      beforeCreate: assertCommittedUnchanged,
-      beforeRename: assertCommittedUnchanged,
-    });
+    const syncDirectory = transactionTestHooks.get(this)?.syncDirectory;
+    if (backup.originalExists) {
+      await atomicWrite(target.path, original, {
+        beforeCreate: assertCommittedUnchanged,
+        beforeRename: assertCommittedUnchanged,
+        ...(syncDirectory === undefined ? {} : { syncDirectory }),
+      });
+    } else {
+      await guardedRemove(target.path, {
+        beforeRemove: assertCommittedUnchanged,
+        ...(syncDirectory === undefined ? {} : { syncDirectory }),
+      });
+    }
     const restored = await this.#registry.read(backup.targetId);
     if (
-      !restored.exists ||
+      restored.exists !== backup.originalExists ||
       fingerprint(restored.text) !== backup.originalFingerprint
     ) {
       throw new ConfigWriteError();
     }
-    parseJsonc(restored.text);
+    if (restored.exists) parseJsonc(restored.text);
   }
 
   #prunePreviews(): void {
     const now = Date.now();
     for (const [previewId, state] of this.#previews) {
-      if (state.expiresAt <= now) this.#previews.delete(previewId);
+      if (state.expiresAt <= now) this.#deletePreview(previewId);
     }
-    while (this.#previews.size > MAX_PREVIEWS) {
+    while (this.#previews.size > MAX_PREVIEWS || this.#retainedPreviewBytes > MAX_RETAINED_PREVIEW_BYTES) {
       const oldest = this.#previews.keys().next().value as string | undefined;
       if (oldest === undefined) break;
-      this.#previews.delete(oldest);
+      this.#deletePreview(oldest);
+    }
+  }
+
+  #deletePreview(previewId: string): void {
+    const state = this.#previews.get(previewId);
+    if (state !== undefined) {
+      this.#previews.delete(previewId);
+      this.#retainedPreviewBytes -= state.retainedBytes;
+    }
+    const timer = this.#previewTimers.get(previewId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.#previewTimers.delete(previewId);
+    }
+  }
+
+  async #pruneBackups(targetId: string): Promise<void> {
+    const matching = [...this.#backups.values()].filter((backup) => backup.targetId === targetId);
+    while (matching.length > MAX_BACKUPS_PER_TARGET) {
+      const oldest = matching.shift();
+      if (oldest === undefined || this.#backupStore === undefined) break;
+      await this.#backupStore.delete(oldest.reference);
+      this.#backups.delete(oldest.backupId);
     }
   }
 }

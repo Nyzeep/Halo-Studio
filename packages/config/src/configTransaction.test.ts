@@ -1,10 +1,10 @@
-import { mkdtemp, readFile, writeFile, rm, readdir, mkdir, rename, symlink } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, writeFile, rm, readdir, mkdir, rename, stat, symlink } from "node:fs/promises";
 import { watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentKind } from "@halo-studio/contracts";
-import { ConfigTransaction, ConfigBackupUnavailable, ConfigConflict, ConfigPreviewUnavailable, UnsafeConfigError } from "./configTransaction.js";
+import { ConfigTransaction, ConfigBackupUnavailable, ConfigConflict, ConfigPreviewUnavailable, UnsafeConfigError, setConfigTransactionTestHooks } from "./configTransaction.js";
 import { TargetRegistry } from "./targetRegistry.js";
 import { createTwoFilesPatch } from "./unifiedDiff.js";
 import { applyJsoncPatch } from "./jsoncPatch.js";
@@ -12,7 +12,11 @@ import { atomicWrite } from "./atomicWrite.js";
 import { FileCredentialVault, type CredentialVault, type SecretProtector } from "@halo-studio/storage";
 
 const dirs: string[] = [];
-afterEach(async () => { await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true }))); });
+afterEach(async () => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+});
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "halo-config-中文 space-")); dirs.push(root);
@@ -221,6 +225,96 @@ describe("config transaction", () => {
     expect(await readFile(file, "utf8")).toContain('"created": true');
   });
 
+  it("rolls an originally missing target back to ENOENT", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-missing-rollback-")); dirs.push(root);
+    const file = join(root, "new.jsonc");
+    const registry = new TargetRegistry();
+    const targetId = await registry.register({ scope: "project", owner: "opencode", path: file, format: "jsonc", source: "managed", writable: true, allowedRoot: root });
+    const transaction = new ConfigTransaction(registry, { vault: memoryVault() });
+    const preview = await transaction.preview(targetId, [{ op: "set", path: ["created"], value: true }]);
+    const committed = await transaction.commit(preview.previewId);
+    await transaction.rollback(committed.backupId);
+    await expect(stat(file)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await registry.read(targetId)).exists).toBe(false);
+  });
+
+  it("rejects a preview whose generated configuration exceeds one MiB", async () => {
+    const { registry, targetId } = await fixture();
+    const transaction = new ConfigTransaction(registry, { vault: memoryVault() });
+    await expect(transaction.preview(targetId, [
+      { op: "set", path: ["payload"], value: "x".repeat(1024 * 1024) },
+    ])).rejects.toBeInstanceOf(UnsafeConfigError);
+  });
+
+  it("bounds aggregate retained preview plaintext by bytes", async () => {
+    const { registry, targetId } = await fixture();
+    const transaction = new ConfigTransaction(registry, { vault: memoryVault() });
+    let firstId = "";
+    for (let index = 0; index < 5; index += 1) {
+      const preview = await transaction.preview(targetId, [
+        { op: "set", path: ["payload"], value: `${index}${"x".repeat(900 * 1024)}` },
+      ]);
+      if (index === 0) firstId = preview.previewId;
+    }
+    await expect(transaction.commit(firstId)).rejects.toBeInstanceOf(ConfigPreviewUnavailable);
+  });
+
+  it("expires previews on unreferenced timers and dispose clears retained plaintext", async () => {
+    const { registry, targetId } = await fixture();
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const transaction = new ConfigTransaction(registry, { vault: memoryVault(), previewTtlMs: 1_000 });
+    const preview = await transaction.preview(targetId, [{ op: "set", path: ["known"], value: false }]);
+    const timer = timeoutSpy.mock.results.at(-1)?.value as NodeJS.Timeout | undefined;
+    expect(timer?.hasRef()).toBe(false);
+    transaction.dispose();
+    await expect(transaction.commit(preview.previewId)).rejects.toBeInstanceOf(ConfigPreviewUnavailable);
+
+    timeoutSpy.mockRestore();
+    vi.useFakeTimers();
+    const expiring = new ConfigTransaction(registry, { vault: memoryVault(), previewTtlMs: 1_000 });
+    const second = await expiring.preview(targetId, [{ op: "set", path: ["known"], value: false }]);
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(expiring.commit(second.previewId)).rejects.toBeInstanceOf(ConfigPreviewUnavailable);
+  });
+
+  it("bounds backup history per target and deletes evicted vault entries", async () => {
+    const { registry, targetId } = await fixture();
+    const values = new Map<string, string>();
+    const deleted: string[] = [];
+    const vault: CredentialVault = {
+      isAvailable: () => true,
+      store: async (reference, value) => { values.set(reference, value); },
+      get: async (reference) => values.get(reference) ?? null,
+      delete: async (reference) => { deleted.push(reference); values.delete(reference); },
+    };
+    const transaction = new ConfigTransaction(registry, { vault });
+    let firstBackupId = "";
+    for (let index = 0; index < 33; index += 1) {
+      const preview = await transaction.preview(targetId, [{ op: "set", path: ["index"], value: index }]);
+      const committed = await transaction.commit(preview.previewId);
+      if (index === 0) firstBackupId = committed.backupId;
+    }
+    expect(deleted).toContain(`config-backup:${firstBackupId}`);
+    await expect(transaction.rollback(firstBackupId)).rejects.toBeInstanceOf(ConfigPreviewUnavailable);
+  });
+
+  it("returns deeply frozen audit snapshots and bounds audit history", async () => {
+    const { registry, targetId } = await fixture();
+    const transaction = new ConfigTransaction(registry, { vault: memoryVault() });
+    for (let index = 0; index < 129; index += 1) {
+      const preview = await transaction.preview(targetId, [{ op: "set", path: ["index"], value: index }]);
+      await transaction.commit(preview.previewId);
+    }
+    const audit = transaction.audit;
+    expect(audit).toHaveLength(128);
+    expect(Object.isFrozen(audit)).toBe(true);
+    expect(Object.isFrozen(audit[0])).toBe(true);
+    expect(() => { (audit[0] as { summary: string }).summary = "mutated"; }).toThrow(TypeError);
+    expect(transaction.audit[0]?.summary).toBe("Configuration updated");
+  }, 15_000);
+
   it("refuses rollback after an external edit and preserves that edit", async () => {
     const { file, registry, targetId } = await fixture();
     const transaction = new ConfigTransaction(registry, { vault: memoryVault() });
@@ -241,6 +335,86 @@ describe("config transaction", () => {
       beforeRename: async () => { calls.push("before-rename"); },
     });
     expect(calls).toEqual(["before-create", "before-rename"]);
+  });
+
+  it("rejects a staged temp file replaced before rename without deleting the replacement", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-atomic-temp-")); dirs.push(root);
+    const file = join(root, "settings.jsonc"); await writeFile(file, "{}\n", "utf8");
+    let replacement = "";
+    await expect(atomicWrite(file, "{\n  \"safe\": true\n}\n", {
+      beforeCreate: async () => undefined,
+      beforeRename: async () => undefined,
+      afterTempSync: async (temporary) => {
+        replacement = temporary;
+        await rename(temporary, `${temporary}.original`);
+        await writeFile(temporary, "ATTACKER-TEMP-CANARY", "utf8");
+      },
+    })).rejects.toMatchObject({ state: "not-replaced", replaced: false });
+    expect(await readFile(file, "utf8")).toBe("{}\n");
+    expect(await readFile(replacement, "utf8")).toBe("ATTACKER-TEMP-CANARY");
+  });
+
+  it("rejects a parent directory replaced after staging", async (context) => {
+    const root = await mkdtemp(join(tmpdir(), "halo-atomic-parent-")); dirs.push(root);
+    const parent = join(root, "parent"); await mkdir(parent);
+    const file = join(parent, "settings.jsonc"); await writeFile(file, "{}\n", "utf8");
+    let replacementAttempted = false;
+    try {
+      await expect(atomicWrite(file, "{\n  \"safe\": true\n}\n", {
+        beforeCreate: async () => undefined,
+        beforeRename: async () => undefined,
+        afterTempSync: async (temporary) => {
+          replacementAttempted = true;
+          try {
+            await rename(parent, join(root, "original-parent"));
+          } catch (error) {
+            const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+            if (process.platform === "win32" && (code === "EPERM" || code === "EACCES")) { context.skip(); return; }
+            throw error;
+          }
+          await mkdir(parent);
+          await writeFile(join(parent, "settings.jsonc"), "ATTACKER-TARGET-CANARY", "utf8");
+          await writeFile(temporary, "ATTACKER-TEMP-CANARY", "utf8");
+        },
+      })).rejects.toMatchObject({ state: "not-replaced", replaced: false });
+    } finally {
+      if (!replacementAttempted) context.skip();
+    }
+    expect(await readFile(join(parent, "settings.jsonc"), "utf8")).toBe("ATTACKER-TARGET-CANARY");
+  });
+
+  it("restores the original after rename succeeds but directory durability fails", async () => {
+    const { file, registry, targetId } = await fixture();
+    const original = await readFile(file, "utf8");
+    let durabilityCalls = 0;
+    const transaction = new ConfigTransaction(registry, { vault: memoryVault() });
+    setConfigTransactionTestHooks(transaction, {
+      syncDirectory: async () => {
+        durabilityCalls += 1;
+        if (durabilityCalls === 1) throw new Error("DIRECTORY-SYNC-CANARY");
+      },
+    });
+    const preview = await transaction.preview(targetId, [{ op: "set", path: ["known"], value: false }]);
+    let error: unknown;
+    try { await transaction.commit(preview.previewId); } catch (caught) { error = caught; }
+    expect(error).toMatchObject({
+      name: "ConfigWriteError",
+      message: "Configuration durability failed; original restored",
+    });
+    expect(String(error)).not.toContain("DIRECTORY-SYNC-CANARY");
+    expect(await readFile(file, "utf8")).toBe(original);
+  });
+
+  it("preserves the existing POSIX mode across atomic replacement", async (context) => {
+    if (process.platform === "win32") { context.skip(); return; }
+    const root = await mkdtemp(join(tmpdir(), "halo-atomic-mode-")); dirs.push(root);
+    const file = join(root, "settings.jsonc"); await writeFile(file, "{}\n", "utf8");
+    await chmod(file, 0o640);
+    await atomicWrite(file, "{\n  \"safe\": true\n}\n", {
+      beforeCreate: async () => undefined,
+      beforeRename: async () => undefined,
+    });
+    expect((await stat(file)).mode & 0o777).toBe(0o640);
   });
 
   it("does not create a temp file outside the root when backup is followed by parent replacement", async (context) => {
@@ -367,7 +541,7 @@ describe("config transaction", () => {
     const { file, registry, targetId } = await fixture();
     const external = "{\n  \"externalDuringTemp\": true\n}\n";
     const transaction = new ConfigTransaction(registry, { vault: memoryVault() });
-    const preview = await transaction.preview(targetId, [{ op: "set", path: ["payload"], value: "x".repeat(4 * 1024 * 1024) }]);
+    const preview = await transaction.preview(targetId, [{ op: "set", path: ["payload"], value: "x".repeat(768 * 1024) }]);
     let changed = false;
     const watcher = watch(join(file, ".."), (_event, filename) => {
       if (!changed && filename?.toString().endsWith(".tmp")) {

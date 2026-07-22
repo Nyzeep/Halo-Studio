@@ -21,8 +21,7 @@
     "@halo-studio/core": "0.1.0",
     "@halo-studio/storage": "0.1.0",
     "diff": "7.0.0",
-    "jsonc-parser": "3.3.1",
-    "write-file-atomic": "5.0.1"
+    "jsonc-parser": "3.3.1"
   },
   "devDependencies": { "@types/node": "22.10.5", "typescript": "5.7.3", "vitest": "2.1.8" },
   "engines": { "node": ">=20.18" }
