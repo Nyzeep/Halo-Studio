@@ -31,6 +31,7 @@ describe("Pi runtime lifecycle", () => {
     const port = new RuntimePort();
     const runtime = new PiRuntime({
       detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
       spawn: () => port,
       cwd: "C:/workspace",
       session: "session",
@@ -60,10 +61,13 @@ describe("Pi runtime lifecycle", () => {
 
   it("fails closed on an incompatible PATH version and tries pi.exe after pi", async () => {
     const calls: string[] = [];
+    let receivedEnv: Readonly<Record<string, string>> | undefined;
     const ports = new Map<string, RuntimePort>();
     const detection = await detectPi({
-      processFactory: (executable) => {
+      env: { PATH: "C:/bin" },
+      processFactory: (executable, _args, options) => {
         calls.push(executable);
+        receivedEnv = options.env;
         const port = new RuntimePort();
         ports.set(executable, port);
         queueMicrotask(() => {
@@ -76,12 +80,14 @@ describe("Pi runtime lifecycle", () => {
       },
     });
     expect(calls).toEqual(["pi", "pi.exe"]);
+    expect(receivedEnv).toEqual({ PATH: "C:/bin" });
     expect(detection).toMatchObject({ status: "detected", source: "system", executable: "pi.exe", version: "0.81.1" });
   });
 
   it("waits for stdout close after process exit before parsing the exact version", async () => {
     const calls: string[] = [];
     const detection = await detectPi({
+      env: { PATH: "C:/bin" },
       processFactory: (executable) => {
         calls.push(executable);
         const stdout = new EventEmitter();
@@ -108,6 +114,7 @@ describe("Pi runtime lifecycle", () => {
 
   it("fails closed on a nonzero top-level process exit without wait()", async () => {
     const detection = await detectPi({
+      env: { PATH: "C:/bin" },
       processFactory: () => {
         const stdout = new EventEmitter();
         const stderr = new EventEmitter();
@@ -125,12 +132,42 @@ describe("Pi runtime lifecycle", () => {
     expect(detection).toMatchObject({ status: "unavailable", source: "managed" });
   });
 
+  it("rejects direct detection without an explicit runtime environment", async () => {
+    await expect(detectPi({ processFactory: () => { throw new Error("must not spawn"); } })).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+  });
+
+  it("re-probes supplied detection before starting a process", async () => {
+    const probes: string[][] = [];
+    const runtime = new PiRuntime({
+      detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      spawn: (_executable, args) => {
+        probes.push([...args]);
+        const port = new RuntimePort();
+        if (args[0] === "--version") {
+          queueMicrotask(() => {
+            port.stdout.emit("data", "pi 0.80.0\n");
+            port.stdout.emit("end");
+            port.stderr.emit("end");
+            port.process.emit("exit", 0, null);
+            port.process.emit("close");
+          });
+        }
+        return port;
+      },
+      cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
+    });
+    await expect(runtime.start()).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+    expect(probes.length).toBe(2);
+    expect(probes.every((args) => args[0] === "--version")).toBe(true);
+  });
+
   it("passes trust policy and a whitelisted environment into stable startup arguments", async () => {
     const port = new RuntimePort();
     let spawnArgs: readonly string[] = [];
     let spawnOptions: { cwd?: string; env?: Readonly<Record<string, string>> } = {};
     const runtime = new PiRuntime({
       detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
       spawn: (_executable, args, options) => { spawnArgs = args; spawnOptions = options; return port; },
       cwd: "C:/workspace",
       session: "s",
@@ -153,6 +190,7 @@ describe("Pi runtime lifecycle", () => {
     port.wait = async () => { waited = true; return { code: 0, signal: null }; };
     const runtime = new PiRuntime({
       detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
       spawn: () => port,
       cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
     });
@@ -171,6 +209,7 @@ describe("Pi runtime lifecycle", () => {
     port.kill = () => { killed = true; };
     const runtime = new PiRuntime({
       detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
       spawn: () => port,
       cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
       stopTimeoutMs: 1,
@@ -190,6 +229,7 @@ describe("Pi runtime lifecycle", () => {
     port.kill = () => { killed = true; };
     const runtime = new PiRuntime({
       detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
       spawn: () => port,
       cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
       stopTimeoutMs: 1,
@@ -207,6 +247,7 @@ describe("Pi runtime lifecycle", () => {
     port.kill = () => { killed = true; };
     const runtime = new PiRuntime({
       detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
       spawn: () => port,
       cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
       readinessTimeoutMs: 1,
@@ -228,6 +269,7 @@ describe("Pi runtime lifecycle", () => {
     port.kill = () => { killed = true; };
     const runtime = new PiRuntime({
       detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
       spawn: () => port,
       cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
     });
@@ -243,8 +285,8 @@ describe("Pi runtime lifecycle", () => {
     let spawns = 0;
     const runtime = new PiRuntime({
       detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      detect: async () => ({ status: "detected", source: "system", executable: "pi", version: "0.81.1" }),
       spawn: () => { spawns += 1; return port; },
-      detect: async () => ({ status: "unavailable", source: "managed", managedInstall: "available" }),
       cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
     });
     await runtime.start();

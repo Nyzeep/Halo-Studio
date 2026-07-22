@@ -71,7 +71,7 @@ export class PiRuntime {
     if (this.#state === "ready" || this.#state === "starting" || this.#state === "stopping" || this.#state === "stopped" || this.#state === "crashed") {
       throw new RuntimeUnavailableError();
     }
-    if (!this.#detection) await this.detect();
+    await this.detect();
     const detection = this.#detection;
     if (!detection || detection.status !== "detected" || detection.version !== PI_VERSION || !detection.executable) {
       this.#state = "unavailable";

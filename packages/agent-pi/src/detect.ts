@@ -1,6 +1,7 @@
 import type { ProcessExit, ProcessPort } from "./jsonlTransport.js";
 import { spawn } from "node:child_process";
 import { PI_VERSION, type PiDetection } from "./schemas.js";
+import { RuntimeUnavailableError } from "./errors.js";
 
 export interface ProcessFactoryOptions {
   readonly cwd?: string;
@@ -105,6 +106,7 @@ async function probe(executable: string, options: DetectOptions): Promise<PiDete
 export const detectPiRuntime = detectPi;
 
 export async function detectPi(options: DetectOptions = {}): Promise<PiDetection> {
+  if (options.env === undefined) throw new RuntimeUnavailableError();
   for (const executable of ["pi", "pi.exe"]) {
     const found = await probe(executable, options);
     if (found) return found;
