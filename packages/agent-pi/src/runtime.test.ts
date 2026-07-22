@@ -106,6 +106,25 @@ describe("Pi runtime lifecycle", () => {
     expect(detection).toMatchObject({ status: "detected", executable: "pi", version: "0.81.1" });
   });
 
+  it("fails closed on a nonzero top-level process exit without wait()", async () => {
+    const detection = await detectPi({
+      processFactory: () => {
+        const stdout = new EventEmitter();
+        const stderr = new EventEmitter();
+        const process = new EventEmitter();
+        queueMicrotask(() => {
+          process.emit("exit", 1, null);
+          stdout.emit("data", "pi 0.81.1\n");
+          stdout.emit("end");
+          stderr.emit("end");
+          process.emit("close");
+        });
+        return { stdin: { write: () => undefined, end: () => undefined }, stdout, stderr, process };
+      },
+    });
+    expect(detection).toMatchObject({ status: "unavailable", source: "managed" });
+  });
+
   it("passes trust policy and a whitelisted environment into stable startup arguments", async () => {
     const port = new RuntimePort();
     let spawnArgs: readonly string[] = [];

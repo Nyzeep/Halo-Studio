@@ -60,17 +60,25 @@ async function probe(executable: string, options: DetectOptions): Promise<PiDete
   let output = "";
   port.stdout.on("data", (chunk: Buffer | string) => { output += typeof chunk === "string" ? chunk : chunk.toString("utf8"); });
   port.stderr?.on("data", () => undefined);
-  const streamClosed = (stream: ProcessPort["stdout"] | undefined): Promise<void> => {
-    if (!stream) return Promise.resolve();
-    return new Promise<void>((resolve) => {
+  const processEvents = port.process ?? (port.on === undefined ? undefined : { on: port.on.bind(port) });
+  let reportedExit: ProcessExit | undefined;
+  processEvents?.on("exit", (code: unknown, signal: unknown) => {
+    reportedExit = {
+      code: typeof code === "number" ? code : null,
+      signal: typeof signal === "string" ? signal : null,
+    };
+  });
+  const streamClosed = (stream: ProcessPort["stdout"] | undefined): Promise<boolean> => {
+    if (!stream) return Promise.resolve(false);
+    return new Promise<boolean>((resolve) => {
       let settled = false;
-      const done = () => { if (!settled) { settled = true; resolve(); } };
+      const done = (errored = false) => { if (!settled) { settled = true; resolve(errored); } };
       stream.on("end", done);
       stream.on("close", done);
+      stream.on("error", () => done(true));
     });
   };
   const processClosed = (exitPromise: Promise<ProcessExit>): Promise<void> => {
-    const processEvents = port.process ?? (port.on === undefined ? undefined : { on: port.on.bind(port) });
     if (!processEvents) return exitPromise.then(() => undefined);
     return new Promise<void>((resolve) => {
       let settled = false;
@@ -80,10 +88,14 @@ async function probe(executable: string, options: DetectOptions): Promise<PiDete
     });
   };
   try {
-    const exitPromise: Promise<ProcessExit> = port.wait ? port.wait() : Promise.resolve({ code: 0, signal: null });
-    const [, , exit] = await Promise.all([streamClosed(port.stdout), streamClosed(port.stderr), exitPromise.then((value) => value)]);
+    const exitPromise: Promise<ProcessExit> = port.wait
+      ? port.wait()
+      : processEvents
+        ? new Promise<ProcessExit>((resolve) => processEvents.on("close", () => resolve(reportedExit ?? { code: null, signal: null })))
+        : Promise.resolve({ code: null, signal: null });
+    const [stdoutErrored, stderrErrored, exit] = await Promise.all([streamClosed(port.stdout), streamClosed(port.stderr), exitPromise.then((value) => value)]);
     await processClosed(exitPromise);
-    if (exit.code !== 0) return undefined;
+    if (stdoutErrored || stderrErrored || exit.code !== 0) return undefined;
   } catch { return undefined; }
   const version = parseVersion(output);
   if (version !== PI_VERSION) return undefined;
