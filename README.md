@@ -1,286 +1,169 @@
 # Halo Studio
 
-Halo Studio 是一个 Windows 优先的本地桌面多 Agent 开发工作台。它的目标是把 Claude Code、Codex CLI、OpenCode 和 Pi 这些常用命令行 Agent 统一放进一个漂亮、可切换、可配置、可扩展的桌面壳里，让开发者可以在同一个界面中启动会话、查看状态、预览配置、写入项目级 MCP 配置，并逐步扩展到多 Agent 协作调用。
+Halo Studio 的目标是成为一个 Windows 优先的 AI Native Desktop Workspace：把 Claude Code、Codex CLI、OpenCode、Pi Agent 等本地 CLI Agent 统一放进一个原生桌面工作台中，让用户看到 Agent 的思考、工具调用、Shell、Diff、进度、Token 与结果摘要，而不是只面对终端字节流。
 
-当前项目仍处于早期开发阶段，但已经具备可运行的 Electron 桌面壳、Agent 检测、PTY 终端会话、MCP 配置预览、安全写入服务、备份回滚和项目级 MCP 写入预案。
+当前仓库正在从旧的 Electron/React/Web UI 路线迁移到原生桌面路线。Phase 1 先交付可运行、可测试的纵切片：原生桌面壳、三栏 Agent 工作区、`/` 命令补全、fake multi-agent runtime、内置 Agent manifest 和基础并发测试。
 
-## 设计目标
+## 当前方向
 
-- 本地优先：先服务 Windows 桌面开发场景，核心功能不依赖云端服务。
-- 多 Agent 一体化：统一管理 Claude Code、Codex CLI、OpenCode、Pi 的启动、配置和后续协作。
-- 配置安全：涉及真实配置写入时，必须经过项目路径校验、危险目录拦截和确认短语。
-- MCP 友好：提供跨 Agent 的 MCP 配置预览、项目级配置目标和后续结构化合并能力。
-- 现代 UI：避免只做命令包装器，目标是形成一个适合长时间开发使用的工作台界面。
-- 渐进落地：先完成可运行 MVP，再逐步接入配置合并、Agent 间调用、项目管理和插件生态。
+- 原生桌面优先：Windows 先行，目标 UI 为 PySide6/QML。
+- Runtime 分层：高并发 Agent runtime 逐步迁移到 Rust。
+- Agent 是一等公民：每个 Agent 拥有独立状态、消息流、任务队列和工作流事件。
+- 终端退到 Debug 角色：真实 CLI 输出会被解析成工作流事件，原始终端只作为调试抽屉。
+- 少即是多：删除高成本动画、粒子背景、Web fallback 和低价值面板。
+- 安全默认关闭：Phase 1 manifest 声明能力但不执行真实 shell 或文件写入。
 
-## 当前功能
+## Phase 1 目录
 
-### 桌面工作台
-
-- 基于 Electron、React、TypeScript 构建。
-- Windows 本地桌面壳，开发模式下可直接启动桌面窗口。
-- 左侧 Agent 启动栏，中间终端工作区，右侧状态和 MCP 配置面板。
-- 当前默认工作区为 `D:\Halo Studio`，后续会扩展为可选择项目目录。
-
-### Agent 集成
-
-当前内置四类 Agent：
-
-| Agent | 命令 | 当前能力 |
-| --- | --- | --- |
-| Claude Code | `claude` | 检测、终端启动、MCP 配置预览、项目级 `.mcp.json` 写入预案 |
-| Codex CLI | `codex` | 检测、终端启动、MCP 配置预览、项目级 `.codex/config.toml` 写入预案 |
-| OpenCode | `opencode` | 检测、终端启动、MCP 配置预览、项目级 `opencode.json` 写入预案 |
-| Pi | `pi` | 检测、终端启动、MCP 配置预览、项目级 `.pi/mcp.json` 写入预案 |
-
-Agent 检测会读取命令是否存在和版本信息。如果本机尚未安装某个 CLI，界面会显示缺失状态，但不会阻塞其他 Agent 使用。
-
-### 终端会话
-
-- 使用 `node-pty` 承载真实 CLI 会话。
-- 使用 `xterm.js` 渲染终端。
-- 支持启动多个 Agent 会话。
-- 支持会话标签、活动会话切换、终端输入输出和窗口尺寸同步。
-
-### MCP 配置预览
-
-当前内置了一个示例 MCP 服务：
-
-```txt
-@modelcontextprotocol/server-filesystem
+```text
+apps/
+  desktop/
+    halo_desktop/
+      main.py
+      app_controller.py
+      completion.py
+      demo_runtime.py
+      plugin_registry.py
+      qml/
+crates/
+  halo-protocol/
+  halo-core/
+  halo-ipc/
+  halo-runtime/
+plugins/
+  agents/
+    claude-code/
+    codex-cli/
+    opencode/
+    pi/
+docs/
+  architecture/
+  superpowers/plans/
 ```
 
-界面会为四个 Agent 生成对应配置片段：
+## Phase 2 Runtime/IPC
 
-- Claude Code：JSON，`mcpServers`
-- Codex CLI：TOML，`[mcp_servers.<name>]`
-- OpenCode：JSON，`mcp`
-- Pi：JSON，`mcpServers`
+Phase 2 新增 Rust runtime 纵切片，但仍然不直接调用真实 CLI、不启动 PTY、不写入用户配置。它的作用是先固定桌面壳与后台 runtime 的协议边界：
 
-这些预览用于确认生成内容是否符合目标 Agent 的配置格式。
+- `halo-protocol`：共享 Agent、RuntimeEvent、RunSnapshot、RuntimeCommand 等协议类型。
+- `halo-core`：内存 EventBus、按 run 校验事件顺序、每个 run 的 ring buffer snapshot。
+- `halo-ipc`：无外部依赖的 stdio JSONL 编解码，负责 command/event/snapshot/error envelope。
+- `halo-runtime`：可测试的 Rust sidecar，通过 stdin/stdout 接收 `createRun`、`getSnapshot`、`shutdown`。
+- `apps/desktop/halo_desktop/ipc_client.py`：Python IPC client，只在显式调用时连接 sidecar，导入模块不会启动后台进程。
 
-### 配置写入服务
+默认桌面启动仍然使用 demo runtime：
 
-项目已经实现一套通用配置写入服务：
-
-- 写入前读取旧内容。
-- 自动生成统一 diff。
-- 自动创建备份文件。
-- 通过临时文件进行原子替换。
-- 支持按备份回滚。
-- 支持列出历史备份。
-
-演示写入默认写到 Electron 用户数据目录下的 `preview-configs`，不会改动真实 Agent 配置。
-
-### 项目级真实写入守卫
-
-真实写入目前只允许写入当前工作区内的目标文件，并且会执行以下检查：
-
-- 目标路径必须位于 workspace root 内。
-- 禁止写入 `.git`、`node_modules`、`dist` 等危险目录。
-- 写入前必须输入确认短语，格式为 `APPLY <文件名>`。
-- 写入仍然复用 diff、备份、原子替换和回滚能力。
-
-当前项目级 MCP 写入目标为：
-
-| Agent | 项目级目标文件 |
-| --- | --- |
-| Claude Code | `.mcp.json` |
-| Codex CLI | `.codex/config.toml` |
-| OpenCode | `opencode.json` |
-| Pi | `.pi/mcp.json` |
-
-注意：当前真实写入会写入完整生成文件。也就是说，如果目标文件已经存在，现阶段不会做 JSON/TOML 结构化合并。结构化合并会在后续阶段实现。
-
-## 技术架构
-
-```txt
-Halo Studio
-├─ Electron Main Process
-│  ├─ Agent Registry
-│  ├─ PTY Session Manager
-│  ├─ MCP Preview Service
-│  ├─ Project MCP Target Service
-│  ├─ Config Write Service
-│  └─ IPC Handlers
-├─ Electron Preload
-│  └─ window.halo 安全桥接 API
-├─ React Renderer
-│  ├─ Agent Rail
-│  ├─ Session Tabs
-│  ├─ Terminal Pane
-│  ├─ Inspector Panel
-│  ├─ Utility Strip
-│  └─ MCP Preview Panel
-└─ Shared Types
-   ├─ Agent 类型
-   ├─ MCP 类型
-   └─ 配置写入类型
+```powershell
+cd "D:\Halo Studio"
+.\.venv\Scripts\python.exe -m halo_desktop.main
 ```
 
-核心目录：
+构建和单独运行 Rust sidecar：
 
-| 路径 | 说明 |
-| --- | --- |
-| `src/main` | Electron 主进程、IPC、PTY、Agent 检测、配置写入 |
-| `src/main/agents` | 四个 Agent 的适配器和检测逻辑 |
-| `src/main/config` | diff、备份、原子写入、回滚、真实写入守卫 |
-| `src/main/mcp` | MCP 配置预览和项目级目标生成 |
-| `src/main/pty` | 终端会话管理 |
-| `src/main/preload.ts` | Renderer 可访问的安全 API |
-| `src/renderer` | React UI |
-| `src/shared` | 主进程和渲染进程共享类型 |
-| `src/tests` | Vitest 测试 |
-| `docs/superpowers` | 阶段设计文档和实现计划 |
+```powershell
+cargo build -p halo-runtime
+cargo run -p halo-runtime
+```
 
-## 本地开发
+手动测试 sidecar 的 JSONL 输入：
 
-### 环境要求
+```powershell
+@'
+{"type":"createRun","runId":"run-1","agentId":"codex-cli","prompt":"hello"}
+{"type":"getSnapshot","runId":"run-1"}
+{"type":"shutdown"}
+'@ | cargo run -p halo-runtime
+```
+
+IPC 模式目前是开发接缝，不是默认 UI 路线；后续阶段会把命令提交、事件轮询、真实 CLI 进程管理和权限审批逐步接入。
+
+## Windows 开发环境
+
+建议环境：
 
 - Windows 10 或 Windows 11
-- Node.js 20 或更高版本
-- npm
+- Python 3.13+
+- Rust 1.95+
 - Git
-- 可选：本机安装 `claude`、`codex`、`opencode`、`pi`
+- 可选：Claude Code、Codex CLI、OpenCode、Pi Agent 的本地 CLI
 
-### 安装依赖
+安装桌面依赖：
 
-```bash
-npm install
+```powershell
+cd "D:\Halo Studio"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r apps\desktop\requirements.txt
+python -m pip install -e apps\desktop
 ```
 
-### 启动桌面应用
+启动原生桌面壳：
 
-```bash
-npm run dev:electron
+```powershell
+python -m halo_desktop.main
 ```
 
-该命令会同时启动 Vite、TypeScript 主进程监听和 Electron 桌面窗口。
+如果你暂时不想安装 editable 包，也可以这样启动：
 
-### 运行测试
-
-```bash
-npm test
+```powershell
+cd apps\desktop
+python -m halo_desktop.main
 ```
 
-当前测试覆盖：
+如果没有安装 PySide6，入口会给出安装提示；核心 Python 测试不依赖 PySide6。
 
-- Agent Registry
-- MCP 配置预览
-- 配置写入服务
-- 真实写入守卫
-- 项目级 MCP 写入目标
+## 测试
 
-### 构建
+Rust runtime 与协议测试：
 
-```bash
-npm run build
+```powershell
+cargo test --workspace
 ```
 
-构建会执行：
+Python 桌面后端、命令补全、manifest 读取、QML 静态约束测试：
 
-- Renderer TypeScript 检查
-- Main Process TypeScript 检查
-- Vite 生产构建
+```powershell
+python -m unittest discover -s apps/desktop/tests -v
+```
 
-当前还没有加入安装包打包脚本。后续可以接入 `electron-builder` 或 `electron-forge` 生成 Windows 安装包。
+Phase 1 验收重点：
 
-## 使用说明
+- fake runtime 支持 4/16/32 个 Agent 的确定性事件生成。
+- slash completion 支持 `/codex`、`/claude`、`/opencode`、`/pi`、`/test`、`/review` 等命令。
+- QML 主界面包含 AgentSidebar、WorkflowTimeline、InspectorPanel、CommandComposer。
+- QML 不使用粒子、ShaderEffect、DropShadow、FastBlur 或持续坐标动画。
+- 新增代码不引入新的 Electron、React、Vue、WebView 或浏览器 UI。
 
-### 启动 Agent 会话
+## 内置 Agent Manifest
 
-1. 打开 Halo Studio。
-2. 左侧会显示 Claude Code、Codex CLI、OpenCode、Pi 的检测结果。
-3. 点击某个 Agent。
-4. 中间终端区域会启动对应 CLI。
-5. 可以通过会话标签切换不同 Agent 会话。
+Phase 1 已准备四个内置 Agent profile：
 
-### 查看 MCP 配置预览
+| Agent | 命令 | 默认权限 |
+| --- | --- | --- |
+| Claude Code | `claude` | shell/file_write 默认关闭 |
+| Codex CLI | `codex` | shell/file_write 默认关闭 |
+| OpenCode | `opencode` | shell/file_write 默认关闭 |
+| Pi Agent | `pi` | shell/file_write 默认关闭 |
 
-1. 打开右侧 MCP 预览区域。
-2. 在 Agent 按钮中选择目标 Agent。
-3. 查看对应 JSON、JSONC 或 TOML 配置内容。
-4. 可以先使用演示写入，确认 diff 和备份流程。
+这些 manifest 目前只用于 UI、命令补全、能力声明和后续 runtime 接入。真实进程启动、配置写入、MCP 写入和权限审批会在后续阶段接入。
 
-### 写入项目级 MCP 配置
+## 旧 Electron 状态
 
-1. 在 MCP 面板中选择目标 Agent。
-2. 查看“项目级真实写入预案”中的目标路径。
-3. 确认目标位于当前工作区内。
-4. 输入界面提示的确认短语，例如 `APPLY .mcp.json`。
-5. 点击确认写入。
+旧的 Electron/React 代码仍保留在仓库中，用作迁移参考和行为回归参考，但它不再是目标产品路线。后续阶段会逐步将可复用的 Agent 检测、配置写入、MCP preview、备份回滚等能力迁移到原生桌面架构，再清退旧 Web/Electron 入口。
 
-写入完成后会生成备份，并显示 diff。若需要恢复，可以通过回滚入口或备份历史恢复。
+## 文档
 
-## 安全策略
-
-Halo Studio 当前把真实配置写入作为高风险操作处理。
-
-已经实现的保护：
-
-- Renderer 不直接拼接真实 Agent 配置路径。
-- 项目级路径由主进程服务生成。
-- 写入目标必须位于 workspace root 内。
-- 危险目录会被拦截。
-- 用户必须输入确认短语。
-- 每次写入都会备份旧内容。
-- 写入使用临时文件替换，减少半写入风险。
-- 支持回滚到备份。
-
-尚未完成的保护：
-
-- 尚未实现已有 JSON/TOML 配置的结构化合并。
-- 尚未实现用户选择 workspace root。
-- 尚未实现全局 Agent 配置写入。
-- 尚未实现写入前的可视化结构化差异视图。
-
-## 开发阶段
-
-### 已完成
-
-- Phase 0/1：Electron + React + TypeScript 桌面壳，多 Agent 工作台 UI，PTY 终端会话。
-- Phase 2A：MCP 统一模型和四个 Agent 的配置预览。
-- Phase 2B：安全配置写入服务，支持 diff、备份、原子写入和回滚。
-- Phase 2C：配置备份历史和历史恢复入口。
-- Phase 2D：真实写入确认守卫，限制项目内路径并拦截危险目录。
-- Phase 2E：项目级 MCP 写入目标，支持 `.mcp.json`、`.codex/config.toml`、`opencode.json`、`.pi/mcp.json`。
-
-### 下一步建议
-
-1. Phase 2F：实现 JSON/TOML 结构化合并，避免覆盖已有配置。
-2. Phase 3A：加入工作区选择和最近项目列表，替换硬编码 `D:\Halo Studio`。
-3. Phase 3B：完善 Agent 配置文件管理，支持读取、编辑、备份和恢复。
-4. Phase 3C：加入 MCP Server 注册表，支持常用 MCP 模板一键添加。
-5. Phase 4A：实现 Agent 间调用和任务编排。
-6. Phase 4B：加入会话日志、上下文快照和任务恢复。
-7. Phase 5A：接入 Windows 安装包和自动更新。
+- 架构设计：`docs/architecture/2026-07-22-native-agent-workspace-rebuild.md`
+- Phase 1 实施计划：`docs/superpowers/plans/2026-07-22-native-agent-workspace-phase-1.md`
 
 ## 当前限制
 
-- 当前主要验证 Windows 环境。
-- 工作区路径仍有硬编码，后续需要改为用户可选。
-- MCP 示例服务目前是固定示例，后续会做可编辑注册表。
-- 真实写入目前是完整文件写入，不做结构化 merge。
-- 终端会话管理仍是 MVP，还没有持久化会话历史。
-- 尚未加入 Windows 安装包构建。
+- Phase 1 使用 fake runtime，不直接调用真实 CLI。
+- QML UI 是原生桌面壳纵切片，不是完整产品功能。
+- 配置写入、MCP 写入、真实 shell、插件执行默认不启用。
+- Windows 打包脚本尚未接入。
+- PySide6 需要本机安装后才能实际打开桌面窗口。
 
-## 参考项目
+## 提交约定
 
-本项目的产品方向参考了以下开源项目和工具生态：
-
-- OpenCode: `anomalyco/opencode`
-- Pi: `earendil-works/pi`
-- Pi Web: `agegr/pi-web`
-- cc-switch: `farion1231/cc-switch`
-- Claude Code、Codex CLI、OpenCode、Pi 的 MCP 和配置体系
-
-## 贡献约定
-
-- 文档和提交信息优先使用中文。
-- 涉及真实写入、配置迁移、Agent 调用等高风险功能时，需要优先补测试。
-- 不直接改动用户全局配置，除非有清晰的预览、确认、备份和回滚能力。
-- UI 应保持桌面工作台风格，避免做成营销落地页。
-
-## License
-
-当前仓库尚未声明开源许可证。正式发布前需要补充许可证文件。
+本项目提交信息优先使用中文。涉及真实配置、shell、文件写入、Agent 调度和并发 runtime 的变更，需要先补测试，再实现。
