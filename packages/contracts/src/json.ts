@@ -165,10 +165,10 @@ type JsonSchemaPredicate<TValue extends JsonSchemaValue> = (
 
 function invalidJsonResult<TValue>(
   params?: Partial<z.ParseParams>,
-): z.SafeParseReturnType<unknown, TValue> {
+): z.SafeParseReturnType<TValue, TValue> {
   return {
     success: false,
-    error: new z.ZodError<unknown>([
+    error: new z.ZodError<TValue>([
       {
         code: z.ZodIssueCode.custom,
         message: JSON_VALUE_ERROR_MESSAGE,
@@ -180,7 +180,7 @@ function invalidJsonResult<TValue>(
 
 class JsonValueSchema<
   TValue extends JsonSchemaValue,
-> extends z.ZodType<TValue, z.ZodTypeDef, unknown> {
+> extends z.ZodType<TValue, z.ZodTypeDef, TValue> {
   constructor(private readonly predicate: JsonSchemaPredicate<TValue>) {
     super({});
   }
@@ -210,7 +210,7 @@ class JsonValueSchema<
   override safeParse(
     data: unknown,
     params?: Partial<z.ParseParams>,
-  ): z.SafeParseReturnType<unknown, TValue> {
+  ): z.SafeParseReturnType<TValue, TValue> {
     try {
       return super.safeParse(data, params);
     } catch {
@@ -221,7 +221,7 @@ class JsonValueSchema<
   override async safeParseAsync(
     data: unknown,
     params?: Partial<z.ParseParams>,
-  ): Promise<z.SafeParseReturnType<unknown, TValue>> {
+  ): Promise<z.SafeParseReturnType<TValue, TValue>> {
     try {
       return await super.safeParseAsync(data, params);
     } catch {
@@ -233,13 +233,13 @@ class JsonValueSchema<
 export const jsonValueSchema: z.ZodType<
   JsonValue,
   z.ZodTypeDef,
-  unknown
+  JsonValue
 > = new JsonValueSchema(isJsonValue);
 
 export const optionalJsonValueSchema: z.ZodType<
   JsonValue | undefined,
   z.ZodTypeDef,
-  unknown
+  JsonValue | undefined
 > = new JsonValueSchema(
   (input): input is JsonValue | undefined =>
     input === undefined || isJsonValue(input),

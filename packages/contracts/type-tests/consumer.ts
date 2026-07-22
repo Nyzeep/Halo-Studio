@@ -1,9 +1,15 @@
-import type {
-  AppError,
-  DataOf,
-  InputOf,
-  IpcContractMap,
-  ResponseOf,
+import { z } from "zod";
+
+import {
+  appErrorSchema,
+  jsonValueSchema,
+  openCodeEventPayloadSchema,
+  piEventPayloadSchema,
+  type AppError,
+  type DataOf,
+  type InputOf,
+  type IpcContractMap,
+  type ResponseOf,
 } from "@halo-studio/contracts";
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
@@ -27,6 +33,81 @@ const openInput: InputOf<"workspace.open"> = {
 
 // @ts-expect-error workspace.open requires a selection handle.
 const invalidOpenInput: InputOf<"workspace.open"> = {};
+
+const validSetInput: InputOf<"config.preview"> = {
+  targetId: "pi:user-settings",
+  operations: [{ op: "set", path: ["model"], value: { id: 1 } }],
+};
+
+const validRemoveInput: InputOf<"config.preview"> = {
+  targetId: "pi:user-settings",
+  operations: [{ op: "remove", path: ["model"] }],
+};
+
+const missingSetValue: InputOf<"config.preview"> = {
+  targetId: "pi:user-settings",
+  operations: [
+    // @ts-expect-error Config set operations require a value.
+    { op: "set", path: ["model"] },
+  ],
+};
+
+const functionSetValue: InputOf<"config.preview"> = {
+  targetId: "pi:user-settings",
+  operations: [
+    // @ts-expect-error Config values must be JSON-safe.
+    { op: "set", path: ["model"], value: () => "invalid" },
+  ],
+};
+
+const dateSetValue: InputOf<"config.preview"> = {
+  targetId: "pi:user-settings",
+  operations: [
+    // @ts-expect-error Config values must be JSON-safe.
+    { op: "set", path: ["model"], value: new Date() },
+  ],
+};
+
+const undefinedSetValue: InputOf<"config.preview"> = {
+  targetId: "pi:user-settings",
+  operations: [
+    // @ts-expect-error Config set operations cannot use undefined as a value.
+    { op: "set", path: ["model"], value: undefined },
+  ],
+};
+
+// @ts-expect-error Public JSON schema input must be JSON-safe.
+const invalidJsonSchemaInput: z.input<typeof jsonValueSchema> = () => "invalid";
+
+type AppErrorInput = z.input<typeof appErrorSchema>;
+const appErrorWithoutDetails: AppErrorInput = {
+  code: "ProtocolViolation",
+  message: "Invalid protocol data",
+  retryable: false,
+};
+const appErrorWithUndefinedDetails: AppErrorInput = {
+  ...appErrorWithoutDetails,
+  details: undefined,
+};
+
+const piEventWithoutData: z.input<typeof piEventPayloadSchema> = {
+  protocol: "pi-rpc",
+  type: "agent_start",
+};
+const piEventWithUndefinedData: z.input<typeof piEventPayloadSchema> = {
+  ...piEventWithoutData,
+  data: undefined,
+};
+const openCodeEventWithoutData: z.input<typeof openCodeEventPayloadSchema> = {
+  protocol: "opencode-sse",
+  type: "message.part.updated",
+};
+const openCodeEventWithUndefinedData: z.input<
+  typeof openCodeEventPayloadSchema
+> = {
+  ...openCodeEventWithoutData,
+  data: undefined,
+};
 
 const storageData: DataOf<"storage.health"> = {
   mode: "read-write",
@@ -58,6 +139,19 @@ void [
   invalidEmptyInput,
   openInput,
   invalidOpenInput,
+  validSetInput,
+  validRemoveInput,
+  missingSetValue,
+  functionSetValue,
+  dateSetValue,
+  undefinedSetValue,
+  invalidJsonSchemaInput,
+  appErrorWithoutDetails,
+  appErrorWithUndefinedDetails,
+  piEventWithoutData,
+  piEventWithUndefinedData,
+  openCodeEventWithoutData,
+  openCodeEventWithUndefinedData,
   successResponse,
   errorResponse,
   publicChannel,
