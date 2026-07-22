@@ -19,7 +19,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run && npm run test:types",
+    "test:types": "npm run build && tsc -p type-tests/tsconfig.json"
   },
   "dependencies": {
     "zod": "3.24.1"

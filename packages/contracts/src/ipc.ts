@@ -11,19 +11,28 @@ import {
   type AppError,
 } from "./error.js";
 
-export function ipcEnvelope<const TDataSchema extends z.ZodTypeAny>(
-  dataSchema: TDataSchema,
-) {
-  return z.discriminatedUnion("ok", [
-    z.object({ ok: z.literal(true), data: dataSchema }).strict(),
-    z.object({ ok: z.literal(false), error: appErrorSchema }).strict(),
-  ]);
-}
-
-export const ipcEnvelopeSchema = ipcEnvelope(jsonValueSchema);
 export type IpcEnvelope<TData> =
   | { readonly ok: true; readonly data: TData }
   | { readonly ok: false; readonly error: AppError };
+
+type IpcEnvelopeSchema<TDataSchema extends z.ZodTypeAny> = z.ZodType<
+  IpcEnvelope<z.output<TDataSchema>>,
+  z.ZodTypeDef,
+  IpcEnvelope<z.input<TDataSchema>>
+>;
+
+export function ipcEnvelope<const TDataSchema extends z.ZodTypeAny>(
+  dataSchema: TDataSchema,
+): IpcEnvelopeSchema<TDataSchema> {
+  const schema = z.discriminatedUnion("ok", [
+    z.object({ ok: z.literal(true), data: dataSchema }).strict(),
+    z.object({ ok: z.literal(false), error: appErrorSchema }).strict(),
+  ]);
+
+  return schema as IpcEnvelopeSchema<TDataSchema>;
+}
+
+export const ipcEnvelopeSchema = ipcEnvelope(jsonValueSchema);
 
 export const trustStateSchema = z.enum(["untrusted", "trusted"]);
 export type TrustState = z.infer<typeof trustStateSchema>;
@@ -46,13 +55,25 @@ export const workspaceSchema = z
   .strict();
 export type Workspace = z.infer<typeof workspaceSchema>;
 
+const unsafeConfigPathKeys = new Set([
+  "__proto__",
+  "prototype",
+  "constructor",
+]);
+
 export const configPathSegmentSchema = z.union([
-  z.string(),
-  z.number().int().nonnegative(),
+  z
+    .string()
+    .min(1)
+    .max(256)
+    .refine((key) => !unsafeConfigPathKeys.has(key), {
+      message: "Prototype-sensitive keys are not allowed in config paths.",
+    }),
+  z.number().int().nonnegative().safe().max(1_000_000),
 ]);
 export type ConfigPathSegment = z.infer<typeof configPathSegmentSchema>;
 
-const configPathSchema = z.array(configPathSegmentSchema).min(1);
+const configPathSchema = z.array(configPathSegmentSchema).min(1).max(128);
 
 export const configOperationSchema = z.discriminatedUnion("op", [
   z
@@ -114,7 +135,13 @@ export const storageHealthSchema = z
   .strict();
 export type StorageHealth = z.infer<typeof storageHealthSchema>;
 
-const emptyRequestSchema = z.object({}).strict();
+export type EmptyRequest = Record<string, never>;
+
+const emptyRequestSchema = z.object({}).strict() as z.ZodType<
+  EmptyRequest,
+  z.ZodTypeDef,
+  EmptyRequest
+>;
 const workspaceIdFilterSchema = z
   .object({ workspaceId: workspaceIdSchema.optional() })
   .strict();
@@ -192,6 +219,7 @@ export const ipcContracts = {
   },
 } as const;
 
+export type IpcContractMap = typeof ipcContracts;
 export type IpcChannel = keyof typeof ipcContracts;
 export type InputOf<TChannel extends IpcChannel> = z.input<
   (typeof ipcContracts)[TChannel]["request"]

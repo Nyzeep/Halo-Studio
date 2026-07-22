@@ -1,21 +1,12 @@
 import { z } from "zod";
 
-export type JsonPrimitive = boolean | null | number | string;
-export type JsonValue =
-  | JsonPrimitive
-  | readonly JsonValue[]
-  | { readonly [key: string]: JsonValue };
+import { jsonValueSchema } from "./json.js";
 
-export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number().finite(),
-    z.boolean(),
-    z.null(),
-    z.array(jsonValueSchema),
-    z.record(jsonValueSchema),
-  ]),
-);
+export {
+  jsonValueSchema,
+  type JsonPrimitive,
+  type JsonValue,
+} from "./json.js";
 
 export const appErrorCodeSchema = z.enum([
   "RuntimeUnavailable",

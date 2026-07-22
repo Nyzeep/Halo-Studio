@@ -7,7 +7,9 @@ import {
   appErrorSchema,
   capabilitySchema,
   commandDescriptorSchema,
+  configPathSegmentSchema,
   ipcContracts,
+  jsonValueSchema,
   runtimeBindingSchema,
   workspaceIdSchema,
   type DataOf,
@@ -273,6 +275,76 @@ describe("public errors", () => {
         .success,
     ).toBe(false);
   });
+
+  it("accepts ordinary JSON and repeated non-cyclic references", () => {
+    const shared = { value: 1 };
+    const nullPrototypeObject = Object.assign(Object.create(null), {
+      enabled: true,
+    });
+
+    expect(
+      jsonValueSchema.safeParse({
+        array: [null, "text", 1, false],
+        left: shared,
+        right: shared,
+        nullPrototypeObject,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects cyclic JSON without throwing", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+
+    expect(() => jsonValueSchema.safeParse(cyclic)).not.toThrow();
+    expect(jsonValueSchema.safeParse(cyclic).success).toBe(false);
+  });
+
+  it("rejects JSON over the depth limit without throwing", () => {
+    let deeplyNested: unknown = null;
+    for (let depth = 0; depth < 10_000; depth += 1) {
+      deeplyNested = { value: deeplyNested };
+    }
+
+    expect(() => jsonValueSchema.safeParse(deeplyNested)).not.toThrow();
+    expect(jsonValueSchema.safeParse(deeplyNested).success).toBe(false);
+  });
+
+  it("rejects dangerous object shapes without throwing", () => {
+    const accessor = {};
+    Object.defineProperty(accessor, "value", {
+      enumerable: true,
+      get() {
+        throw new Error("must not be read");
+      },
+    });
+
+    const nonEnumerable = {};
+    Object.defineProperty(nonEnumerable, "hidden", {
+      enumerable: false,
+      value: true,
+    });
+
+    const symbolProperty = { [Symbol("hidden")]: true };
+    const throwingProxy = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error("must not escape safeParse");
+        },
+      },
+    );
+
+    for (const value of [
+      accessor,
+      nonEnumerable,
+      symbolProperty,
+      throwingProxy,
+    ]) {
+      expect(() => jsonValueSchema.safeParse(value)).not.toThrow();
+      expect(jsonValueSchema.safeParse(value).success).toBe(false);
+    }
+  });
 });
 
 describe("agent event envelopes", () => {
@@ -442,6 +514,38 @@ describe("IPC contracts", () => {
       preview.safeParse({
         targetId: "pi:user-settings",
         operations: [{ op: "set", path: ["key"], value: undefined }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts bounded config path keys and safe indexes", () => {
+    expect(configPathSegmentSchema.safeParse("valid-key").success).toBe(true);
+    expect(configPathSegmentSchema.safeParse(1_000_000).success).toBe(true);
+  });
+
+  it("rejects dangerous or unbounded config paths", () => {
+    for (const segment of [
+      "",
+      "__proto__",
+      "prototype",
+      "constructor",
+      "x".repeat(257),
+      Number.MAX_VALUE,
+      Number.MAX_SAFE_INTEGER + 1,
+      1_000_001,
+    ]) {
+      expect(configPathSegmentSchema.safeParse(segment).success).toBe(false);
+    }
+
+    expect(
+      ipcContracts["config.preview"].request.safeParse({
+        targetId: "pi:user-settings",
+        operations: [
+          {
+            op: "remove",
+            path: Array.from({ length: 129 }, () => "nested"),
+          },
+        ],
       }).success,
     ).toBe(false);
   });
