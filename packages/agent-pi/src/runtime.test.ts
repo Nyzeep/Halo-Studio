@@ -69,12 +69,41 @@ describe("Pi runtime lifecycle", () => {
         queueMicrotask(() => {
           const output = executable === "pi" ? "pi 0.80.0\n" : "pi 0.81.1\n";
           port.stdout.emit("data", output);
+          port.stdout.emit("end");
+          port.stderr.emit("end");
         });
         return port;
       },
     });
     expect(calls).toEqual(["pi", "pi.exe"]);
     expect(detection).toMatchObject({ status: "detected", source: "system", executable: "pi.exe", version: "0.81.1" });
+  });
+
+  it("waits for stdout close after process exit before parsing the exact version", async () => {
+    const calls: string[] = [];
+    const detection = await detectPi({
+      processFactory: (executable) => {
+        calls.push(executable);
+        const stdout = new EventEmitter();
+        const stderr = new EventEmitter();
+        const process = new EventEmitter();
+        const wait = new Promise<{ code: number; signal: null }>((resolve) => {
+          process.once("exit", () => resolve({ code: 0, signal: null }));
+        });
+        queueMicrotask(() => {
+          process.emit("exit", 0, null);
+          queueMicrotask(() => {
+            stdout.emit("data", "pi 0.81.1\n");
+            stdout.emit("end");
+            stderr.emit("end");
+            process.emit("close");
+          });
+        });
+        return { stdin: { write: () => undefined, end: () => undefined }, stdout, stderr, process, wait: () => wait };
+      },
+    });
+    expect(calls).toEqual(["pi"]);
+    expect(detection).toMatchObject({ status: "detected", executable: "pi", version: "0.81.1" });
   });
 
   it("passes trust policy and a whitelisted environment into stable startup arguments", async () => {
@@ -94,7 +123,7 @@ describe("Pi runtime lifecycle", () => {
       allowedProviderKeys: new Set(["OPENAI_API_KEY"]),
     });
     await runtime.start();
-    expect(spawnArgs).toEqual(["--mode", "rpc", "--cwd", "C:/workspace", "--session", "s", "--model", "m", "--thinking", "high", "--no-approve", "--no-context-files"]);
+    expect(spawnArgs).toEqual(["--mode", "rpc", "--session", "s", "--model", "m", "--thinking", "high", "--no-approve", "--no-context-files"]);
     expect(spawnOptions).toMatchObject({ cwd: "C:/workspace", env: { PATH: "C:/bin", OPENAI_API_KEY: "key" } });
     expect(spawnOptions.env).not.toHaveProperty("SECRET");
   });
@@ -132,5 +161,59 @@ describe("Pi runtime lifecycle", () => {
     expect(port.ended).toBe(true);
     expect(killed).toBe(true);
     expect(runtime.state).toBe("stopped");
+  });
+
+  it("fails readiness as crashed when get_state times out and terminates the process", async () => {
+    const port = new RuntimePort();
+    port.stdin.write = (value: string) => { port.stdin.writes.push(value); };
+    let killed = false;
+    port.kill = () => { killed = true; };
+    const runtime = new PiRuntime({
+      detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      spawn: () => port,
+      cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
+      readinessTimeoutMs: 1,
+    });
+    await expect(runtime.start()).rejects.toMatchObject({ code: "TransportDisconnected" });
+    expect(runtime.state).toBe("crashed");
+    expect(port.ended).toBe(true);
+    expect(killed).toBe(true);
+  });
+
+  it("rejects a failed get_state response and never becomes ready", async () => {
+    const port = new RuntimePort();
+    port.stdin.write = (value: string) => {
+      port.stdin.writes.push(value);
+      const command = JSON.parse(value) as { id: string; type: string };
+      if (command.type === "get_state") queueMicrotask(() => port.stdout.emit("data", JSON.stringify({ type: "response", id: command.id, command: "get_state", success: false, error: "unavailable" }) + "\n"));
+    };
+    let killed = false;
+    port.kill = () => { killed = true; };
+    const runtime = new PiRuntime({
+      detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      spawn: () => port,
+      cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
+    });
+    await expect(runtime.start()).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+    expect(runtime.state).toBe("crashed");
+    expect(port.ended).toBe(true);
+    expect(killed).toBe(true);
+    await expect(runtime.prompt("after failure")).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+  });
+
+  it("does not spawn twice and does not downgrade a running state on detect", async () => {
+    const port = new RuntimePort();
+    let spawns = 0;
+    const runtime = new PiRuntime({
+      detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      spawn: () => { spawns += 1; return port; },
+      detect: async () => ({ status: "unavailable", source: "managed", managedInstall: "available" }),
+      cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
+    });
+    await runtime.start();
+    await expect(runtime.start()).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+    expect(spawns).toBe(1);
+    await expect(runtime.detect()).resolves.toMatchObject({ status: "detected" });
+    expect(runtime.state).toBe("ready");
   });
 });

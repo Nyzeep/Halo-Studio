@@ -142,4 +142,29 @@ describe("Pi JSONL transport", () => {
     eofPort.stdout.emit("end");
     await expect(eofPending).rejects.toBeInstanceOf(TransportDisconnectedError);
   });
+
+  it("closes on one timeout and rejects every other pending or queued request without later writes", async () => {
+    const port = new FakePort();
+    const transport = new PiJsonlTransport(port);
+    const timedOut = transport.request({ type: "prompt", message: "one" }, { timeoutMs: 5 });
+    const queued = transport.request({ type: "get_state" });
+    const concurrent = transport.request({ type: "abort" });
+    await expect(timedOut).rejects.toBeInstanceOf(TransportDisconnectedError);
+    await expect(queued).rejects.toBeInstanceOf(TransportDisconnectedError);
+    await expect(concurrent).rejects.toBeInstanceOf(TransportDisconnectedError);
+    const writeCount = port.stdin.writes.length;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(port.stdin.writes).toHaveLength(writeCount);
+    await expect(transport.request({ type: "get_state" })).rejects.toBeInstanceOf(TransportDisconnectedError);
+  });
+
+  it("rejects all requests on an unexpected process exit", async () => {
+    const port = new FakePort();
+    const transport = new PiJsonlTransport(port);
+    const first = transport.request({ type: "prompt", message: "one" });
+    const queued = transport.request({ type: "get_state" });
+    port.process.emit("exit", 2, null);
+    await expect(first).rejects.toBeInstanceOf(TransportDisconnectedError);
+    await expect(queued).rejects.toBeInstanceOf(TransportDisconnectedError);
+  });
 });

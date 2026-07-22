@@ -55,6 +55,10 @@ export class PiRuntime {
   get detection(): PiDetection | undefined { return this.#detection; }
 
   async detect(): Promise<PiDetection> {
+    if (this.#state === "ready" || this.#state === "starting" || this.#state === "stopping" || this.#state === "stopped" || this.#state === "crashed") {
+      if (this.#detection) return this.#detection;
+      throw new RuntimeUnavailableError();
+    }
     const trustPolicy = runtimeTrustPolicy("pi", this.#options.trust);
     const baseEnvironment = buildRuntimeEnvironment(this.#options.hostEnvironment, this.#options.providerEnvironment ?? {}, this.#options.allowedProviderKeys ?? new Set());
     const env = mergeRuntimeEnvironment(baseEnvironment, trustPolicy);
@@ -64,6 +68,9 @@ export class PiRuntime {
   }
 
   async start(): Promise<void> {
+    if (this.#state === "ready" || this.#state === "starting" || this.#state === "stopping" || this.#state === "stopped" || this.#state === "crashed") {
+      throw new RuntimeUnavailableError();
+    }
     if (!this.#detection) await this.detect();
     const detection = this.#detection;
     if (!detection || detection.status !== "detected" || detection.version !== PI_VERSION || !detection.executable) {
@@ -76,15 +83,17 @@ export class PiRuntime {
       const trustPolicy = runtimeTrustPolicy("pi", this.#options.trust);
       const baseEnvironment = buildRuntimeEnvironment(this.#options.hostEnvironment, this.#options.providerEnvironment ?? {}, this.#options.allowedProviderKeys ?? new Set());
       const env = mergeRuntimeEnvironment(baseEnvironment, trustPolicy);
-      const args = ["--mode", "rpc", "--cwd", this.#options.cwd, "--session", this.#options.session, "--model", this.#options.model, "--thinking", this.#options.thinking, ...trustPolicy.args] as const;
+      const args = ["--mode", "rpc", "--session", this.#options.session, "--model", this.#options.model, "--thinking", this.#options.thinking, ...trustPolicy.args] as const;
       this.#port = (this.#options.spawn ?? nodeProcessFactory)(detection.executable, args, { cwd: this.#options.cwd, env });
       this.#transport = new PiJsonlTransport(this.#port, { onDisconnect: (error) => this.#onDisconnect(error) });
       this.#unsubscribe = this.#transport.onEvent((event) => this.#onEvent(event));
-      await this.#transport.request({ type: "get_state" }, { timeoutMs: this.#options.readinessTimeoutMs ?? 10_000 });
+      const readiness = await this.#transport.request({ type: "get_state" }, { timeoutMs: this.#options.readinessTimeoutMs ?? 10_000 });
+      if (!readiness.success) throw new RuntimeUnavailableError();
       this.#state = "ready";
     } catch (error) {
       this.#state = "crashed";
       this.#transport?.close();
+      await this.#terminateFailedStart();
       if (error instanceof PiError) throw error;
       throw new RuntimeUnavailableError();
     }
@@ -145,6 +154,11 @@ export class PiRuntime {
     if (!this.#stopRequested && this.#state !== "stopped" && this.#state !== "unavailable") {
       this.#state = "crashed";
     }
+  }
+
+  async #terminateFailedStart(): Promise<void> {
+    try { await this.#port?.stdin.end(); } catch { /* process may already be gone */ }
+    try { await this.#port?.kill?.("SIGTERM"); } catch { /* process may already be gone */ }
   }
 }
 

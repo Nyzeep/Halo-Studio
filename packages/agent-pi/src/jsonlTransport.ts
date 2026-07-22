@@ -4,8 +4,8 @@ import { piCommandSchema, piEventSchema, piResponseSchema, type PiCommand, type 
 import { PiError, ProtocolViolationError, TransportDisconnectedError } from "./errors.js";
 
 export interface ProcessStream {
-  on(event: "data" | "end" | "error", listener: (...args: any[]) => void): unknown;
-  once?(event: "end" | "error", listener: (...args: any[]) => void): unknown;
+  on(event: "data" | "end" | "error" | "close", listener: (...args: any[]) => void): unknown;
+  once?(event: "end" | "error" | "close", listener: (...args: any[]) => void): unknown;
 }
 
 export interface ProcessStdin {
@@ -22,8 +22,8 @@ export interface ProcessPort {
   readonly stdin: ProcessStdin;
   readonly stdout: ProcessStream;
   readonly stderr?: ProcessStream;
-  readonly process?: { on(event: "exit" | "error", listener: (...args: any[]) => void): unknown; once?(event: "exit" | "error", listener: (...args: any[]) => void): unknown };
-  on?(event: "exit" | "error", listener: (...args: any[]) => void): unknown;
+  readonly process?: { on(event: "exit" | "error" | "close", listener: (...args: any[]) => void): unknown; once?(event: "exit" | "error" | "close", listener: (...args: any[]) => void): unknown };
+  on?(event: "exit" | "error" | "close", listener: (...args: any[]) => void): unknown;
   wait?(): Promise<ProcessExit>;
   kill?(signal?: string): void | Promise<void>;
 }
@@ -76,6 +76,7 @@ export class PiJsonlTransport {
     const processEvents = port.process ?? (port.on === undefined ? undefined : { on: port.on.bind(port) });
     processEvents?.on("error", () => this.close(new TransportDisconnectedError()));
     processEvents?.on("exit", () => this.close(new TransportDisconnectedError()));
+    processEvents?.on("close", () => this.close(new TransportDisconnectedError()));
   }
 
   request(command: PiCommand, options: RequestOptions = {}): Promise<PiResponse> {
@@ -170,6 +171,7 @@ export class PiJsonlTransport {
     if (pending.timer !== undefined) clearTimeout(pending.timer);
     pending.reject(new TransportDisconnectedError());
     pending.finish();
+    this.close(new TransportDisconnectedError());
   }
 
   #onData(chunk: Buffer | string): void {
