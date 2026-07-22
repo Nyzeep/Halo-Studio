@@ -11,7 +11,7 @@
     "dev": "node scripts/run-workspace-script.mjs dev",
     "build": "node scripts/run-workspace-script.mjs build",
     "typecheck": "node scripts/run-workspace-script.mjs typecheck",
-    "test": "node scripts/run-workspace-script.mjs test",
+    "test": "node --test scripts/assert-repository.test.mjs scripts/run-workspace-script.test.mjs && node scripts/run-workspace-script.mjs test",
     "check:repository": "node scripts/assert-repository.mjs",
     "verify": "npm run check:repository && npm run typecheck && npm test && npm run build"
   },

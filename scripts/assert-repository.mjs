@@ -1,4 +1,9 @@
 import { spawnSync } from "node:child_process";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = dirname(scriptsDirectory);
 
 const forbiddenPrefixes = [
   "用于参考的几个项目的代码/",
@@ -8,7 +13,7 @@ const forbiddenPrefixes = [
 ];
 
 const result = spawnSync("git", ["ls-files", "-z"], {
-  cwd: process.cwd(),
+  cwd: repositoryRoot,
   encoding: "utf8",
 });
 
