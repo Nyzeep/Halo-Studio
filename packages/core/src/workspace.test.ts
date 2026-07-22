@@ -1,12 +1,20 @@
 import { constants } from "node:fs";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
 import { types as utilTypes } from "node:util";
 
-import { workspaceSchema } from "@halo-studio/contracts";
+import { workspaceSchema, type AgentKind } from "@halo-studio/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { CoreError } from "./error.js";
 import {
   isPathWithin,
   normalizePathKey,
@@ -17,6 +25,8 @@ import {
   mergeRuntimeEnvironment,
   resolveTrust,
   runtimeTrustPolicy,
+  type TrustDecision,
+  type TrustStore,
 } from "./trust.js";
 import { openWorkspace, type FsPort } from "./workspace.js";
 
@@ -86,6 +96,22 @@ async function createDirectoryLinkForTest(
   }
 }
 
+async function captureError(action: () => Promise<unknown>): Promise<unknown> {
+  try {
+    await action();
+  } catch (error) {
+    return error;
+  }
+  return undefined;
+}
+
+function trustStoreWith(decisions: readonly TrustDecision[]): TrustStore {
+  return {
+    listDecisions: vi.fn().mockResolvedValue(decisions),
+    setDecision: vi.fn(),
+  };
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryRoots.splice(0).map((root) =>
@@ -95,18 +121,61 @@ afterEach(async () => {
 });
 
 describe("path policy", () => {
+  it.runIf(process.platform === "win32")(
+    "keeps canonical NTFS names distinct when JavaScript case folding collides",
+    async () => {
+      const parent = await temporaryDirectory();
+      const asciiK = join(parent, "K");
+      const kelvinSign = join(parent, "\u212A");
+      await mkdir(asciiK);
+      await mkdir(kelvinSign);
+
+      const canonicalAsciiK = await realpath(asciiK);
+      const canonicalKelvinSign = await realpath(kelvinSign);
+      const store = new MemoryTrustStore("win32");
+      await store.setDecision(canonicalAsciiK, "trusted");
+
+      expect(workspaceIdForPath(canonicalAsciiK, "win32")).not.toBe(
+        workspaceIdForPath(canonicalKelvinSign, "win32"),
+      );
+      await expect(
+        resolveTrust(canonicalKelvinSign, store, "win32"),
+      ).resolves.toBe("untrusted");
+      expect(
+        isPathWithin(canonicalKelvinSign, canonicalAsciiK, "win32"),
+      ).toBe(false);
+    },
+  );
+
+  it.runIf(process.platform === "win32")(
+    "converges alternate input casing through filesystem canonicalization",
+    async () => {
+      const parent = await temporaryDirectory();
+      const target = join(parent, "CanonicalCase");
+      await mkdir(target);
+
+      const canonicalExact = await realpath(target);
+      const canonicalAlternate = await realpath(target.toLowerCase());
+
+      expect(canonicalAlternate).toBe(canonicalExact);
+      expect(workspaceIdForPath(canonicalAlternate, "win32")).toBe(
+        workspaceIdForPath(canonicalExact, "win32"),
+      );
+    },
+  );
+
   it("normalizes comparison keys without removing a filesystem root", () => {
     expect(normalizePathKey("C:\\Work\\Project\\", "win32")).toBe(
-      "c:\\work\\project",
+      "C:\\Work\\Project",
     );
-    expect(normalizePathKey("C:\\", "win32")).toBe("c:\\");
+    expect(normalizePathKey("C:\\", "win32")).toBe("C:\\");
     expect(normalizePathKey("/srv/project///", "linux")).toBe("/srv/project");
     expect(normalizePathKey("/", "linux")).toBe("/");
   });
 
   it("uses path segments for ancestor checks", () => {
     expect(isPathWithin("C:\\foo\\bar", "C:\\foo", "win32")).toBe(true);
-    expect(isPathWithin("c:\\FOO\\bar", "C:\\foo", "win32")).toBe(true);
+    expect(isPathWithin("c:\\FOO\\bar", "C:\\foo", "win32")).toBe(false);
     expect(isPathWithin("C:\\foo-bar", "C:\\foo", "win32")).toBe(false);
     expect(isPathWithin("/srv/foo-bar", "/srv/foo", "linux")).toBe(false);
     expect(isPathWithin("/srv/project", "/", "linux")).toBe(true);
@@ -118,6 +187,13 @@ describe("path policy", () => {
         "win32",
       ),
     ).toBe(true);
+    expect(
+      isPathWithin(
+        "\\\\server\\share\\project",
+        "\\\\SERVER\\share\\",
+        "win32",
+      ),
+    ).toBe(false);
   });
 
   it("derives SHA-256 ids from platform-specific canonical keys", () => {
@@ -127,7 +203,7 @@ describe("path policy", () => {
     const unixLower = workspaceIdForPath("/work/project", "linux");
 
     expect(windowsUpper).toMatch(/^[0-9a-f]{64}$/u);
-    expect(windowsUpper).toBe(windowsLower);
+    expect(windowsUpper).not.toBe(windowsLower);
     expect(unixUpper).not.toBe(unixLower);
   });
 });
@@ -180,6 +256,29 @@ describe("workspace opening", () => {
     ).rejects.toMatchObject({ code: "UnsafePath" });
   });
 
+  it("sanitizes CoreError failures from filesystem dependencies", async () => {
+    const parent = await temporaryDirectory();
+    const fsPort: FsPort = {
+      access: vi.fn(),
+      realpath: vi
+        .fn()
+        .mockRejectedValue(
+          new CoreError("ProtocolViolation", "filesystem-core-canary-secret"),
+        ),
+      stat: vi.fn(),
+    };
+
+    const thrown = await captureError(() =>
+      openWorkspace(parent, new MemoryTrustStore(), { fs: fsPort }),
+    );
+
+    expect(thrown).toMatchObject({
+      code: "UnsafePath",
+      message: "Workspace path is unavailable.",
+    });
+    expect(String(thrown)).not.toContain("filesystem-core-canary-secret");
+  });
+
   it("validates directory access on the canonical real path", async () => {
     const parent = await temporaryDirectory();
     const linkPath = join(parent, "selected link");
@@ -210,15 +309,30 @@ describe("workspace opening", () => {
       setDecision: vi.fn(),
     };
 
-    let thrown: unknown;
-    try {
-      await openWorkspace(parent, trustStore);
-    } catch (error) {
-      thrown = error;
-    }
+    const thrown = await captureError(() => openWorkspace(parent, trustStore));
 
     expect(thrown).toMatchObject({ code: "ProtocolViolation" });
     expect(String(thrown)).not.toContain("trust-storage-canary-secret");
+  });
+
+  it("sanitizes CoreError failures from trust-store dependencies", async () => {
+    const parent = await temporaryDirectory();
+    const trustStore = {
+      listDecisions: vi
+        .fn()
+        .mockRejectedValue(
+          new CoreError("UnsafePath", "trust-core-canary-secret"),
+        ),
+      setDecision: vi.fn(),
+    };
+
+    const thrown = await captureError(() => openWorkspace(parent, trustStore));
+
+    expect(thrown).toMatchObject({
+      code: "ProtocolViolation",
+      message: "Workspace trust decision is unavailable.",
+    });
+    expect(String(thrown)).not.toContain("trust-core-canary-secret");
   });
 
   it("does not skip POSIX directory-link failures", async () => {
@@ -334,6 +448,24 @@ describe("workspace opening", () => {
 });
 
 describe("trust decisions", () => {
+  const olderDuplicateDecision: TrustDecision = {
+    decidedAt: new Date("2026-07-22T00:00:00.000Z"),
+    realPath: "/projects/app",
+    state: "untrusted",
+  };
+  const newerDuplicateDecision: TrustDecision = {
+    decidedAt: new Date("2026-07-23T00:00:00.000Z"),
+    realPath: "/projects/app",
+    state: "trusted",
+  };
+  const duplicateDecisionOrders: readonly [
+    string,
+    readonly TrustDecision[],
+  ][] = [
+    ["older-first", [olderDuplicateDecision, newerDuplicateDecision]],
+    ["newer-first", [newerDuplicateDecision, olderDuplicateDecision]],
+  ];
+
   it("defaults to untrusted when no decision exists", async () => {
     await expect(resolveTrust("/workspace", new MemoryTrustStore(), "linux")).resolves.toBe(
       "untrusted",
@@ -351,6 +483,46 @@ describe("trust decisions", () => {
     ).resolves.toBe("untrusted");
   });
 
+  it.each(duplicateDecisionOrders)(
+    "selects the latest duplicate decision in %s order",
+    async (_, decisions) => {
+      await expect(
+        resolveTrust("/projects/app", trustStoreWith(decisions), "linux"),
+      ).resolves.toBe("trusted");
+    },
+  );
+
+  it("fails closed for duplicate decisions tied at the latest time", async () => {
+    const decidedAt = new Date("2026-07-23T00:00:00.000Z");
+    const store = trustStoreWith([
+      { decidedAt, realPath: "/projects/app", state: "trusted" },
+      { decidedAt, realPath: "/projects/app", state: "untrusted" },
+    ]);
+
+    await expect(resolveTrust("/projects/app", store, "linux")).resolves.toBe(
+      "untrusted",
+    );
+  });
+
+  it("fails closed when a deepest duplicate has an invalid decision time", async () => {
+    const store = trustStoreWith([
+      {
+        decidedAt: new Date("2026-07-23T00:00:00.000Z"),
+        realPath: "/projects/app",
+        state: "trusted",
+      },
+      {
+        decidedAt: new Date(Number.NaN),
+        realPath: "/projects/app",
+        state: "untrusted",
+      },
+    ]);
+
+    await expect(resolveTrust("/projects/app", store, "linux")).resolves.toBe(
+      "untrusted",
+    );
+  });
+
   it("does not treat a non-ancestor prefix as a decision", async () => {
     const store = new MemoryTrustStore("linux");
     await store.setDecision("/projects/app", "trusted");
@@ -360,13 +532,13 @@ describe("trust decisions", () => {
     );
   });
 
-  it("matches Windows decisions case-insensitively", async () => {
+  it("does not case-fold non-canonical Windows decision paths", async () => {
     const store = new MemoryTrustStore("win32");
     await store.setDecision("C:\\Work", "trusted");
 
     await expect(
       resolveTrust("c:\\WORK\\Project", store, "win32"),
-    ).resolves.toBe("trusted");
+    ).resolves.toBe("untrusted");
   });
 
   it("preserves the normalized real path casing in stored decisions", async () => {
@@ -394,6 +566,17 @@ describe("trust decisions", () => {
 });
 
 describe("runtime trust policy", () => {
+  it("fails closed for an unknown runtime kind", () => {
+    expect(() =>
+      runtimeTrustPolicy("future-runtime" as AgentKind, "trusted"),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "ProtocolViolation",
+        message: "Runtime kind is not supported.",
+      }),
+    );
+  });
+
   it("allows Pi project resources only for trusted workspaces", () => {
     expect(runtimeTrustPolicy("pi", "trusted")).toEqual({
       args: ["--approve"],

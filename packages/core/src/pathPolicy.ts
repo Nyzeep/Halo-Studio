@@ -26,16 +26,16 @@ export function normalizeFilesystemPath(
   return withoutTrailingSeparators;
 }
 
+/** Creates a stable key from a canonical path returned by fs.realpath. */
 export function normalizePathKey(
   input: string,
   platform: PathPlatform = process.platform,
 ): string {
-  const normalized = normalizeFilesystemPath(input, platform);
-  return platform === "win32"
-    ? normalized.toLocaleLowerCase("en-US")
-    : normalized;
+  // JavaScript case folding can collapse distinct filesystem names.
+  return normalizeFilesystemPath(input, platform);
 }
 
+/** Compares two canonical fs.realpath results using exact path segments. */
 export function isPathWithin(
   candidateRealPath: string,
   allowedRealRoot: string,
@@ -44,16 +44,31 @@ export function isPathWithin(
   const api = pathApi(platform);
   const candidateKey = normalizePathKey(candidateRealPath, platform);
   const rootKey = normalizePathKey(allowedRealRoot, platform);
-  const relativePath = api.relative(rootKey, candidateKey);
+  const candidateRoot = api.parse(candidateKey).root;
+  const allowedRoot = api.parse(rootKey).root;
 
-  if (relativePath === "") {
-    return true;
+  if (candidateRoot !== allowedRoot) {
+    return false;
   }
 
-  const [firstSegment] = relativePath.split(api.sep);
-  return firstSegment !== ".." && !api.isAbsolute(relativePath);
+  const candidateSegments = candidateKey
+    .slice(candidateRoot.length)
+    .split(api.sep)
+    .filter((segment) => segment.length > 0);
+  const allowedSegments = rootKey
+    .slice(allowedRoot.length)
+    .split(api.sep)
+    .filter((segment) => segment.length > 0);
+
+  return (
+    allowedSegments.length <= candidateSegments.length &&
+    allowedSegments.every(
+      (segment, index) => segment === candidateSegments[index],
+    )
+  );
 }
 
+/** Derives an id from a canonical path returned by fs.realpath. */
 export function workspaceIdForPath(
   realPath: string,
   platform: PathPlatform = process.platform,

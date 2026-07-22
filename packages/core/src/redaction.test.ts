@@ -166,6 +166,20 @@ describe("log redaction", () => {
     expect(JSON.stringify(result)).not.toContain("proxy-canary-secret");
   });
 
+  it("does not execute Proxy prototype traps while classifying objects", () => {
+    const getPrototypeOf = vi.fn(() => {
+      throw new Error("prototype-proxy-canary-secret");
+    });
+    const proxyPrototype = new Proxy({}, { getPrototypeOf });
+    const value = Object.create(proxyPrototype) as object;
+
+    const result = redactLogValue(value);
+
+    expect(result).toBe(UNSERIALIZABLE);
+    expect(getPrototypeOf).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("prototype-proxy-canary-secret");
+  });
+
   it("does not let exceptional options escape the redaction boundary", () => {
     const options = Object.defineProperty({}, "maxDepth", {
       get() {

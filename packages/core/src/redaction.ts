@@ -250,7 +250,7 @@ function redactValue(
     if (state.activeAncestors.has(value)) {
       return UNSERIALIZABLE;
     }
-    if (value instanceof Date) {
+    if (utilTypes.isDate(value)) {
       return Number.isFinite(Date.prototype.getTime.call(value))
         ? truncateString(
             Date.prototype.toISOString.call(value),
@@ -258,7 +258,7 @@ function redactValue(
           )
         : UNSERIALIZABLE;
     }
-    if (value instanceof Error) {
+    if (utilTypes.isNativeError(value)) {
       return redactError(value, depth, state);
     }
 

@@ -47,29 +47,31 @@ export async function openWorkspace(
     platform,
   );
   let realPath: string;
+  let isDirectory: boolean;
 
   try {
     const resolvedRealPath = await fs.realpath(rootPath);
     realPath = normalizeFilesystemPath(resolvedRealPath, platform);
     const pathStat = await fs.stat(realPath);
-    if (!pathStat.isDirectory()) {
-      throw new CoreError("UnsafePath", "Workspace path must be a directory.");
-    }
+    isDirectory = pathStat.isDirectory();
+  } catch {
+    throw new CoreError("UnsafePath", "Workspace path is unavailable.");
+  }
+
+  if (!isDirectory) {
+    throw new CoreError("UnsafePath", "Workspace path must be a directory.");
+  }
+
+  try {
     await fs.access(realPath, constants.R_OK | constants.X_OK);
-  } catch (error) {
-    if (error instanceof CoreError) {
-      throw error;
-    }
+  } catch {
     throw new CoreError("UnsafePath", "Workspace path is unavailable.");
   }
 
   let trustState: Workspace["trustState"];
   try {
     trustState = await resolveTrust(realPath, trustStore, platform);
-  } catch (error) {
-    if (error instanceof CoreError) {
-      throw error;
-    }
+  } catch {
     throw new CoreError(
       "ProtocolViolation",
       "Workspace trust decision is unavailable.",

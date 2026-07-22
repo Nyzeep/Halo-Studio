@@ -1,6 +1,8 @@
 import type { AgentKind, TrustState } from "@halo-studio/contracts";
+import { types as utilTypes } from "node:util";
 
 import { OPENCODE_PROJECT_CONFIG_ENV } from "./environment.js";
+import { CoreError } from "./error.js";
 import {
   isPathWithin,
   normalizeFilesystemPath,
@@ -57,7 +59,7 @@ export async function resolveTrust(
   platform: PathPlatform = process.platform,
 ): Promise<TrustState> {
   const decisions = await store.listDecisions();
-  let selected: TrustDecision | undefined;
+  let deepestDecisions: TrustDecision[] = [];
   let selectedDepth = -1;
 
   for (const decision of decisions) {
@@ -67,12 +69,36 @@ export async function resolveTrust(
 
     const depth = pathDepth(decision.realPath, platform);
     if (depth > selectedDepth) {
-      selected = decision;
+      deepestDecisions = [decision];
       selectedDepth = depth;
+    } else if (depth === selectedDepth) {
+      deepestDecisions.push(decision);
     }
   }
 
-  return selected?.state ?? "untrusted";
+  let latestDecision: TrustDecision | undefined;
+  let latestTime = Number.NEGATIVE_INFINITY;
+  let latestCount = 0;
+
+  for (const decision of deepestDecisions) {
+    if (!utilTypes.isDate(decision.decidedAt)) {
+      return "untrusted";
+    }
+    const decidedAt = Date.prototype.getTime.call(decision.decidedAt);
+    if (!Number.isFinite(decidedAt)) {
+      return "untrusted";
+    }
+
+    if (decidedAt > latestTime) {
+      latestDecision = decision;
+      latestTime = decidedAt;
+      latestCount = 1;
+    } else if (decidedAt === latestTime) {
+      latestCount += 1;
+    }
+  }
+
+  return latestCount === 1 ? (latestDecision?.state ?? "untrusted") : "untrusted";
 }
 
 export interface RuntimeTrustPolicy {
@@ -81,27 +107,34 @@ export interface RuntimeTrustPolicy {
   readonly loadProjectResources: boolean;
 }
 
+function unsupportedRuntimeKind(_kind: never): never {
+  throw new CoreError("ProtocolViolation", "Runtime kind is not supported.");
+}
+
 export function runtimeTrustPolicy(
   kind: AgentKind,
   state: TrustState,
 ): RuntimeTrustPolicy {
-  if (kind === "pi") {
-    return state === "trusted"
-      ? { args: ["--approve"], env: {}, loadProjectResources: true }
-      : {
-          args: ["--no-approve", "--no-context-files"],
-          env: {},
-          loadProjectResources: false,
-        };
+  switch (kind) {
+    case "pi":
+      return state === "trusted"
+        ? { args: ["--approve"], env: {}, loadProjectResources: true }
+        : {
+            args: ["--no-approve", "--no-context-files"],
+            env: {},
+            loadProjectResources: false,
+          };
+    case "opencode":
+      return state === "trusted"
+        ? { args: [], env: {}, loadProjectResources: true }
+        : {
+            args: [],
+            env: { [OPENCODE_PROJECT_CONFIG_ENV]: "1" },
+            loadProjectResources: false,
+          };
+    default:
+      return unsupportedRuntimeKind(kind);
   }
-
-  return state === "trusted"
-    ? { args: [], env: {}, loadProjectResources: true }
-    : {
-        args: [],
-        env: { [OPENCODE_PROJECT_CONFIG_ENV]: "1" },
-        loadProjectResources: false,
-      };
 }
 
 export function mergeRuntimeEnvironment(

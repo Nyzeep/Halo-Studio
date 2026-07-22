@@ -73,7 +73,11 @@ describe("runtime environment allowlist", () => {
       OPENAI_API_KEY: "explicit-openai-value",
     };
 
-    const result = buildRuntimeEnvironment(hostEnvironment, providerEnvironment);
+    const result = buildRuntimeEnvironment(
+      hostEnvironment,
+      providerEnvironment,
+      new Set(["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]),
+    );
 
     expect(result).toEqual({ PATH: "/usr/bin", ...providerEnvironment });
     expect(result.ANTHROPIC_API_KEY).not.toBe(hostEnvironment.ANTHROPIC_API_KEY);
@@ -82,7 +86,11 @@ describe("runtime environment allowlist", () => {
   it("returns a fresh object without mutating either input", () => {
     const host = { PATH: "/bin" };
     const provider = { OPENAI_API_KEY: "explicit" };
-    const result = buildRuntimeEnvironment(host, provider);
+    const result = buildRuntimeEnvironment(
+      host,
+      provider,
+      new Set(["OPENAI_API_KEY"]),
+    );
 
     result.PATH = "/changed";
 
@@ -110,12 +118,26 @@ describe("runtime environment allowlist", () => {
     "HTTPS_PROXY",
   ])("rejects unsafe provider variable %s", (name) => {
     expect(() =>
-      buildRuntimeEnvironment({}, { [name]: "provider-secret-canary" }),
+      buildRuntimeEnvironment(
+        {},
+        { [name]: "provider-secret-canary" },
+        new Set([name]),
+      ),
     ).toThrowError(
       expect.objectContaining({
         code: "ProtocolViolation",
       }),
     );
+  });
+
+  it.each([
+    "GIT_SSH_COMMAND",
+    "JAVA_TOOL_OPTIONS",
+    "DOTNET_STARTUP_HOOKS",
+  ])("rejects undeclared provider variable %s", (name) => {
+    expect(() =>
+      buildRuntimeEnvironment({}, { [name]: "provider-secret-canary" }),
+    ).toThrowError(expect.objectContaining(invalidEnvironmentError));
   });
 
   it("rejects non-string provider values without including them in errors", () => {
@@ -127,7 +149,11 @@ describe("runtime environment allowlist", () => {
 
     let thrown: unknown;
     try {
-      buildRuntimeEnvironment({ RANDOM: secret }, provider);
+      buildRuntimeEnvironment(
+        { RANDOM: secret },
+        provider,
+        new Set(["OPENAI_API_KEY"]),
+      );
     } catch (error) {
       thrown = error;
     }
@@ -141,7 +167,11 @@ describe("runtime environment allowlist", () => {
 
     let thrown: unknown;
     try {
-      buildRuntimeEnvironment({}, { [invalidKey]: "credential-canary-secret" });
+      buildRuntimeEnvironment(
+        {},
+        { [invalidKey]: "credential-canary-secret" },
+        new Set([invalidKey]),
+      );
     } catch (error) {
       thrown = error;
     }
@@ -155,6 +185,7 @@ describe("runtime environment allowlist", () => {
       buildRuntimeEnvironment(
         {},
         { OPENAI_API_KEY: "credential-canary\0secret" },
+        new Set(["OPENAI_API_KEY"]),
       ),
     ).toThrowError(expect.objectContaining({ code: "ProtocolViolation" }));
   });
@@ -213,7 +244,11 @@ describe("runtime environment allowlist", () => {
 
     let thrown: unknown;
     try {
-      buildRuntimeEnvironment({}, provider);
+      buildRuntimeEnvironment(
+        {},
+        provider,
+        new Set(["OPENAI_API_KEY"]),
+      );
     } catch (error) {
       thrown = error;
     }

@@ -43,6 +43,7 @@ const BLOCKED_PROVIDER_KEYS = new Set([
 const PROVIDER_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/u;
 const INVALID_ENVIRONMENT_MESSAGE =
   "Runtime environment input is not permitted.";
+const NO_PROVIDER_KEYS = new Set<string>();
 
 function invalidEnvironment(): never {
   throw new CoreError("ProtocolViolation", INVALID_ENVIRONMENT_MESSAGE);
@@ -104,6 +105,7 @@ function isBlockedProviderKey(key: string): boolean {
 export function buildRuntimeEnvironment(
   hostEnvironment: EnvironmentInput,
   providerEnvironment: ProviderEnvironment = {},
+  allowedProviderKeys: ReadonlySet<string> = NO_PROVIDER_KEYS,
 ): Record<string, string> {
   try {
     assertInspectableObject(hostEnvironment);
@@ -141,6 +143,7 @@ export function buildRuntimeEnvironment(
       if (
         !PROVIDER_KEY_PATTERN.test(key) ||
         isBlockedProviderKey(key) ||
+        !allowedProviderKeys.has(key) ||
         typeof value !== "string" ||
         value.includes("\0")
       ) {
