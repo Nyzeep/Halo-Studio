@@ -52,6 +52,43 @@ async function close(handle: FileHandle | undefined): Promise<void> {
   if (handle !== undefined) await handle.close();
 }
 
+export interface ParentDurabilityGuards {
+  readonly beforeSync: () => Promise<void>;
+  readonly syncDirectory?: () => Promise<void>;
+}
+
+export async function syncParentDirectory(path: string, guards: ParentDurabilityGuards): Promise<void> {
+  let parentHandle: FileHandle | undefined;
+  let guardError: unknown;
+  try {
+    try { await guards.beforeSync(); } catch (error) { guardError = error; throw error; }
+    parentHandle = await open(dirname(path), "r");
+    const parentInfo = await parentHandle.stat({ bigint: true });
+    if (!parentInfo.isDirectory()) throw new Error("Unsafe parent");
+    const parentIdentity = identity(parentInfo);
+    if (!sameIdentity(parentIdentity, identity(await stat(dirname(path), { bigint: true })))) {
+      throw new Error("Parent path changed");
+    }
+    try { await guards.beforeSync(); } catch (error) { guardError = error; throw error; }
+    if (!sameIdentity(parentIdentity, identity(await parentHandle.stat({ bigint: true })))) {
+      throw new Error("Parent handle changed");
+    }
+    if (!sameIdentity(parentIdentity, identity(await stat(dirname(path), { bigint: true })))) {
+      throw new Error("Parent path changed");
+    }
+    if (guards.syncDirectory !== undefined) await guards.syncDirectory();
+    else if (process.platform !== "win32") await parentHandle.sync();
+    await parentHandle.close(); parentHandle = undefined;
+  } catch (error) {
+    await close(parentHandle).catch(() => undefined);
+    if (guardError !== undefined) throw guardError;
+    void error;
+    throw new AtomicWriteError("durability-failed", true);
+  } finally {
+    await close(parentHandle).catch(() => undefined);
+  }
+}
+
 export interface GuardedRemoveGuards {
   readonly beforeRemove: () => Promise<void>;
   readonly syncDirectory?: () => Promise<void>;

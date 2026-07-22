@@ -319,6 +319,44 @@ describe("config transaction", () => {
     expect(values.size).toBe(0);
   });
 
+  it("continues cleanup after one pending backup fails", async () => {
+    const { registry, targetId } = await fixture();
+    const values = new Map<string, string>();
+    let cleanupPhase = false;
+    let allowFirst = false;
+    let firstReference = "";
+    const vault: CredentialVault = {
+      isAvailable: () => true,
+      store: async (reference, value) => { values.set(reference, value); },
+      get: async (reference) => values.get(reference) ?? null,
+      delete: async (reference) => {
+        if (!cleanupPhase || (reference === firstReference && !allowFirst)) throw new Error("DELETE-CANARY");
+        values.delete(reference);
+      },
+    };
+    const transaction = new ConfigTransaction(registry, { vault });
+    const firstPreview = await transaction.preview(targetId, [{ op: "set", path: ["index"], value: 1 }]);
+    const first = await transaction.commit(firstPreview.previewId);
+    firstReference = `config-backup:${first.backupId}`;
+    await expect(transaction.rollback(first.backupId)).rejects.toBeInstanceOf(ConfigRecoveryError);
+
+    const secondPreview = await transaction.preview(targetId, [{ op: "set", path: ["index"], value: 2 }]);
+    const second = await transaction.commit(secondPreview.previewId);
+    const secondReference = `config-backup:${second.backupId}`;
+    await expect(transaction.rollback(second.backupId)).rejects.toBeInstanceOf(ConfigRecoveryError);
+
+    cleanupPhase = true;
+    await expect(transaction.cleanup()).rejects.toMatchObject({
+      name: "ConfigRecoveryError",
+      reason: "backup-unavailable",
+    });
+    expect(values.has(firstReference)).toBe(true);
+    expect(values.has(secondReference)).toBe(false);
+    allowFirst = true;
+    await expect(transaction.cleanup()).resolves.toBeUndefined();
+    expect(values.size).toBe(0);
+  });
+
   it("bounds pending vault cleanup and blocks a new commit at the limit", async () => {
     const { registry, targetId } = await fixture();
     const values = new Map<string, string>();
@@ -344,15 +382,26 @@ describe("config transaction", () => {
     expect(values.size).toBe(32);
   }, 15_000);
 
-  it("maps rollback durability failure after replacement and retries as cleanup only", async () => {
+  it("retries parent durability before deleting an existing-target backup", async () => {
     const { file, registry, targetId } = await fixture();
     const original = await readFile(file, "utf8");
-    const transaction = new ConfigTransaction(registry, { vault: memoryVault() });
+    const values = new Map<string, string>();
+    let deletes = 0;
+    const vault: CredentialVault = {
+      isAvailable: () => true,
+      store: async (reference, value) => { values.set(reference, value); },
+      get: async (reference) => values.get(reference) ?? null,
+      delete: async (reference) => { deletes += 1; values.delete(reference); },
+    };
+    const transaction = new ConfigTransaction(registry, { vault });
     const preview = await transaction.preview(targetId, [{ op: "set", path: ["known"], value: false }]);
     const committed = await transaction.commit(preview.previewId);
     let durabilityCalls = 0;
     setConfigTransactionTestHooks(transaction, {
-      syncDirectory: async () => { durabilityCalls += 1; throw new Error("DURABILITY-CANARY"); },
+      syncDirectory: async () => {
+        durabilityCalls += 1;
+        if (durabilityCalls === 1) throw new Error("DURABILITY-CANARY");
+      },
     });
     await expect(transaction.rollback(committed.backupId)).rejects.toMatchObject({
       name: "ConfigRecoveryError",
@@ -360,16 +409,27 @@ describe("config transaction", () => {
       reason: "write-failed",
     });
     expect(await readFile(file, "utf8")).toBe(original);
+    expect(deletes).toBe(0);
     await expect(transaction.rollback(committed.backupId)).resolves.toMatchObject({ backupId: committed.backupId });
-    expect(durabilityCalls).toBe(1);
+    expect(durabilityCalls).toBe(2);
+    expect(deletes).toBe(1);
+    expect(values.size).toBe(0);
   });
 
-  it("maps missing-target unlink durability failure and retries as cleanup only", async () => {
+  it("retains a missing-target backup while parent durability keeps failing", async () => {
     const root = await mkdtemp(join(tmpdir(), "halo-missing-durability-")); dirs.push(root);
     const file = join(root, "new.jsonc");
     const registry = new TargetRegistry();
     const targetId = await registry.register({ scope: "project", owner: "opencode", path: file, format: "jsonc", source: "managed", writable: true, allowedRoot: root });
-    const transaction = new ConfigTransaction(registry, { vault: memoryVault() });
+    const values = new Map<string, string>();
+    let deletes = 0;
+    const vault: CredentialVault = {
+      isAvailable: () => true,
+      store: async (reference, value) => { values.set(reference, value); },
+      get: async (reference) => values.get(reference) ?? null,
+      delete: async (reference) => { deletes += 1; values.delete(reference); },
+    };
+    const transaction = new ConfigTransaction(registry, { vault });
     const preview = await transaction.preview(targetId, [{ op: "set", path: ["created"], value: true }]);
     const committed = await transaction.commit(preview.previewId);
     let durabilityCalls = 0;
@@ -381,8 +441,17 @@ describe("config transaction", () => {
       reason: "write-failed",
     });
     await expect(stat(file)).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(transaction.rollback(committed.backupId)).resolves.toMatchObject({ backupId: committed.backupId });
-    expect(durabilityCalls).toBe(1);
+    await expect(transaction.rollback(committed.backupId)).rejects.toMatchObject({
+      name: "ConfigRecoveryError",
+      reason: "write-failed",
+    });
+    await expect(transaction.cleanup()).rejects.toMatchObject({
+      name: "ConfigRecoveryError",
+      reason: "write-failed",
+    });
+    expect(durabilityCalls).toBe(3);
+    expect(deletes).toBe(0);
+    expect(values.has(`config-backup:${committed.backupId}`)).toBe(true);
   });
 
   it("rejects a preview whose generated configuration exceeds one MiB", async () => {
