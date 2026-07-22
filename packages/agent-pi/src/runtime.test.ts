@@ -182,6 +182,24 @@ describe("Pi runtime lifecycle", () => {
     expect(runtime.state).toBe("stopped");
   });
 
+  it("kills even when stdin.end never completes", async () => {
+    const port = new RuntimePort();
+    let killed = false;
+    port.stdin.end = () => new Promise(() => undefined);
+    port.wait = () => new Promise(() => undefined);
+    port.kill = () => { killed = true; };
+    const runtime = new PiRuntime({
+      detection: { status: "detected", source: "system", executable: "pi", version: "0.81.1" },
+      spawn: () => port,
+      cwd: "C:/workspace", session: "s", model: "m", thinking: "low", trust: "trusted", hostEnvironment: { PATH: "C:/bin" },
+      stopTimeoutMs: 1,
+    });
+    await runtime.start();
+    await runtime.stop();
+    expect(killed).toBe(true);
+    expect(runtime.state).toBe("stopped");
+  });
+
   it("fails readiness as crashed when get_state times out and terminates the process", async () => {
     const port = new RuntimePort();
     port.stdin.write = (value: string) => { port.stdin.writes.push(value); };

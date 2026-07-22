@@ -119,10 +119,10 @@ export class PiRuntime {
     if (!this.#port) { this.#state = "stopped"; return; }
     this.#stopRequested = true;
     this.#state = "stopping";
-    try { await this.#port.stdin.end(); } catch { /* process may already be gone */ }
+    const stopTimeoutMs = this.#options.stopTimeoutMs ?? 5_000;
+    await this.#endStdin(stopTimeoutMs);
     const wait = this.#port.wait ? this.#port.wait() : Promise.resolve({ code: 0, signal: null } satisfies ProcessExit);
     let completed = false;
-    const stopTimeoutMs = this.#options.stopTimeoutMs ?? 5_000;
     await Promise.race([
       wait.then(() => { completed = true; }, () => { completed = true; }),
       new Promise<void>((resolve) => setTimeout(resolve, stopTimeoutMs)),
@@ -157,8 +157,19 @@ export class PiRuntime {
   }
 
   async #terminateFailedStart(): Promise<void> {
-    try { await this.#port?.stdin.end(); } catch { /* process may already be gone */ }
+    await this.#endStdin(1_000);
     try { await this.#port?.kill?.("SIGTERM"); } catch { /* process may already be gone */ }
+  }
+
+  async #endStdin(timeoutMs: number): Promise<void> {
+    const port = this.#port;
+    if (!port) return;
+    try {
+      const result = port.stdin.end();
+      if (result && typeof (result as PromiseLike<unknown>).then === "function") {
+        await Promise.race([result as PromiseLike<unknown>, new Promise<void>((resolve) => setTimeout(resolve, timeoutMs))]);
+      }
+    } catch { /* process may already be gone */ }
   }
 }
 
