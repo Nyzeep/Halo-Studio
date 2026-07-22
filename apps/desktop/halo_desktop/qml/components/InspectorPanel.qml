@@ -119,6 +119,9 @@ Item {
     }
 
     function visibleEventCount() {
+        if (!root.events)
+            return 0
+
         var count = 0
         for (var index = 0; index < root.events.length; index += 1) {
             if (root.events[index].agentId === root.currentAgentId)

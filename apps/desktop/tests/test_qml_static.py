@@ -49,6 +49,13 @@ class QmlStaticTests(unittest.TestCase):
         self.assertIn("property bool debugDrawerOpen: false", qml_text)
         self.assertIn("Debug", qml_text)
 
+    def test_main_qml_guards_controller_during_startup(self):
+        main_qml = read_main_qml()
+
+        self.assertIn("property var appController", main_qml)
+        self.assertIn("appController === null ? []", main_qml)
+
+
 
 if __name__ == "__main__":
     unittest.main()

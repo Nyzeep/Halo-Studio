@@ -15,8 +15,9 @@ ApplicationWindow {
 
     Theme { id: theme }
 
-    property var agents: controller.agents
-    property var events: controller.events
+    property var appController: typeof controller === "undefined" ? null : controller
+    property var agents: appController === null ? [] : appController.agents
+    property var events: appController === null ? [] : appController.events
     property string currentAgentId: agents.length > 0 ? agents[0].id : "codex-cli"
     property bool debugDrawerOpen: false
 
@@ -138,7 +139,7 @@ ApplicationWindow {
                 CommandComposer {
                     id: composer
                     width: parent.width
-                    controller: controller
+                    controller: window.appController
                     currentAgentId: window.currentAgentId
                     panelColor: theme.glassStrong
                     borderColor: theme.border
