@@ -1,0 +1,35 @@
+{
+  "name": "@halo-studio/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist-electron/main/main.js",
+  "scripts": {
+    "build:dependencies": "npm run build --workspace @halo-studio/config && npm run build --workspace @halo-studio/agent-pi && npm run build --workspace @halo-studio/agent-opencode",
+    "prebuild": "npm run build:dependencies",
+    "build": "tsc -p tsconfig.json --noEmit && vite build --mode main && vite build --mode preload && vite build",
+    "dev": "vite",
+    "pretypecheck": "npm run build:dependencies",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build:dependencies",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@halo-studio/agent-opencode": "0.1.0",
+    "@halo-studio/agent-pi": "0.1.0",
+    "@halo-studio/config": "0.1.0",
+    "@halo-studio/contracts": "0.1.0",
+    "@halo-studio/core": "0.1.0",
+    "@halo-studio/storage": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.5",
+    "electron": "33.4.11",
+    "typescript": "5.7.3",
+    "vite": "6.4.3",
+    "vitest": "2.1.8"
+  },
+  "engines": {
+    "node": ">=20.18"
+  }
+}
