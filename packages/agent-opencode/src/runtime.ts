@@ -160,9 +160,11 @@ export interface OpenCodeRuntimeOptions {
   readonly onDisconnect?: () => void;
   /** Source-module seam for tests; production callers use the bundled resolver. */
   readonly resolveArtifact?: () => Promise<OpenCodeArtifact>;
+  /** Source-module seam for tests; production callers use Main-owned random credentials. */
+  readonly credentialsFactory?: () => ServerCredentials;
 }
 
-export type OpenCodeRuntimePublicOptions = Omit<OpenCodeRuntimeOptions, "resolveArtifact">;
+export type OpenCodeRuntimePublicOptions = Omit<OpenCodeRuntimeOptions, "resolveArtifact" | "credentialsFactory">;
 
 async function reserveLoopbackPort(): Promise<number> {
   const server = createServer();
@@ -232,7 +234,9 @@ export class OpenCodeRuntime {
       throw new VersionMismatchError();
     }
     this.#state = "installed";
-    this.#credentials = createServerCredentials();
+    let retainCredentials = false;
+    try {
+    this.#credentials = (this.#options.credentialsFactory ?? createServerCredentials)();
     const credentials = this.#credentials;
     const trust = runtimeTrustPolicy("opencode", this.#options.trust);
     const base = buildRuntimeEnvironment(
@@ -272,6 +276,7 @@ export class OpenCodeRuntime {
             if (earlyFailure === "port-conflict") {
               if (!await this.#teardownCurrentProcess()) throw new RuntimeUnavailableError();
               this.#clearSpawnEnvironment();
+              this.#clearRuntimeFields();
               if (attempt < 2) continue;
               break;
             }
@@ -297,6 +302,7 @@ export class OpenCodeRuntime {
           if (outcome.failure === "port-conflict") {
             if (!await this.#teardownCurrentProcess()) throw new RuntimeUnavailableError();
             this.#clearSpawnEnvironment();
+            this.#clearRuntimeFields();
             if (attempt < 2) continue;
             break;
           }
@@ -305,6 +311,7 @@ export class OpenCodeRuntime {
         if (this.#state !== "starting" || this.#processExited) throw new TransportDisconnectedError();
         this.#version = outcome.result.version;
         this.#state = "healthy";
+        retainCredentials = true;
         return;
       } catch (error) {
         if (isPortConflict(error)) {
@@ -312,9 +319,11 @@ export class OpenCodeRuntime {
             this.#state = "crashed";
             this.#error = new RuntimeUnavailableError();
             this.#clearSecrets();
+            this.#clearRuntimeFields(false);
             throw this.#error;
           }
           this.#clearSpawnEnvironment();
+          this.#clearRuntimeFields();
           if (attempt < 2) continue;
           break;
         }
@@ -322,6 +331,7 @@ export class OpenCodeRuntime {
         this.#state = "crashed";
         this.#error = error instanceof OpenCodeError ? error : new RuntimeUnavailableError();
         this.#clearSecrets();
+        this.#clearRuntimeFields(false);
         throw this.#error;
       }
     }
@@ -329,7 +339,18 @@ export class OpenCodeRuntime {
     this.#state = "crashed";
     this.#error = new RuntimeUnavailableError();
     this.#clearSecrets();
+    this.#clearRuntimeFields(false);
     throw this.#error;
+    } catch (error) {
+      if (this.#state === "crashed" && this.#error !== undefined) throw this.#error;
+      this.#state = "crashed";
+      this.#error = error instanceof OpenCodeError ? error : new RuntimeUnavailableError();
+      this.#clearSecrets();
+      this.#clearRuntimeFields(false);
+      throw this.#error;
+    } finally {
+      if (!retainCredentials) this.#clearSecrets();
+    }
   }
 
   stop(): Promise<void> { return this.#exclusive(() => this.#stopInternal()); }
@@ -338,11 +359,13 @@ export class OpenCodeRuntime {
     if (this.#state === "stopped" || this.#state === "unavailable") {
       this.#state = "stopped";
       this.#clearSecrets();
+      this.#clearRuntimeFields();
       return;
     }
     if (!this.#process) {
       this.#state = "stopped";
       this.#clearSecrets();
+      this.#clearRuntimeFields();
       return;
     }
     this.#stopRequested = true;
@@ -352,9 +375,11 @@ export class OpenCodeRuntime {
     if (!stopped) {
       this.#state = "crashed";
       this.#error = new RuntimeUnavailableError();
+      this.#clearRuntimeFields(false);
       throw this.#error;
     }
     this.#state = "stopped";
+    this.#clearRuntimeFields();
   }
 
   #attachLifecycle(process: OpenCodeProcess): void {
@@ -384,6 +409,7 @@ export class OpenCodeRuntime {
     this.#state = "crashed";
     this.#error = new TransportDisconnectedError();
     this.#clearSecrets();
+    this.#clearRuntimeFields(false);
     this.#options.onDisconnect?.();
   }
 
@@ -396,7 +422,7 @@ export class OpenCodeRuntime {
 
     await this.#settle(() => process.stdin.end(), remaining());
     const wait = process.wait === undefined
-      ? ({ status: "fulfilled", value: { code: 0, signal: null } } as const)
+      ? ({ status: "rejected" } as const)
       : await this.#settle(() => process.wait!(), remaining());
     let stopped = wait.status === "fulfilled";
     if (!stopped) {
@@ -424,6 +450,12 @@ export class OpenCodeRuntime {
     if (this.#credentials) clearServerCredentials(this.#credentials);
     this.#credentials = undefined;
     this.#clearSpawnEnvironment();
+  }
+
+  #clearRuntimeFields(clearError = true): void {
+    this.#port = undefined;
+    this.#version = undefined;
+    if (clearError) this.#error = undefined;
   }
 
   async #settle<T>(operation: () => T | PromiseLike<T>, timeoutMs: number): Promise<Settlement<T>> {
@@ -457,7 +489,8 @@ export class OpenCodeRuntime {
 }
 
 export function createOpenCodeRuntime(options: OpenCodeRuntimePublicOptions): OpenCodeRuntime {
-  const { resolveArtifact: _ignored, ...productionOptions } = options as OpenCodeRuntimeOptions;
-  void _ignored;
+  const { resolveArtifact: _ignoredArtifact, credentialsFactory: _ignoredCredentials, ...productionOptions } = options as OpenCodeRuntimeOptions;
+  void _ignoredArtifact;
+  void _ignoredCredentials;
   return new OpenCodeRuntime(productionOptions);
 }

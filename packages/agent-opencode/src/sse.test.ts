@@ -35,8 +35,15 @@ describe("OpenCode SSE", () => {
 
   it("does not synthesize replay headers or require Last-Event-ID", async () => {
     const requests: RequestInit[] = [];
-    await consumeSse(chunks([]), { onSignal: () => undefined, request: (_url, init) => { requests.push(init ?? {}); return Promise.resolve(); } });
-    expect(requests.flatMap((request) => Object.keys(request.headers ?? {}))).not.toContain("Last-Event-ID");
+    const signals: SseSignal[] = [];
+    await consumeSse(chunks(["event: connected\ndata: {}\n\n"]), {
+      onSignal: (signal) => signals.push(signal),
+      requestUrl: "http://127.0.0.1:43123/global/event",
+      request: (_url, init) => { requests.push(init ?? {}); return Promise.resolve(); },
+    });
+    expect(requests).toHaveLength(1);
+    expect(new Headers(requests[0]?.headers).has("last-event-id")).toBe(false);
+    expect(signals.map((signal) => signal.type)).toEqual(["connected", "disconnected"]);
   });
 
   it("recognizes OpenCode server event payloads and heartbeat comments", async () => {

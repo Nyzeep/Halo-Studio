@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
 import { createServerCredentials } from "./auth.js";
-import { createOpenCodeRuntime, OpenCodeRuntime, type OpenCodeProcess, type SpawnPort } from "./runtime.js";
+import { OpenCodeRuntime, type OpenCodeProcess, type SpawnPort } from "./runtime.js";
 import * as runtimeModule from "./runtime.js";
 
 class FakeProcess implements OpenCodeProcess {
@@ -37,16 +37,28 @@ const testArtifact = (executable = "opencode.exe") => async () => ({ executable,
 
 describe("OpenCode runtime", () => {
   it("does not let an arbitrary executable bypass the bundled artifact resolver", async () => {
-    let spawned = false;
-    const runtime = createOpenCodeRuntime({
+    let spawnedExecutable = "";
+    const processes: FakeProcess[] = [];
+    const runtime = new OpenCodeRuntime({
       executable: "C:\\malicious\\opencode.exe",
+      resolveArtifact: testArtifact("C:\\fixture\\node_modules\\opencode-ai\\bin\\opencode.exe"),
       cwd: "C:\\workspace",
       hostEnvironment: { PATH: "C:\\malicious" },
       trust: "trusted",
-      spawn: async () => { spawned = true; throw new Error("must not spawn"); },
+      reservePort: async () => 43120,
+      spawn: async (executable, args, options) => {
+        spawnedExecutable = executable;
+        const child = new FakeProcess(args, options.env);
+        processes.push(child);
+        return child;
+      },
+      checkHealth: async () => ({ version: "1.18.4" }),
     } as never);
-    await expect(runtime.start()).rejects.toMatchObject({ code: "RuntimeUnavailable" });
-    expect(spawned).toBe(false);
+    await runtime.start();
+    expect(spawnedExecutable).toBe("C:\\fixture\\node_modules\\opencode-ai\\bin\\opencode.exe");
+    expect(spawnedExecutable).not.toContain("malicious");
+    processes[0]?.resolveWait({ code: 0, signal: null });
+    await runtime.stop();
   });
 
   it("uses fixed serve args, private credentials, and reaches healthy", async () => {
@@ -118,6 +130,41 @@ describe("OpenCode runtime", () => {
     expect(runtime.state).toBe("crashed");
   });
 
+  it("clears credentials and maps reserve-port rejection after credential creation", async () => {
+    const credentials = { username: "opencode" as const, password: "reserve-canary" };
+    const runtime = new OpenCodeRuntime({
+      resolveArtifact: testArtifact(),
+      credentialsFactory: () => credentials,
+      cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
+      reservePort: async () => { throw new Error(credentials.password); },
+    } as never);
+    let failure: unknown;
+    try { await runtime.start(); } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ code: "RuntimeUnavailable" });
+    expect(String(failure)).not.toContain("reserve-canary");
+    expect(credentials.password).toBe("");
+    expect(runtime.snapshot()).toEqual({ state: "crashed", error: { code: "RuntimeUnavailable" } });
+  });
+
+  it("clears credentials and maps synchronous environment construction failure", async () => {
+    const credentials = { username: "opencode" as const, password: "environment-canary" };
+    const hostEnvironment = Object.defineProperty({}, "PATH", {
+      enumerable: true,
+      get: () => { throw new Error(credentials.password); },
+    });
+    const runtime = new OpenCodeRuntime({
+      resolveArtifact: testArtifact(),
+      credentialsFactory: () => credentials,
+      cwd: "C:\\workspace", hostEnvironment, trust: "trusted",
+    } as never);
+    let failure: unknown;
+    try { await runtime.start(); } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ code: "RuntimeUnavailable" });
+    expect(String(failure)).not.toContain("environment-canary");
+    expect(credentials.password).toBe("");
+    expect(runtime.snapshot()).toEqual({ state: "crashed", error: { code: "RuntimeUnavailable" } });
+  });
+
   it("hard-kills and awaits a child after a failed health handshake", async () => {
     const processes: FakeProcess[] = [];
     const runtime = new OpenCodeRuntime({
@@ -156,7 +203,9 @@ describe("OpenCode runtime", () => {
     await runtime.start();
     processes[0]?.process.emit("exit", 1, null);
     expect(runtime.state).toBe("crashed");
-    expect(runtime.snapshot().error?.code).toBe("TransportDisconnected");
+    expect(runtime.snapshot()).toEqual({ state: "crashed", error: { code: "TransportDisconnected" } });
+    await runtime.stop();
+    expect(runtime.snapshot()).toEqual({ state: "stopped" });
   });
 
   it("hard-kills a process that ignores graceful stop after six seconds", async () => {
@@ -166,6 +215,7 @@ describe("OpenCode runtime", () => {
     await runtime.stop();
     expect(processes[0]?.killed).toContain("SIGKILL");
     expect(runtime.state).toBe("stopped");
+    expect(runtime.snapshot()).toEqual({ state: "stopped" });
   });
 
   it("forces termination when process wait throws synchronously", async () => {
