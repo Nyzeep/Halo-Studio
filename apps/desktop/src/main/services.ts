@@ -212,6 +212,7 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
     return workspace;
   };
   const getOpenCodeRuntime = (workspace: Workspace): OpenCodeRuntimeInstance => {
+    if (retainedOpenCodeRuntimes.has(workspace.id)) throw runtimeUnavailable();
     const existing = openCodeRuntimes.get(workspace.id);
     if (existing !== undefined) return existing;
     const runtime = openCodeRuntimeFactory({
@@ -229,23 +230,34 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
     const state = piBindingStates.get(workspace.id);
     return createRuntimeBinding("pi", state?.health ?? "unavailable", state?.metadata);
   };
-  const discardWorkspaceRuntimeState = async (workspaceId: string): Promise<boolean> => {
-    const runtimes = new Set<OpenCodeRuntimeInstance>([
-      ...(openCodeRuntimes.get(workspaceId) === undefined ? [] : [openCodeRuntimes.get(workspaceId)!]),
+  const workspaceOpenCodeRuntimes = (workspaceId: string): Set<OpenCodeRuntimeInstance> => {
+    const current = openCodeRuntimes.get(workspaceId);
+    return new Set<OpenCodeRuntimeInstance>([
+      ...(current === undefined ? [] : [current]),
       ...(retainedOpenCodeRuntimes.get(workspaceId) ?? []),
     ]);
+  };
+  const stopWorkspaceOpenCodeRuntimes = async (workspaceId: string): Promise<boolean> => {
     const retained = new Set<OpenCodeRuntimeInstance>();
-    let stopped = true;
-    for (const runtime of runtimes) {
+    for (const runtime of workspaceOpenCodeRuntimes(workspaceId)) {
       try { await runtime.stop(); }
-      catch {
-        stopped = false;
-        retained.add(runtime);
-      }
+      catch { retained.add(runtime); }
     }
-    openCodeRuntimes.delete(workspaceId);
     if (retained.size === 0) retainedOpenCodeRuntimes.delete(workspaceId);
     else retainedOpenCodeRuntimes.set(workspaceId, retained);
+    return retained.size === 0;
+  };
+  const stopOrphanedOpenCodeRuntimes = async (workspaceId: string): Promise<RuntimeBinding | undefined> => {
+    if (workspaceOpenCodeRuntimes(workspaceId).size === 0) return undefined;
+    if (!await stopWorkspaceOpenCodeRuntimes(workspaceId)) throw runtimeUnavailable();
+    const metadata = openCodeMetadata.get(workspaceId);
+    openCodeRuntimes.delete(workspaceId);
+    openCodeMetadata.delete(workspaceId);
+    return createRuntimeBinding("opencode", "stopped", metadata);
+  };
+  const discardWorkspaceRuntimeState = async (workspaceId: string): Promise<boolean> => {
+    const stopped = await stopWorkspaceOpenCodeRuntimes(workspaceId);
+    openCodeRuntimes.delete(workspaceId);
     openCodeMetadata.delete(workspaceId);
     piBindingStates.delete(workspaceId);
     return stopped;
@@ -406,6 +418,11 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
       return openCodeBinding(workspace, runtime);
     }),
     "runtime.stop": ({ workspaceId, agentKind }) => runWorkspaceLifecycle(workspaceId, async () => {
+      if (agentKind === "opencode" && !workspaces.has(workspaceId)) {
+        const stopped = await stopOrphanedOpenCodeRuntimes(workspaceId);
+        if (stopped !== undefined) return stopped;
+        throw workspaceNotFound();
+      }
       const workspace = await revalidateWorkspace(getWorkspace(workspaceId));
       if (agentKind === "pi") {
         const current = piBindingStates.get(workspace.id);
@@ -415,9 +432,8 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
         });
         return piBinding(workspace);
       }
-      const runtime = openCodeRuntimes.get(workspace.id);
-      if (runtime !== undefined) await runtime.stop();
-      return openCodeBinding(workspace, runtime);
+      if (!await stopWorkspaceOpenCodeRuntimes(workspace.id)) throw runtimeUnavailable();
+      return openCodeBinding(workspace);
     }),
     "runtime.snapshot": async ({ workspaceId }) => {
       const result: RuntimeBinding[] = [];
@@ -454,18 +470,25 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
   const dispose = (): Promise<void> => {
     if (disposePromise !== undefined) return disposePromise;
     shutdownStarted = true;
-    disposePromise = (async () => {
+    const current = (async () => {
       await Promise.all([...activeServiceOperations]);
       await Promise.all([...workspaceLifecycleOperations.values()]);
-      const runtimes = new Set<OpenCodeRuntimeInstance>([
-        ...openCodeRuntimes.values(),
-        ...[...retainedOpenCodeRuntimes.values()].flatMap((retained) => [...retained]),
+      const workspaceIds = new Set<string>([
+        ...openCodeRuntimes.keys(),
+        ...retainedOpenCodeRuntimes.keys(),
       ]);
-      for (const runtime of runtimes) await runtime.stop().catch(() => undefined);
+      for (const workspaceId of workspaceIds) {
+        if (!await stopWorkspaceOpenCodeRuntimes(workspaceId)) throw runtimeUnavailable();
+      }
       config.dispose();
       database.close();
     })();
-    return disposePromise;
+    disposePromise = current;
+    void current.then(
+      () => undefined,
+      () => { if (disposePromise === current) disposePromise = undefined; },
+    );
+    return current;
   };
 
   return {

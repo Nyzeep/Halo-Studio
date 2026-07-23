@@ -24,17 +24,19 @@ import {
   type SseSignal,
 } from "./sse.js";
 
+/** `spawn-error` is reserved for an adapter that has confirmed no child was created. */
 export type ProcessStartupFailure = "port-conflict" | "spawn-error" | "exited";
 
 export interface OpenCodeProcess {
   readonly stdin: { end: () => unknown };
   readonly stdout?: EventEmitter;
   readonly stderr?: EventEmitter;
-  readonly process?: EventEmitter;
+  /** The event source owned by this child; runtime lifecycle follows this exit stream. */
+  readonly process: EventEmitter;
   readonly startup?: Promise<ProcessStartupFailure>;
   /** Resolves only after this managed child's stdout reports its listening loopback port. */
-  readonly listeningAddress?: Promise<number | undefined>;
-  wait?: () => Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>;
+  readonly listeningAddress: Promise<number | undefined>;
+  wait: () => Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>;
   kill?: (signal?: NodeJS.Signals) => boolean | Promise<boolean>;
   dispose?: () => void;
 }
@@ -48,12 +50,13 @@ export type ProcessFactory = (
   executable: string,
   args: readonly string[],
   options: SpawnPort,
-) => OpenCodeProcess | Promise<OpenCodeProcess>;
+) => OpenCodeProcess;
 
 export interface NodeChildPort extends EventEmitter {
   readonly stdin: { end: () => unknown };
   readonly stdout: EventEmitter;
   readonly stderr: EventEmitter;
+  readonly pid?: number;
   kill(signal?: NodeJS.Signals): boolean;
 }
 
@@ -66,7 +69,8 @@ export type NodeSpawn = (
 const PORT_CONFLICT_PATTERN = /(?:^|\s)listen(?:\s+\w+)?\s+EADDRINUSE\b|(?:^|\s)listen\b[^\r\n]*address already in use/iu;
 const MAX_STARTUP_STDERR = 4_096;
 const MAX_STARTUP_STDOUT = 4_096;
-const LISTENING_ADDRESS_PATTERN = /^server listening on http:\/\/127\.0\.0\.1:([1-9]\d{0,4})$/u;
+// The source reference log differs; the pinned opencode-ai 1.18.4 binary is the runtime contract.
+const LISTENING_ADDRESS_PATTERN = /^opencode server listening on http:\/\/127\.0\.0\.1:([1-9]\d{0,4})$/u;
 
 function loopbackPortFromListeningLine(line: string): number | undefined {
   const match = LISTENING_ADDRESS_PATTERN.exec(line);
@@ -161,16 +165,23 @@ export function createNodeProcessFactory(spawn: NodeSpawn = defaultNodeSpawn): P
       } catch { /* Ignore malformed stream chunks. */ }
     };
     const onStderr = (chunk: unknown): void => {
-      if (stderr.length >= MAX_STARTUP_STDERR) return;
-      try { stderr = `${stderr}${String(chunk)}`.slice(0, MAX_STARTUP_STDERR); }
-      catch { stderr = ""; }
+      const available = MAX_STARTUP_STDERR - stderr.length;
+      if (available <= 0) return;
+      if (typeof chunk === "string") stderr = `${stderr}${chunk.slice(0, available)}`;
+      else if (Buffer.isBuffer(chunk)) {
+        try { stderr = `${stderr}${chunk.toString("utf8", 0, Math.min(chunk.length, available))}`; }
+        catch { return; }
+      } else return;
       if (PORT_CONFLICT_PATTERN.test(stderr)) settleStartup("port-conflict");
     };
     const onError = (): void => {
+      // A ChildProcess can emit error after it has a PID (for example, when a later
+      // kill or IPC operation fails). Only an absent PID proves spawn never completed.
+      if (child.pid !== undefined) return;
       settleStartup("spawn-error");
       settleListeningAddress(undefined);
     };
-    const onStartupExit = (): void => {
+    const onStartupTermination = (): void => {
       settleStartup(PORT_CONFLICT_PATTERN.test(stderr) ? "port-conflict" : "exited");
       settleListeningAddress(undefined);
     };
@@ -178,13 +189,15 @@ export function createNodeProcessFactory(spawn: NodeSpawn = defaultNodeSpawn): P
     child.stderr.on("data", onStderr);
     child.stdout.on("data", onStdout);
     child.on("error", onError);
-    child.once("exit", onStartupExit);
+    child.once("exit", onStartupTermination);
+    child.once("close", onStartupTermination);
     let resolveExit!: (exit: { readonly code: number | null; readonly signal: NodeJS.Signals | null }) => void;
     const exit = new Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>((resolve) => {
       resolveExit = resolve;
     });
-    const onWaitExit = (code: number | null, signal: NodeJS.Signals | null): void => resolveExit({ code, signal });
-    child.once("exit", onWaitExit);
+    const onWaitTermination = (code: number | null, signal: NodeJS.Signals | null): void => resolveExit({ code, signal });
+    child.once("exit", onWaitTermination);
+    child.once("close", onWaitTermination);
 
     const dispose = (): void => {
       if (disposed) return;
@@ -195,8 +208,10 @@ export function createNodeProcessFactory(spawn: NodeSpawn = defaultNodeSpawn): P
       child.stderr.off("data", onStderr);
       child.stdout.off("data", onStdout);
       child.off("error", onError);
-      child.off("exit", onStartupExit);
-      child.off("exit", onWaitExit);
+      child.off("exit", onStartupTermination);
+      child.off("close", onStartupTermination);
+      child.off("exit", onWaitTermination);
+      child.off("close", onWaitTermination);
     };
 
     return {
@@ -293,6 +308,7 @@ export class OpenCodeRuntime {
   #errorListener: (() => void) | undefined;
   #artifact: OpenCodeArtifact | undefined;
   #acceptSse = false;
+  #crashCleanup: Promise<void> = Promise.resolve();
   readonly #sseRecords = new Set<RuntimeSseRecord>();
   #operation: Promise<void> = Promise.resolve();
 
@@ -337,7 +353,16 @@ export class OpenCodeRuntime {
   start(): Promise<void> { return this.#exclusive(() => this.#startInternal()); }
 
   async #startInternal(): Promise<void> {
-    if (this.#state !== "unavailable" && this.#state !== "installed") throw new RuntimeUnavailableError();
+    if (
+      this.#process !== undefined
+      || (
+        this.#state !== "unavailable"
+        && this.#state !== "installed"
+        && this.#state !== "stopped"
+        && this.#state !== "crashed"
+      )
+    ) throw new RuntimeUnavailableError();
+    if (this.#state === "crashed") await this.#crashCleanup;
     this.#acceptSse = false;
     this.#error = undefined;
     const artifact = await this.#detectInternal();
@@ -367,19 +392,7 @@ export class OpenCodeRuntime {
       const args = ["serve", "--hostname", "127.0.0.1", "--port", "0"] as const;
       try {
         const readinessTimeoutMs = this.#options.readinessTimeoutMs ?? 10_000;
-        const spawnPromise = Promise.resolve((this.#options.spawn ?? nodeProcessFactory)(artifact.executable, args, { cwd: this.#options.cwd, env }));
-        spawnPromise.catch(() => undefined);
-        const spawned = await this.#race(spawnPromise, readinessTimeoutMs);
-        if (spawned === "timeout") {
-          void spawnPromise.then(
-            (lateProcess) => this.#teardownProcess(lateProcess, this.#options.stopTimeoutMs ?? 6_000).then(
-              (stopped) => { if (stopped) lateProcess.dispose?.(); },
-              () => undefined,
-            ),
-            () => undefined,
-          );
-          throw new RuntimeUnavailableError();
-        }
+        const spawned = (this.#options.spawn ?? nodeProcessFactory)(artifact.executable, args, { cwd: this.#options.cwd, env });
         this.#process = spawned;
         this.#stopRequested = false;
         this.#attachLifecycle(spawned);
@@ -387,7 +400,7 @@ export class OpenCodeRuntime {
         const startupOutcome = spawned.startup?.then(
           (failure) => ({ type: "startup-failure", failure } as const),
         );
-        const listeningOutcome = (spawned.listeningAddress ?? Promise.resolve(undefined)).then(
+        const listeningOutcome = spawned.listeningAddress.then(
           (port) => ({ type: "listening-address", port } as const),
         );
         const listeningHandshake = startupOutcome === undefined
@@ -403,8 +416,12 @@ export class OpenCodeRuntime {
             if (attempt < 2) continue;
             break;
           }
-          const process = this.#process;
-          if (process) this.#releaseCurrentProcess(process);
+          // The adapter reports this only after confirming that spawn produced no child.
+          // Every other startup failure retains ownership until a real termination is observed.
+          if (announced.failure === "spawn-error") {
+            const process = this.#process;
+            if (process) this.#releaseCurrentProcess(process);
+          }
           throw new RuntimeUnavailableError();
         }
         if (announced.port === undefined) throw new RuntimeUnavailableError();
@@ -573,22 +590,18 @@ export class OpenCodeRuntime {
   #attachLifecycle(process: OpenCodeProcess): void {
     this.#processExited = false;
     this.#exitListener = () => { this.#processExited = true; this.#onExit(); };
-    this.#errorListener = () => {
-      this.#processExited = true;
-      if (this.#state === "starting") {
-        this.#releaseCurrentProcess(process);
-        this.#clearSecrets();
-        return;
-      }
-      this.#onExit();
-    };
-    process.process?.once("exit", this.#exitListener);
-    process.process?.once("error", this.#errorListener);
+    // `error` does not prove the child exited. Keep ownership until exit/close, while
+    // still preventing EventEmitter from treating an ordinary ChildProcess error as unhandled.
+    this.#errorListener = () => undefined;
+    process.process.once("exit", this.#exitListener);
+    process.process.once("close", this.#exitListener);
+    process.process.once("error", this.#errorListener);
   }
 
   #detachLifecycle(process: OpenCodeProcess): void {
-    if (this.#exitListener) process.process?.off("exit", this.#exitListener);
-    if (this.#errorListener) process.process?.off("error", this.#errorListener);
+    if (this.#exitListener) process.process.off("exit", this.#exitListener);
+    if (this.#exitListener) process.process.off("close", this.#exitListener);
+    if (this.#errorListener) process.process.off("error", this.#errorListener);
     this.#exitListener = undefined;
     this.#errorListener = undefined;
   }
@@ -600,19 +613,21 @@ export class OpenCodeRuntime {
   }
 
   #onExit(): void {
+    // A real exit/close is the ownership boundary even when an earlier stop timed out.
+    // Release first, then preserve the state/error chosen by the in-flight operation.
+    const process = this.#process;
+    if (process) this.#releaseCurrentProcess(process);
     if (this.#state === "starting") {
       // The startup continuation runs later; clear the shared credential object before it can begin health I/O.
       this.#clearSecrets();
       return;
     }
-    if (this.#stopRequested || this.#state === "stopping" || this.#state === "stopped") return;
+    if (this.#stopRequested || this.#state === "stopping" || this.#state === "stopped" || this.#state === "crashed") return;
     this.#acceptSse = false;
-    const process = this.#process;
-    if (process) this.#releaseCurrentProcess(process);
     this.#state = "crashed";
     this.#error = new TransportDisconnectedError();
     this.#clearRuntimeFields(false);
-    void this.#closeSseConnections().then(
+    this.#crashCleanup = this.#closeSseConnections().then(
       () => this.#clearSecrets(),
       () => this.#clearSecrets(),
     );
@@ -639,18 +654,14 @@ export class OpenCodeRuntime {
     const remaining = (): number => Math.max(0, deadline - Date.now());
 
     await this.#settle(() => process.stdin.end(), remaining());
-    const exit = process.wait === undefined ? undefined : Promise.resolve().then(() => process.wait!());
-    const wait = exit === undefined
-      ? ({ status: "rejected" } as const)
-      : await this.#settle(() => exit, remaining());
+    const exit = Promise.resolve().then(() => process.wait());
+    const wait = await this.#settle(() => exit, remaining());
     if (wait.status === "fulfilled") return true;
     const killed = process.kill === undefined
       ? ({ status: "rejected" } as const)
       : await this.#settle(() => process.kill!("SIGKILL"), Math.max(1, remaining()));
     if (killed.status !== "fulfilled" || killed.value === false) return false;
-    const afterKill = exit === undefined
-      ? ({ status: "rejected" } as const)
-      : await this.#settle(() => exit, Math.max(1, timeoutMs));
+    const afterKill = await this.#settle(() => exit, Math.max(1, timeoutMs));
     return afterKill.status === "fulfilled";
   }
 

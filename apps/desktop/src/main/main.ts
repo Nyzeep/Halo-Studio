@@ -61,9 +61,15 @@ export function startDesktopMain(options: DesktopMainOptions): DesktopLifecycle 
     shutdownStarted = true;
     void schedule(async () => {
       await ready.catch(() => undefined);
+      try {
+        await services?.dispose();
+      } catch {
+        // Keep service ownership intact so a later quit request can retry shutdown.
+        shutdownStarted = false;
+        return;
+      }
       unregisterIpc?.();
       unregisterIpc = undefined;
-      await services?.dispose().catch(() => undefined);
       services = undefined;
       disposed = true;
       options.app.quit();
