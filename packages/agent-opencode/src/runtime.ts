@@ -2,7 +2,6 @@ import type { TrustState } from "@halo-studio/contracts";
 import { buildRuntimeEnvironment, mergeRuntimeEnvironment, runtimeTrustPolicy } from "@halo-studio/core";
 import { spawn as spawnChild } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { createServer } from "node:net";
 import { join } from "node:path";
 import {
   clearServerCredentials,
@@ -33,6 +32,8 @@ export interface OpenCodeProcess {
   readonly stderr?: EventEmitter;
   readonly process?: EventEmitter;
   readonly startup?: Promise<ProcessStartupFailure>;
+  /** Resolves only after this managed child's stdout reports its listening loopback port. */
+  readonly listeningAddress?: Promise<number | undefined>;
   wait?: () => Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>;
   kill?: (signal?: NodeJS.Signals) => boolean | Promise<boolean>;
   dispose?: () => void;
@@ -64,6 +65,16 @@ export type NodeSpawn = (
 
 const PORT_CONFLICT_PATTERN = /(?:^|\s)listen(?:\s+\w+)?\s+EADDRINUSE\b|(?:^|\s)listen\b[^\r\n]*address already in use/iu;
 const MAX_STARTUP_STDERR = 4_096;
+const MAX_STARTUP_STDOUT = 4_096;
+const LISTENING_ADDRESS_PATTERN = /^server listening on http:\/\/127\.0\.0\.1:([1-9]\d{0,4})$/u;
+
+function loopbackPortFromListeningLine(line: string): number | undefined {
+  const match = LISTENING_ADDRESS_PATTERN.exec(line);
+  const text = match?.[1];
+  if (text === undefined) return undefined;
+  const port = Number(text);
+  return Number.isInteger(port) && port >= 1 && port <= 65_535 ? port : undefined;
+}
 
 function defaultNodeSpawn(executable: string, args: readonly string[], options: Parameters<NodeSpawn>[2]): NodeChildPort {
   return spawnChild(executable, [...args], {
@@ -77,16 +88,48 @@ export function createNodeProcessFactory(spawn: NodeSpawn = defaultNodeSpawn): P
   return (executable, args, options) => {
     const child = spawn(executable, args, { ...options, stdio: ["pipe", "pipe", "pipe"] });
     let stderr = "";
+    let stdout = "";
+    let discardingStdoutLine = false;
     let startupSettled = false;
+    let listeningAddressSettled = false;
     let disposed = false;
-    const onStdout = (): void => undefined;
     let resolveStartup!: (failure: ProcessStartupFailure) => void;
+    let resolveListeningAddress!: (port: number | undefined) => void;
     const startup = new Promise<ProcessStartupFailure>((resolve) => { resolveStartup = resolve; });
+    const listeningAddress = new Promise<number | undefined>((resolve) => { resolveListeningAddress = resolve; });
 
     const settleStartup = (failure: ProcessStartupFailure): void => {
       if (startupSettled) return;
       startupSettled = true;
       resolveStartup(failure);
+    };
+    const settleListeningAddress = (port: number | undefined): void => {
+      if (listeningAddressSettled) return;
+      listeningAddressSettled = true;
+      resolveListeningAddress(port);
+    };
+    const onStdout = (chunk: unknown): void => {
+      let text: string;
+      try { text = String(chunk); }
+      catch { return; }
+      stdout = `${stdout}${text}`;
+      let newline = stdout.indexOf("\n");
+      while (newline >= 0) {
+        const rawLine = stdout.slice(0, newline);
+        stdout = stdout.slice(newline + 1);
+        if (discardingStdoutLine) {
+          discardingStdoutLine = false;
+        } else {
+          const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+          const port = loopbackPortFromListeningLine(line);
+          if (port !== undefined) settleListeningAddress(port);
+        }
+        newline = stdout.indexOf("\n");
+      }
+      if (stdout.length > MAX_STARTUP_STDOUT) {
+        stdout = "";
+        discardingStdoutLine = true;
+      }
     };
     const onStderr = (chunk: unknown): void => {
       if (stderr.length >= MAX_STARTUP_STDERR) return;
@@ -94,8 +137,14 @@ export function createNodeProcessFactory(spawn: NodeSpawn = defaultNodeSpawn): P
       catch { stderr = ""; }
       if (PORT_CONFLICT_PATTERN.test(stderr)) settleStartup("port-conflict");
     };
-    const onError = (): void => settleStartup("spawn-error");
-    const onStartupExit = (): void => settleStartup(PORT_CONFLICT_PATTERN.test(stderr) ? "port-conflict" : "exited");
+    const onError = (): void => {
+      settleStartup("spawn-error");
+      settleListeningAddress(undefined);
+    };
+    const onStartupExit = (): void => {
+      settleStartup(PORT_CONFLICT_PATTERN.test(stderr) ? "port-conflict" : "exited");
+      settleListeningAddress(undefined);
+    };
 
     child.stderr.on("data", onStderr);
     child.stdout.on("data", onStdout);
@@ -112,6 +161,8 @@ export function createNodeProcessFactory(spawn: NodeSpawn = defaultNodeSpawn): P
       if (disposed) return;
       disposed = true;
       stderr = "";
+      stdout = "";
+      settleListeningAddress(undefined);
       child.stderr.off("data", onStderr);
       child.stdout.off("data", onStdout);
       child.off("error", onError);
@@ -125,6 +176,7 @@ export function createNodeProcessFactory(spawn: NodeSpawn = defaultNodeSpawn): P
       stderr: child.stderr,
       process: child,
       startup,
+      listeningAddress,
       wait: () => exit,
       kill: (signal = "SIGTERM") => child.kill(signal),
       dispose,
@@ -174,7 +226,6 @@ export interface OpenCodeRuntimeOptions {
   readonly providerEnvironment?: Readonly<Record<string, string>>;
   readonly allowedProviderKeys?: ReadonlySet<string>;
   readonly spawn?: ProcessFactory;
-  readonly reservePort?: () => Promise<number>;
   readonly checkHealth?: (options: RuntimeHealthOptions) => Promise<HealthResult>;
   readonly readinessTimeoutMs?: number;
   readonly stopTimeoutMs?: number;
@@ -186,19 +237,6 @@ export interface OpenCodeRuntimeOptions {
 }
 
 export type OpenCodeRuntimePublicOptions = Omit<OpenCodeRuntimeOptions, "resolveArtifact" | "credentialsFactory">;
-
-async function reserveLoopbackPort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen({ host: "127.0.0.1", port: 0 }, () => resolve());
-  });
-  const address = server.address();
-  const port = typeof address === "object" && address !== null ? address.port : 0;
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  if (port <= 0) throw new RuntimeUnavailableError();
-  return port;
-}
 
 function isPortConflict(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -287,7 +325,6 @@ export class OpenCodeRuntime {
     );
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const port = await (this.#options.reservePort ?? reserveLoopbackPort)();
       const env = mergeRuntimeEnvironment({
         ...base,
         ...serverCredentialEnvironment(credentials),
@@ -298,7 +335,7 @@ export class OpenCodeRuntime {
       }, trust);
       this.#spawnEnvironment = env;
       this.#state = "starting";
-      const args = ["serve", "--hostname", "127.0.0.1", "--port", String(port)] as const;
+      const args = ["serve", "--hostname", "127.0.0.1", "--port", "0"] as const;
       try {
         const readinessTimeoutMs = this.#options.readinessTimeoutMs ?? 10_000;
         const spawnPromise = Promise.resolve((this.#options.spawn ?? nodeProcessFactory)(artifact.executable, args, { cwd: this.#options.cwd, env }));
@@ -312,31 +349,40 @@ export class OpenCodeRuntime {
           throw new RuntimeUnavailableError();
         }
         this.#process = spawned;
-        this.#port = port;
         this.#stopRequested = false;
         this.#attachLifecycle(spawned);
 
-        if (spawned.startup) {
-          const earlyFailure = await this.#race(spawned.startup, 0);
-          if (earlyFailure !== "timeout") {
-            if (earlyFailure === "port-conflict") {
-              if (!await this.#teardownCurrentProcess()) throw new RuntimeUnavailableError();
-              this.#clearSpawnEnvironment();
-              this.#clearRuntimeFields();
-              if (attempt < 2) continue;
-              break;
-            }
-            throw new RuntimeUnavailableError();
+        const startupOutcome = spawned.startup?.then(
+          (failure) => ({ type: "startup-failure", failure } as const),
+        );
+        const listeningOutcome = (spawned.listeningAddress ?? Promise.resolve(undefined)).then(
+          (port) => ({ type: "listening-address", port } as const),
+        );
+        const listeningHandshake = startupOutcome === undefined
+          ? listeningOutcome
+          : Promise.race([startupOutcome, listeningOutcome]);
+        const announced = await this.#race(listeningHandshake, readinessTimeoutMs);
+        if (announced === "timeout") throw new RuntimeUnavailableError();
+        if (announced.type === "startup-failure") {
+          if (announced.failure === "port-conflict") {
+            if (!await this.#teardownCurrentProcess()) throw new RuntimeUnavailableError();
+            this.#clearSpawnEnvironment();
+            this.#clearRuntimeFields();
+            if (attempt < 2) continue;
+            break;
           }
+          throw new RuntimeUnavailableError();
         }
+        if (announced.port === undefined) throw new RuntimeUnavailableError();
+        // An exit delivered before health starts wins here; TCP cannot atomically bind a later peer to this child.
+        if (this.#state !== "starting" || this.#processExited) throw new TransportDisconnectedError();
+        this.#port = announced.port;
+
         const health = this.#options.checkHealth ?? ((options: RuntimeHealthOptions) => checkHealth({
           ...options,
           totalTimeoutMs: readinessTimeoutMs,
         }));
-        const startupOutcome = spawned.startup?.then(
-          (failure) => ({ type: "startup-failure", failure } as const),
-        );
-        const healthOutcome = health({ baseUrl: `http://127.0.0.1:${port}`, credentials }).then(
+        const healthOutcome = health({ baseUrl: `http://127.0.0.1:${announced.port}`, credentials }).then(
           (result) => ({ type: "healthy", result } as const),
         );
         const handshake = startupOutcome === undefined
@@ -504,7 +550,11 @@ export class OpenCodeRuntime {
   }
 
   #onExit(): void {
-    if (this.#state === "starting") return;
+    if (this.#state === "starting") {
+      // The startup continuation runs later; clear the shared credential object before it can begin health I/O.
+      this.#clearSecrets();
+      return;
+    }
     if (this.#stopRequested || this.#state === "stopping" || this.#state === "stopped") return;
     this.#acceptSse = false;
     const process = this.#process;

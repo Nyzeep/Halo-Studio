@@ -27,7 +27,7 @@ import {
   type CredentialVault,
   type HaloDatabase,
 } from "@halo-studio/storage";
-import { mkdir } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createElectronSecretProtector, type SafeStoragePort } from "./electronSecretProtector.js";
@@ -55,14 +55,28 @@ export interface DesktopServices {
   dispose(): Promise<void>;
 }
 
+interface WorkspaceIdentity {
+  readonly device: bigint;
+  readonly inode: bigint;
+}
+
+type WorkspaceIdentityPort = (realPath: string) => Promise<WorkspaceIdentity>;
+
 export interface CreateDesktopServicesOptions {
   readonly userDataPath: string;
   readonly picker: WorkspaceDialogPort;
   readonly safeStorage: SafeStoragePort;
   readonly hostEnvironment: Readonly<Record<string, string | undefined>>;
+  /** Main-process test seam; production uses the core workspace opener. */
+  readonly openWorkspace?: typeof openWorkspace;
+  /** Main-process test seam; production uses the bundled OpenCode runtime factory. */
+  readonly createOpenCodeRuntime?: OpenCodeRuntimeFactory;
+  /** Main-process test seam; production uses filesystem device and inode identity. */
+  readonly workspaceIdentity?: WorkspaceIdentityPort;
 }
 
-type OpenCodeRuntimeInstance = ReturnType<typeof createOpenCodeRuntime>;
+type OpenCodeRuntimeInstance = Pick<ReturnType<typeof createOpenCodeRuntime>, "state" | "detect" | "start" | "stop">;
+type OpenCodeRuntimeFactory = (options: Parameters<typeof createOpenCodeRuntime>[0]) => OpenCodeRuntimeInstance;
 
 interface RuntimeMetadata {
   readonly source: RuntimeBinding["source"];
@@ -138,6 +152,16 @@ function safeHostEnvironment(
   return { ...source, HOME: runtimeDirectory, USERPROFILE: runtimeDirectory };
 }
 
+async function readWorkspaceIdentity(realPath: string): Promise<WorkspaceIdentity> {
+  const details = await stat(realPath, { bigint: true });
+  if (!details.isDirectory()) throw new Error("Workspace path is unavailable.");
+  return { device: details.dev, inode: details.ino };
+}
+
+function sameWorkspaceIdentity(left: WorkspaceIdentity, right: WorkspaceIdentity): boolean {
+  return left.device === right.device && left.inode === right.inode;
+}
+
 export async function createDesktopServices(options: CreateDesktopServicesOptions): Promise<DesktopServices> {
   const storageDirectory = join(options.userDataPath, "storage");
   const databasePath = join(storageDirectory, "halo-studio.sqlite3");
@@ -165,13 +189,19 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
   const protector = createElectronSecretProtector(options.safeStorage);
   const vault: CredentialVault = new FileCredentialVault(credentialDirectory, protector);
   const trustStore = new MemoryTrustStore();
+  const workspaceOpener = options.openWorkspace ?? openWorkspace;
+  const openCodeRuntimeFactory = options.createOpenCodeRuntime ?? createOpenCodeRuntime;
+  const workspaceIdentityReader = options.workspaceIdentity ?? readWorkspaceIdentity;
   const registry = new TargetRegistry();
   const config = new ConfigTransaction(registry, { vault });
   const selections = new Map<string, string>();
   const workspaces = new Map<string, Workspace>();
+  const workspaceIdentities = new Map<string, WorkspaceIdentity>();
   const openCodeRuntimes = new Map<string, OpenCodeRuntimeInstance>();
+  const retainedOpenCodeRuntimes = new Map<string, Set<OpenCodeRuntimeInstance>>();
   const openCodeMetadata = new Map<string, RuntimeMetadata>();
   const piBindingStates = new Map<string, PiBindingState>();
+  const workspaceLifecycleOperations = new Map<string, Promise<void>>();
 
   const getWorkspace = (workspaceId: string): Workspace => {
     const workspace = workspaces.get(workspaceId);
@@ -181,7 +211,7 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
   const getOpenCodeRuntime = (workspace: Workspace): OpenCodeRuntimeInstance => {
     const existing = openCodeRuntimes.get(workspace.id);
     if (existing !== undefined) return existing;
-    const runtime = createOpenCodeRuntime({
+    const runtime = openCodeRuntimeFactory({
       cwd: workspace.realPath,
       trust: workspace.trustState,
       hostEnvironment: safeHostEnvironment(options.hostEnvironment, openCodeRuntimeDirectory),
@@ -197,6 +227,66 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
     const state = piBindingStates.get(workspace.id);
     return createRuntimeBinding("pi", state?.health ?? "unavailable", state?.metadata);
   };
+  const discardWorkspaceRuntimeState = async (workspaceId: string): Promise<boolean> => {
+    const runtimes = new Set<OpenCodeRuntimeInstance>([
+      ...(openCodeRuntimes.get(workspaceId) === undefined ? [] : [openCodeRuntimes.get(workspaceId)!]),
+      ...(retainedOpenCodeRuntimes.get(workspaceId) ?? []),
+    ]);
+    const retained = new Set<OpenCodeRuntimeInstance>();
+    let stopped = true;
+    for (const runtime of runtimes) {
+      try { await runtime.stop(); }
+      catch {
+        stopped = false;
+        retained.add(runtime);
+      }
+    }
+    openCodeRuntimes.delete(workspaceId);
+    if (retained.size === 0) retainedOpenCodeRuntimes.delete(workspaceId);
+    else retainedOpenCodeRuntimes.set(workspaceId, retained);
+    openCodeMetadata.delete(workspaceId);
+    piBindingStates.delete(workspaceId);
+    return stopped;
+  };
+  const invalidateWorkspace = async (workspaceId: string): Promise<boolean> => {
+    const stopped = await discardWorkspaceRuntimeState(workspaceId);
+    workspaces.delete(workspaceId);
+    workspaceIdentities.delete(workspaceId);
+    return stopped;
+  };
+  const revalidateWorkspace = async (workspace: Workspace): Promise<Workspace> => {
+    let reopened: Workspace;
+    let identity: WorkspaceIdentity;
+    try {
+      reopened = await workspaceOpener(workspace.rootPath, trustStore);
+      identity = await workspaceIdentityReader(reopened.realPath);
+    }
+    catch {
+      if (!await invalidateWorkspace(workspace.id)) throw runtimeUnavailable();
+      throw workspaceNotFound();
+    }
+    const expectedIdentity = workspaceIdentities.get(workspace.id);
+    if (
+      reopened.id !== workspace.id
+      || reopened.realPath !== workspace.realPath
+      || expectedIdentity === undefined
+      || !sameWorkspaceIdentity(expectedIdentity, identity)
+    ) {
+      if (!await invalidateWorkspace(workspace.id)) throw runtimeUnavailable();
+      throw workspaceNotFound();
+    }
+    workspaces.set(workspace.id, reopened);
+    return reopened;
+  };
+  const runWorkspaceLifecycle = <T>(workspaceId: string, operation: () => Promise<T>): Promise<T> => {
+    const previous = workspaceLifecycleOperations.get(workspaceId) ?? Promise.resolve();
+    const current = previous.then(operation, operation);
+    const settled = current.then(() => undefined, () => undefined);
+    workspaceLifecycleOperations.set(workspaceId, settled);
+    return current.finally(() => {
+      if (workspaceLifecycleOperations.get(workspaceId) === settled) workspaceLifecycleOperations.delete(workspaceId);
+    });
+  };
 
   const handlers: IpcServiceMap = {
     "workspace.pick": async () => {
@@ -210,23 +300,44 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
     "workspace.open": async ({ selectionId }) => {
       const path = selections.get(selectionId);
       if (path === undefined) throw workspaceNotFound();
-      const workspace = await openWorkspace(path, trustStore);
-      workspaces.set(workspace.id, workspace);
-      return workspace;
+      const workspace = await workspaceOpener(path, trustStore);
+      return runWorkspaceLifecycle(workspace.id, async () => {
+        if (retainedOpenCodeRuntimes.has(workspace.id)) throw runtimeUnavailable();
+        let identity: WorkspaceIdentity;
+        try {
+          identity = await workspaceIdentityReader(workspace.realPath);
+        } catch {
+          if (workspaces.has(workspace.id) && !await invalidateWorkspace(workspace.id)) throw runtimeUnavailable();
+          throw workspaceNotFound();
+        }
+        const previous = workspaces.get(workspace.id);
+        const previousIdentity = workspaceIdentities.get(workspace.id);
+        if (
+          previous !== undefined
+          && (
+            previous.realPath !== workspace.realPath
+            || previousIdentity === undefined
+            || !sameWorkspaceIdentity(previousIdentity, identity)
+          )
+        ) {
+          const stopped = await invalidateWorkspace(workspace.id);
+          if (!stopped) throw runtimeUnavailable();
+        }
+        workspaces.set(workspace.id, workspace);
+        workspaceIdentities.set(workspace.id, identity);
+        return workspace;
+      });
     },
     "workspace.snapshot": async () => [...workspaces.values()].map((workspace) => ({ ...workspace })),
-    "workspace.trust": async ({ workspaceId, trustState }) => {
-      const workspace = getWorkspace(workspaceId);
-      const runtime = openCodeRuntimes.get(workspace.id);
-      if (runtime !== undefined) await runtime.stop();
-      openCodeRuntimes.delete(workspace.id);
-      openCodeMetadata.delete(workspace.id);
-      piBindingStates.delete(workspace.id);
+    "workspace.trust": ({ workspaceId, trustState }) => runWorkspaceLifecycle(workspaceId, async () => {
+      const workspace = await revalidateWorkspace(getWorkspace(workspaceId));
+      const stopped = await discardWorkspaceRuntimeState(workspace.id);
+      if (!stopped) throw runtimeUnavailable();
       await trustStore.setDecision(workspace.realPath, trustState as TrustState);
       const updated = { ...workspace, trustState };
       workspaces.set(workspaceId, updated);
       return updated;
-    },
+    }),
     "runtime.probe": async ({ workspaceId }) => {
       const selected = workspaceId === undefined ? [...workspaces.values()] : [getWorkspace(workspaceId)];
       const result: RuntimeBinding[] = [];
@@ -266,14 +377,15 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
       }
       return result;
     },
-    "runtime.start": async ({ workspaceId, agentKind }) => {
-      const workspace = getWorkspace(workspaceId);
+    "runtime.start": ({ workspaceId, agentKind }) => runWorkspaceLifecycle(workspaceId, async () => {
+      const workspace = await revalidateWorkspace(getWorkspace(workspaceId));
+      if (retainedOpenCodeRuntimes.has(workspace.id)) throw runtimeUnavailable();
       if (workspace.trustState !== "trusted") throw untrusted();
       if (agentKind === "pi") throw runtimeUnavailable();
       const runtime = getOpenCodeRuntime(workspace);
       await runtime.start();
       return openCodeBinding(workspace);
-    },
+    }),
     "runtime.stop": async ({ workspaceId, agentKind }) => {
       const workspace = getWorkspace(workspaceId);
       if (agentKind === "pi") {
@@ -310,7 +422,11 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
     paths,
     handlers,
     async dispose() {
-      for (const runtime of openCodeRuntimes.values()) await runtime.stop().catch(() => undefined);
+      const runtimes = new Set<OpenCodeRuntimeInstance>([
+        ...openCodeRuntimes.values(),
+        ...[...retainedOpenCodeRuntimes.values()].flatMap((retained) => [...retained]),
+      ]);
+      for (const runtime of runtimes) await runtime.stop().catch(() => undefined);
       config.dispose();
       database.close();
     },

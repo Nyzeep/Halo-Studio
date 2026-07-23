@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
-import { OpenCodeRuntime, type OpenCodeProcess, type SpawnPort } from "./runtime.js";
+import { createNodeProcessFactory, OpenCodeRuntime, type NodeChildPort, type OpenCodeProcess, type SpawnPort } from "./runtime.js";
 import * as runtimeModule from "./runtime.js";
 
 class FakeProcess implements OpenCodeProcess {
@@ -8,19 +8,28 @@ class FakeProcess implements OpenCodeProcess {
   readonly stderr = new EventEmitter();
   readonly process = new EventEmitter();
   readonly stdin = { end: () => undefined };
+  readonly listeningAddress: Promise<number | undefined>;
   readonly args: readonly string[];
   readonly env: Readonly<Record<string, string>>;
   killed: string[] = [];
   disposed = false;
   waitPromise: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
   resolveWait!: (value: { code: number | null; signal: NodeJS.Signals | null }) => void;
+  #resolveListeningAddress!: (port: number | undefined) => void;
 
-  constructor(args: readonly string[], env: Readonly<Record<string, string>>, waitForever = false) {
+  constructor(args: readonly string[], env: Readonly<Record<string, string>>, waitForever = false, announceListening = true) {
     this.args = args;
     this.env = env;
     this.waitPromise = waitForever ? new Promise(() => undefined) : new Promise((resolve) => { this.resolveWait = resolve; });
+    this.listeningAddress = new Promise((resolve) => { this.#resolveListeningAddress = resolve; });
+    if (announceListening) queueMicrotask(() => this.reportListening());
   }
 
+  reportListening(address = "http://127.0.0.1:43123"): void {
+    this.stdout.emit("data", `server listening on ${address}\r\n`);
+    const match = /^http:\/\/127\.0\.0\.1:([1-9]\d{0,4})$/u.exec(address);
+    this.#resolveListeningAddress(match === null ? undefined : Number(match[1]));
+  }
   wait() { return this.waitPromise; }
   kill(signal?: NodeJS.Signals) { this.killed.push(signal ?? "SIGTERM"); return true; }
   dispose() { this.disposed = true; }
@@ -36,6 +45,27 @@ function processFactory(options: { processes: FakeProcess[]; waitForever?: boole
 
 const testArtifact = (executable = "opencode.exe") => async () => ({ executable, version: "1.18.4" as const });
 
+function createFakeNodeChild(): NodeChildPort {
+  const child = new EventEmitter() as EventEmitter & {
+    stdin: { end: () => unknown };
+    stdout: EventEmitter;
+    stderr: EventEmitter;
+    kill: (signal?: NodeJS.Signals) => boolean;
+  };
+  child.stdin = {
+    end: () => {
+      queueMicrotask(() => child.emit("exit", 0, null));
+    },
+  };
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.kill = (signal?: NodeJS.Signals) => {
+    queueMicrotask(() => child.emit("exit", null, signal ?? "SIGKILL"));
+    return true;
+  };
+  return child;
+}
+
 describe("OpenCode runtime", () => {
   it("detects and caches the bundled artifact without downgrading a healthy runtime", async () => {
     let resolutions = 0;
@@ -43,7 +73,6 @@ describe("OpenCode runtime", () => {
     const runtime = new OpenCodeRuntime({
       resolveArtifact: async () => { resolutions += 1; return { executable: "C:\\bundle\\bin\\opencode.exe", version: "1.18.4" }; },
       cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43110,
       spawn: processFactory({ processes }),
       checkHealth: async () => ({ version: "1.18.4" }),
     });
@@ -61,7 +90,6 @@ describe("OpenCode runtime", () => {
     const processes: FakeProcess[] = [];
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43111,
       spawn: processFactory({ processes }),
       checkHealth: async () => ({ version: "1.18.4" }),
     });
@@ -81,7 +109,6 @@ describe("OpenCode runtime", () => {
     const body = new ReadableStream<Uint8Array>({ cancel() { cancelCalls += 1; } });
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43115,
       spawn: processFactory({ processes }),
       checkHealth: async () => ({ version: "1.18.4" }),
     });
@@ -112,7 +139,6 @@ describe("OpenCode runtime", () => {
     const body = new ReadableStream<Uint8Array>({ cancel() { cancelCalls += 1; } });
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43116,
       spawn: processFactory({ processes }),
       checkHealth: async () => ({ version: "1.18.4" }),
     });
@@ -136,7 +162,6 @@ describe("OpenCode runtime", () => {
     let requestSignal: AbortSignal | undefined;
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43118,
       spawn: processFactory({ processes }),
       checkHealth: async () => ({ version: "1.18.4" }),
     });
@@ -159,7 +184,6 @@ describe("OpenCode runtime", () => {
     let requestSignal: AbortSignal | undefined;
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43117,
       spawn: processFactory({ processes }),
       checkHealth: async () => ({ version: "1.18.4" }),
     });
@@ -191,7 +215,6 @@ describe("OpenCode runtime", () => {
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), credentialsFactory: () => credentials,
       cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43119,
       spawn: processFactory({ processes }),
       checkHealth: async () => ({ version: "1.18.4" }),
     });
@@ -232,7 +255,6 @@ describe("OpenCode runtime", () => {
       cwd: "C:\\workspace",
       hostEnvironment: { PATH: "C:\\malicious" },
       trust: "trusted",
-      reservePort: async () => 43120,
       spawn: async (executable, args, options) => {
         spawnedExecutable = executable;
         const child = new FakeProcess(args, options.env);
@@ -261,21 +283,105 @@ describe("OpenCode runtime", () => {
         expect(credentials.password).toBeTruthy();
         return { version: "1.18.4" };
       },
-      reservePort: async () => 43123,
     });
     await runtime.start();
     expect(runtime.state).toBe("healthy");
-    expect(processes[0]?.args).toEqual(["serve", "--hostname", "127.0.0.1", "--port", "43123"]);
+    expect(processes[0]?.args).toEqual(["serve", "--hostname", "127.0.0.1", "--port", "0"]);
     expect(processes[0]?.env.OPENCODE_SERVER_USERNAME).toBe("opencode");
     expect(runtime.snapshot()).not.toMatchObject({ password: expect.anything() });
     expect(JSON.stringify(runtime.snapshot())).not.toContain(processes[0]?.env.OPENCODE_SERVER_PASSWORD ?? "impossible");
+  });
+
+  it("waits for the managed child to report its loopback address before sending health credentials", async () => {
+    const child = createFakeNodeChild();
+    let spawnedArgs: readonly string[] = [];
+    const healthBaseUrls: string[] = [];
+    const runtime = new OpenCodeRuntime({
+      resolveArtifact: testArtifact("C:\\bundle\\opencode.exe"),
+      cwd: "C:\\workspace",
+      hostEnvironment: { PATH: "C:\\Windows" },
+      trust: "trusted",
+      spawn: createNodeProcessFactory((_executable, args) => {
+        spawnedArgs = args;
+        return child;
+      }),
+      checkHealth: async ({ baseUrl }) => {
+        healthBaseUrls.push(baseUrl);
+        return { version: "1.18.4" };
+      },
+    });
+
+    const starting = runtime.start();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(spawnedArgs).toEqual(["serve", "--hostname", "127.0.0.1", "--port", "0"]);
+    expect(healthBaseUrls).toEqual([]);
+
+    child.stdout.emit("data", "unrelated startup output\nserver listening on http://127.0.0.");
+    child.stdout.emit("data", "1:43199\r\n");
+    await starting;
+
+    expect(healthBaseUrls).toEqual(["http://127.0.0.1:43199"]);
+    await runtime.stop();
+  });
+
+  it.each([
+    ["a non-loopback address", "server listening on http://127.0.0.2:43199\n"],
+    ["no listening address", undefined],
+  ])("does not send health credentials when stdout reports %s", async (_description, output) => {
+    const child = createFakeNodeChild();
+    let healthCalls = 0;
+    const runtime = new OpenCodeRuntime({
+      resolveArtifact: testArtifact(),
+      cwd: "C:\\workspace",
+      hostEnvironment: { PATH: "x" },
+      trust: "trusted",
+      readinessTimeoutMs: 10,
+      stopTimeoutMs: 10,
+      spawn: createNodeProcessFactory(() => child),
+      checkHealth: async () => {
+        healthCalls += 1;
+        return { version: "1.18.4" };
+      },
+    });
+
+    const starting = runtime.start();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    if (output !== undefined) child.stdout.emit("data", output);
+    await expect(starting).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+    expect(healthCalls).toBe(0);
+  });
+
+  it("does not send health credentials when the managed child exits after reporting its address", async () => {
+    const child = createFakeNodeChild();
+    const credentials = { username: "opencode" as const, password: "exit-before-health-canary" };
+    let healthCalls = 0;
+    const runtime = new OpenCodeRuntime({
+      resolveArtifact: testArtifact(),
+      credentialsFactory: () => credentials,
+      cwd: "C:\\workspace",
+      hostEnvironment: { PATH: "x" },
+      trust: "trusted",
+      spawn: createNodeProcessFactory(() => child),
+      checkHealth: async () => {
+        healthCalls += 1;
+        return { version: "1.18.4" };
+      },
+    });
+
+    const starting = runtime.start();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    child.stdout.emit("data", "server listening on http://127.0.0.1:43199\n");
+    child.emit("exit", 1, null);
+
+    expect(credentials.password).toBe("");
+    await expect(starting).rejects.toMatchObject({ code: "TransportDisconnected" });
+    expect(healthCalls).toBe(0);
   });
 
   it("retries port conflicts at most three times", async () => {
     let calls = 0;
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 40000 + calls,
       spawn: async () => { calls += 1; const error = Object.assign(new Error("busy"), { code: "EADDRINUSE" }); throw error; },
       checkHealth: async () => ({ version: "1.18.4" }),
     });
@@ -287,7 +393,6 @@ describe("OpenCode runtime", () => {
     let calls = 0;
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43113,
       spawn: async () => { calls += 1; throw new Error("diagnostic text mentions EADDRINUSE out of context"); },
     });
     await expect(runtime.start()).rejects.toMatchObject({ code: "RuntimeUnavailable" });
@@ -299,7 +404,6 @@ describe("OpenCode runtime", () => {
     let healthCalls = 0;
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 41000 + calls,
       spawn: async (_executable, args, options) => {
         calls += 1;
         const child = new FakeProcess(args, options.env);
@@ -320,7 +424,6 @@ describe("OpenCode runtime", () => {
   it("bounds a startup spawn that never resolves", async () => {
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43126,
       readinessTimeoutMs: 5,
       spawn: async () => new Promise<never>(() => undefined),
     });
@@ -332,7 +435,6 @@ describe("OpenCode runtime", () => {
     let lateChild: FakeProcess | undefined;
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43112,
       readinessTimeoutMs: 5,
       stopTimeoutMs: 5,
       spawn: async (_executable, args, options) => {
@@ -354,18 +456,18 @@ describe("OpenCode runtime", () => {
     expect(lateChild?.env.OPENCODE_SERVER_PASSWORD).toBeUndefined();
   });
 
-  it("clears credentials and maps reserve-port rejection after credential creation", async () => {
-    const credentials = { username: "opencode" as const, password: "reserve-canary" };
+  it("clears credentials and maps spawn rejection after credential creation", async () => {
+    const credentials = { username: "opencode" as const, password: "spawn-canary" };
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(),
       credentialsFactory: () => credentials,
       cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => { throw new Error(credentials.password); },
+      spawn: async () => { throw new Error(credentials.password); },
     } as never);
     let failure: unknown;
     try { await runtime.start(); } catch (error) { failure = error; }
     expect(failure).toMatchObject({ code: "RuntimeUnavailable" });
-    expect(String(failure)).not.toContain("reserve-canary");
+    expect(String(failure)).not.toContain("spawn-canary");
     expect(credentials.password).toBe("");
     expect(runtime.snapshot()).toEqual({ state: "crashed", error: { code: "RuntimeUnavailable" } });
   });
@@ -393,7 +495,6 @@ describe("OpenCode runtime", () => {
     const processes: FakeProcess[] = [];
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43127,
       spawn: processFactory({ processes, waitForever: true }),
       checkHealth: async () => { throw Object.assign(new Error("health timeout"), { code: "RuntimeUnavailable" }); },
       stopTimeoutMs: 5,
@@ -408,7 +509,6 @@ describe("OpenCode runtime", () => {
     Object.defineProperty(child, "stdin", { value: { end: () => new Promise<never>(() => undefined) } });
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43130,
       spawn: async () => child,
       checkHealth: async () => { throw new Error("health failure"); },
       stopTimeoutMs: 5,
@@ -423,7 +523,7 @@ describe("OpenCode runtime", () => {
 
   it("transitions to crashed on an unexpected ready-process exit", async () => {
     const processes: FakeProcess[] = [];
-    const runtime = new OpenCodeRuntime({ resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted", reservePort: async () => 43124, spawn: processFactory({ processes }), checkHealth: async () => ({ version: "1.18.4" }) });
+    const runtime = new OpenCodeRuntime({ resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted", spawn: processFactory({ processes }), checkHealth: async () => ({ version: "1.18.4" }) });
     await runtime.start();
     processes[0]?.process.emit("exit", 1, null);
     expect(runtime.state).toBe("crashed");
@@ -434,7 +534,7 @@ describe("OpenCode runtime", () => {
 
   it("does not report stopped when SIGKILL succeeds but the child never exits", async () => {
     const processes: FakeProcess[] = [];
-    const runtime = new OpenCodeRuntime({ resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted", reservePort: async () => 43125, spawn: processFactory({ processes, waitForever: true }), checkHealth: async () => ({ version: "1.18.4" }), stopTimeoutMs: 5 });
+    const runtime = new OpenCodeRuntime({ resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted", spawn: processFactory({ processes, waitForever: true }), checkHealth: async () => ({ version: "1.18.4" }), stopTimeoutMs: 5 });
     await runtime.start();
     await expect(runtime.stop()).rejects.toMatchObject({ code: "RuntimeUnavailable" });
     expect(processes[0]?.killed).toContain("SIGKILL");
@@ -443,7 +543,7 @@ describe("OpenCode runtime", () => {
 
   it("reports stopped only after observing a delayed post-kill exit", async () => {
     const processes: FakeProcess[] = [];
-    const runtime = new OpenCodeRuntime({ resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted", reservePort: async () => 43133, spawn: processFactory({ processes }), checkHealth: async () => ({ version: "1.18.4" }), stopTimeoutMs: 5 });
+    const runtime = new OpenCodeRuntime({ resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted", spawn: processFactory({ processes }), checkHealth: async () => ({ version: "1.18.4" }), stopTimeoutMs: 5 });
     await runtime.start();
     const child = processes[0]!;
     child.kill = (signal?: NodeJS.Signals) => {
@@ -458,7 +558,7 @@ describe("OpenCode runtime", () => {
 
   it("forces termination when process wait throws synchronously", async () => {
     const processes: FakeProcess[] = [];
-    const runtime = new OpenCodeRuntime({ resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted", reservePort: async () => 43131, spawn: processFactory({ processes }), checkHealth: async () => ({ version: "1.18.4" }), stopTimeoutMs: 5 });
+    const runtime = new OpenCodeRuntime({ resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted", spawn: processFactory({ processes }), checkHealth: async () => ({ version: "1.18.4" }), stopTimeoutMs: 5 });
     await runtime.start();
     processes[0]!.wait = () => { throw new Error("raw wait failure"); };
     await expect(runtime.stop()).rejects.toMatchObject({ code: "RuntimeUnavailable" });
@@ -509,7 +609,6 @@ describe("OpenCode runtime", () => {
     const runtime = new OpenCodeRuntime({
       resolveArtifact: async () => ({ executable: "C:\\bundle\\bin\\opencode.exe", version: "1.18.4" }),
       cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43132,
       spawn: createFactory(spawn),
       stopTimeoutMs: 5,
     } as never);
@@ -568,7 +667,7 @@ describe("OpenCode runtime", () => {
     const runtime = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), credentialsFactory: () => credentials,
       cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43114, spawn: async () => child,
+      spawn: async () => child,
       checkHealth: async () => { throw new Error(credentials.password); }, stopTimeoutMs: 5,
     });
     let failure: unknown;
@@ -584,7 +683,6 @@ describe("OpenCode runtime", () => {
     let stoppedCredentials: { password: string } | undefined;
     const stopped = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43128,
       spawn: processFactory({ processes: stoppedProcesses }),
       checkHealth: async ({ credentials }) => { stoppedCredentials = credentials; return { version: "1.18.4" }; },
     });
@@ -597,7 +695,6 @@ describe("OpenCode runtime", () => {
     let crashedCredentials: { password: string } | undefined;
     const crashed = new OpenCodeRuntime({
       resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
-      reservePort: async () => 43129,
       spawn: processFactory({ processes: crashedProcesses }),
       checkHealth: async ({ credentials }) => { crashedCredentials = credentials; return { version: "1.18.4" }; },
     });

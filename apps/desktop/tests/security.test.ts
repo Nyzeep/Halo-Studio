@@ -222,6 +222,396 @@ describe("preload capability boundary", () => {
   });
 });
 
+describe("workspace lifecycle security", () => {
+  it("fails closed when trust changes after the original root resolves to a different workspace", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-workspace-revalidation-"));
+    const rootPath = join(root, "selected-root");
+    const replacementPath = join(root, "replacement-root");
+    await Promise.all([mkdir(rootPath), mkdir(replacementPath)]);
+    const workspaceId = "a".repeat(64);
+    const original = { id: workspaceId, rootPath, realPath: rootPath, trustState: "trusted" as const };
+    const replacement = { id: "b".repeat(64), rootPath, realPath: replacementPath, trustState: "trusted" as const };
+    let opens = 0;
+    const runtime = {
+      state: "unavailable" as const,
+      stopCalls: 0,
+      async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+      async start() { throw new Error("start should not run"); },
+      async stop() { runtime.stopCalls += 1; },
+    };
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath: join(root, "user-data"),
+        picker: { showOpenDialog: async () => ({ canceled: false, filePaths: [rootPath] }) },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: "x" },
+        openWorkspace: async () => {
+          opens += 1;
+          return opens === 1 ? original : replacement;
+        },
+        createOpenCodeRuntime: () => runtime,
+      } as never);
+
+      const candidate = await services.handlers["workspace.pick"]({});
+      const workspace = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
+      await services.handlers["runtime.snapshot"]({ workspaceId: workspace.id });
+
+      await expect(services.handlers["workspace.trust"]({ workspaceId: workspace.id, trustState: "trusted" })).rejects.toMatchObject({
+        code: "ProtocolViolation",
+        message: "Workspace is unavailable.",
+      });
+      expect(runtime.stopCalls).toBe(1);
+      await expect(services.handlers["runtime.snapshot"]({ workspaceId: workspace.id })).rejects.toMatchObject({ code: "ProtocolViolation" });
+    } finally {
+      await services?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed before runtime start when the original root resolves to a different workspace", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-runtime-revalidation-"));
+    const rootPath = join(root, "selected-root");
+    const replacementPath = join(root, "replacement-root");
+    await Promise.all([mkdir(rootPath), mkdir(replacementPath)]);
+    const workspaceId = "c".repeat(64);
+    const original = { id: workspaceId, rootPath, realPath: rootPath, trustState: "trusted" as const };
+    const replacement = { id: "d".repeat(64), rootPath, realPath: replacementPath, trustState: "trusted" as const };
+    let opens = 0;
+    const runtime = {
+      state: "unavailable" as "unavailable" | "healthy" | "stopped",
+      startCalls: 0,
+      stopCalls: 0,
+      async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+      async start() { runtime.startCalls += 1; runtime.state = "healthy"; },
+      async stop() { runtime.stopCalls += 1; runtime.state = "stopped"; },
+    };
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath: join(root, "user-data"),
+        picker: { showOpenDialog: async () => ({ canceled: false, filePaths: [rootPath] }) },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: "x" },
+        openWorkspace: async () => {
+          opens += 1;
+          return opens === 1 ? original : replacement;
+        },
+        createOpenCodeRuntime: () => runtime,
+      } as never);
+
+      const candidate = await services.handlers["workspace.pick"]({});
+      const workspace = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
+      await services.handlers["runtime.snapshot"]({ workspaceId: workspace.id });
+
+      await expect(services.handlers["runtime.start"]({ workspaceId: workspace.id, agentKind: "opencode" })).rejects.toMatchObject({
+        code: "ProtocolViolation",
+        message: "Workspace is unavailable.",
+      });
+      expect(runtime.startCalls).toBe(0);
+      expect(runtime.stopCalls).toBe(1);
+    } finally {
+      await services?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed when a workspace directory is replaced at the same canonical path", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-workspace-identity-"));
+    const rootPath = join(root, "selected-root");
+    await mkdir(rootPath);
+    const workspace = { id: "f".repeat(64), rootPath, realPath: rootPath, trustState: "trusted" as const };
+    let identityReads = 0;
+    const runtime = {
+      state: "unavailable" as const,
+      stopCalls: 0,
+      async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+      async start() { throw new Error("start should not run"); },
+      async stop() { runtime.stopCalls += 1; },
+    };
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath: join(root, "user-data"),
+        picker: { showOpenDialog: async () => ({ canceled: false, filePaths: [rootPath] }) },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: "x" },
+        openWorkspace: async () => workspace,
+        workspaceIdentity: async () => {
+          identityReads += 1;
+          return identityReads === 1 ? { device: 1n, inode: 101n } : { device: 1n, inode: 202n };
+        },
+        createOpenCodeRuntime: () => runtime,
+      } as never);
+
+      const candidate = await services.handlers["workspace.pick"]({});
+      const opened = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
+      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+
+      await expect(services.handlers["workspace.trust"]({ workspaceId: opened.id, trustState: "trusted" })).rejects.toMatchObject({
+        code: "ProtocolViolation",
+        message: "Workspace is unavailable.",
+      });
+      expect(runtime.stopCalls).toBe(1);
+      await expect(services.handlers["runtime.snapshot"]({ workspaceId: opened.id })).rejects.toMatchObject({ code: "ProtocolViolation" });
+    } finally {
+      await services?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("retires an old runtime before re-opening a replaced directory with the same workspace id", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-workspace-reopen-identity-"));
+    const rootPath = join(root, "selected-root");
+    await mkdir(rootPath);
+    const workspace = { id: "9".repeat(64), rootPath, realPath: rootPath, trustState: "trusted" as const };
+    let identityReads = 0;
+    const oldRuntime = {
+      state: "unavailable" as "unavailable" | "healthy" | "stopped",
+      startCalls: 0,
+      stopCalls: 0,
+      async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+      async start() { oldRuntime.startCalls += 1; oldRuntime.state = "healthy"; },
+      async stop() { oldRuntime.stopCalls += 1; oldRuntime.state = "stopped"; },
+    };
+    const replacementRuntime = {
+      state: "unavailable" as "unavailable" | "healthy" | "stopped",
+      startCalls: 0,
+      async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+      async start() { replacementRuntime.startCalls += 1; replacementRuntime.state = "healthy"; },
+      async stop() { replacementRuntime.state = "stopped"; },
+    };
+    let runtimeCreations = 0;
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath: join(root, "user-data"),
+        picker: { showOpenDialog: async () => ({ canceled: false, filePaths: [rootPath] }) },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: "x" },
+        openWorkspace: async () => workspace,
+        workspaceIdentity: async () => {
+          identityReads += 1;
+          return identityReads === 1 ? { device: 1n, inode: 101n } : { device: 1n, inode: 202n };
+        },
+        createOpenCodeRuntime: () => {
+          runtimeCreations += 1;
+          return runtimeCreations === 1 ? oldRuntime : replacementRuntime;
+        },
+      } as never);
+
+      const firstCandidate = await services.handlers["workspace.pick"]({});
+      const opened = await services.handlers["workspace.open"]({ selectionId: firstCandidate!.selectionId });
+      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+
+      const secondCandidate = await services.handlers["workspace.pick"]({});
+      await services.handlers["workspace.open"]({ selectionId: secondCandidate!.selectionId });
+      expect(oldRuntime.stopCalls).toBe(1);
+
+      await services.handlers["runtime.start"]({ workspaceId: opened.id, agentKind: "opencode" });
+      expect(oldRuntime.startCalls).toBe(0);
+      expect(replacementRuntime.startCalls).toBe(1);
+    } finally {
+      await services?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("retires an existing runtime when a same-id re-open cannot read directory identity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-workspace-unreadable-identity-"));
+    const rootPath = join(root, "selected-root");
+    await mkdir(rootPath);
+    const workspace = { id: "8".repeat(64), rootPath, realPath: rootPath, trustState: "trusted" as const };
+    let identityReads = 0;
+    const runtime = {
+      state: "unavailable" as const,
+      stopCalls: 0,
+      async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+      async start() { throw new Error("start should not run"); },
+      async stop() { runtime.stopCalls += 1; },
+    };
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath: join(root, "user-data"),
+        picker: { showOpenDialog: async () => ({ canceled: false, filePaths: [rootPath] }) },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: "x" },
+        openWorkspace: async () => workspace,
+        workspaceIdentity: async () => {
+          identityReads += 1;
+          if (identityReads === 1) return { device: 1n, inode: 101n };
+          throw new Error("identity unavailable");
+        },
+        createOpenCodeRuntime: () => runtime,
+      } as never);
+
+      const firstCandidate = await services.handlers["workspace.pick"]({});
+      const opened = await services.handlers["workspace.open"]({ selectionId: firstCandidate!.selectionId });
+      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+
+      const secondCandidate = await services.handlers["workspace.pick"]({});
+      await expect(services.handlers["workspace.open"]({ selectionId: secondCandidate!.selectionId })).rejects.toMatchObject({
+        code: "ProtocolViolation",
+        message: "Workspace is unavailable.",
+      });
+      expect(runtime.stopCalls).toBe(1);
+      await expect(services.handlers["runtime.snapshot"]({ workspaceId: opened.id })).rejects.toMatchObject({ code: "ProtocolViolation" });
+    } finally {
+      await services?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps a failed runtime shutdown reachable without revoking trust or permitting a same-id re-open", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-workspace-stop-failure-"));
+    const rootPath = join(root, "selected-root");
+    await mkdir(rootPath);
+    const workspace = { id: "0".repeat(64), rootPath, realPath: rootPath, trustState: "trusted" as const };
+    const runtime = {
+      state: "unavailable" as const,
+      startCalls: 0,
+      stopCalls: 0,
+      async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+      async start() { runtime.startCalls += 1; },
+      async stop() { runtime.stopCalls += 1; throw new Error("stop failed"); },
+    };
+    const observedTrustStates: Array<"trusted" | "untrusted"> = [];
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath: join(root, "user-data"),
+        picker: { showOpenDialog: async () => ({ canceled: false, filePaths: [rootPath] }) },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: "x" },
+        openWorkspace: async (_rootPath: string, trustStore: { listDecisions(): Promise<readonly { realPath: string; state: "trusted" | "untrusted" }[]> }) => {
+          const decision = (await trustStore.listDecisions()).find(({ realPath }) => realPath === workspace.realPath);
+          const trustState = decision?.state ?? "trusted";
+          observedTrustStates.push(trustState);
+          return { ...workspace, trustState };
+        },
+        createOpenCodeRuntime: () => runtime,
+      } as never);
+
+      const candidate = await services.handlers["workspace.pick"]({});
+      const opened = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
+      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+
+      await expect(services.handlers["workspace.trust"]({ workspaceId: opened.id, trustState: "untrusted" })).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+      expect(observedTrustStates).toEqual(["trusted", "trusted"]);
+      await expect(services.handlers["runtime.start"]({ workspaceId: opened.id, agentKind: "opencode" })).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+      const retryCandidate = await services.handlers["workspace.pick"]({});
+      await expect(services.handlers["workspace.open"]({ selectionId: retryCandidate!.selectionId })).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+      expect(runtime.startCalls).toBe(0);
+
+      await services.dispose();
+      services = undefined;
+      expect(runtime.stopCalls).toBe(2);
+    } finally {
+      await services?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("serializes trust revocation ahead of a concurrent runtime start", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-workspace-serialization-"));
+    const rootPath = join(root, "selected-root");
+    await mkdir(rootPath);
+    const workspaceId = "e".repeat(64);
+    const workspace = { id: workspaceId, rootPath, realPath: rootPath, trustState: "trusted" as const };
+    let releaseStop!: () => void;
+    let signalStop!: () => void;
+    const stopEntered = new Promise<void>((resolve) => { signalStop = resolve; });
+    const stopGate = new Promise<void>((resolve) => { releaseStop = resolve; });
+    const runtime = {
+      state: "unavailable" as "unavailable" | "healthy" | "stopped",
+      startCalls: 0,
+      stopCalls: 0,
+      async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+      async start() { runtime.startCalls += 1; runtime.state = "healthy"; },
+      async stop() {
+        runtime.stopCalls += 1;
+        signalStop();
+        await stopGate;
+        runtime.state = "stopped";
+      },
+    };
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath: join(root, "user-data"),
+        picker: { showOpenDialog: async () => ({ canceled: false, filePaths: [rootPath] }) },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: "x" },
+        openWorkspace: async (_rootPath: string, trustStore: { listDecisions(): Promise<readonly { realPath: string; state: "trusted" | "untrusted" }[]> }) => {
+          const decision = (await trustStore.listDecisions()).find(({ realPath }) => realPath === workspace.realPath);
+          return { ...workspace, trustState: decision?.state ?? "trusted" };
+        },
+        createOpenCodeRuntime: () => runtime,
+      } as never);
+
+      const candidate = await services.handlers["workspace.pick"]({});
+      const opened = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
+      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+
+      const revoking = services.handlers["workspace.trust"]({ workspaceId: opened.id, trustState: "untrusted" });
+      const stopStarted = await Promise.race([
+        stopEntered.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
+      ]);
+      expect(stopStarted).toBe(true);
+
+      const starting = services.handlers["runtime.start"]({ workspaceId: opened.id, agentKind: "opencode" });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(runtime.startCalls).toBe(0);
+
+      releaseStop();
+      await expect(revoking).resolves.toMatchObject({ trustState: "untrusted" });
+      await expect(starting).rejects.toMatchObject({ code: "WorkspaceUntrusted" });
+      expect(runtime.startCalls).toBe(0);
+    } finally {
+      releaseStop?.();
+      await services?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("desktop service composition", () => {
   it("keeps Pi discovery independent from unavailable launch configuration", async () => {
     const source = await readFile(new URL("../src/main/services.ts", import.meta.url), "utf8");
