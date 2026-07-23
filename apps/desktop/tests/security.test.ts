@@ -375,6 +375,58 @@ describe("workspace lifecycle security", () => {
     }
   });
 
+  it("fails closed before runtime start when a workspace directory is replaced at the same canonical path", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-runtime-identity-"));
+    const rootPath = join(root, "selected-root");
+    await mkdir(rootPath);
+    const workspace = { id: "d".repeat(64), rootPath, realPath: rootPath, trustState: "trusted" as const };
+    let identityReads = 0;
+    const runtime = {
+      state: "unavailable" as "unavailable" | "healthy" | "stopped",
+      startCalls: 0,
+      stopCalls: 0,
+      async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+      async start() { runtime.startCalls += 1; runtime.state = "healthy"; },
+      async stop() { runtime.stopCalls += 1; runtime.state = "stopped"; },
+    };
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath: join(root, "user-data"),
+        picker: { showOpenDialog: async () => ({ canceled: false, filePaths: [rootPath] }) },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: "x" },
+        openWorkspace: async () => workspace,
+        workspaceIdentity: async () => {
+          identityReads += 1;
+          return identityReads === 1 ? { device: 1n, inode: 101n } : { device: 1n, inode: 202n };
+        },
+        createOpenCodeRuntime: () => runtime,
+      } as never);
+
+      const candidate = await services.handlers["workspace.pick"]({});
+      const opened = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
+      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+
+      await expect(services.handlers["runtime.start"]({ workspaceId: opened.id, agentKind: "opencode" })).rejects.toMatchObject({
+        code: "ProtocolViolation",
+        message: "Workspace is unavailable.",
+      });
+      expect(runtime.stopCalls).toBe(1);
+      expect(runtime.startCalls).toBe(0);
+      await expect(services.handlers["runtime.start"]({ workspaceId: opened.id, agentKind: "opencode" })).rejects.toMatchObject({ code: "ProtocolViolation" });
+      expect(runtime.startCalls).toBe(0);
+    } finally {
+      await services?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("retires an old runtime before re-opening a replaced directory with the same workspace id", async () => {
     const root = await mkdtemp(join(tmpdir(), "halo-workspace-reopen-identity-"));
     const rootPath = join(root, "selected-root");
