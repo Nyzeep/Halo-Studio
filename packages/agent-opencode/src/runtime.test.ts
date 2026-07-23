@@ -73,6 +73,141 @@ describe("OpenCode runtime", () => {
     await runtime.stop();
   });
 
+  it("connects SSE with runtime-owned credentials and closes it before stop clears secrets", async () => {
+    const processes: FakeProcess[] = [];
+    let authorization = "";
+    let requestSignal: AbortSignal | undefined;
+    let cancelCalls = 0;
+    const body = new ReadableStream<Uint8Array>({ cancel() { cancelCalls += 1; } });
+    const runtime = new OpenCodeRuntime({
+      resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
+      reservePort: async () => 43115,
+      spawn: processFactory({ processes }),
+      checkHealth: async () => ({ version: "1.18.4" }),
+    });
+    await runtime.start();
+    const connection = await runtime.connectSse({
+      onSignal: () => undefined,
+      fetch: async (_url, init) => {
+        authorization = String(new Headers(init?.headers).get("authorization"));
+        requestSignal = init?.signal ?? undefined;
+        return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+      },
+    });
+    expect(authorization).toMatch(/^Basic [A-Za-z0-9+/]+={0,2}$/u);
+    expect(authorization).not.toContain("opencode:");
+    expect(runtime.snapshot()).not.toMatchObject({ password: expect.anything() });
+
+    processes[0]?.resolveWait({ code: 0, signal: null });
+    await runtime.stop();
+    await connection.done;
+    expect(requestSignal?.aborted).toBe(true);
+    expect(cancelCalls).toBe(1);
+  });
+
+  it("closes connected SSE when the managed process exits unexpectedly", async () => {
+    const processes: FakeProcess[] = [];
+    let requestSignal: AbortSignal | undefined;
+    let cancelCalls = 0;
+    const body = new ReadableStream<Uint8Array>({ cancel() { cancelCalls += 1; } });
+    const runtime = new OpenCodeRuntime({
+      resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
+      reservePort: async () => 43116,
+      spawn: processFactory({ processes }),
+      checkHealth: async () => ({ version: "1.18.4" }),
+    });
+    await runtime.start();
+    const connection = await runtime.connectSse({
+      onSignal: () => undefined,
+      fetch: async (_url, init) => {
+        requestSignal = init?.signal ?? undefined;
+        return new Response(body, { status: 200 });
+      },
+    });
+    processes[0]?.process.emit("exit", 1, null);
+    await connection.done;
+    expect(runtime.state).toBe("crashed");
+    expect(requestSignal?.aborted).toBe(true);
+    expect(cancelCalls).toBe(1);
+  });
+
+  it("unbinds a completed SSE connection from later runtime shutdown", async () => {
+    const processes: FakeProcess[] = [];
+    let requestSignal: AbortSignal | undefined;
+    const runtime = new OpenCodeRuntime({
+      resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
+      reservePort: async () => 43118,
+      spawn: processFactory({ processes }),
+      checkHealth: async () => ({ version: "1.18.4" }),
+    });
+    await runtime.start();
+    const connection = await runtime.connectSse({
+      onSignal: () => undefined,
+      fetch: async (_url, init) => {
+        requestSignal = init?.signal ?? undefined;
+        return new Response(new ReadableStream<Uint8Array>({ start(controller) { controller.close(); } }), { status: 200 });
+      },
+    });
+    await connection.done;
+    processes[0]?.resolveWait({ code: 0, signal: null });
+    await runtime.stop();
+    expect(requestSignal?.aborted).toBe(false);
+  });
+
+  it("aborts an in-flight SSE handshake when stop runs concurrently", async () => {
+    const processes: FakeProcess[] = [];
+    let requestSignal: AbortSignal | undefined;
+    const runtime = new OpenCodeRuntime({
+      resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
+      reservePort: async () => 43117,
+      spawn: processFactory({ processes }),
+      checkHealth: async () => ({ version: "1.18.4" }),
+    });
+    await runtime.start();
+    const connecting = runtime.connectSse({
+      onSignal: () => undefined,
+      fetch: async (_url, init) => new Promise<Response>((_resolve, reject) => {
+        requestSignal = init?.signal ?? undefined;
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+      }),
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    processes[0]?.resolveWait({ code: 0, signal: null });
+    const stopping = runtime.stop();
+    const [connectionResult, stopResult] = await Promise.allSettled([connecting, stopping]);
+    expect(connectionResult).toMatchObject({ status: "rejected", reason: { code: "TransportDisconnected" } });
+    expect(stopResult).toMatchObject({ status: "fulfilled" });
+    expect(requestSignal?.aborted).toBe(true);
+    expect(runtime.state).toBe("stopped");
+  });
+
+  it("clears crash credentials only after connected SSE close completes", async () => {
+    const credentials = { username: "opencode" as const, password: "crash-order-canary" };
+    const processes: FakeProcess[] = [];
+    let resolveCancel!: () => void;
+    const body = new ReadableStream<Uint8Array>({
+      cancel: () => new Promise<void>((resolve) => { resolveCancel = resolve; }),
+    });
+    const runtime = new OpenCodeRuntime({
+      resolveArtifact: testArtifact(), credentialsFactory: () => credentials,
+      cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
+      reservePort: async () => 43119,
+      spawn: processFactory({ processes }),
+      checkHealth: async () => ({ version: "1.18.4" }),
+    });
+    await runtime.start();
+    await runtime.connectSse({
+      onSignal: () => undefined,
+      fetch: async () => new Response(body, { status: 200 }),
+    });
+    processes[0]?.process.emit("exit", 1, null);
+    await Promise.resolve();
+    expect(credentials.password).toBe("crash-order-canary");
+    resolveCancel();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(credentials.password).toBe("");
+  });
+
   it("serializes detect and stop without leaving installed state behind", async () => {
     let resolveDetection!: (artifact: { executable: string; version: "1.18.4" }) => void;
     const runtime = new OpenCodeRuntime({
@@ -468,6 +603,7 @@ describe("OpenCode runtime", () => {
     });
     await crashed.start();
     crashedProcesses[0]?.process.emit("exit", 1, null);
+    await new Promise<void>((resolve) => setImmediate(resolve));
     expect(crashedCredentials?.password).toBe("");
   });
 });

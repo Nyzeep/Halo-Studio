@@ -18,6 +18,12 @@ import {
   TransportDisconnectedError,
   VersionMismatchError,
 } from "./errors.js";
+import {
+  connectOpenCodeSse,
+  type OpenCodeSseConnection,
+  type SseFetch,
+  type SseSignal,
+} from "./sse.js";
 
 export type ProcessStartupFailure = "port-conflict" | "spawn-error" | "exited";
 
@@ -149,6 +155,18 @@ export interface RuntimeHealthOptions {
   readonly credentials: ServerCredentials;
 }
 
+export interface RuntimeSseOptions {
+  readonly onSignal: (signal: SseSignal) => void;
+  readonly sampleUnknown?: (event: string) => void;
+  /** Source-module seam for deterministic transport tests. */
+  readonly fetch?: SseFetch;
+}
+
+interface RuntimeSseRecord {
+  readonly controller: AbortController;
+  connection?: OpenCodeSseConnection;
+}
+
 export interface OpenCodeRuntimeOptions {
   readonly cwd: string;
   readonly trust: TrustState;
@@ -207,6 +225,8 @@ export class OpenCodeRuntime {
   #exitListener: (() => void) | undefined;
   #errorListener: (() => void) | undefined;
   #artifact: OpenCodeArtifact | undefined;
+  #acceptSse = false;
+  readonly #sseRecords = new Set<RuntimeSseRecord>();
   #operation: Promise<void> = Promise.resolve();
 
   constructor(options: OpenCodeRuntimeOptions) { this.#options = options; }
@@ -251,6 +271,7 @@ export class OpenCodeRuntime {
 
   async #startInternal(): Promise<void> {
     if (this.#state !== "unavailable" && this.#state !== "installed") throw new RuntimeUnavailableError();
+    this.#acceptSse = false;
     this.#error = undefined;
     const artifact = await this.#detectInternal();
     this.#state = "installed";
@@ -336,6 +357,7 @@ export class OpenCodeRuntime {
         if (this.#state !== "starting" || this.#processExited) throw new TransportDisconnectedError();
         this.#version = outcome.result.version;
         this.#state = "healthy";
+        this.#acceptSse = true;
         retainCredentials = true;
         return;
       } catch (error) {
@@ -378,9 +400,68 @@ export class OpenCodeRuntime {
     }
   }
 
-  stop(): Promise<void> { return this.#exclusive(() => this.#stopInternal()); }
+  connectSse(options: RuntimeSseOptions): Promise<OpenCodeSseConnection> {
+    return this.#exclusive(() => this.#connectSseInternal(options));
+  }
+
+  async #connectSseInternal(options: RuntimeSseOptions): Promise<OpenCodeSseConnection> {
+    const port = this.#port;
+    const credentials = this.#credentials;
+    if (this.#state !== "healthy" || !this.#acceptSse || port === undefined || credentials === undefined) {
+      throw new RuntimeUnavailableError();
+    }
+
+    const controller = new AbortController();
+    const record: RuntimeSseRecord = { controller };
+    this.#sseRecords.add(record);
+    let rejectAbort!: () => void;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      rejectAbort = () => reject(new TransportDisconnectedError());
+      if (controller.signal.aborted) rejectAbort();
+      else controller.signal.addEventListener("abort", rejectAbort, { once: true });
+    });
+    const connecting = connectOpenCodeSse({
+      baseUrl: `http://127.0.0.1:${port}`,
+      credentials,
+      onSignal: options.onSignal,
+      ...(options.sampleUnknown === undefined ? {} : { sampleUnknown: options.sampleUnknown }),
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+      signal: controller.signal,
+    });
+    connecting.catch(() => undefined);
+    connecting.then(
+      (lateConnection) => {
+        if (controller.signal.aborted) void lateConnection.close().catch(() => undefined);
+      },
+      () => undefined,
+    );
+
+    try {
+      const connection = await Promise.race([connecting, aborted]);
+      if (controller.signal.aborted) {
+        await connection.close().catch(() => undefined);
+        throw new TransportDisconnectedError();
+      }
+      record.connection = connection;
+      const completed = connection.done.finally(() => { this.#sseRecords.delete(record); });
+      completed.catch(() => undefined);
+      return connection;
+    } catch (error) {
+      this.#sseRecords.delete(record);
+      throw error instanceof OpenCodeError ? error : new TransportDisconnectedError();
+    } finally {
+      controller.signal.removeEventListener("abort", rejectAbort);
+    }
+  }
+
+  stop(): Promise<void> {
+    this.#acceptSse = false;
+    this.#abortSseConnections();
+    return this.#exclusive(() => this.#stopInternal());
+  }
 
   async #stopInternal(): Promise<void> {
+    await this.#closeSseConnections();
     if (this.#state === "stopped" || this.#state === "unavailable") {
       this.#state = "stopped";
       this.#clearSecrets();
@@ -425,6 +506,7 @@ export class OpenCodeRuntime {
   #onExit(): void {
     if (this.#state === "starting") return;
     if (this.#stopRequested || this.#state === "stopping" || this.#state === "stopped") return;
+    this.#acceptSse = false;
     const process = this.#process;
     if (process) {
       this.#detachLifecycle(process);
@@ -433,9 +515,27 @@ export class OpenCodeRuntime {
     this.#process = undefined;
     this.#state = "crashed";
     this.#error = new TransportDisconnectedError();
-    this.#clearSecrets();
     this.#clearRuntimeFields(false);
+    void this.#closeSseConnections().then(
+      () => this.#clearSecrets(),
+      () => this.#clearSecrets(),
+    );
     this.#options.onDisconnect?.();
+  }
+
+  #abortSseConnections(): void {
+    for (const record of this.#sseRecords) record.controller.abort();
+  }
+
+  async #closeSseConnections(): Promise<void> {
+    this.#acceptSse = false;
+    const records = [...this.#sseRecords];
+    for (const record of records) record.controller.abort();
+    const timeoutMs = this.#options.stopTimeoutMs ?? 6_000;
+    await Promise.all(records.map(async (record) => {
+      if (record.connection) await this.#settle(() => record.connection!.close(), timeoutMs);
+      this.#sseRecords.delete(record);
+    }));
   }
 
   async #teardownProcess(process: OpenCodeProcess, timeoutMs: number): Promise<boolean> {
@@ -483,6 +583,8 @@ export class OpenCodeRuntime {
   }
 
   #clearSecrets(): void {
+    this.#acceptSse = false;
+    this.#abortSseConnections();
     if (this.#credentials) clearServerCredentials(this.#credentials);
     this.#credentials = undefined;
     this.#clearSpawnEnvironment();

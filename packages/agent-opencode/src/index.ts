@@ -15,6 +15,7 @@ export {
   type ProcessFactory,
   type ProcessStartupFailure,
   type RuntimeHealthOptions,
+  type RuntimeSseOptions,
   type RuntimeSnapshot,
   type SpawnPort,
 } from "./runtime.js";
