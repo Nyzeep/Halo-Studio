@@ -56,7 +56,7 @@ export type NodeSpawn = (
   options: { readonly cwd: string; readonly env: Readonly<Record<string, string>>; readonly stdio: readonly ["pipe", "pipe", "pipe"] },
 ) => NodeChildPort;
 
-const PORT_CONFLICT_PATTERN = /\bEADDRINUSE\b|address already in use|addr(?:ess)? in use/iu;
+const PORT_CONFLICT_PATTERN = /(?:^|\s)listen(?:\s+\w+)?\s+EADDRINUSE\b|(?:^|\s)listen\b[^\r\n]*address already in use/iu;
 const MAX_STARTUP_STDERR = 4_096;
 
 function defaultNodeSpawn(executable: string, args: readonly string[], options: Parameters<NodeSpawn>[2]): NodeChildPort {
@@ -73,6 +73,7 @@ export function createNodeProcessFactory(spawn: NodeSpawn = defaultNodeSpawn): P
     let stderr = "";
     let startupSettled = false;
     let disposed = false;
+    const onStdout = (): void => undefined;
     let resolveStartup!: (failure: ProcessStartupFailure) => void;
     const startup = new Promise<ProcessStartupFailure>((resolve) => { resolveStartup = resolve; });
 
@@ -91,6 +92,7 @@ export function createNodeProcessFactory(spawn: NodeSpawn = defaultNodeSpawn): P
     const onStartupExit = (): void => settleStartup(PORT_CONFLICT_PATTERN.test(stderr) ? "port-conflict" : "exited");
 
     child.stderr.on("data", onStderr);
+    child.stdout.on("data", onStdout);
     child.on("error", onError);
     child.once("exit", onStartupExit);
     let resolveExit!: (exit: { readonly code: number | null; readonly signal: NodeJS.Signals | null }) => void;
@@ -105,6 +107,7 @@ export function createNodeProcessFactory(spawn: NodeSpawn = defaultNodeSpawn): P
       disposed = true;
       stderr = "";
       child.stderr.off("data", onStderr);
+      child.stdout.off("data", onStdout);
       child.off("error", onError);
       child.off("exit", onStartupExit);
       child.off("exit", onWaitExit);
@@ -182,7 +185,7 @@ async function reserveLoopbackPort(): Promise<number> {
 function isPortConflict(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const code = (error as Error & { readonly code?: unknown }).code;
-  return code === "EADDRINUSE" || PORT_CONFLICT_PATTERN.test(error.message);
+  return code === "EADDRINUSE";
 }
 
 type Settlement<T> =
@@ -203,6 +206,7 @@ export class OpenCodeRuntime {
   #processExited = false;
   #exitListener: (() => void) | undefined;
   #errorListener: (() => void) | undefined;
+  #artifact: OpenCodeArtifact | undefined;
   #operation: Promise<void> = Promise.resolve();
 
   constructor(options: OpenCodeRuntimeOptions) { this.#options = options; }
@@ -218,21 +222,37 @@ export class OpenCodeRuntime {
     };
   }
 
+  detect(): Promise<OpenCodeArtifact> { return this.#exclusive(() => this.#detectInternal()); }
+
+  async #detectInternal(): Promise<OpenCodeArtifact> {
+    if (this.#artifact) {
+      if (this.#state === "unavailable") {
+        this.#state = "installed";
+        this.#version = this.#artifact.version;
+      }
+      return this.#artifact;
+    }
+    try {
+      const artifact = await (this.#options.resolveArtifact ?? resolveOpenCodeArtifact)();
+      if (artifact.version !== OPENCODE_VERSION) throw new VersionMismatchError();
+      this.#artifact = artifact;
+      if (this.#state === "unavailable" || this.#state === "installed") {
+        this.#state = "installed";
+        this.#version = artifact.version;
+      }
+      return artifact;
+    } catch (error) {
+      if (this.#state === "unavailable" || this.#state === "installed") this.#state = "unavailable";
+      throw error instanceof OpenCodeError ? error : new RuntimeUnavailableError();
+    }
+  }
+
   start(): Promise<void> { return this.#exclusive(() => this.#startInternal()); }
 
   async #startInternal(): Promise<void> {
     if (this.#state !== "unavailable" && this.#state !== "installed") throw new RuntimeUnavailableError();
     this.#error = undefined;
-    let artifact: OpenCodeArtifact;
-    try { artifact = await (this.#options.resolveArtifact ?? resolveOpenCodeArtifact)(); }
-    catch (error) {
-      this.#state = "unavailable";
-      throw error instanceof OpenCodeError ? error : new RuntimeUnavailableError();
-    }
-    if (artifact.version !== OPENCODE_VERSION) {
-      this.#state = "unavailable";
-      throw new VersionMismatchError();
-    }
+    const artifact = await this.#detectInternal();
     this.#state = "installed";
     let retainCredentials = false;
     try {
@@ -260,11 +280,16 @@ export class OpenCodeRuntime {
       const args = ["serve", "--hostname", "127.0.0.1", "--port", String(port)] as const;
       try {
         const readinessTimeoutMs = this.#options.readinessTimeoutMs ?? 10_000;
-        const spawned = await this.#race(
-          Promise.resolve((this.#options.spawn ?? nodeProcessFactory)(artifact.executable, args, { cwd: this.#options.cwd, env })),
-          readinessTimeoutMs,
-        );
-        if (spawned === "timeout") throw new RuntimeUnavailableError();
+        const spawnPromise = Promise.resolve((this.#options.spawn ?? nodeProcessFactory)(artifact.executable, args, { cwd: this.#options.cwd, env }));
+        spawnPromise.catch(() => undefined);
+        const spawned = await this.#race(spawnPromise, readinessTimeoutMs);
+        if (spawned === "timeout") {
+          void spawnPromise.then(
+            (lateProcess) => this.#teardownProcess(lateProcess, this.#options.stopTimeoutMs ?? 6_000).then(() => undefined, () => undefined),
+            () => undefined,
+          );
+          throw new RuntimeUnavailableError();
+        }
         this.#process = spawned;
         this.#port = port;
         this.#stopRequested = false;
@@ -413,29 +438,40 @@ export class OpenCodeRuntime {
     this.#options.onDisconnect?.();
   }
 
-  async #teardownCurrentProcess(): Promise<boolean> {
-    const process = this.#process;
-    if (!process) return true;
-    const timeoutMs = this.#options.stopTimeoutMs ?? 6_000;
+  async #teardownProcess(process: OpenCodeProcess, timeoutMs: number): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
     const remaining = (): number => Math.max(0, deadline - Date.now());
 
     await this.#settle(() => process.stdin.end(), remaining());
-    const wait = process.wait === undefined
+    const exit = process.wait === undefined ? undefined : Promise.resolve().then(() => process.wait!());
+    const wait = exit === undefined
       ? ({ status: "rejected" } as const)
-      : await this.#settle(() => process.wait!(), remaining());
-    let stopped = wait.status === "fulfilled";
-    if (!stopped) {
-      const killed = process.kill === undefined
-        ? ({ status: "rejected" } as const)
-        : await this.#settle(() => process.kill!("SIGKILL"), Math.max(1, timeoutMs));
-      stopped = killed.status === "fulfilled" && killed.value !== false;
+      : await this.#settle(() => exit, remaining());
+    if (wait.status === "fulfilled") {
+      process.dispose?.();
+      return true;
     }
-
-    this.#detachLifecycle(process);
+    const killed = process.kill === undefined
+      ? ({ status: "rejected" } as const)
+      : await this.#settle(() => process.kill!("SIGKILL"), Math.max(1, remaining()));
+    if (killed.status !== "fulfilled" || killed.value === false) {
+      process.dispose?.();
+      return false;
+    }
+    const afterKill = exit === undefined
+      ? ({ status: "rejected" } as const)
+      : await this.#settle(() => exit, Math.max(1, timeoutMs));
     process.dispose?.();
+    return afterKill.status === "fulfilled";
+  }
+
+  async #teardownCurrentProcess(): Promise<boolean> {
+    const process = this.#process;
+    if (!process) return true;
+    const timeoutMs = this.#options.stopTimeoutMs ?? 6_000;
+    this.#detachLifecycle(process);
     this.#process = undefined;
-    return stopped;
+    return this.#teardownProcess(process, timeoutMs);
   }
 
   #clearSpawnEnvironment(): void {

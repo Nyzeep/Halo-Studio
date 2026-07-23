@@ -1,4 +1,9 @@
-import { ProtocolViolationError } from "./errors.js";
+import { basicAuthHeader, type ServerCredentials } from "./auth.js";
+import {
+  AuthenticationFailedError,
+  ProtocolViolationError,
+  TransportDisconnectedError,
+} from "./errors.js";
 
 export type SseSignal =
   | { readonly type: "connected"; readonly data?: unknown }
@@ -9,9 +14,25 @@ export type SseSignal =
 export interface SseOptions {
   readonly onSignal: (signal: SseSignal) => void;
   readonly sampleUnknown?: (event: string) => void;
-  readonly request?: (url: string, init?: RequestInit) => Promise<unknown>;
-  readonly requestUrl?: string;
 }
+
+export type SseFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
+export interface OpenCodeSseConnectionOptions {
+  readonly baseUrl: string;
+  readonly credentials: ServerCredentials;
+  readonly onSignal: (signal: SseSignal) => void;
+  readonly sampleUnknown?: (event: string) => void;
+  readonly fetch?: SseFetch;
+  readonly signal?: AbortSignal;
+}
+
+export interface OpenCodeSseConnection {
+  readonly done: Promise<void>;
+  close(): Promise<void>;
+}
+
+const MAX_UNKNOWN_EVENT_SAMPLES = 10;
 
 function parseData(lines: readonly string[]): unknown {
   const data = lines.join("\n");
@@ -58,7 +79,15 @@ export async function consumeSse(
   stream: AsyncIterable<string | Uint8Array>,
   options: SseOptions,
 ): Promise<void> {
-  if (options.request && options.requestUrl) await options.request(options.requestUrl, { method: "GET", headers: { accept: "text/event-stream" } });
+  let unknownSamples = 0;
+  const boundedOptions: SseOptions = {
+    ...options,
+    sampleUnknown: (event) => {
+      if (unknownSamples >= MAX_UNKNOWN_EVENT_SAMPLES) return;
+      unknownSamples += 1;
+      options.sampleUnknown?.(event);
+    },
+  };
   const decoder = new TextDecoder();
   let buffer = "";
   let event = "";
@@ -66,13 +95,13 @@ export async function consumeSse(
   const processLine = (raw: string): void => {
     const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
     if (line === "") {
-      dispatch(event, dataLines, options);
+      dispatch(event, dataLines, boundedOptions);
       event = "";
       dataLines = [];
       return;
     }
     if (line.startsWith(":")) {
-      if (line.slice(1).trim().toLowerCase() === "heartbeat") options.onSignal({ type: "heartbeat" });
+      if (line.slice(1).trim().toLowerCase() === "heartbeat") boundedOptions.onSignal({ type: "heartbeat" });
       return;
     }
     const separator = line.indexOf(":");
@@ -94,10 +123,95 @@ export async function consumeSse(
     }
     buffer += decoder.decode();
     if (buffer.length > 0) processLine(buffer);
-    if (event !== "" || dataLines.length > 0) dispatch(event, dataLines, options);
+    if (event !== "" || dataLines.length > 0) dispatch(event, dataLines, boundedOptions);
   } finally {
-    options.onSignal({ type: "disconnected" });
+    boundedOptions.onSignal({ type: "disconnected" });
   }
+}
+
+function eventEndpoint(baseUrl: string): string {
+  return `${baseUrl.replace(/\/$/u, "")}/global/event`;
+}
+
+async function* readResponse(reader: ReadableStreamDefaultReader<Uint8Array>): AsyncIterable<Uint8Array> {
+  while (true) {
+    const result = await reader.read();
+    if (result.done) return;
+    yield result.value;
+  }
+}
+
+function cancelBody(response: Response): void {
+  if (!response.body) return;
+  try { response.body.cancel().catch(() => undefined); }
+  catch { /* Cancellation is best effort for rejected handshakes. */ }
+}
+
+export async function connectOpenCodeSse(options: OpenCodeSseConnectionOptions): Promise<OpenCodeSseConnection> {
+  const controller = new AbortController();
+  const fetcher = options.fetch ?? ((url, init) => fetch(url, init));
+  let closeFromCaller: (() => void) | undefined;
+  const abortFromCaller = (): void => {
+    controller.abort();
+    closeFromCaller?.();
+  };
+  if (options.signal?.aborted) controller.abort();
+  else options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+
+  let response: Response;
+  try {
+    response = await fetcher(eventEndpoint(options.baseUrl), {
+      method: "GET",
+      headers: {
+        authorization: basicAuthHeader(options.credentials),
+        accept: "text/event-stream",
+      },
+      signal: controller.signal,
+    });
+  } catch {
+    options.signal?.removeEventListener("abort", abortFromCaller);
+    throw new TransportDisconnectedError();
+  }
+  if (response.status === 401) {
+    cancelBody(response);
+    options.signal?.removeEventListener("abort", abortFromCaller);
+    throw new AuthenticationFailedError();
+  }
+  if (response.status !== 200 || !response.body || controller.signal.aborted) {
+    cancelBody(response);
+    options.signal?.removeEventListener("abort", abortFromCaller);
+    throw new TransportDisconnectedError();
+  }
+
+  let reader: ReadableStreamDefaultReader<Uint8Array>;
+  try { reader = response.body.getReader(); }
+  catch {
+    cancelBody(response);
+    options.signal?.removeEventListener("abort", abortFromCaller);
+    throw new TransportDisconnectedError();
+  }
+  let closeRequested = false;
+  let closePromise: Promise<void> | undefined;
+  const done = consumeSse(readResponse(reader), {
+    onSignal: options.onSignal,
+    ...(options.sampleUnknown === undefined ? {} : { sampleUnknown: options.sampleUnknown }),
+  }).catch((error: unknown) => {
+    if (closeRequested || controller.signal.aborted) return;
+    throw error instanceof ProtocolViolationError ? error : new TransportDisconnectedError();
+  }).finally(() => {
+    options.signal?.removeEventListener("abort", abortFromCaller);
+    try { reader.releaseLock(); } catch { /* The reader may already be released by the platform. */ }
+  });
+  done.catch(() => undefined);
+
+  const close = (): Promise<void> => {
+    closeRequested = true;
+    controller.abort();
+    closePromise ??= Promise.resolve().then(() => reader.cancel()).catch(() => undefined).then(() => done);
+    return closePromise;
+  };
+  closeFromCaller = () => { void close(); };
+  return { done, close };
 }
 
 export { ProtocolViolationError };
