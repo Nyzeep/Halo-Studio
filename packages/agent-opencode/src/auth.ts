@@ -4,7 +4,7 @@ export const OPENCODE_SERVER_USERNAME = "opencode" as const;
 
 export interface ServerCredentials {
   readonly username: typeof OPENCODE_SERVER_USERNAME;
-  readonly password: string;
+  password: string;
 }
 
 /** Credentials stay in the Main runtime and are never part of a public snapshot. */
@@ -24,6 +24,10 @@ export function serverCredentialEnvironment(credentials: ServerCredentials): Rec
     OPENCODE_SERVER_USERNAME: credentials.username,
     OPENCODE_SERVER_PASSWORD: credentials.password,
   };
+}
+
+export function clearServerCredentials(credentials: ServerCredentials): void {
+  credentials.password = "";
 }
 
 export const createCredentials = createServerCredentials;

@@ -74,6 +74,27 @@ describe("OpenCode health handshake", () => {
     })).rejects.toMatchObject({ code: "RuntimeUnavailable" });
   });
 
+  it("includes response body parsing in the total timeout", async () => {
+    const pending = checkHealth({
+      baseUrl: "http://127.0.0.1:43123",
+      credentials,
+      totalTimeoutMs: 5,
+      retryDelayMs: 0,
+      fetch: async () => ({
+        status: 200,
+        json: async () => new Promise<never>(() => undefined),
+      }) as Response,
+    }).then(
+      () => "resolved",
+      (error: unknown) => (error as { code?: string }).code,
+    );
+    const result = await Promise.race([
+      pending,
+      new Promise<string>((resolve) => setTimeout(() => resolve("test-harness-timeout"), 50)),
+    ]);
+    expect(result).toBe("RuntimeUnavailable");
+  });
+
   it("never exposes raw response details in stable errors", () => {
     const error = new OpenCodeHealthError("RuntimeUnavailable");
     expect(error.message).not.toContain(credentials.password);

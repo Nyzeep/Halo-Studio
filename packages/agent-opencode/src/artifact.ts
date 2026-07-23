@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { realpath, stat, readFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { OPENCODE_VERSION } from "./health.js";
 import { RuntimeUnavailableError, VersionMismatchError } from "./errors.js";
 
@@ -17,8 +17,8 @@ export interface ArtifactOptions {
 
 function candidates(root: string, platform: NodeJS.Platform, arch: string): string[] {
   const names = platform === "win32"
-    ? ["opencode.exe", "opencode-win32-x64.exe", `opencode-${platform}-${arch}.exe`]
-    : ["opencode", `opencode-${platform}-${arch}`];
+    ? ["opencode.exe", `opencode-${platform}-${arch}.exe`]
+    : ["opencode.exe", "opencode", `opencode-${platform}-${arch}`];
   return names.map((name) => join(root, "bin", name));
 }
 
@@ -53,10 +53,8 @@ export async function resolveOpenCodeArtifact(options: ArtifactOptions = {}): Pr
       if (!info.isFile()) continue;
       const executable = await realpath(candidate);
       const rootReal = await realpath(root);
-      const separator = platform === "win32" ? "\\" : "/";
-      const executableKey = platform === "win32" ? executable.toLowerCase() : executable;
-      const rootKey = platform === "win32" ? rootReal.toLowerCase() : rootReal;
-      if (!executableKey.startsWith(`${rootKey}${separator}`)) continue;
+      const relativePath = relative(rootReal, executable);
+      if (relativePath === "" || relativePath === ".." || relativePath.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) || isAbsolute(relativePath)) continue;
       return { executable, version: OPENCODE_VERSION };
     } catch { /* try next bundled candidate */ }
   }

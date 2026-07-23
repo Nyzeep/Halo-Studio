@@ -49,22 +49,21 @@ export async function checkHealth(options: HealthOptions): Promise<HealthResult>
   while (now() - started <= totalTimeoutMs) {
     attempts += 1;
     try {
-      const response = await withTimeout(fetcher(endpoint(options.baseUrl), {
-        method: "GET",
-        headers: { authorization: basicAuthHeader(options.credentials), accept: "application/json" },
-      }), Math.max(1, totalTimeoutMs - (now() - started)));
-      if (response.status === 401) throw new AuthenticationFailedError();
-      if (response.status >= 500 || response.status === 408 || response.status === 429) {
-        if (now() - started >= totalTimeoutMs) throw new RuntimeUnavailableError();
-      } else if (response.status !== 200) {
-        throw new RuntimeUnavailableError();
-      } else {
+      const result = await withTimeout((async (): Promise<HealthResult | "retry"> => {
+        const response = await fetcher(endpoint(options.baseUrl), {
+          method: "GET",
+          headers: { authorization: basicAuthHeader(options.credentials), accept: "application/json" },
+        });
+        if (response.status === 401) throw new AuthenticationFailedError();
+        if (response.status >= 500 || response.status === 408 || response.status === 429) return "retry";
+        if (response.status !== 200) throw new RuntimeUnavailableError();
         let body: unknown;
         try { body = await response.json(); } catch { throw new ProtocolViolationError(); }
         if (!isRecord(body) || typeof body.version !== "string") throw new ProtocolViolationError();
         if (body.version !== OPENCODE_VERSION) throw new VersionMismatchError();
         return { version: OPENCODE_VERSION };
-      }
+      })(), Math.max(1, totalTimeoutMs - (now() - started)));
+      if (result !== "retry") return result;
     } catch (error) {
       if (error instanceof OpenCodeError && error.code !== "RuntimeUnavailable") throw error;
       if (now() - started >= totalTimeoutMs) throw new RuntimeUnavailableError();
