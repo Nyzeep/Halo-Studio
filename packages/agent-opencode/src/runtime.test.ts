@@ -541,6 +541,28 @@ describe("OpenCode runtime", () => {
     expect(runtime.snapshot()).toEqual({ state: "crashed", error: { code: "RuntimeUnavailable" } });
   });
 
+  it("retains an unexited child for repeated failed termination attempts", async () => {
+    const credentials = { username: "opencode" as const, password: "retained-stop-canary" };
+    const processes: FakeProcess[] = [];
+    const runtime = new OpenCodeRuntime({
+      resolveArtifact: testArtifact(), credentialsFactory: () => credentials,
+      cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted",
+      spawn: processFactory({ processes, waitForever: true }), checkHealth: async () => ({ version: "1.18.4" }), stopTimeoutMs: 5,
+    });
+    await runtime.start();
+    const child = processes[0]!;
+
+    await expect(runtime.stop()).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+    expect(child.killed).toEqual(["SIGKILL"]);
+    expect(child.disposed).toBe(false);
+    expect(credentials.password).toBe("");
+
+    await expect(runtime.stop()).rejects.toMatchObject({ code: "RuntimeUnavailable" });
+    expect(child.killed).toEqual(["SIGKILL", "SIGKILL"]);
+    expect(child.disposed).toBe(false);
+    expect(runtime.snapshot()).toEqual({ state: "crashed", error: { code: "RuntimeUnavailable" } });
+  });
+
   it("reports stopped only after observing a delayed post-kill exit", async () => {
     const processes: FakeProcess[] = [];
     const runtime = new OpenCodeRuntime({ resolveArtifact: testArtifact(), cwd: "C:\\workspace", hostEnvironment: { PATH: "x" }, trust: "trusted", spawn: processFactory({ processes }), checkHealth: async () => ({ version: "1.18.4" }), stopTimeoutMs: 5 });
@@ -583,6 +605,25 @@ describe("OpenCode runtime", () => {
     for (let index = 0; index < 1_000; index += 1) child.stdout.emit("data", Buffer.alloc(1_024));
     port.dispose?.();
     expect(child.stdout.listenerCount("data")).toBe(0);
+  });
+
+  it("bounds default-adapter stdout decoding before appending an overlong line", async () => {
+    const child = createFakeNodeChild();
+    const factory = runtimeModule.createNodeProcessFactory(() => child);
+    const port = factory("C:\\bundle\\bin\\opencode.exe", [], { cwd: "C:\\workspace", env: {} }) as OpenCodeProcess;
+    const overlong = Buffer.alloc(8_192, "a");
+    const originalToString = overlong.toString.bind(overlong);
+    let decodedBeyondLimit = false;
+    overlong.toString = (encoding, start, end) => {
+      if ((end ?? overlong.length) - (start ?? 0) > 4_096) decodedBeyondLimit = true;
+      return originalToString(encoding, start, end);
+    };
+
+    child.stdout.emit("data", overlong);
+    expect(decodedBeyondLimit).toBe(false);
+    child.stdout.emit("data", "\nserver listening on http://127.0.0.1:43199\n");
+    await expect(port.listeningAddress).resolves.toBe(43199);
+    port.dispose?.();
   });
 
   it("maps default child-process errors without exposing stderr or paths", async () => {

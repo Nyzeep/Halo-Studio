@@ -108,28 +108,57 @@ export function createNodeProcessFactory(spawn: NodeSpawn = defaultNodeSpawn): P
       listeningAddressSettled = true;
       resolveListeningAddress(port);
     };
-    const onStdout = (chunk: unknown): void => {
-      let text: string;
-      try { text = String(chunk); }
-      catch { return; }
-      stdout = `${stdout}${text}`;
-      let newline = stdout.indexOf("\n");
-      while (newline >= 0) {
-        const rawLine = stdout.slice(0, newline);
-        stdout = stdout.slice(newline + 1);
+    const consumeStdout = (
+      length: number,
+      findNewline: (offset: number) => number,
+      read: (start: number, end: number) => string,
+    ): void => {
+      let offset = 0;
+      while (offset < length) {
+        const newline = findNewline(offset);
         if (discardingStdoutLine) {
+          if (newline < 0) return;
           discardingStdoutLine = false;
-        } else {
+          offset = newline + 1;
+          continue;
+        }
+        const available = MAX_STARTUP_STDOUT - stdout.length;
+        if (newline >= 0) {
+          if (newline - offset > available) {
+            stdout = "";
+            offset = newline + 1;
+            continue;
+          }
+          const rawLine = `${stdout}${read(offset, newline)}`;
+          stdout = "";
           const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
           const port = loopbackPortFromListeningLine(line);
           if (port !== undefined) settleListeningAddress(port);
+          offset = newline + 1;
+          continue;
         }
-        newline = stdout.indexOf("\n");
-      }
-      if (stdout.length > MAX_STARTUP_STDOUT) {
+        if (length - offset <= available) {
+          stdout = `${stdout}${read(offset, length)}`;
+          return;
+        }
         stdout = "";
         discardingStdoutLine = true;
+        return;
       }
+    };
+    const onStdout = (chunk: unknown): void => {
+      if (typeof chunk === "string") {
+        consumeStdout(chunk.length, (offset) => chunk.indexOf("\n", offset), (start, end) => chunk.slice(start, end));
+        return;
+      }
+      if (!Buffer.isBuffer(chunk)) return;
+      try {
+        consumeStdout(
+          chunk.length,
+          (offset) => chunk.indexOf(0x0a, offset),
+          (start, end) => chunk.toString("utf8", start, end),
+        );
+      } catch { /* Ignore malformed stream chunks. */ }
     };
     const onStderr = (chunk: unknown): void => {
       if (stderr.length >= MAX_STARTUP_STDERR) return;
@@ -343,7 +372,10 @@ export class OpenCodeRuntime {
         const spawned = await this.#race(spawnPromise, readinessTimeoutMs);
         if (spawned === "timeout") {
           void spawnPromise.then(
-            (lateProcess) => this.#teardownProcess(lateProcess, this.#options.stopTimeoutMs ?? 6_000).then(() => undefined, () => undefined),
+            (lateProcess) => this.#teardownProcess(lateProcess, this.#options.stopTimeoutMs ?? 6_000).then(
+              (stopped) => { if (stopped) lateProcess.dispose?.(); },
+              () => undefined,
+            ),
             () => undefined,
           );
           throw new RuntimeUnavailableError();
@@ -371,6 +403,8 @@ export class OpenCodeRuntime {
             if (attempt < 2) continue;
             break;
           }
+          const process = this.#process;
+          if (process) this.#releaseCurrentProcess(process);
           throw new RuntimeUnavailableError();
         }
         if (announced.port === undefined) throw new RuntimeUnavailableError();
@@ -398,6 +432,8 @@ export class OpenCodeRuntime {
             if (attempt < 2) continue;
             break;
           }
+          const process = this.#process;
+          if (process) this.#releaseCurrentProcess(process);
           throw new RuntimeUnavailableError();
         }
         if (this.#state !== "starting" || this.#processExited) throw new TransportDisconnectedError();
@@ -537,7 +573,15 @@ export class OpenCodeRuntime {
   #attachLifecycle(process: OpenCodeProcess): void {
     this.#processExited = false;
     this.#exitListener = () => { this.#processExited = true; this.#onExit(); };
-    this.#errorListener = () => { this.#processExited = true; this.#onExit(); };
+    this.#errorListener = () => {
+      this.#processExited = true;
+      if (this.#state === "starting") {
+        this.#releaseCurrentProcess(process);
+        this.#clearSecrets();
+        return;
+      }
+      this.#onExit();
+    };
     process.process?.once("exit", this.#exitListener);
     process.process?.once("error", this.#errorListener);
   }
@@ -549,6 +593,12 @@ export class OpenCodeRuntime {
     this.#errorListener = undefined;
   }
 
+  #releaseCurrentProcess(process: OpenCodeProcess): void {
+    this.#detachLifecycle(process);
+    if (this.#process === process) this.#process = undefined;
+    process.dispose?.();
+  }
+
   #onExit(): void {
     if (this.#state === "starting") {
       // The startup continuation runs later; clear the shared credential object before it can begin health I/O.
@@ -558,11 +608,7 @@ export class OpenCodeRuntime {
     if (this.#stopRequested || this.#state === "stopping" || this.#state === "stopped") return;
     this.#acceptSse = false;
     const process = this.#process;
-    if (process) {
-      this.#detachLifecycle(process);
-      process.dispose?.();
-    }
-    this.#process = undefined;
+    if (process) this.#releaseCurrentProcess(process);
     this.#state = "crashed";
     this.#error = new TransportDisconnectedError();
     this.#clearRuntimeFields(false);
@@ -597,21 +643,14 @@ export class OpenCodeRuntime {
     const wait = exit === undefined
       ? ({ status: "rejected" } as const)
       : await this.#settle(() => exit, remaining());
-    if (wait.status === "fulfilled") {
-      process.dispose?.();
-      return true;
-    }
+    if (wait.status === "fulfilled") return true;
     const killed = process.kill === undefined
       ? ({ status: "rejected" } as const)
       : await this.#settle(() => process.kill!("SIGKILL"), Math.max(1, remaining()));
-    if (killed.status !== "fulfilled" || killed.value === false) {
-      process.dispose?.();
-      return false;
-    }
+    if (killed.status !== "fulfilled" || killed.value === false) return false;
     const afterKill = exit === undefined
       ? ({ status: "rejected" } as const)
       : await this.#settle(() => exit, Math.max(1, timeoutMs));
-    process.dispose?.();
     return afterKill.status === "fulfilled";
   }
 
@@ -619,9 +658,10 @@ export class OpenCodeRuntime {
     const process = this.#process;
     if (!process) return true;
     const timeoutMs = this.#options.stopTimeoutMs ?? 6_000;
-    this.#detachLifecycle(process);
-    this.#process = undefined;
-    return this.#teardownProcess(process, timeoutMs);
+    const stopped = await this.#teardownProcess(process, timeoutMs);
+    if (!stopped) return false;
+    this.#releaseCurrentProcess(process);
+    return true;
   }
 
   #clearSpawnEnvironment(): void {

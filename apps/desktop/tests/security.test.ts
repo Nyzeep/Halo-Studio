@@ -231,7 +231,7 @@ describe("workspace lifecycle security", () => {
     const workspaceId = "a".repeat(64);
     const original = { id: workspaceId, rootPath, realPath: rootPath, trustState: "trusted" as const };
     const replacement = { id: "b".repeat(64), rootPath, realPath: replacementPath, trustState: "trusted" as const };
-    let opens = 0;
+    let replacementActive = false;
     const runtime = {
       state: "unavailable" as const,
       stopCalls: 0,
@@ -251,16 +251,14 @@ describe("workspace lifecycle security", () => {
           decryptString: (value) => value.toString("utf8"),
         },
         hostEnvironment: { PATH: "x" },
-        openWorkspace: async () => {
-          opens += 1;
-          return opens === 1 ? original : replacement;
-        },
+        openWorkspace: async () => replacementActive ? replacement : original,
         createOpenCodeRuntime: () => runtime,
       } as never);
 
       const candidate = await services.handlers["workspace.pick"]({});
       const workspace = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
-      await services.handlers["runtime.snapshot"]({ workspaceId: workspace.id });
+      await services.handlers["runtime.probe"]({ workspaceId: workspace.id });
+      replacementActive = true;
 
       await expect(services.handlers["workspace.trust"]({ workspaceId: workspace.id, trustState: "trusted" })).rejects.toMatchObject({
         code: "ProtocolViolation",
@@ -282,7 +280,7 @@ describe("workspace lifecycle security", () => {
     const workspaceId = "c".repeat(64);
     const original = { id: workspaceId, rootPath, realPath: rootPath, trustState: "trusted" as const };
     const replacement = { id: "d".repeat(64), rootPath, realPath: replacementPath, trustState: "trusted" as const };
-    let opens = 0;
+    let replacementActive = false;
     const runtime = {
       state: "unavailable" as "unavailable" | "healthy" | "stopped",
       startCalls: 0,
@@ -303,16 +301,14 @@ describe("workspace lifecycle security", () => {
           decryptString: (value) => value.toString("utf8"),
         },
         hostEnvironment: { PATH: "x" },
-        openWorkspace: async () => {
-          opens += 1;
-          return opens === 1 ? original : replacement;
-        },
+        openWorkspace: async () => replacementActive ? replacement : original,
         createOpenCodeRuntime: () => runtime,
       } as never);
 
       const candidate = await services.handlers["workspace.pick"]({});
       const workspace = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
-      await services.handlers["runtime.snapshot"]({ workspaceId: workspace.id });
+      await services.handlers["runtime.probe"]({ workspaceId: workspace.id });
+      replacementActive = true;
 
       await expect(services.handlers["runtime.start"]({ workspaceId: workspace.id, agentKind: "opencode" })).rejects.toMatchObject({
         code: "ProtocolViolation",
@@ -354,14 +350,14 @@ describe("workspace lifecycle security", () => {
         openWorkspace: async () => workspace,
         workspaceIdentity: async () => {
           identityReads += 1;
-          return identityReads === 1 ? { device: 1n, inode: 101n } : { device: 1n, inode: 202n };
+          return identityReads <= 2 ? { device: 1n, inode: 101n } : { device: 1n, inode: 202n };
         },
         createOpenCodeRuntime: () => runtime,
       } as never);
 
       const candidate = await services.handlers["workspace.pick"]({});
       const opened = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
-      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+      await services.handlers["runtime.probe"]({ workspaceId: opened.id });
 
       await expect(services.handlers["workspace.trust"]({ workspaceId: opened.id, trustState: "trusted" })).rejects.toMatchObject({
         code: "ProtocolViolation",
@@ -404,14 +400,14 @@ describe("workspace lifecycle security", () => {
         openWorkspace: async () => workspace,
         workspaceIdentity: async () => {
           identityReads += 1;
-          return identityReads === 1 ? { device: 1n, inode: 101n } : { device: 1n, inode: 202n };
+          return identityReads <= 2 ? { device: 1n, inode: 101n } : { device: 1n, inode: 202n };
         },
         createOpenCodeRuntime: () => runtime,
       } as never);
 
       const candidate = await services.handlers["workspace.pick"]({});
       const opened = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
-      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+      await services.handlers["runtime.probe"]({ workspaceId: opened.id });
 
       await expect(services.handlers["runtime.start"]({ workspaceId: opened.id, agentKind: "opencode" })).rejects.toMatchObject({
         code: "ProtocolViolation",
@@ -464,7 +460,7 @@ describe("workspace lifecycle security", () => {
         openWorkspace: async () => workspace,
         workspaceIdentity: async () => {
           identityReads += 1;
-          return identityReads === 1 ? { device: 1n, inode: 101n } : { device: 1n, inode: 202n };
+          return identityReads <= 2 ? { device: 1n, inode: 101n } : { device: 1n, inode: 202n };
         },
         createOpenCodeRuntime: () => {
           runtimeCreations += 1;
@@ -474,7 +470,7 @@ describe("workspace lifecycle security", () => {
 
       const firstCandidate = await services.handlers["workspace.pick"]({});
       const opened = await services.handlers["workspace.open"]({ selectionId: firstCandidate!.selectionId });
-      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+      await services.handlers["runtime.probe"]({ workspaceId: opened.id });
 
       const secondCandidate = await services.handlers["workspace.pick"]({});
       await services.handlers["workspace.open"]({ selectionId: secondCandidate!.selectionId });
@@ -517,7 +513,7 @@ describe("workspace lifecycle security", () => {
         openWorkspace: async () => workspace,
         workspaceIdentity: async () => {
           identityReads += 1;
-          if (identityReads === 1) return { device: 1n, inode: 101n };
+          if (identityReads <= 2) return { device: 1n, inode: 101n };
           throw new Error("identity unavailable");
         },
         createOpenCodeRuntime: () => runtime,
@@ -525,7 +521,7 @@ describe("workspace lifecycle security", () => {
 
       const firstCandidate = await services.handlers["workspace.pick"]({});
       const opened = await services.handlers["workspace.open"]({ selectionId: firstCandidate!.selectionId });
-      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+      await services.handlers["runtime.probe"]({ workspaceId: opened.id });
 
       const secondCandidate = await services.handlers["workspace.pick"]({});
       await expect(services.handlers["workspace.open"]({ selectionId: secondCandidate!.selectionId })).rejects.toMatchObject({
@@ -577,10 +573,10 @@ describe("workspace lifecycle security", () => {
 
       const candidate = await services.handlers["workspace.pick"]({});
       const opened = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
-      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+      await services.handlers["runtime.probe"]({ workspaceId: opened.id });
 
       await expect(services.handlers["workspace.trust"]({ workspaceId: opened.id, trustState: "untrusted" })).rejects.toMatchObject({ code: "RuntimeUnavailable" });
-      expect(observedTrustStates).toEqual(["trusted", "trusted"]);
+      expect(observedTrustStates).toEqual(["trusted", "trusted", "trusted"]);
       await expect(services.handlers["runtime.start"]({ workspaceId: opened.id, agentKind: "opencode" })).rejects.toMatchObject({ code: "RuntimeUnavailable" });
       const retryCandidate = await services.handlers["workspace.pick"]({});
       await expect(services.handlers["workspace.open"]({ selectionId: retryCandidate!.selectionId })).rejects.toMatchObject({ code: "RuntimeUnavailable" });
@@ -639,7 +635,7 @@ describe("workspace lifecycle security", () => {
 
       const candidate = await services.handlers["workspace.pick"]({});
       const opened = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
-      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+      await services.handlers["runtime.probe"]({ workspaceId: opened.id });
 
       const revoking = services.handlers["workspace.trust"]({ workspaceId: opened.id, trustState: "untrusted" });
       const stopStarted = await Promise.race([
@@ -658,6 +654,271 @@ describe("workspace lifecycle security", () => {
       expect(runtime.startCalls).toBe(0);
     } finally {
       releaseStop?.();
+      await services?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not reuse a stale probe runtime after a same-id workspace replacement", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-probe-replacement-"));
+    const rootPath = join(root, "selected-root");
+    const replacementPath = join(root, "replacement-root");
+    await Promise.all([mkdir(rootPath), mkdir(replacementPath)]);
+    const workspaceId = "6".repeat(64);
+    const original = { id: workspaceId, rootPath, realPath: rootPath, trustState: "trusted" as const };
+    const replacement = { id: workspaceId, rootPath, realPath: replacementPath, trustState: "trusted" as const };
+    let replacementActive = false;
+    let releaseDetect!: () => void;
+    let signalDetect!: () => void;
+    const detectStarted = new Promise<void>((resolve) => { signalDetect = resolve; });
+    const detectGate = new Promise<void>((resolve) => { releaseDetect = resolve; });
+    const startedCwds: string[] = [];
+    const stoppedCwds: string[] = [];
+    let runtimeCreations = 0;
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath: join(root, "user-data"),
+        picker: { showOpenDialog: async () => ({ canceled: false, filePaths: [rootPath] }) },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: "x" },
+        openWorkspace: async () => replacementActive ? replacement : original,
+        createOpenCodeRuntime: ({ cwd }) => {
+          const ordinal = runtimeCreations;
+          runtimeCreations += 1;
+          const runtime = {
+            state: "unavailable" as "unavailable" | "healthy" | "stopped",
+            async detect() {
+              if (ordinal === 0) {
+                signalDetect();
+                await detectGate;
+              }
+              return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const };
+            },
+            async start() { startedCwds.push(cwd); runtime.state = "healthy"; },
+            async stop() { stoppedCwds.push(cwd); runtime.state = "stopped"; },
+          };
+          return runtime;
+        },
+      } as never);
+
+      const candidate = await services.handlers["workspace.pick"]({});
+      const opened = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
+      const probing = services.handlers["runtime.probe"]({ workspaceId: opened.id });
+      const entered = await Promise.race([
+        detectStarted.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
+      ]);
+      expect(entered).toBe(true);
+
+      replacementActive = true;
+      const replacementCandidate = await services.handlers["workspace.pick"]({});
+      const reopening = services.handlers["workspace.open"]({ selectionId: replacementCandidate!.selectionId });
+      await Promise.race([
+        reopening.then(() => undefined),
+        new Promise<void>((resolve) => setTimeout(resolve, 250)),
+      ]);
+      releaseDetect();
+      await probing;
+      await expect(reopening).resolves.toMatchObject({ realPath: replacementPath });
+
+      await services.handlers["runtime.start"]({ workspaceId, agentKind: "opencode" });
+      expect(stoppedCwds).toContain(rootPath);
+      expect(startedCwds).toEqual([replacementPath]);
+    } finally {
+      releaseDetect?.();
+      await services?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("serializes runtime stop with a concurrent trust change", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-stop-trust-"));
+    const rootPath = join(root, "selected-root");
+    await mkdir(rootPath);
+    const workspace = { id: "5".repeat(64), rootPath, realPath: rootPath, trustState: "trusted" as const };
+    let releaseStop!: () => void;
+    let signalStop!: () => void;
+    const stopEntered = new Promise<void>((resolve) => { signalStop = resolve; });
+    const stopGate = new Promise<void>((resolve) => { releaseStop = resolve; });
+    let stopping = false;
+    let stopCalls = 0;
+    let concurrentStops = 0;
+    let signalSecondStop!: () => void;
+    const secondStopEntered = new Promise<void>((resolve) => { signalSecondStop = resolve; });
+    const runtime = {
+      state: "unavailable" as "unavailable" | "stopped",
+      async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+      async start() { throw new Error("start should not run"); },
+      async stop() {
+        stopCalls += 1;
+        if (stopCalls === 2) signalSecondStop();
+        if (stopping) concurrentStops += 1;
+        stopping = true;
+        signalStop();
+        await stopGate;
+        stopping = false;
+        runtime.state = "stopped";
+      },
+    };
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath: join(root, "user-data"),
+        picker: { showOpenDialog: async () => ({ canceled: false, filePaths: [rootPath] }) },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: "x" },
+        openWorkspace: async () => workspace,
+        createOpenCodeRuntime: () => runtime,
+      } as never);
+
+      const candidate = await services.handlers["workspace.pick"]({});
+      const opened = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
+      await services.handlers["runtime.probe"]({ workspaceId: opened.id });
+
+      const stoppingRuntime = services.handlers["runtime.stop"]({ workspaceId: opened.id, agentKind: "opencode" });
+      const entered = await Promise.race([
+        stopEntered.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
+      ]);
+      expect(entered).toBe(true);
+      const trusting = services.handlers["workspace.trust"]({ workspaceId: opened.id, trustState: "untrusted" });
+      await Promise.race([
+        secondStopEntered,
+        new Promise<void>((resolve) => setTimeout(resolve, 250)),
+      ]);
+      expect(concurrentStops).toBe(0);
+
+      releaseStop();
+      await Promise.all([stoppingRuntime, trusting]);
+      expect(concurrentStops).toBe(0);
+    } finally {
+      releaseStop?.();
+      await services?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not allocate an OpenCode runtime for snapshot or stop", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-read-only-runtime-"));
+    const rootPath = join(root, "selected-root");
+    await mkdir(rootPath);
+    const workspace = { id: "4".repeat(64), rootPath, realPath: rootPath, trustState: "trusted" as const };
+    let runtimeCreations = 0;
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath: join(root, "user-data"),
+        picker: { showOpenDialog: async () => ({ canceled: false, filePaths: [rootPath] }) },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: "x" },
+        openWorkspace: async () => workspace,
+        createOpenCodeRuntime: () => {
+          runtimeCreations += 1;
+          return {
+            state: "unavailable" as const,
+            async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+            async start() { throw new Error("start should not run"); },
+            async stop() { throw new Error("stop should not run"); },
+          };
+        },
+      } as never);
+
+      const candidate = await services.handlers["workspace.pick"]({});
+      const opened = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
+      await services.handlers["runtime.snapshot"]({ workspaceId: opened.id });
+      await services.handlers["runtime.stop"]({ workspaceId: opened.id, agentKind: "opencode" });
+      expect(runtimeCreations).toBe(0);
+    } finally {
+      await services?.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("waits for an in-flight runtime start before disposal and rejects new handlers", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-dispose-start-"));
+    const rootPath = join(root, "selected-root");
+    await mkdir(rootPath);
+    const workspace = { id: "3".repeat(64), rootPath, realPath: rootPath, trustState: "trusted" as const };
+    let releaseStart!: () => void;
+    let signalStart!: () => void;
+    const startEntered = new Promise<void>((resolve) => { signalStart = resolve; });
+    const startGate = new Promise<void>((resolve) => { releaseStart = resolve; });
+    const runtime = {
+      state: "unavailable" as "unavailable" | "healthy" | "stopped",
+      startCalls: 0,
+      stopCalls: 0,
+      async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+      async start() {
+        runtime.startCalls += 1;
+        signalStart();
+        await startGate;
+        runtime.state = "healthy";
+      },
+      async stop() { runtime.stopCalls += 1; runtime.state = "stopped"; },
+    };
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+    let starting: Promise<unknown> | undefined;
+    let disposing: Promise<void> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath: join(root, "user-data"),
+        picker: { showOpenDialog: async () => ({ canceled: false, filePaths: [rootPath] }) },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: "x" },
+        openWorkspace: async () => workspace,
+        createOpenCodeRuntime: () => runtime,
+      } as never);
+
+      const candidate = await services.handlers["workspace.pick"]({});
+      const opened = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
+      starting = services.handlers["runtime.start"]({ workspaceId: opened.id, agentKind: "opencode" });
+      const entered = await Promise.race([
+        startEntered.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
+      ]);
+      expect(entered).toBe(true);
+
+      disposing = services.dispose();
+      let disposed = false;
+      void disposing.then(() => { disposed = true; });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(disposed).toBe(false);
+      await expect(services.handlers["runtime.snapshot"]({ workspaceId: opened.id })).rejects.toMatchObject({
+        code: "RuntimeUnavailable",
+      });
+
+      releaseStart();
+      await starting;
+      await disposing;
+      expect(runtime.startCalls).toBe(1);
+      expect(runtime.stopCalls).toBe(1);
+      expect(runtime.state).toBe("stopped");
+      services = undefined;
+    } finally {
+      releaseStart?.();
+      await starting?.catch(() => undefined);
+      await disposing?.catch(() => undefined);
       await services?.dispose();
       await rm(root, { recursive: true, force: true });
     }
