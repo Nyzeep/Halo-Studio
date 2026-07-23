@@ -2,7 +2,7 @@ import {
   createOpenCodeRuntime,
 } from "@halo-studio/agent-opencode";
 import {
-  createPiRuntime,
+  detectPi,
 } from "@halo-studio/agent-pi";
 import {
   type AgentKind,
@@ -62,14 +62,17 @@ export interface CreateDesktopServicesOptions {
   readonly hostEnvironment: Readonly<Record<string, string | undefined>>;
 }
 
-type PiRuntimeInstance = ReturnType<typeof createPiRuntime>;
 type OpenCodeRuntimeInstance = ReturnType<typeof createOpenCodeRuntime>;
-type Runtime = PiRuntimeInstance | OpenCodeRuntimeInstance;
 
 interface RuntimeMetadata {
   readonly source: RuntimeBinding["source"];
   readonly executable?: string;
   readonly version?: string;
+}
+
+interface PiBindingState {
+  readonly health: RuntimeBinding["health"];
+  readonly metadata: RuntimeMetadata;
 }
 
 const unavailableCapabilities = {
@@ -88,17 +91,8 @@ const unavailableCapabilities = {
   usage: { supported: false, channel: "unavailable", restartRequired: false, reason: "Capability is not exposed by the desktop bridge yet." },
 } as const;
 
-function runtimeHealth(kind: AgentKind, runtime: Runtime): RuntimeBinding["health"] {
+function openCodeRuntimeHealth(runtime: OpenCodeRuntimeInstance): RuntimeBinding["health"] {
   const state = runtime.state;
-  if (kind === "pi") {
-    if (state === "ready") return "ready";
-    if (state === "starting") return "starting";
-    if (state === "stopping") return "stopping";
-    if (state === "stopped") return "stopped";
-    if (state === "crashed") return "crashed";
-    if (state === "detected") return "detected";
-    return "unavailable";
-  }
   if (state === "healthy") return "healthy";
   if (state === "starting") return "starting";
   if (state === "stopping") return "stopping";
@@ -175,40 +169,33 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
   const config = new ConfigTransaction(registry, { vault });
   const selections = new Map<string, string>();
   const workspaces = new Map<string, Workspace>();
-  const runtimes = new Map<string, Runtime>();
-  const runtimeMetadata = new Map<string, RuntimeMetadata>();
+  const openCodeRuntimes = new Map<string, OpenCodeRuntimeInstance>();
+  const openCodeMetadata = new Map<string, RuntimeMetadata>();
+  const piBindingStates = new Map<string, PiBindingState>();
 
   const getWorkspace = (workspaceId: string): Workspace => {
     const workspace = workspaces.get(workspaceId);
     if (workspace === undefined) throw workspaceNotFound();
     return workspace;
   };
-  const runtimeKey = (workspaceId: string, kind: AgentKind): string => `${workspaceId}:${kind}`;
-  const getRuntime = (workspace: Workspace, kind: AgentKind): Runtime => {
-    const key = runtimeKey(workspace.id, kind);
-    const existing = runtimes.get(key);
+  const getOpenCodeRuntime = (workspace: Workspace): OpenCodeRuntimeInstance => {
+    const existing = openCodeRuntimes.get(workspace.id);
     if (existing !== undefined) return existing;
-    const runtime = kind === "pi"
-      ? createPiRuntime({
-          cwd: workspace.realPath,
-          session: `halo-${workspace.id}`,
-          model: "unconfigured",
-          thinking: "default",
-          trust: workspace.trustState,
-          hostEnvironment: safeHostEnvironment(options.hostEnvironment, piRuntimeDirectory),
-        })
-      : createOpenCodeRuntime({
-          cwd: workspace.realPath,
-          trust: workspace.trustState,
-          hostEnvironment: safeHostEnvironment(options.hostEnvironment, openCodeRuntimeDirectory),
-        });
-    runtimes.set(key, runtime);
+    const runtime = createOpenCodeRuntime({
+      cwd: workspace.realPath,
+      trust: workspace.trustState,
+      hostEnvironment: safeHostEnvironment(options.hostEnvironment, openCodeRuntimeDirectory),
+    });
+    openCodeRuntimes.set(workspace.id, runtime);
     return runtime;
   };
-  const binding = (workspace: Workspace, kind: AgentKind): RuntimeBinding => {
-    const key = runtimeKey(workspace.id, kind);
-    const runtime = getRuntime(workspace, kind);
-    return createRuntimeBinding(kind, runtimeHealth(kind, runtime), runtimeMetadata.get(key));
+  const openCodeBinding = (workspace: Workspace): RuntimeBinding => {
+    const runtime = getOpenCodeRuntime(workspace);
+    return createRuntimeBinding("opencode", openCodeRuntimeHealth(runtime), openCodeMetadata.get(workspace.id));
+  };
+  const piBinding = (workspace: Workspace): RuntimeBinding => {
+    const state = piBindingStates.get(workspace.id);
+    return createRuntimeBinding("pi", state?.health ?? "unavailable", state?.metadata);
   };
 
   const handlers: IpcServiceMap = {
@@ -230,13 +217,11 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
     "workspace.snapshot": async () => [...workspaces.values()].map((workspace) => ({ ...workspace })),
     "workspace.trust": async ({ workspaceId, trustState }) => {
       const workspace = getWorkspace(workspaceId);
-      for (const kind of ["pi", "opencode"] as const) {
-        const key = runtimeKey(workspace.id, kind);
-        const runtime = runtimes.get(key);
-        if (runtime !== undefined) await runtime.stop();
-        runtimes.delete(key);
-        runtimeMetadata.delete(key);
-      }
+      const runtime = openCodeRuntimes.get(workspace.id);
+      if (runtime !== undefined) await runtime.stop();
+      openCodeRuntimes.delete(workspace.id);
+      openCodeMetadata.delete(workspace.id);
+      piBindingStates.delete(workspace.id);
       await trustStore.setDecision(workspace.realPath, trustState as TrustState);
       const updated = { ...workspace, trustState };
       workspaces.set(workspaceId, updated);
@@ -246,49 +231,66 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
       const selected = workspaceId === undefined ? [...workspaces.values()] : [getWorkspace(workspaceId)];
       const result: RuntimeBinding[] = [];
       for (const workspace of selected) {
-        for (const kind of ["pi", "opencode"] as const) {
-          const runtime = getRuntime(workspace, kind);
-          try {
-            if (kind === "pi") {
-              const detection = await (runtime as PiRuntimeInstance).detect();
-              runtimeMetadata.set(runtimeKey(workspace.id, kind), {
-                source: detection.source,
-                ...(detection.executable === undefined ? {} : { executable: detection.executable }),
-                ...(detection.version === undefined ? {} : { version: detection.version }),
-              });
-            } else {
-              const artifact = await (runtime as OpenCodeRuntimeInstance).detect();
-              runtimeMetadata.set(runtimeKey(workspace.id, kind), {
-                source: "bundled",
-                executable: artifact.executable,
-                version: artifact.version,
-              });
-            }
-          } catch {
-            // Probe reports an unavailable binding; raw runtime failures never cross IPC.
-          }
-          result.push(binding(workspace, kind));
+        try {
+          const detection = await detectPi({
+            cwd: workspace.realPath,
+            hostEnvironment: safeHostEnvironment(options.hostEnvironment, piRuntimeDirectory),
+          });
+          piBindingStates.set(workspace.id, detection.status === "detected"
+            ? {
+                health: "detected",
+                metadata: {
+                  source: detection.source,
+                  ...(detection.executable === undefined ? {} : { executable: detection.executable }),
+                  ...(detection.version === undefined ? {} : { version: detection.version }),
+                },
+              }
+            : { health: "unavailable", metadata: { source: "managed" } });
+        } catch {
+          piBindingStates.set(workspace.id, { health: "unavailable", metadata: { source: "managed" } });
         }
+        result.push(piBinding(workspace));
+
+        const runtime = getOpenCodeRuntime(workspace);
+        try {
+          const artifact = await runtime.detect();
+          openCodeMetadata.set(workspace.id, {
+            source: "bundled",
+            executable: artifact.executable,
+            version: artifact.version,
+          });
+        } catch {
+          // Probe reports an unavailable binding; raw runtime failures never cross IPC.
+        }
+        result.push(openCodeBinding(workspace));
       }
       return result;
     },
     "runtime.start": async ({ workspaceId, agentKind }) => {
       const workspace = getWorkspace(workspaceId);
       if (workspace.trustState !== "trusted") throw untrusted();
-      const runtime = getRuntime(workspace, agentKind);
       if (agentKind === "pi") throw runtimeUnavailable();
+      const runtime = getOpenCodeRuntime(workspace);
       await runtime.start();
-      return binding(workspace, agentKind);
+      return openCodeBinding(workspace);
     },
     "runtime.stop": async ({ workspaceId, agentKind }) => {
       const workspace = getWorkspace(workspaceId);
-      const runtime = getRuntime(workspace, agentKind);
+      if (agentKind === "pi") {
+        const current = piBindingStates.get(workspace.id);
+        piBindingStates.set(workspace.id, {
+          health: "stopped",
+          metadata: current?.metadata ?? { source: "managed" },
+        });
+        return piBinding(workspace);
+      }
+      const runtime = getOpenCodeRuntime(workspace);
       await runtime.stop();
-      return binding(workspace, agentKind);
+      return openCodeBinding(workspace);
     },
     "runtime.snapshot": async ({ workspaceId }) => {
       const selected = workspaceId === undefined ? [...workspaces.values()] : [getWorkspace(workspaceId)];
-      return selected.flatMap((workspace) => [binding(workspace, "pi"), binding(workspace, "opencode")]);
+      return selected.flatMap((workspace) => [piBinding(workspace), openCodeBinding(workspace)]);
     },
     "config.preview": async () => { throw runtimeUnavailable(); },
     "config.commit": async () => { throw runtimeUnavailable(); },
@@ -308,7 +310,7 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
     paths,
     handlers,
     async dispose() {
-      for (const runtime of runtimes.values()) await runtime.stop().catch(() => undefined);
+      for (const runtime of openCodeRuntimes.values()) await runtime.stop().catch(() => undefined);
       config.dispose();
       database.close();
     },

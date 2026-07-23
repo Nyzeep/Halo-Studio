@@ -223,6 +223,16 @@ describe("preload capability boundary", () => {
 });
 
 describe("desktop service composition", () => {
+  it("keeps Pi discovery independent from unavailable launch configuration", async () => {
+    const source = await readFile(new URL("../src/main/services.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("detectPi");
+    expect(source).not.toContain("createPiRuntime");
+    expect(source).not.toMatch(/\bmodel\s*:/u);
+    expect(source).not.toMatch(/\bthinking\s*:/u);
+    expect(source).not.toContain('"unconfigured"');
+  });
+
   it("preserves detected runtime identity without exposing transport credentials", () => {
     const binding = createRuntimeBinding("opencode", "installed", {
       source: "bundled",
@@ -245,7 +255,8 @@ describe("desktop service composition", () => {
     const root = await mkdtemp(join(tmpdir(), "halo-desktop-services-"));
     const userDataPath = join(root, "user-data");
     const workspacePath = join(root, "workspace");
-    await mkdir(workspacePath);
+    const emptyPath = join(root, "empty-path");
+    await Promise.all([mkdir(workspacePath), mkdir(emptyPath)]);
     const xor = (value: Buffer): Buffer => Buffer.from(value, (byte) => byte ^ 0xa5);
     const services = await createDesktopServices({
       userDataPath,
@@ -257,7 +268,7 @@ describe("desktop service composition", () => {
         encryptString: (value) => xor(Buffer.from(value, "utf8")),
         decryptString: (value) => xor(value).toString("utf8"),
       },
-      hostEnvironment: { PATH: process.env.PATH },
+      hostEnvironment: { PATH: emptyPath },
     });
 
     for (const path of [
@@ -280,9 +291,20 @@ describe("desktop service composition", () => {
     expect(candidate).toMatchObject({ displayPath: workspacePath });
     const workspace = await services.handlers["workspace.open"]({ selectionId: candidate!.selectionId });
     expect(workspace).toMatchObject({ realPath: workspacePath, trustState: "untrusted" });
-    await expect(services.handlers["runtime.snapshot"]({ workspaceId: workspace.id })).resolves.toHaveLength(2);
+    const initialBindings = await services.handlers["runtime.snapshot"]({ workspaceId: workspace.id });
+    expect(initialBindings).toHaveLength(2);
+    expect(JSON.stringify(initialBindings)).not.toMatch(/unconfigured|\bmodel\b|\bthinking\b/u);
+    const probedBindings = await services.handlers["runtime.probe"]({ workspaceId: workspace.id });
+    expect(probedBindings.find(({ agentKind }) => agentKind === "pi")).toMatchObject({
+      agentKind: "pi",
+      source: "managed",
+      health: "unavailable",
+    });
+    expect(JSON.stringify(probedBindings)).not.toMatch(/unconfigured|\bmodel\b|\bthinking\b/u);
     await expect(services.handlers["runtime.start"]({ workspaceId: workspace.id, agentKind: "pi" })).rejects.toMatchObject({ code: "WorkspaceUntrusted" });
-    await services.handlers["runtime.stop"]({ workspaceId: workspace.id, agentKind: "pi" });
+    const stoppedPi = await services.handlers["runtime.stop"]({ workspaceId: workspace.id, agentKind: "pi" });
+    expect(stoppedPi).toMatchObject({ agentKind: "pi", health: "stopped" });
+    expect(JSON.stringify(stoppedPi)).not.toMatch(/unconfigured|\bmodel\b|\bthinking\b/u);
     await services.handlers["workspace.trust"]({ workspaceId: workspace.id, trustState: "trusted" });
     const resetBindings = await services.handlers["runtime.snapshot"]({ workspaceId: workspace.id });
     expect(resetBindings.find(({ agentKind }) => agentKind === "pi")?.health).toBe("unavailable");
