@@ -527,6 +527,10 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
     openCodeRuntimes.set(workspace.id, runtime);
     return runtime;
   };
+  const detectPiForWorkspace = (workspace: Workspace) => piDetector({
+    cwd: workspace.realPath,
+    hostEnvironment: safeHostEnvironment(options.hostEnvironment, piRuntimeDirectory),
+  });
   const getPiRuntime = (workspace: Workspace): PiRuntimeInstance => {
     if (workspace.trustState !== "trusted") throw untrusted();
     if (retainedPiRuntimes.has(workspace.id)) throw runtimeUnavailable();
@@ -538,12 +542,9 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
       session: randomUUID(),
       trust: workspace.trustState,
       hostEnvironment: safeHostEnvironment(options.hostEnvironment, piRuntimeDirectory),
-      // Detection remains Main-owned and credential-blind. It is deliberately
-      // omitted for untrusted workspaces by the caller below.
-      detect: () => piDetector({
-        cwd: workspace.realPath,
-        hostEnvironment: safeHostEnvironment(options.hostEnvironment, piRuntimeDirectory),
-      }),
+      // This fixed version probe remains Main-owned and credential-blind. The
+      // same probe is safe before trust; RPC launch remains trust-gated here.
+      detect: () => detectPiForWorkspace(workspace),
       // This resolver does not capture a provider value. It is invoked by
       // PiRuntime only after its credential-blind version probe succeeds.
       resolveRpcLaunch: async () => {
@@ -779,14 +780,12 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
   };
   const probeWorkspace = (workspaceId: string): Promise<RuntimeBinding[]> => runWorkspaceLifecycle(workspaceId, async () => {
     const workspace = await revalidateWorkspace(getWorkspace(workspaceId));
-    if (workspace.trustState !== "trusted") {
-      // A workspace cannot influence command lookup or run a child until the
-      // user has made an explicit trust decision.
-      piBindingStates.set(workspace.id, { health: "unavailable", metadata: { source: "managed" } });
-    } else if (!retainedPiRuntimes.has(workspace.id)) {
-      const runtime = getPiRuntime(workspace);
+    if (!retainedPiRuntimes.has(workspace.id) && !piRuntimes.has(workspace.id)) {
       try {
-        const detection = await runtime.detect();
+        // Pi discovery only executes the fixed credential-blind `--version`
+        // probe against a Main-owned, absolute executable. It never resolves
+        // a launch configuration or starts the project RPC runtime.
+        const detection = await detectPiForWorkspace(workspace);
         piBindingStates.set(workspace.id, detection.status === "detected"
           ? { health: "detected", metadata: piMetadata(detection) }
           : { health: "unavailable", metadata: { source: "managed" } });

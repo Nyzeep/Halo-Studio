@@ -41,7 +41,7 @@ const safeStorage = {
 };
 
 describe("workspace runtime integration", () => {
-  it("uses real child-process protocols only after the workspace is trusted", async () => {
+  it("uses real child-process runtime protocols only after the workspace is trusted", async () => {
     const root = await mkdtemp(join(tmpdir(), "halo 集成 runtime "));
     const workspacePath = join(root, "项目 空格");
     const userDataPath = join(root, "用户 数据");
@@ -93,9 +93,10 @@ describe("workspace runtime integration", () => {
       const untrustedProbe = await services.handlers["runtime.probe"]({ workspaceId: workspace.id });
       expect(untrustedProbe.find(({ agentKind }) => agentKind === "pi")).toMatchObject({
         agentKind: "pi",
-        health: "unavailable",
+        health: "detected",
+        version: "0.81.1",
       });
-      expect(piSpawnArgs).toEqual([]);
+      expect(piSpawnArgs).toEqual([["--version"]]);
       expect(launchCalls).toBe(0);
 
       await expect(services.handlers["runtime.start"]({ workspaceId: workspace.id, agentKind: "pi" })).rejects.toMatchObject({

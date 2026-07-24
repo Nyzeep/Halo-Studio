@@ -5,10 +5,15 @@ import {
   RuntimeUnavailableError,
   TransportDisconnectedError,
 } from "./errors.js";
+import {
+  boundedText,
+  isRecord,
+  MAX_SESSION_TEXT_LENGTH,
+  projectSession,
+  safeSessionId,
+} from "./sessionProjection.js";
 import type { OpenCodeSessionStreamEvent, OpenCodeSseConnection, SseSignal } from "./sse.js";
 
-const MAX_SESSION_ID_LENGTH = 512;
-const MAX_TEXT_LENGTH = 32_768;
 const MAX_SESSIONS = 128;
 const MAX_HISTORY_MESSAGES = 128;
 const MAX_HISTORY_PARTS = 256;
@@ -196,21 +201,6 @@ class SessionAdapter implements OpenCodeSessionAdapter {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function boundedText(value: unknown): string | undefined {
-  if (typeof value !== "string" || value.length === 0 || value.length > MAX_TEXT_LENGTH) return undefined;
-  return value;
-}
-
-function safeSessionId(value: unknown): string | undefined {
-  if (typeof value !== "string" || value.length === 0 || value.length > MAX_SESSION_ID_LENGTH) return undefined;
-  if (/[\u0000-\u001f\u007f]/u.test(value)) return undefined;
-  return value;
-}
-
 function requireSessionId(value: unknown): string {
   const id = safeSessionId(value);
   if (!id) throw new ProtocolViolationError();
@@ -223,31 +213,12 @@ function requirePromptText(value: unknown): string {
   return text;
 }
 
-function parseOptionalText(record: Record<string, unknown>, key: string): string | undefined | null {
-  if (!(key in record) || record[key] === undefined || record[key] === null) return undefined;
-  return boundedText(record[key]) ?? null;
-}
-
-function parseUpdatedAt(record: Record<string, unknown>): string | undefined | null {
-  if (!("time" in record) || record.time === undefined || record.time === null) return undefined;
-  if (!isRecord(record.time) || typeof record.time.updated !== "number" || !Number.isFinite(record.time.updated)) return null;
-  const date = new Date(record.time.updated);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString();
-}
-
 function parseSummary(value: unknown, active: ReadonlySet<string>): OpenCodeSessionSummary | undefined {
-  if (!isRecord(value)) return undefined;
-  const sessionId = safeSessionId(value.id);
-  if (!sessionId) return undefined;
-  const title = parseOptionalText(value, "title");
-  const updatedAt = parseUpdatedAt(value);
-  if (title === null || updatedAt === null) return undefined;
+  const session = projectSession(value);
+  if (!session) return undefined;
   return {
-    sessionId,
-    ...(title === undefined ? {} : { title }),
-    ...(updatedAt === undefined ? {} : { updatedAt }),
-    active: active.has(sessionId),
+    ...session,
+    active: active.has(session.sessionId),
   };
 }
 
@@ -263,7 +234,7 @@ function parseHistoryMessage(value: unknown, sessionId: string, ordinal: number)
     const text = boundedText(part.text);
     if (!text || part.sessionID !== sessionId) return undefined;
     length += text.length;
-    if (length > MAX_TEXT_LENGTH) return undefined;
+    if (length > MAX_SESSION_TEXT_LENGTH) return undefined;
     parts.push(text);
   }
   const text = parts.join("");

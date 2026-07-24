@@ -34,6 +34,22 @@ R1 只处理以下事情：
 - [核心架构](docs/architecture/pi-opencode-core.md)
 - [验证指南](docs/testing/core-rebuild-verification.md)
 
+## R2 会话边界（当前受限切片）
+
+在 R1 运行时边界之上，当前版本还提供了受限的结构化会话投影：仅当 Pi 或 OpenCode 已由 Main 进程启动且运行正常时，界面才可以查看有界历史、发送普通提示词或中止当前会话。输入 `/` 时，界面只展示当前受管应用实际公开的原生命令，并把选择结果插入输入框；Halo 不提供独立的命令执行 API。
+
+这不是完整聊天产品、IDE 或终端。它不提供任意 Shell、PTY、嵌入式终端、文件读写/编辑、Diff 定位、模型或 Provider 输入、凭据输入、权限代理或完整会话归档。Pi/OpenCode 自身的文件写入和权限语义仍由各自运行时负责。完整边界见[核心架构](docs/architecture/pi-opencode-core.md)。
+
+## 数据与故障排查
+
+应用运行数据只保存在 Electron 的 `userData` 目录下，路径由宿主系统决定，项目代码不会硬编码本机路径。该目录包含：
+
+- `storage/halo-studio.sqlite3`：Halo 自身的元数据与迁移状态；
+- `credentials/`：由 Electron `safeStorage` 保护的凭据引用内容；
+- `runtime/pi/` 与 `runtime/opencode/`：两个受管运行时的私有宿主目录。
+
+不要将该目录、`.halo-runtime/` 的本地原生模块缓存或任何凭据复制进仓库。排查时先确认工作区是否受信任，再刷新 Main 进程提供的 Pi/OpenCode 真实状态；运行时无法启动时，可依次执行 `npm run verify`、`node scripts/windows-smoke.mjs` 和[验证指南](docs/testing/core-rebuild-verification.md)中的针对性命令。开发态 Electron 图形烟测必须在交互式、非受限 Windows 宿主运行，不能用 `--no-sandbox` 绕过受限宿主。
+
 ## 环境与命令
 
 - Node.js `>= 20.18`
