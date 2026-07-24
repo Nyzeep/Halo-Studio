@@ -1103,6 +1103,63 @@ describe("workspace lifecycle security", () => {
   });
 });
 
+describe("active workspace selection", () => {
+  it("switches from one workspace to another without restoring the stale workspace after a renderer reload", async () => {
+    const root = await mkdtemp(join(tmpdir(), "halo-active-workspace-"));
+    const userDataPath = join(root, "user-data");
+    const firstPath = join(root, "first workspace");
+    const secondPath = join(root, "second workspace");
+    await Promise.all([mkdir(firstPath), mkdir(secondPath)]);
+    const paths = [firstPath, secondPath];
+    let nextPath = 0;
+    const runtimes = new Map<string, { state: "unavailable" | "healthy" | "stopped"; stopCalls: number; detect(): Promise<{ executable: string; version: "1.18.4" }>; start(): Promise<void>; stop(): Promise<void> }>();
+    let services: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
+
+    try {
+      services = await createDesktopServices({
+        userDataPath,
+        picker: {
+          showOpenDialog: async () => ({ canceled: false, filePaths: [paths[nextPath++]!] }),
+        },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (value) => Buffer.from(value, "utf8"),
+          decryptString: (value) => value.toString("utf8"),
+        },
+        hostEnvironment: { PATH: root },
+        createOpenCodeRuntime: ({ cwd }) => {
+          const runtime = {
+            state: "unavailable" as "unavailable" | "healthy" | "stopped",
+            stopCalls: 0,
+            async detect() { return { executable: "C:\\bundle\\opencode.exe", version: "1.18.4" as const }; },
+            async start() { runtime.state = "healthy"; },
+            async stop() { runtime.stopCalls += 1; runtime.state = "stopped"; },
+          };
+          runtimes.set(cwd, runtime);
+          return runtime;
+        },
+      } as never);
+
+      const firstCandidate = await services.handlers["workspace.pick"]({});
+      const first = await services.handlers["workspace.open"]({ selectionId: firstCandidate!.selectionId });
+      await services.handlers["workspace.trust"]({ workspaceId: first.id, trustState: "trusted" });
+      await services.handlers["runtime.probe"]({ workspaceId: first.id });
+      await services.handlers["runtime.start"]({ workspaceId: first.id, agentKind: "opencode" });
+
+      const secondCandidate = await services.handlers["workspace.pick"]({});
+      const second = await services.handlers["workspace.open"]({ selectionId: secondCandidate!.selectionId });
+      expect(runtimes.get(first.realPath)?.stopCalls).toBe(1);
+      await expect(services.handlers["runtime.snapshot"]({ workspaceId: first.id })).rejects.toMatchObject({
+        code: "ProtocolViolation",
+      });
+      await expect(services.handlers["workspace.snapshot"]({})).resolves.toEqual([second]);
+    } finally {
+      await services?.dispose().catch(() => undefined);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("desktop service composition", () => {
   it("keeps Pi discovery independent from unavailable launch configuration", async () => {
     const source = await readFile(new URL("../src/main/services.ts", import.meta.url), "utf8");

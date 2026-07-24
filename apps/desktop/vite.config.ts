@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
-import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig, type Plugin } from "vite";
 
 const externalMainDependencies = [
   "electron",
@@ -10,6 +11,16 @@ const externalMainDependencies = [
   "@halo-studio/core",
   "@halo-studio/storage",
 ];
+
+function developmentCspPlugin(): Plugin {
+  return {
+    name: "halo-development-csp",
+    transformIndexHtml(html, context) {
+      if (context.server === undefined) return html;
+      return html.replace("style-src 'self'", "style-src 'self' 'unsafe-inline'");
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   if (mode === "main") {
@@ -48,6 +59,7 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    plugins: [react(), developmentCspPlugin()],
     base: "./",
     build: {
       emptyOutDir: false,

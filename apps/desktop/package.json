@@ -5,9 +5,10 @@
   "type": "module",
   "main": "./dist-electron/main/main.js",
   "scripts": {
-    "build:dependencies": "npm run build --workspace @halo-studio/config && npm run build --workspace @halo-studio/agent-pi && npm run build --workspace @halo-studio/agent-opencode",
+    "build:dependencies": "npm run build --workspace @halo-studio/config && npm run build --workspace @halo-studio/agent-pi && npm run build --workspace @halo-studio/agent-opencode && npm run build --workspace @halo-studio/ui",
     "prebuild": "npm run build:dependencies",
     "build": "tsc -p tsconfig.json --noEmit && vite build --mode main && vite build --mode preload && vite build",
+    "predev": "npm run build:dependencies",
     "dev": "vite",
     "pretypecheck": "npm run build:dependencies",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -20,11 +21,21 @@
     "@halo-studio/config": "0.1.0",
     "@halo-studio/contracts": "0.1.0",
     "@halo-studio/core": "0.1.0",
-    "@halo-studio/storage": "0.1.0"
+    "@halo-studio/storage": "0.1.0",
+    "@halo-studio/ui": "0.1.0",
+    "lucide-react": "0.468.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.1.0",
     "@types/node": "22.10.5",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
     "electron": "33.4.11",
+    "jsdom": "25.0.1",
     "typescript": "5.7.3",
     "vite": "6.4.3",
     "vitest": "2.1.8"

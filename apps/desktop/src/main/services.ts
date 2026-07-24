@@ -203,6 +203,8 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
   const piBindingStates = new Map<string, PiBindingState>();
   const workspaceLifecycleOperations = new Map<string, Promise<void>>();
   const activeServiceOperations = new Set<Promise<void>>();
+  let activeWorkspaceId: string | undefined;
+  let workspaceSelectionOperation: Promise<void> = Promise.resolve();
   let shutdownStarted = false;
   let disposePromise: Promise<void> | undefined;
 
@@ -266,6 +268,7 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
     const stopped = await discardWorkspaceRuntimeState(workspaceId);
     workspaces.delete(workspaceId);
     workspaceIdentities.delete(workspaceId);
+    if (activeWorkspaceId === workspaceId) activeWorkspaceId = undefined;
     return stopped;
   };
   const revalidateWorkspace = async (workspace: Workspace): Promise<Workspace> => {
@@ -301,6 +304,13 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
       if (workspaceLifecycleOperations.get(workspaceId) === settled) workspaceLifecycleOperations.delete(workspaceId);
     });
   };
+  const runWorkspaceSelection = <T>(operation: () => Promise<T>): Promise<T> => {
+    const previous = workspaceSelectionOperation;
+    const current = previous.then(operation, operation);
+    const settled = current.then(() => undefined, () => undefined);
+    workspaceSelectionOperation = settled;
+    return current;
+  };
   const runServiceOperation = <T>(operation: () => Promise<T>): Promise<T> => {
     if (shutdownStarted) return Promise.reject(runtimeUnavailable());
     const current = Promise.resolve().then(operation);
@@ -313,8 +323,18 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
     return (input: Input): Promise<Output> => runServiceOperation(() => handler(input));
   };
   const selectedWorkspaceIds = (workspaceId: string | undefined): string[] => workspaceId === undefined
-    ? [...workspaces.keys()]
+    ? (activeWorkspaceId === undefined ? [] : [activeWorkspaceId])
     : [workspaceId];
+  const deactivateOtherWorkspaces = async (nextWorkspaceId: string): Promise<void> => {
+    for (const workspaceId of [...workspaces.keys()]) {
+      if (workspaceId === nextWorkspaceId) continue;
+      const stopped = await runWorkspaceLifecycle(workspaceId, () => discardWorkspaceRuntimeState(workspaceId));
+      if (!stopped) throw runtimeUnavailable();
+      workspaces.delete(workspaceId);
+      workspaceIdentities.delete(workspaceId);
+      if (activeWorkspaceId === workspaceId) activeWorkspaceId = undefined;
+    }
+  };
   const probeWorkspace = (workspaceId: string): Promise<RuntimeBinding[]> => runWorkspaceLifecycle(workspaceId, async () => {
     const workspace = await revalidateWorkspace(getWorkspace(workspaceId));
     try {
@@ -366,7 +386,7 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
       const path = selections.get(selectionId);
       if (path === undefined) throw workspaceNotFound();
       const workspace = await workspaceOpener(path, trustStore);
-      return runWorkspaceLifecycle(workspace.id, async () => {
+      return runWorkspaceSelection(() => runWorkspaceLifecycle(workspace.id, async () => {
         if (retainedOpenCodeRuntimes.has(workspace.id)) throw runtimeUnavailable();
         let identity: WorkspaceIdentity;
         try {
@@ -388,12 +408,22 @@ export async function createDesktopServices(options: CreateDesktopServicesOption
           const stopped = await invalidateWorkspace(workspace.id);
           if (!stopped) throw runtimeUnavailable();
         }
+        await deactivateOtherWorkspaces(workspace.id);
         workspaces.set(workspace.id, workspace);
         workspaceIdentities.set(workspace.id, identity);
+        activeWorkspaceId = workspace.id;
         return workspace;
-      });
+      }));
     },
-    "workspace.snapshot": async () => [...workspaces.values()].map((workspace) => ({ ...workspace })),
+    "workspace.snapshot": async () => {
+      if (activeWorkspaceId === undefined) return [];
+      const workspace = workspaces.get(activeWorkspaceId);
+      if (workspace === undefined) {
+        activeWorkspaceId = undefined;
+        return [];
+      }
+      return [{ ...workspace }];
+    },
     "workspace.trust": ({ workspaceId, trustState }) => runWorkspaceLifecycle(workspaceId, async () => {
       const workspace = await revalidateWorkspace(getWorkspace(workspaceId));
       const stopped = await discardWorkspaceRuntimeState(workspace.id);
