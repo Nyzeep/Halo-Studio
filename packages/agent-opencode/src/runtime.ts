@@ -4,6 +4,7 @@ import { spawn as spawnChild } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { join } from "node:path";
 import {
+  basicAuthHeader,
   clearServerCredentials,
   createServerCredentials,
   serverCredentialEnvironment,
@@ -23,6 +24,12 @@ import {
   type SseFetch,
   type SseSignal,
 } from "./sse.js";
+import {
+  createOpenCodeSessionAdapter,
+  type OpenCodeSessionAdapter,
+  type OpenCodeSessionResponse,
+  type OpenCodeSessionTransport,
+} from "./session.js";
 
 /** `spawn-error` is reserved for an adapter that has confirmed no child was created. */
 export type ProcessStartupFailure = "port-conflict" | "spawn-error" | "exited";
@@ -263,6 +270,10 @@ interface RuntimeSseRecord {
   connection?: OpenCodeSseConnection;
 }
 
+interface RuntimeSessionRequestRecord {
+  readonly controller: AbortController;
+}
+
 export interface OpenCodeRuntimeOptions {
   readonly cwd: string;
   readonly trust: TrustState;
@@ -310,6 +321,9 @@ export class OpenCodeRuntime {
   #acceptSse = false;
   #crashCleanup: Promise<void> = Promise.resolve();
   readonly #sseRecords = new Set<RuntimeSseRecord>();
+  readonly #sessionRequests = new Set<RuntimeSessionRequestRecord>();
+  #sessionAdapter: OpenCodeSessionAdapter | undefined;
+  #sessionGeneration = 0;
   #operation: Promise<void> = Promise.resolve();
 
   constructor(options: OpenCodeRuntimeOptions) { this.#options = options; }
@@ -323,6 +337,20 @@ export class OpenCodeRuntime {
       ...(this.#version === undefined ? {} : { version: this.#version }),
       ...(this.#error === undefined ? {} : { error: { code: this.#error.code } }),
     };
+  }
+
+  /**
+   * Main-only R2 session projection. It can only be obtained while the managed
+   * sidecar is healthy and never reveals its loopback endpoint or credentials.
+   */
+  createSessionAdapter(): OpenCodeSessionAdapter {
+    if (this.#state !== "healthy" || !this.#acceptSse || this.#port === undefined || this.#credentials === undefined) {
+      throw new RuntimeUnavailableError();
+    }
+    if (this.#sessionAdapter) return this.#sessionAdapter;
+    const generation = this.#sessionGeneration;
+    this.#sessionAdapter = createOpenCodeSessionAdapter(this.#createSessionTransport(generation));
+    return this.#sessionAdapter;
   }
 
   detect(): Promise<OpenCodeArtifact> { return this.#exclusive(() => this.#detectInternal()); }
@@ -499,14 +527,102 @@ export class OpenCodeRuntime {
     }
   }
 
+  #createSessionTransport(generation: number): OpenCodeSessionTransport {
+    return {
+      list: () => this.#sessionRequest(generation, "/session", { method: "GET" }),
+      create: () => this.#sessionRequest(generation, "/session", { method: "POST" }),
+      get: (sessionId) => this.#sessionRequest(generation, `/session/${encodeURIComponent(sessionId)}`, { method: "GET" }),
+      history: (sessionId) => this.#sessionRequest(
+        generation,
+        `/session/${encodeURIComponent(sessionId)}/message?limit=128`,
+        { method: "GET" },
+      ),
+      startPrompt: (sessionId, text) => this.#sessionRequest(
+        generation,
+        `/session/${encodeURIComponent(sessionId)}/prompt_async`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ parts: [{ type: "text", text }] }),
+        },
+      ),
+      abort: (sessionId) => this.#sessionRequest(
+        generation,
+        `/session/${encodeURIComponent(sessionId)}/abort`,
+        { method: "POST" },
+      ),
+      subscribe: (onSignal) => this.#connectSessionSse(generation, onSignal),
+    };
+  }
+
+  async #sessionRequest(
+    generation: number,
+    path: string,
+    init: RequestInit,
+  ): Promise<OpenCodeSessionResponse> {
+    const port = this.#port;
+    const credentials = this.#credentials;
+    if (
+      generation !== this.#sessionGeneration
+      || this.#state !== "healthy"
+      || !this.#acceptSse
+      || port === undefined
+      || credentials === undefined
+    ) throw new RuntimeUnavailableError();
+
+    const controller = new AbortController();
+    const record: RuntimeSessionRequestRecord = { controller };
+    this.#sessionRequests.add(record);
+    let closed = false;
+    const close = (): void => {
+      if (closed) return;
+      closed = true;
+      this.#sessionRequests.delete(record);
+      controller.abort();
+    };
+
+    try {
+      const url = new URL(path, `http://127.0.0.1:${port}`);
+      url.searchParams.set("directory", this.#options.cwd);
+      const headers = new Headers(init.headers);
+      headers.set("authorization", basicAuthHeader(credentials));
+      headers.set("accept", "application/json");
+      const response = await fetch(url, { ...init, headers, signal: controller.signal });
+      if (controller.signal.aborted) {
+        try { response.body?.cancel().catch(() => undefined); } catch { /* Best effort after shutdown. */ }
+        throw new TransportDisconnectedError();
+      }
+      return { response, close };
+    } catch (error) {
+      close();
+      if (error instanceof OpenCodeError) throw error;
+      throw new TransportDisconnectedError();
+    }
+  }
+
+  #connectSessionSse(generation: number, onSignal: (signal: SseSignal) => void): Promise<OpenCodeSseConnection> {
+    if (generation !== this.#sessionGeneration) return Promise.reject(new RuntimeUnavailableError());
+    return this.#exclusive(() => this.#connectSseInternal({ onSignal }, this.#options.cwd, generation));
+  }
+
   connectSse(options: RuntimeSseOptions): Promise<OpenCodeSseConnection> {
     return this.#exclusive(() => this.#connectSseInternal(options));
   }
 
-  async #connectSseInternal(options: RuntimeSseOptions): Promise<OpenCodeSseConnection> {
+  async #connectSseInternal(
+    options: RuntimeSseOptions,
+    workspaceDirectory?: string,
+    sessionGeneration?: number,
+  ): Promise<OpenCodeSseConnection> {
     const port = this.#port;
     const credentials = this.#credentials;
-    if (this.#state !== "healthy" || !this.#acceptSse || port === undefined || credentials === undefined) {
+    if (
+      this.#state !== "healthy"
+      || !this.#acceptSse
+      || port === undefined
+      || credentials === undefined
+      || (sessionGeneration !== undefined && sessionGeneration !== this.#sessionGeneration)
+    ) {
       throw new RuntimeUnavailableError();
     }
 
@@ -525,6 +641,7 @@ export class OpenCodeRuntime {
       onSignal: options.onSignal,
       ...(options.sampleUnknown === undefined ? {} : { sampleUnknown: options.sampleUnknown }),
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+      ...(workspaceDirectory === undefined ? {} : { workspaceDirectory }),
       signal: controller.signal,
     });
     connecting.catch(() => undefined);
@@ -556,6 +673,7 @@ export class OpenCodeRuntime {
   stop(): Promise<void> {
     this.#acceptSse = false;
     this.#abortSseConnections();
+    this.#abortSessionRequests();
     return this.#exclusive(() => this.#stopInternal());
   }
 
@@ -624,6 +742,7 @@ export class OpenCodeRuntime {
     }
     if (this.#stopRequested || this.#state === "stopping" || this.#state === "stopped" || this.#state === "crashed") return;
     this.#acceptSse = false;
+    this.#abortSessionRequests();
     this.#state = "crashed";
     this.#error = new TransportDisconnectedError();
     this.#clearRuntimeFields(false);
@@ -636,6 +755,12 @@ export class OpenCodeRuntime {
 
   #abortSseConnections(): void {
     for (const record of this.#sseRecords) record.controller.abort();
+  }
+
+  #abortSessionRequests(): void {
+    const records = [...this.#sessionRequests];
+    this.#sessionRequests.clear();
+    for (const record of records) record.controller.abort();
   }
 
   async #closeSseConnections(): Promise<void> {
@@ -686,6 +811,7 @@ export class OpenCodeRuntime {
   #clearSecrets(): void {
     this.#acceptSse = false;
     this.#abortSseConnections();
+    this.#abortSessionRequests();
     if (this.#credentials) clearServerCredentials(this.#credentials);
     this.#credentials = undefined;
     this.#clearSpawnEnvironment();
@@ -694,6 +820,8 @@ export class OpenCodeRuntime {
   #clearRuntimeFields(clearError = true): void {
     this.#port = undefined;
     this.#version = undefined;
+    this.#sessionAdapter = undefined;
+    this.#sessionGeneration += 1;
     if (clearError) this.#error = undefined;
   }
 

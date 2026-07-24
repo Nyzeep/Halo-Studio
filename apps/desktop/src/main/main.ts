@@ -1,7 +1,15 @@
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { sessionEventChannel, type AgentEventEnvelope } from "@halo-studio/contracts";
 import type { DesktopServices } from "./services.js";
+
+export interface DesktopWindowPort {
+  readonly webContents: {
+    send?(channel: string, ...args: unknown[]): void;
+  };
+}
 
 export interface DesktopAppPort {
   whenReady(): Promise<void>;
@@ -16,7 +24,7 @@ export interface DesktopMainOptions {
   readonly getWindowCount: () => number;
   readonly createServices: () => Promise<DesktopServices>;
   readonly registerIpc: (services: DesktopServices) => () => void;
-  readonly createWindow: () => Promise<unknown>;
+  readonly createWindow: () => Promise<DesktopWindowPort>;
 }
 
 export interface DesktopLifecycle {
@@ -24,9 +32,30 @@ export interface DesktopLifecycle {
   idle(): Promise<void>;
 }
 
+const desktopDevelopmentServerUrl = "http://127.0.0.1:5173";
+const developmentSmokeMarkerFileName = "halo-desktop-dev-smoke-ready";
+
+/**
+ * Development mode is deliberately limited to the Vite server launched by our
+ * development command. Any other inherited environment value falls back to
+ * the packaged local renderer.
+ */
+export function resolveDesktopDevelopmentServerUrl(value: string | undefined): string | undefined {
+  if (value !== desktopDevelopmentServerUrl && value !== `${desktopDevelopmentServerUrl}/`) {
+    return undefined;
+  }
+  return desktopDevelopmentServerUrl;
+}
+
+export function getDesktopDevelopmentSmokeMarkerPath(userDataPath: string): string {
+  return join(userDataPath, developmentSmokeMarkerFileName);
+}
+
 export function startDesktopMain(options: DesktopMainOptions): DesktopLifecycle {
   let services: DesktopServices | undefined;
   let unregisterIpc: (() => void) | undefined;
+  let unsubscribeSessionEvents: (() => void) | undefined;
+  let currentWindow: DesktopWindowPort | undefined;
   let activity = Promise.resolve();
   let shutdownStarted = false;
   let disposed = false;
@@ -37,16 +66,27 @@ export function startDesktopMain(options: DesktopMainOptions): DesktopLifecycle 
     return current;
   };
 
+  const createWindow = async (): Promise<void> => {
+    currentWindow = await options.createWindow();
+  };
+  const forwardSessionEvent = (event: AgentEventEnvelope): void => {
+    try { currentWindow?.webContents.send?.(sessionEventChannel, event); }
+    catch { /* A closing renderer must not affect the Main-owned runtime. */ }
+  };
+
   const ready = options.app.whenReady().then(async () => {
     services = await options.createServices();
     unregisterIpc = options.registerIpc(services);
-    await options.createWindow();
+    if (typeof services.subscribeSessionEvents === "function") {
+      unsubscribeSessionEvents = services.subscribeSessionEvents(forwardSessionEvent);
+    }
+    await createWindow();
   });
 
   options.app.on("activate", () => {
     void schedule(async () => {
       await ready;
-      if (!shutdownStarted && options.getWindowCount() === 0) await options.createWindow();
+      if (!shutdownStarted && options.getWindowCount() === 0) await createWindow();
     });
   });
 
@@ -68,8 +108,11 @@ export function startDesktopMain(options: DesktopMainOptions): DesktopLifecycle 
         shutdownStarted = false;
         return;
       }
+      unsubscribeSessionEvents?.();
+      unsubscribeSessionEvents = undefined;
       unregisterIpc?.();
       unregisterIpc = undefined;
+      currentWindow = undefined;
       services = undefined;
       disposed = true;
       options.app.quit();
@@ -90,6 +133,9 @@ async function bootElectron(): Promise<void> {
   const outputDirectory = dirname(fileURLToPath(import.meta.url));
   const preloadPath = join(outputDirectory, "..", "preload", "preload.cjs");
   const rendererPath = join(outputDirectory, "..", "renderer", "index.html");
+  const developmentUrl = resolveDesktopDevelopmentServerUrl(
+    process.env.HALO_DESKTOP_DEV_SERVER_URL,
+  );
 
   const lifecycle = startDesktopMain({
     app: electron.app,
@@ -110,14 +156,34 @@ async function bootElectron(): Promise<void> {
       BrowserWindow: electron.BrowserWindow as unknown as import("./window.js").BrowserWindowConstructor,
       preloadPath,
       rendererPath,
+      ...(developmentUrl === undefined ? {} : { developmentUrl }),
     }),
   });
   await lifecycle.ready;
+  if (developmentUrl !== undefined && process.env.HALO_DESKTOP_DEV_SMOKE === "1") {
+    await writeFile(
+      getDesktopDevelopmentSmokeMarkerPath(electron.app.getPath("userData")),
+      `${developmentUrl}\n`,
+      "utf8",
+    );
+    console.log(`HALO_DESKTOP_DEV_SMOKE_READY ${developmentUrl}`);
+    electron.app.quit();
+  }
 }
 
 if (process.versions.electron !== undefined) {
-  void bootElectron().catch(async () => {
+  void bootElectron().catch(async (error) => {
     const { app } = await import("electron");
+    if (process.env.HALO_DESKTOP_DEV_SMOKE === "1") {
+      const userDataPath = app.getPath("userData");
+      await mkdir(userDataPath, { recursive: true });
+      const reason = error instanceof Error ? error.message : "Unknown startup error.";
+      await writeFile(
+        getDesktopDevelopmentSmokeMarkerPath(userDataPath),
+        `FAILED ${reason}\n`,
+        "utf8",
+      );
+    }
     app.quit();
   });
 }

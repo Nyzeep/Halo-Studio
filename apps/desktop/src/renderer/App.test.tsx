@@ -18,13 +18,20 @@ const unavailableCapability = {
   reason: "当前阶段未开放。",
 };
 
-function binding(agentKind: "pi" | "opencode", health: RuntimeBinding["health"]): RuntimeBinding {
+function binding(
+  agentKind: "pi" | "opencode",
+  health: RuntimeBinding["health"],
+  sessionsSupported = false,
+): RuntimeBinding {
+  const sessions = sessionsSupported
+    ? { supported: true, channel: agentKind === "pi" ? "rpc" as const : "http" as const, restartRequired: false }
+    : unavailableCapability;
   return {
     agentKind,
     source: agentKind === "pi" ? "managed" : "bundled",
     health,
     capabilities: {
-      sessions: unavailableCapability,
+      sessions,
       streamingMessages: unavailableCapability,
       toolEvents: unavailableCapability,
       permissions: unavailableCapability,
@@ -44,9 +51,11 @@ function binding(agentKind: "pi" | "opencode", health: RuntimeBinding["health"])
 function createApi(options: {
   readonly initialWorkspaces?: readonly Workspace[];
   readonly bindings?: readonly RuntimeBinding[];
+  readonly sessions?: readonly { readonly agentKind: "pi" | "opencode"; readonly sessionId: string; readonly title?: string; readonly active: boolean }[];
 } = {}): WorkbenchApi & {
   readonly workspace: WorkbenchApi["workspace"] & { readonly pick: ReturnType<typeof vi.fn>; readonly open: ReturnType<typeof vi.fn>; readonly setTrust: ReturnType<typeof vi.fn> };
-  readonly runtime: WorkbenchApi["runtime"] & { readonly probe: ReturnType<typeof vi.fn>; readonly start: ReturnType<typeof vi.fn> };
+  readonly runtime: WorkbenchApi["runtime"] & { readonly probe: ReturnType<typeof vi.fn>; readonly start: ReturnType<typeof vi.fn>; readonly stop: ReturnType<typeof vi.fn> };
+  readonly sessions: WorkbenchApi["sessions"] & { readonly snapshot: ReturnType<typeof vi.fn>; readonly send: ReturnType<typeof vi.fn> };
 } {
   const activeBindings = options.bindings ?? [binding("pi", "ready"), binding("opencode", "healthy")];
   const pick = vi.fn(async () => ({ ok: true as const, data: candidate }));
@@ -54,19 +63,83 @@ function createApi(options: {
   const snapshot = vi.fn(async () => ({ ok: true as const, data: options.initialWorkspaces ?? [workspace] }));
   const setTrust = vi.fn(async () => ({ ok: true as const, data: { ...workspace, trustState: "trusted" as const } }));
   const probe = vi.fn(async () => ({ ok: true as const, data: activeBindings }));
-  const start = vi.fn(async () => ({ ok: true as const, data: binding("opencode", "healthy") }));
+  const start = vi.fn(async ({ agentKind }: { readonly agentKind: "pi" | "opencode" }) => ({
+    ok: true as const,
+    data: binding(agentKind, agentKind === "pi" ? "ready" : "healthy"),
+  }));
+  const stop = vi.fn(async ({ agentKind }: { readonly agentKind: "pi" | "opencode" }) => ({
+    ok: true as const,
+    data: binding(agentKind, "stopped"),
+  }));
+  const runtimeSnapshot = vi.fn(async () => ({ ok: true as const, data: activeBindings }));
+  const sessionSnapshot = vi.fn(async () => ({ ok: true as const, data: options.sessions ?? [] }));
+  const createSession = vi.fn(async ({ agentKind }: { readonly agentKind: "pi" | "opencode" }) => ({
+    ok: true as const,
+    data: { agentKind, sessionId: `${agentKind}-created`, title: "New managed session", active: true },
+  }));
+  const selectSession = vi.fn(async ({ agentKind, sessionId }: { readonly agentKind: "pi" | "opencode"; readonly sessionId: string }) => ({
+    ok: true as const,
+    data: { agentKind, sessionId, title: "Selected managed session", active: true },
+  }));
+  const sessionHistory = vi.fn(async ({ agentKind, sessionId }: { readonly agentKind: "pi" | "opencode"; readonly sessionId: string }) => ({
+    ok: true as const,
+    data: {
+      session: { agentKind, sessionId, title: "Selected managed session", active: true },
+      messages: [{ agentKind, sessionId, ordinal: 0, role: "assistant" as const, text: "Existing Pi message" }],
+    },
+  }));
+  const sendSession = vi.fn(async ({ agentKind, sessionId, clientRequestId }: {
+    readonly agentKind: "pi" | "opencode";
+    readonly sessionId: string;
+    readonly clientRequestId: string;
+  }) => ({
+    ok: true as const,
+    data: {
+      session: { agentKind, sessionId, title: "Selected managed session", active: true },
+      clientRequestId,
+      accepted: true as const,
+    },
+  }));
+  const abortSession = vi.fn(async ({ agentKind, sessionId }: { readonly agentKind: "pi" | "opencode"; readonly sessionId: string }) => ({
+    ok: true as const,
+    data: { agentKind, sessionId, title: "Selected managed session", active: false },
+  }));
+  const subscribeSessions = vi.fn(() => () => undefined);
+  const listCommands = vi.fn(async ({ agentKind }: { readonly agentKind: "pi" | "opencode" }) => ({
+    ok: true as const,
+    data: agentKind === "pi" ? [{
+      name: "/compact",
+      agentKind,
+      source: "native" as const,
+      channel: "rpc" as const,
+      allowedWhileRunning: false,
+      mutatesGlobalDefaults: false,
+      tuiOnly: false,
+    }] : [],
+  }));
 
   return {
     workspace: { pick, open, snapshot, setTrust },
     runtime: {
       probe,
       start,
-      stop: vi.fn(),
-      snapshot: vi.fn(),
+      stop,
+      snapshot: runtimeSnapshot,
     },
+    sessions: {
+      snapshot: sessionSnapshot,
+      create: createSession,
+      select: selectSession,
+      history: sessionHistory,
+      send: sendSession,
+      abort: abortSession,
+      subscribe: subscribeSessions,
+    },
+    commands: { list: listCommands },
   } as unknown as WorkbenchApi & {
     readonly workspace: WorkbenchApi["workspace"] & { readonly pick: ReturnType<typeof vi.fn>; readonly open: ReturnType<typeof vi.fn>; readonly setTrust: ReturnType<typeof vi.fn> };
-    readonly runtime: WorkbenchApi["runtime"] & { readonly probe: ReturnType<typeof vi.fn>; readonly start: ReturnType<typeof vi.fn> };
+    readonly runtime: WorkbenchApi["runtime"] & { readonly probe: ReturnType<typeof vi.fn>; readonly start: ReturnType<typeof vi.fn>; readonly stop: ReturnType<typeof vi.fn> };
+    readonly sessions: WorkbenchApi["sessions"] & { readonly snapshot: ReturnType<typeof vi.fn>; readonly send: ReturnType<typeof vi.fn> };
   };
 }
 
@@ -88,8 +161,7 @@ describe("App", () => {
     expect(screen.queryByText("在线")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "配置" }));
-    expect(screen.getByText("Pi 资源")).toBeInTheDocument();
-    expect(screen.getByText("OpenCode MCP")).toBeInTheDocument();
+    expect(screen.getByText("配置写入尚未开放")).toBeInTheDocument();
     expect(screen.getAllByText("示例").length).toBeGreaterThan(1);
   });
 
@@ -126,14 +198,86 @@ describe("App", () => {
     expect(trigger).toHaveFocus();
   });
 
-  it("trusts first, refreshes state, then starts only OpenCode", async () => {
-    const api = createApi();
+  it("trusts a workspace without implicitly starting Pi or OpenCode", async () => {
+    const api = createApi({
+      bindings: [binding("pi", "detected"), binding("opencode", "stopped")],
+    });
     render(<App api={api} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "信任并启动" }));
-    await waitFor(() => expect(api.runtime.start).toHaveBeenCalledWith({ workspaceId, agentKind: "opencode" }));
+    fireEvent.click(await screen.findByRole("button", { name: "信任工作区" }));
     expect(api.workspace.setTrust).toHaveBeenCalledWith({ workspaceId, trustState: "trusted" });
-    expect(api.workspace.setTrust.mock.invocationCallOrder[0]).toBeLessThan(api.runtime.start.mock.invocationCallOrder[0]!);
+    await screen.findByRole("button", { name: "使用受管启动配置启动 Pi" });
+    expect(api.runtime.start).not.toHaveBeenCalled();
+  });
+
+  it("starts Pi only with the fixed trusted-workspace IPC input", async () => {
+    const trustedWorkspace = { ...workspace, trustState: "trusted" as const };
+    const api = createApi({
+      initialWorkspaces: [trustedWorkspace],
+      bindings: [binding("pi", "detected"), binding("opencode", "healthy")],
+    });
+    render(<App api={api} />);
+
+    expect(await screen.findByText("受管启动配置")).toBeInTheDocument();
+    const startButton = await screen.findByRole("button", { name: "使用受管启动配置启动 Pi" });
+    fireEvent.click(startButton);
+
+    await waitFor(() => expect(api.runtime.start).toHaveBeenCalledWith({ workspaceId, agentKind: "pi" }));
+    expect(api.runtime.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops a ready Pi through the fixed runtime stop channel", async () => {
+    const trustedWorkspace = { ...workspace, trustState: "trusted" as const };
+    const api = createApi({
+      initialWorkspaces: [trustedWorkspace],
+      bindings: [binding("pi", "ready"), binding("opencode", "healthy")],
+    });
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "停止 Pi" }));
+    await waitFor(() => expect(api.runtime.stop).toHaveBeenCalledWith({ workspaceId, agentKind: "pi" }));
+    expect(api.runtime.start).not.toHaveBeenCalled();
+  });
+
+  it("retries a crashed Pi by releasing it before the fixed restart", async () => {
+    const trustedWorkspace = { ...workspace, trustState: "trusted" as const };
+    const api = createApi({
+      initialWorkspaces: [trustedWorkspace],
+      bindings: [binding("pi", "crashed"), binding("opencode", "healthy")],
+    });
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "重试 Pi" }));
+    await waitFor(() => expect(api.runtime.start).toHaveBeenCalledWith({ workspaceId, agentKind: "pi" }));
+    expect(api.runtime.stop).toHaveBeenCalledWith({ workspaceId, agentKind: "pi" });
+    expect(api.runtime.stop.mock.invocationCallOrder[0]).toBeLessThan(api.runtime.start.mock.invocationCallOrder[0]!);
+  });
+
+  it("keeps an unavailable Pi retryable without claiming it is installed", async () => {
+    const trustedWorkspace = { ...workspace, trustState: "trusted" as const };
+    const api = createApi({
+      initialWorkspaces: [trustedWorkspace],
+      bindings: [binding("pi", "unavailable"), binding("opencode", "healthy")],
+    });
+    render(<App api={api} />);
+
+    expect(await screen.findByText("未检测到可启动的 Pi")).toBeInTheDocument();
+    expect(screen.queryByText("已安装")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重试 Pi" }));
+    await waitFor(() => expect(api.runtime.start).toHaveBeenCalledWith({ workspaceId, agentKind: "pi" }));
+  });
+
+  it("does not present an unprobed Pi as installed or ready", async () => {
+    const trustedWorkspace = { ...workspace, trustState: "trusted" as const };
+    const api = createApi({
+      initialWorkspaces: [trustedWorkspace],
+      bindings: [binding("opencode", "healthy")],
+    });
+    render(<App api={api} />);
+
+    expect(await screen.findByText("未检测 / 待启动")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "使用受管启动配置启动 Pi" })).not.toBeInTheDocument();
+    expect(screen.queryByText("已安装")).not.toBeInTheDocument();
   });
 
   it("offers an OpenCode retry for an already trusted workspace without starting Pi", async () => {
@@ -149,6 +293,32 @@ describe("App", () => {
     fireEvent.click(startButton);
     await waitFor(() => expect(api.runtime.start).toHaveBeenCalledWith({ workspaceId, agentKind: "opencode" }));
     expect(api.workspace.setTrust).not.toHaveBeenCalled();
+  });
+
+  it("uses only the fixed managed-session API in the trusted Agent workbench", async () => {
+    const trustedWorkspace = { ...workspace, trustState: "trusted" as const };
+    const api = createApi({
+      initialWorkspaces: [trustedWorkspace],
+      bindings: [binding("pi", "ready", true), binding("opencode", "healthy")],
+      sessions: [{ agentKind: "pi", sessionId: "pi-current", title: "Current Pi session", active: true }],
+    });
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Agent" }));
+    await waitFor(() => expect(api.sessions.snapshot).toHaveBeenCalledWith({ workspaceId }));
+    expect((await screen.findAllByText("Selected managed session")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Existing Pi message")).toBeInTheDocument();
+
+    const composer = screen.getByRole("textbox");
+    fireEvent.change(composer, { target: { value: "continue the native session" } });
+    fireEvent.keyDown(composer, { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(api.sessions.send).toHaveBeenCalledWith(expect.objectContaining({
+      workspaceId,
+      agentKind: "pi",
+      sessionId: "pi-current",
+      message: "continue the native session",
+    })));
+    expect(api.runtime.start).not.toHaveBeenCalled();
   });
 
   it("refreshes a crashed OpenCode state before allowing a retry", async () => {

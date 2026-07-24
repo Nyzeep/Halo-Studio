@@ -1,7 +1,7 @@
 import type { IpcEnvelope } from "@halo-studio/contracts";
 import type { HaloApi } from "../preload/preload.js";
 
-export type WorkbenchApi = Pick<HaloApi, "workspace" | "runtime">;
+export type WorkbenchApi = Pick<HaloApi, "workspace" | "runtime" | "sessions" | "commands">;
 
 class PublicIpcError extends Error {
   constructor(message: string) {

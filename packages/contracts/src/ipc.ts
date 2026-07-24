@@ -5,11 +5,23 @@ import {
   runtimeBindingSchema,
   workspaceIdSchema,
 } from "./agent.js";
+import { commandDescriptorSchema } from "./commands.js";
 import {
   appErrorSchema,
   jsonValueSchema,
   type AppError,
 } from "./error.js";
+import {
+  sessionAbortRequestSchema,
+  sessionCreateRequestSchema,
+  sessionHistoryRequestSchema,
+  sessionHistorySchema,
+  sessionSelectRequestSchema,
+  sessionSendRequestSchema,
+  sessionSendResultSchema,
+  sessionSnapshotRequestSchema,
+  sessionSummarySchema,
+} from "./session.js";
 
 export type IpcEnvelope<TData> =
   | { readonly ok: true; readonly data: TData }
@@ -191,6 +203,41 @@ export const ipcContracts = {
     request: workspaceIdFilterSchema,
     data: z.array(runtimeBindingSchema),
     response: ipcEnvelope(z.array(runtimeBindingSchema)),
+  },
+  "session.snapshot": {
+    request: sessionSnapshotRequestSchema,
+    data: z.array(sessionSummarySchema).max(128),
+    response: ipcEnvelope(z.array(sessionSummarySchema).max(128)),
+  },
+  "session.create": {
+    request: sessionCreateRequestSchema,
+    data: sessionSummarySchema,
+    response: ipcEnvelope(sessionSummarySchema),
+  },
+  "session.select": {
+    request: sessionSelectRequestSchema,
+    data: sessionSummarySchema,
+    response: ipcEnvelope(sessionSummarySchema),
+  },
+  "session.history": {
+    request: sessionHistoryRequestSchema,
+    data: sessionHistorySchema,
+    response: ipcEnvelope(sessionHistorySchema),
+  },
+  "session.send": {
+    request: sessionSendRequestSchema,
+    data: sessionSendResultSchema,
+    response: ipcEnvelope(sessionSendResultSchema),
+  },
+  "session.abort": {
+    request: sessionAbortRequestSchema,
+    data: sessionSummarySchema,
+    response: ipcEnvelope(sessionSummarySchema),
+  },
+  "command.list": {
+    request: runtimeActionRequestSchema,
+    data: z.array(commandDescriptorSchema).max(512),
+    response: ipcEnvelope(z.array(commandDescriptorSchema).max(512)),
   },
   "config.preview": {
     request: z

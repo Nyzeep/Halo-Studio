@@ -44,6 +44,40 @@ const runtimeBinding = {
   },
 } as const;
 
+const sessionSummary = {
+  agentKind: "pi",
+  sessionId: "pi-session-1",
+  title: "Current session",
+  active: true,
+} as const;
+
+const sessionHistory = {
+  session: sessionSummary,
+  messages: [{
+    agentKind: "pi",
+    sessionId: sessionSummary.sessionId,
+    ordinal: 0,
+    role: "user",
+    text: "hello",
+  }],
+} as const;
+
+const sessionSendResult = {
+  session: sessionSummary,
+  clientRequestId: selectionId,
+  accepted: true,
+} as const;
+
+const commandList = [{
+  name: "/compact",
+  agentKind: "pi",
+  source: "native",
+  channel: "rpc",
+  allowedWhileRunning: false,
+  mutatesGlobalDefaults: false,
+  tuiOnly: false,
+}] as const;
+
 const fixtures = {
   "workspace.pick": [{}, { selectionId, displayPath: "D:\\Workspace" }],
   "workspace.open": [
@@ -62,6 +96,19 @@ const fixtures = {
   "runtime.start": [{ workspaceId, agentKind: "pi" }, runtimeBinding],
   "runtime.stop": [{ workspaceId, agentKind: "pi" }, { ...runtimeBinding, health: "stopped" }],
   "runtime.snapshot": [{ workspaceId }, [runtimeBinding]],
+  "session.snapshot": [{ workspaceId }, [sessionSummary]],
+  "session.create": [{ workspaceId, agentKind: "pi" }, sessionSummary],
+  "session.select": [{ workspaceId, agentKind: "pi", sessionId: sessionSummary.sessionId }, sessionSummary],
+  "session.history": [{ workspaceId, agentKind: "pi", sessionId: sessionSummary.sessionId }, sessionHistory],
+  "session.send": [{
+    workspaceId,
+    agentKind: "pi",
+    sessionId: sessionSummary.sessionId,
+    message: "hello",
+    clientRequestId: selectionId,
+  }, sessionSendResult],
+  "session.abort": [{ workspaceId, agentKind: "pi", sessionId: sessionSummary.sessionId }, sessionSummary],
+  "command.list": [{ workspaceId, agentKind: "pi" }, commandList],
   "config.preview": [
     { targetId: "target-1", operations: [{ op: "set", path: ["model"], value: "test" }] },
     { previewId: "preview-1", targetId: "target-1", fingerprint: "b".repeat(64), unifiedDiff: "diff", restartRequired: ["pi"] },

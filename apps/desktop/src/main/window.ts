@@ -5,6 +5,7 @@ export interface NavigationEvent {
 export interface WebContentsPort {
   on(event: "will-navigate" | "will-redirect" | "new-window", listener: (event: NavigationEvent, ...args: unknown[]) => void): unknown;
   setWindowOpenHandler(handler: (details: { readonly url: string }) => { readonly action: "deny" }): void;
+  send?(channel: string, ...args: unknown[]): void;
 }
 
 export interface BrowserWindowPort {

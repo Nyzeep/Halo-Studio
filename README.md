@@ -1,55 +1,91 @@
 # Halo Studio
 
-Halo Studio 正在重构为只面向 Pi 与 OpenCode 的精简桌面工作台。项目以跨平台 Electron 应用为目标，Windows 为首发平台。
+Halo Studio 是面向 **Pi** 与 **OpenCode** 的精简桌面受管工作台。它以 Electron 为桌面外壳，Windows 是 R1 的验收平台；代码结构避免绑定单一平台，但 macOS/Linux 发布不属于当前交付。
 
-## 当前状态
+当前分支处于 R1 核心重构阶段。这里的目标是让一个受信任工作区中的 Pi 与 OpenCode 具有可核对的检测、启动、停止和状态边界，而不是交付完整 IDE。
 
-仓库目前处于第一阶段的中间基线：旧实现已经清退，npm workspaces、仓库卫生规则和后续实现边界已经建立。`apps/*` 与 `packages/*` 工作区将在后续任务中逐步加入，当前基线本身不提供可运行的产品界面。
+## R1 的范围
 
-第一阶段只覆盖以下范围：
+R1 只处理以下事情：
 
-- 新 Electron/TypeScript 工程骨架与明确的包边界。
-- Pi JSONL RPC 和 OpenCode 本地 Server 的运行时探测、版本校验与生命周期接口。
-- Workspace、路径规范化、信任状态和最小权限边界。
-- 类型化 IPC、SQLite migration、凭据保护和安全配置写入基线。
-- 反映真实运行时状态的最小桌面外壳。
+- 打开一个本地工作区，并显式维护它的信任状态。
+- 由 Electron Main 进程拥有 Pi 与 OpenCode 的检测、生命周期和公开状态。
+- Pi 使用 JSONL RPC，并在 `get_state` 就绪后才报告可用；其模型、thinking 和 Provider 凭据只在 Main 进程解析。
+- OpenCode 使用锁定依赖版本的本地运行时、回环地址、每次启动的新认证信息、健康检查和版本握手。
+- 通过受限的 Preload API 提供工作区、运行时、配置事务和存储健康度的固定 IPC 契约。
+- 提供紧凑的 VS Code 风格工作台框架：标题栏、活动栏、侧栏、中心区、运行时状态栏、底部面板和状态栏。
 
-完整编辑器、完整聊天与工具交互、`/` 命令执行、调试终端、MCP 与资源管理界面以及云同步尚未交付。
+当前界面能打开/信任工作区、刷新 Pi 与 OpenCode 状态；在受信任工作区中，Pi 面板可使用固定 IPC 与 Main 已有的受管启动配置来启动 Pi、在启动中或就绪后停止 Pi，并在崩溃或不可用后执行停止再重试。界面不接收、展示或保存模型、thinking、Provider 或凭据输入；这些内容缺失时，Pi 启动会失败关闭。当前界面也能启动 OpenCode。配置事务的底层包已存在，但桌面服务暂不开放写入，相关 IPC 会失败关闭。
 
-## 环境
+以下内容不在 R1 内：完整编辑器或文件修改、完整对话、命令执行、嵌入式终端、配置编辑界面、打包安装器和跨平台发布。不要把工作台布局或占位视图当作这些能力已经交付。
 
-- Node.js 20.18 或更高版本
-- npm 10.8 或更高版本
+## 架构与安全边界
 
-安装锁定依赖：
+- Renderer 只负责 React UI 与经过验证的快照，不能访问 Node、凭据、子进程或本地回环服务。
+- Preload 仅暴露按业务域划分的固定方法，并校验每次请求和响应。
+- Main 进程独占工作区、信任、进程、SQLite、凭据库和配置事务；切换、撤销信任或退出时会尝试停止该工作区的运行时。
+- 凭据只保存在 Electron `safeStorage` 保护的凭据库中。公共 IPC、状态、日志和 SQLite 不应包含明文 Provider 值。
+- 运行时环境使用白名单构造；不会将宿主进程的完整环境直接传给 Pi 或 OpenCode。
+
+详细设计与当前实现状态见：
+
+- [产品需求](docs/requirements/2026-07-24-halo-studio-pi-opencode-product-requirements.md)
+- [架构边界 ADR](docs/adr/0001-pi-opencode-managed-workbench-boundary.md)
+- [核心架构](docs/architecture/pi-opencode-core.md)
+- [验证指南](docs/testing/core-rebuild-verification.md)
+
+## 环境与命令
+
+- Node.js `>= 20.18`
+- npm `>= 10.8`
+
+在本工作树根目录安装锁定依赖：
 
 ```powershell
 npm ci
 ```
 
-运行测试：
+常用检查：
 
 ```powershell
+npm run check:repository
+npm run typecheck
 npm test
-```
-
-执行构建：
-
-```powershell
 npm run build
+npm run verify
+node scripts/windows-smoke.mjs
 ```
 
-执行仓库检查、类型检查、测试和构建：
+`npm run verify` 依次执行仓库检查、类型检查、测试和构建。`node scripts/windows-smoke.mjs` 仅在 Windows 上运行，并用受控子进程验证 Main 服务组合；它不是已打包桌面应用的人工 GUI 验收。
+
+`npm run dev` 会转发到桌面工作区：它构建 Main/Preload 开发入口，在固定回环地址 `http://127.0.0.1:5173` 启动 Vite Renderer，并启动加载该地址的 Electron。它用于实际桌面开发会话，但不能替代已打包安装器或 Pi/OpenCode 真实环境的验收。
+
+`better-sqlite3` 是原生模块，因此开发链在 Node 与 Electron ABI 间显式切换。桌面工作区的 `dev`、`build` 和 `smoke:dev` 前置步骤会运行 `scripts/prepare-native-runtime.mjs electron`；根测试、桌面测试和 `windows-smoke.mjs` 则在执行前使用 `scripts/prepare-native-runtime.mjs node` 恢复当前 Node ABI。已构建副本只缓存于 Git 忽略的 `.halo-runtime/native-build-cache/`，绝不能暂存或提交。
+
+Windows 上可运行实际开发态烟测：
 
 ```powershell
-npm run verify
+npm run smoke:dev --workspace @halo-studio/desktop
 ```
 
-## 参考资料边界
+该命令以临时用户数据目录启动同一套 Vite + Electron 开发流程，确认 Renderer 已由回环开发服务器提供且 Electron 已加载开发窗口；它不验证已打包产物，也不启动真实的 Pi/OpenCode 服务。正式执行必须使用具有交互式桌面会话、且不受当前 Codex 限制的 Windows 宿主：当前受限环境会阻断 Chromium 的 sandboxed Renderer，不能作为此烟测的有效运行环境。不得追加 `--no-sandbox` 规避该限制；这会破坏桌面窗口既有的安全边界。完整命令说明、测试覆盖与待补验收项见[验证指南](docs/testing/core-rebuild-verification.md)。
 
-`用于参考的几个项目的代码/` 是只读参考资料目录。不得在其中修改文件、安装依赖或执行构建；该目录也不得被 Git 跟踪、提交或包含在发布产物中。引用其中的代码或资源前必须单独核对许可证。
+## Pi 探测与启动配置（当前内部接缝）
 
-## 设计与计划
+Pi 的版本探测刻意不携带 Provider 凭据：`pi --version` 只接收白名单化的基础运行时环境，探测阶段不会读取凭据库。只有版本探测成功且即将创建确认的 Pi JSONL RPC 子进程时，Main-only 启动解析器才一次性解析模型、thinking、Provider 环境键和受保护的 Provider 值；这些值只在该子进程的创建范围内使用，不会被运行时或服务缓存。
 
-- 核心重构规格：`docs/superpowers/specs/2026-07-22-pi-opencode-core-rebuild-design.md`
-- 当前实施计划：`docs/superpowers/plans/2026-07-22-pi-opencode-core-rebuild.md`
+当前临时解析器从 Main 环境读取非敏感选择器 `HALO_PI_MODEL`、`HALO_PI_THINKING`、`HALO_PI_PROVIDER_ENV_KEY`（Provider 环境变量名）和 `HALO_PI_CREDENTIAL_REFERENCE`，再按凭据引用从受保护凭据库取得 Provider 值。不要把 Provider 明文放入环境变量、Renderer、IPC 请求或测试快照。
+
+这是一条内部实现接缝，不是面向最终用户的配置协议；R1 虽已提供固定的 Pi 启动、停止和重试界面操作，但尚未提供保存启动选择器、录入凭据或管理凭据的设置页面。缺少选择器、凭据库不可用或凭据不存在时，Pi 启动必须失败关闭。
+
+## 参考资料与仓库卫生
+
+`用于参考的几个项目的代码/` 是永久只读的参考资料目录。禁止在其中修改文件、安装依赖、执行构建或运行测试；它不得被暂存、提交、发布或作为本项目构建输入。若未来需要复用任何外部代码、图标或资源，必须先单独核对许可证并在本仓库中记录来源。
+
+当前实现使用 `lucide-react` 图标；没有把参考资料目录中的代码、图标或资源纳入本仓库。第三方依赖说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 开发约定
+
+- 活跃重构分支为 `develop`；提交信息使用中文且保持单一职责。
+- 需求的唯一活动来源是[当前产品需求](docs/requirements/2026-07-24-halo-studio-pi-opencode-product-requirements.md)。历史计划仅作追溯，不直接生成实现任务。
+- 提交前至少运行与改动相称的验证，并执行 `git diff --check`。

@@ -1,10 +1,27 @@
-import { Bot, CircleAlert, Cpu, LoaderCircle, Play, RefreshCw } from "lucide-react";
+import {
+  Bot,
+  CircleAlert,
+  Cpu,
+  LoaderCircle,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+  Square,
+} from "lucide-react";
 import type { RuntimeBinding, RuntimeHealth } from "@halo-studio/contracts";
 
 export interface AgentPanelProps {
   readonly bindings: readonly RuntimeBinding[];
   readonly loading: boolean;
   readonly error: string | undefined;
+  readonly workspaceTrusted: boolean;
+  readonly canStartPi: boolean;
+  readonly canStopPi: boolean;
+  readonly canRetryPi: boolean;
+  onStartPi(): void;
+  onStopPi(): void;
+  onRetryPi(): void;
   readonly canStartOpenCode: boolean;
   onStartOpenCode(): void;
   onRefresh(): void;
@@ -37,7 +54,88 @@ function RuntimeRow({ label, binding }: { readonly label: string; readonly bindi
   );
 }
 
-export function AgentPanel({ bindings, loading, error, canStartOpenCode, onStartOpenCode, onRefresh }: AgentPanelProps): JSX.Element {
+function piDetectionSummary(binding: RuntimeBinding | undefined): string {
+  if (binding === undefined) return "未检测 / 待启动";
+  const details = [
+    binding.executable === undefined ? undefined : `可执行文件：${binding.executable}`,
+    binding.version === undefined ? undefined : `版本：${binding.version}`,
+  ].filter((detail): detail is string => detail !== undefined);
+  if (details.length > 0) return details.join(" · ");
+  if (binding.health === "unavailable") return "未检测到可启动的 Pi";
+  return "未提供检测详情";
+}
+
+interface PiControlsProps {
+  readonly binding: RuntimeBinding | undefined;
+  readonly loading: boolean;
+  readonly workspaceTrusted: boolean;
+  readonly canStart: boolean;
+  readonly canStop: boolean;
+  readonly canRetry: boolean;
+  onStart(): void;
+  onStop(): void;
+  onRetry(): void;
+}
+
+function PiControls({
+  binding,
+  loading,
+  workspaceTrusted,
+  canStart,
+  canStop,
+  canRetry,
+  onStart,
+  onStop,
+  onRetry,
+}: PiControlsProps): JSX.Element {
+  if (binding === undefined) return <p className="agent-panel__notice">尚未请求 Pi 检测。</p>;
+  if (!workspaceTrusted) {
+    return <p className="agent-panel__notice">信任当前工作区后才可启动 Pi。</p>;
+  }
+  if (canStop) {
+    return (
+      <button className="agent-panel__action" type="button" aria-label="停止 Pi" disabled={loading} onClick={onStop}>
+        <Square size={13} aria-hidden="true" />
+        <span>停止 Pi</span>
+      </button>
+    );
+  }
+  if (canRetry) {
+    return (
+      <button className="agent-panel__action" type="button" aria-label="重试 Pi" disabled={loading} onClick={onRetry}>
+        <RotateCcw size={14} aria-hidden="true" />
+        <span>重试 Pi</span>
+      </button>
+    );
+  }
+  if (canStart) {
+    return (
+      <button className="agent-panel__action" type="button" aria-label="使用受管启动配置启动 Pi" disabled={loading} onClick={onStart}>
+        <Play size={14} aria-hidden="true" />
+        <span>使用受管启动配置启动 Pi</span>
+      </button>
+    );
+  }
+  if (binding.health === "starting") return <p className="agent-panel__notice">Pi 正在完成就绪检查。</p>;
+  if (binding.health === "stopping") return <p className="agent-panel__notice">Pi 正在停止。</p>;
+  return <></>;
+}
+
+export function AgentPanel({
+  bindings,
+  loading,
+  error,
+  workspaceTrusted,
+  canStartPi,
+  canStopPi,
+  canRetryPi,
+  onStartPi,
+  onStopPi,
+  onRetryPi,
+  canStartOpenCode,
+  onStartOpenCode,
+  onRefresh,
+}: AgentPanelProps): JSX.Element {
   const pi = bindings.find((binding) => binding.agentKind === "pi");
   const openCode = bindings.find((binding) => binding.agentKind === "opencode");
   return (
@@ -52,7 +150,29 @@ export function AgentPanel({ bindings, loading, error, canStartOpenCode, onStart
         </span>
       </div>
       <div className="agent-panel__content">
-        <RuntimeRow label="Pi" binding={pi} />
+        <section className="agent-runtime-card" aria-label="Pi 受管运行时">
+          <RuntimeRow label="Pi" binding={pi} />
+          <p className="agent-runtime-card__detection">{piDetectionSummary(pi)}</p>
+          <div className="pi-launch-boundary">
+            <ShieldCheck size={14} aria-hidden="true" />
+            <div>
+              <strong>受管启动配置</strong>
+              <span>模型、thinking 与 Provider 凭据仅由主进程解析，不会通过界面或 IPC 输入、展示。</span>
+            </div>
+          </div>
+          <PiControls
+            binding={pi}
+            loading={loading}
+            workspaceTrusted={workspaceTrusted}
+            canStart={canStartPi}
+            canStop={canStopPi}
+            canRetry={canRetryPi}
+            onStart={onStartPi}
+            onStop={onStopPi}
+            onRetry={onRetryPi}
+          />
+        </section>
+        <div className="agent-panel__divider" aria-hidden="true" />
         <RuntimeRow label="OpenCode" binding={openCode} />
         {canStartOpenCode ? (
           <button className="agent-panel__action" type="button" disabled={loading} onClick={onStartOpenCode}>

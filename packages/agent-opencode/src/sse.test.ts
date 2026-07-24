@@ -135,4 +135,62 @@ describe("OpenCode SSE", () => {
     expect(samples).toHaveLength(10);
     expect(samples).toEqual(Array.from({ length: 10 }, (_, index) => `future-${index}`));
   });
+
+  it("projects only supported global events from the fixed workspace", async () => {
+    const signals: SseSignal[] = [];
+    const samples: string[] = [];
+    const frame = (payload: unknown) => `event: message\ndata: ${JSON.stringify(payload)}\n\n`;
+    await consumeSse(chunks([
+      frame({
+        directory: "C:\\workspace",
+        payload: {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              type: "text",
+              sessionID: "s1",
+              messageID: "m1",
+              text: "hello",
+              metadata: { secret: "metadata-canary" },
+            },
+            delta: "he",
+            provider: "provider-canary",
+          },
+        },
+      }),
+      frame({
+        directory: "C:\\other-workspace",
+        payload: { type: "message.part.updated", properties: { part: { type: "text", sessionID: "s1", messageID: "m1", text: "wrong-directory-canary" } } },
+      }),
+      frame({
+        directory: "C:\\workspace",
+        payload: { type: "permission.asked", properties: { command: "permission-canary" } },
+      }),
+      frame({
+        directory: "C:\\workspace",
+        payload: { type: "message.part.updated", properties: { part: { type: "tool", sessionID: "s1", messageID: "m1", input: "tool-canary" } } },
+      }),
+      frame({
+        directory: "C:\\workspace",
+        payload: { type: "future.unknown", properties: { secret: "unknown-canary" } },
+      }),
+    ]), {
+      workspaceDirectory: "C:\\workspace",
+      onSignal: (signal) => signals.push(signal),
+      sampleUnknown: (event) => samples.push(event),
+    });
+
+    expect(signals).toEqual([
+      {
+        type: "event",
+        event: { type: "message-part-updated", sessionId: "s1", messageId: "m1", text: "hello", delta: "he" },
+      },
+      { type: "disconnected" },
+    ]);
+    expect(samples).toEqual(["message", "message", "message", "message"]);
+    const serialised = JSON.stringify(signals);
+    for (const forbidden of ["metadata-canary", "provider-canary", "wrong-directory-canary", "permission-canary", "tool-canary", "unknown-canary"]) {
+      expect(serialised).not.toContain(forbidden);
+    }
+  });
 });

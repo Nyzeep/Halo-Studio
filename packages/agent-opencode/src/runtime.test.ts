@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createNodeProcessFactory, OpenCodeRuntime, type NodeChildPort, type OpenCodeProcess, type SpawnPort } from "./runtime.js";
 import * as runtimeModule from "./runtime.js";
 
@@ -880,5 +880,74 @@ describe("OpenCode runtime", () => {
     crashedProcesses[0]?.process.emit("exit", 1, null);
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(crashedCredentials?.password).toBe("");
+  });
+
+  it("creates a Main-owned session adapter with fixed workspace requests", async () => {
+    const processes: FakeProcess[] = [];
+    const credentials = { username: "opencode" as const, password: "session-auth-canary" };
+    const requests: Array<{ readonly url: string; readonly init: RequestInit | undefined }> = [];
+    const runtime = new OpenCodeRuntime({
+      resolveArtifact: testArtifact(),
+      credentialsFactory: () => credentials,
+      cwd: "C:\\workspace",
+      hostEnvironment: { PATH: "x" },
+      trust: "trusted",
+      spawn: processFactory({ processes }),
+      checkHealth: async () => ({ version: "1.18.4" }),
+    });
+
+    expect(() => runtime.createSessionAdapter()).toThrow(expect.objectContaining({ code: "RuntimeUnavailable" }));
+
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      requests.push({ url, init });
+      const pathname = new URL(url).pathname;
+      if (pathname === "/session") {
+        return new Response(JSON.stringify([{
+          id: "s1",
+          title: "Public session",
+          time: { updated: 0 },
+          directory: "C:\\private\\runtime-path-canary",
+          provider: "provider-canary",
+          model: "model-canary",
+        }]), { status: 200 });
+      }
+      if (pathname === "/session/s1/prompt_async") return new Response(null, { status: 204 });
+      return new Response(null, { status: 404 });
+    });
+
+    try {
+      await runtime.start();
+      const adapter = runtime.createSessionAdapter();
+      const sessions = await adapter.list();
+      await adapter.startPrompt("s1", "Summarize this change.");
+
+      const listRequest = requests[0];
+      expect(listRequest).toBeDefined();
+      if (!listRequest) return;
+      const listUrl = new URL(listRequest.url);
+      expect(listUrl.pathname).toBe("/session");
+      expect(listUrl.searchParams.get("directory")).toBe("C:\\workspace");
+      const listHeaders = new Headers(listRequest.init?.headers);
+      expect(listHeaders.get("authorization")).toBe(`Basic ${Buffer.from("opencode:session-auth-canary").toString("base64")}`);
+      expect(listHeaders.get("accept")).toBe("application/json");
+
+      const promptRequest = requests.find((request) => new URL(request.url).pathname === "/session/s1/prompt_async");
+      expect(promptRequest).toBeDefined();
+      if (!promptRequest) return;
+      expect(JSON.parse(String(promptRequest.init?.body))).toEqual({
+        parts: [{ type: "text", text: "Summarize this change." }],
+      });
+      expect(new Headers(promptRequest.init?.headers).get("content-type")).toBe("application/json");
+
+      const serialised = JSON.stringify({ adapter, sessions });
+      for (const forbidden of ["session-auth-canary", "runtime-path-canary", "provider-canary", "model-canary", "43123", "C:\\workspace"]) {
+        expect(serialised).not.toContain(forbidden);
+      }
+    } finally {
+      vi.unstubAllGlobals();
+      processes[0]?.resolveWait({ code: 0, signal: null });
+      await runtime.stop();
+    }
   });
 });

@@ -3,6 +3,14 @@ export * from "./auth.js";
 export * from "./errors.js";
 export * from "./health.js";
 export * from "./sse.js";
+export type {
+  OpenCodeSessionAdapter,
+  OpenCodeSessionEvent,
+  OpenCodeSessionHistory,
+  OpenCodeSessionMessage,
+  OpenCodeSessionSubscription,
+  OpenCodeSessionSummary,
+} from "./session.js";
 export {
   createNodeProcessFactory,
   createOpenCodeRuntime,

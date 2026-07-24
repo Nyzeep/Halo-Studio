@@ -2,10 +2,15 @@ import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { AgentEventEnvelope } from "@halo-studio/contracts";
 
 import { createElectronSecretProtector } from "../src/main/electronSecretProtector.js";
-import { startDesktopMain } from "../src/main/main.js";
+import {
+  getDesktopDevelopmentSmokeMarkerPath,
+  resolveDesktopDevelopmentServerUrl,
+  startDesktopMain,
+} from "../src/main/main.js";
 import { createDesktopServices, createRuntimeBinding } from "../src/main/services.js";
 import { createSecureWindow, type BrowserWindowPort } from "../src/main/window.js";
 import { createHaloApi, installHaloPreload } from "../src/preload/preload.js";
@@ -46,11 +51,33 @@ describe("secure Electron window", () => {
       readFile(new URL("../index.html", import.meta.url), "utf8"),
     ]);
 
+    expect(mainSource).toContain("HALO_DESKTOP_DEV_SERVER_URL");
     expect(mainSource).not.toContain("HALO_DESKTOP_DEV_URL");
     expect(mainSource).not.toContain("remote-debugging");
     expect(mainSource).not.toContain("shell.openExternal");
     expect(rendererHtml).toContain("connect-src 'self'");
     expect(rendererHtml).not.toContain("http://127.0.0.1");
+  });
+
+  it("accepts only the development command's fixed loopback Vite URL", () => {
+    expect(resolveDesktopDevelopmentServerUrl(undefined)).toBeUndefined();
+    expect(resolveDesktopDevelopmentServerUrl("http://127.0.0.1:5173")).toBe("http://127.0.0.1:5173");
+    expect(resolveDesktopDevelopmentServerUrl("http://127.0.0.1:5173/")).toBe("http://127.0.0.1:5173");
+    for (const value of [
+      "http://localhost:5173",
+      "http://127.0.0.1:4173",
+      "https://127.0.0.1:5173",
+      "http://127.0.0.1:5173/other",
+      "https://example.com",
+    ]) {
+      expect(resolveDesktopDevelopmentServerUrl(value)).toBeUndefined();
+    }
+  });
+
+  it("keeps the development smoke marker within Electron user data", () => {
+    expect(getDesktopDevelopmentSmokeMarkerPath("D:\\temporary user data")).toBe(
+      "D:\\temporary user data\\halo-desktop-dev-smoke-ready",
+    );
   });
 
   it("enforces isolated sandboxed web preferences without Node or security bypasses", async () => {
@@ -177,7 +204,7 @@ describe("preload capability boundary", () => {
     expect(Object.isFrozen(api.workspace)).toBe(true);
   });
 
-  it("exposes only the twelve named domain methods backed by fixed IPC channels", async () => {
+  it("exposes only named domain methods backed by fixed IPC channels", async () => {
     const calls: Array<{ channel: string; request: unknown }> = [];
     const api = createHaloApi(async (channel, request) => {
       calls.push({ channel, request });
@@ -190,15 +217,18 @@ describe("preload capability boundary", () => {
       return { ok: false, error: { code: "RuntimeUnavailable", message: "Runtime is unavailable.", retryable: false } };
     });
 
-    expect(Object.keys(api).sort()).toEqual(["config", "runtime", "storage", "workspace"]);
+    expect(Object.keys(api).sort()).toEqual(["commands", "config", "runtime", "sessions", "storage", "workspace"]);
     expect(Object.keys(api.workspace).sort()).toEqual(["open", "pick", "setTrust", "snapshot"]);
     expect(Object.keys(api.runtime).sort()).toEqual(["probe", "snapshot", "start", "stop"]);
+    expect(Object.keys(api.sessions).sort()).toEqual(["abort", "create", "history", "select", "send", "snapshot", "subscribe"]);
+    expect(Object.keys(api.commands)).toEqual(["list"]);
     expect(Object.keys(api.config).sort()).toEqual(["commit", "preview", "rollback"]);
     expect(Object.keys(api.storage)).toEqual(["health"]);
     expect("invoke" in api).toBe(false);
     expect("ipcRenderer" in api).toBe(false);
     expect("fs" in api).toBe(false);
     expect("shell" in api).toBe(false);
+    expect("terminal" in api).toBe(false);
 
     await api.workspace.pick({});
     await api.storage.health({});
@@ -206,6 +236,36 @@ describe("preload capability boundary", () => {
       { channel: "workspace.pick", request: {} },
       { channel: "storage.health", request: {} },
     ]);
+  });
+
+  it("exposes only the fixed, schema-validated session event listener", () => {
+    let registered: ((event: unknown, value: unknown) => void) | undefined;
+    let removed = 0;
+    const listener = vi.fn();
+    const api = createHaloApi(async () => ({ ok: true, data: null }), {
+      on(channel, callback) {
+        expect(channel).toBe("session.event");
+        registered = callback;
+      },
+      removeListener(channel, callback) {
+        expect(channel).toBe("session.event");
+        expect(callback).toBe(registered);
+        removed += 1;
+      },
+    });
+    const unsubscribe = api.sessions.subscribe(listener);
+    registered?.({}, {
+      eventId: "13ebf428-5647-4a32-ae2e-55304b4e3e9f",
+      workspaceId: "a".repeat(64),
+      sequence: 0,
+      timestamp: "2026-07-24T00:00:00.000Z",
+      agentKind: "pi",
+      payload: { protocol: "pi-rpc", type: "agent_start" },
+    });
+    registered?.({}, { password: "must-not-reach-renderer" });
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+    expect(removed).toBe(1);
   });
 
   it("validates preload requests before invoke and validates responses before returning", async () => {
@@ -1161,16 +1221,6 @@ describe("active workspace selection", () => {
 });
 
 describe("desktop service composition", () => {
-  it("keeps Pi discovery independent from unavailable launch configuration", async () => {
-    const source = await readFile(new URL("../src/main/services.ts", import.meta.url), "utf8");
-
-    expect(source).toContain("detectPi");
-    expect(source).not.toContain("createPiRuntime");
-    expect(source).not.toMatch(/\bmodel\s*:/u);
-    expect(source).not.toMatch(/\bthinking\s*:/u);
-    expect(source).not.toContain('"unconfigured"');
-  });
-
   it("preserves detected runtime identity without exposing transport credentials", () => {
     const binding = createRuntimeBinding("opencode", "installed", {
       source: "bundled",
@@ -1260,6 +1310,50 @@ describe("desktop service composition", () => {
 });
 
 describe("desktop app lifecycle", () => {
+  it("forwards fixed managed-session events only to the current secure window", async () => {
+    const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
+    let sessionListener: ((event: AgentEventEnvelope) => void) | undefined;
+    const sent: Array<{ channel: string; event: unknown }> = [];
+    const app = {
+      whenReady: async () => undefined,
+      getPath: () => "D:\\user-data",
+      on(event: string, listener: (...args: unknown[]) => void) {
+        listeners.set(event, [...(listeners.get(event) ?? []), listener]);
+      },
+      quit: () => undefined,
+    };
+    const lifecycle = startDesktopMain({
+      app,
+      platform: "win32",
+      getWindowCount: () => 1,
+      createServices: async () => ({
+        handlers: {},
+        subscribeSessionEvents(listener: (event: AgentEventEnvelope) => void) {
+          sessionListener = listener;
+          return () => undefined;
+        },
+        dispose: async () => undefined,
+      }) as never,
+      registerIpc: () => () => undefined,
+      createWindow: async () => ({
+        webContents: {
+          send(channel: string, event: unknown) { sent.push({ channel, event }); },
+        },
+      }),
+    });
+    await lifecycle.ready;
+    const event: AgentEventEnvelope = {
+      eventId: "13ebf428-5647-4a32-ae2e-55304b4e3e9f",
+      workspaceId: "a".repeat(64),
+      sequence: 0,
+      timestamp: "2026-07-24T00:00:00.000Z",
+      agentKind: "pi",
+      payload: { protocol: "pi-rpc", type: "agent_start" },
+    };
+    sessionListener?.(event);
+    expect(sent).toEqual([{ channel: "session.event", event }]);
+  });
+
   it("initializes services and IPC once, then recreates only the window on activate", async () => {
     const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
     let windowCount = 0;

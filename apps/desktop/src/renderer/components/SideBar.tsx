@@ -22,7 +22,7 @@ export function SideBar({ activeView, workspace, loading, onOpenFolder }: SideBa
   return (
     <div className="sidebar">
       <div className="panel-heading">
-        <span>{configuration ? "配置" : activeView === "agent" ? "AGENT" : "资源管理器"}</span>
+        <span>{configuration ? "配置" : activeView === "agent" ? "AGENT" : "工作区"}</span>
         <span className="panel-heading__actions">
           {workspace !== undefined ? (
             <button className="panel-heading__action" type="button" aria-label="打开文件夹" title="打开文件夹" disabled={loading} onClick={onOpenFolder}>
@@ -38,10 +38,7 @@ export function SideBar({ activeView, workspace, loading, onOpenFolder }: SideBa
             <span>工作区</span>
             <strong>{workspaceName(workspace)}</strong>
           </div>
-          <div className="sidebar__group"><ChevronDown size={14} aria-hidden="true" /><span>Pi</span></div>
-          <div className="sidebar__item"><HardDrive size={14} aria-hidden="true" /><span>Pi 资源</span><small>只读</small></div>
-          <div className="sidebar__group"><ChevronDown size={14} aria-hidden="true" /><span>OpenCode</span></div>
-          <div className="sidebar__item"><PackageSearch size={14} aria-hidden="true" /><span>OpenCode MCP</span><small>只读</small></div>
+          <div className="sidebar__empty"><SlidersHorizontal size={16} aria-hidden="true" /><span>配置写入尚未开放</span></div>
         </div>
       ) : auxiliaryView ? (
         <div className="sidebar__tree" aria-label={`${auxiliaryLabel}导航`}>

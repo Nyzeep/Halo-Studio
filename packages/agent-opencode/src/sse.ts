@@ -5,15 +5,43 @@ import {
   TransportDisconnectedError,
 } from "./errors.js";
 
+const MAX_SESSION_ID_LENGTH = 512;
+const MAX_TEXT_LENGTH = 32_768;
+
+export interface OpenCodeSseSession {
+  readonly sessionId: string;
+  readonly title?: string;
+  readonly updatedAt?: string;
+}
+
+/** Safe projection of the small event subset required by the R2 session UI. */
+export type OpenCodeSessionStreamEvent =
+  | { readonly type: "session-created"; readonly session: OpenCodeSseSession }
+  | { readonly type: "session-updated"; readonly session: OpenCodeSseSession }
+  | { readonly type: "session-status"; readonly sessionId: string; readonly active: boolean }
+  | { readonly type: "session-idle"; readonly sessionId: string }
+  | { readonly type: "session-error"; readonly sessionId: string }
+  | { readonly type: "message-updated"; readonly sessionId: string; readonly messageId: string; readonly role: "user" | "assistant" }
+  | {
+      readonly type: "message-part-updated";
+      readonly sessionId: string;
+      readonly messageId: string;
+      readonly text: string;
+      readonly delta?: string;
+    };
+
 export type SseSignal =
   | { readonly type: "connected"; readonly data?: unknown }
   | { readonly type: "heartbeat"; readonly data?: unknown }
+  | { readonly type: "event"; readonly event: OpenCodeSessionStreamEvent }
   | { readonly type: "protocol-violation"; readonly error: ProtocolViolationError }
   | { readonly type: "disconnected" };
 
 export interface SseOptions {
   readonly onSignal: (signal: SseSignal) => void;
   readonly sampleUnknown?: (event: string) => void;
+  /** Fixed by Main from the runtime workspace; never sourced from Renderer. */
+  readonly workspaceDirectory?: string;
 }
 
 export type SseFetch = (url: string, init?: RequestInit) => Promise<Response>;
@@ -25,6 +53,7 @@ export interface OpenCodeSseConnectionOptions {
   readonly sampleUnknown?: (event: string) => void;
   readonly fetch?: SseFetch;
   readonly signal?: AbortSignal;
+  readonly workspaceDirectory?: string;
 }
 
 export interface OpenCodeSseConnection {
@@ -39,7 +68,114 @@ function parseData(lines: readonly string[]): unknown {
   try { return JSON.parse(data) as unknown; } catch { throw new ProtocolViolationError(); }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function safeSessionId(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length === 0 || value.length > MAX_SESSION_ID_LENGTH) return undefined;
+  if (/[\u0000-\u001f\u007f]/u.test(value)) return undefined;
+  return value;
+}
+
+function boundedText(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length === 0 || value.length > MAX_TEXT_LENGTH) return undefined;
+  return value;
+}
+
+function optionalText(record: Record<string, unknown>, key: string): string | undefined | null {
+  if (!(key in record) || record[key] === undefined || record[key] === null) return undefined;
+  return boundedText(record[key]) ?? null;
+}
+
+function optionalUpdatedAt(record: Record<string, unknown>): string | undefined | null {
+  if (!("time" in record) || record.time === undefined || record.time === null) return undefined;
+  if (!isRecord(record.time) || typeof record.time.updated !== "number" || !Number.isFinite(record.time.updated)) return null;
+  const date = new Date(record.time.updated);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function projectSession(value: unknown): OpenCodeSseSession | undefined {
+  if (!isRecord(value)) return undefined;
+  const sessionId = safeSessionId(value.id);
+  if (!sessionId) return undefined;
+  const title = optionalText(value, "title");
+  const updatedAt = optionalUpdatedAt(value);
+  if (title === null || updatedAt === null) return undefined;
+  return {
+    sessionId,
+    ...(title === undefined ? {} : { title }),
+    ...(updatedAt === undefined ? {} : { updatedAt }),
+  };
+}
+
+function projectGlobalEvent(value: unknown, workspaceDirectory: string): SseSignal | undefined {
+  if (!isRecord(value) || !isRecord(value.payload) || typeof value.payload.type !== "string") return undefined;
+  const payload = value.payload;
+  if (payload.type === "server.connected") return { type: "connected" };
+  if (payload.type === "server.heartbeat") return { type: "heartbeat" };
+  if (value.directory !== workspaceDirectory || !isRecord(payload.properties)) return undefined;
+  const properties = payload.properties;
+
+  if (payload.type === "session.created" || payload.type === "session.updated") {
+    const session = projectSession(properties.info);
+    if (!session) return undefined;
+    return { type: "event", event: { type: payload.type === "session.created" ? "session-created" : "session-updated", session } };
+  }
+  if (payload.type === "session.status") {
+    const sessionId = safeSessionId(properties.sessionID);
+    if (!sessionId || !isRecord(properties.status)) return undefined;
+    const status = properties.status.type;
+    if (status !== "busy" && status !== "idle" && status !== "retry") return undefined;
+    return { type: "event", event: { type: "session-status", sessionId, active: status !== "idle" } };
+  }
+  if (payload.type === "session.idle" || payload.type === "session.error") {
+    const sessionId = safeSessionId(properties.sessionID);
+    if (!sessionId) return undefined;
+    return { type: "event", event: { type: payload.type === "session.idle" ? "session-idle" : "session-error", sessionId } };
+  }
+  if (payload.type === "message.updated") {
+    if (!isRecord(properties.info)) return undefined;
+    const sessionId = safeSessionId(properties.info.sessionID);
+    const messageId = safeSessionId(properties.info.id);
+    const role = properties.info.role;
+    if (!sessionId || !messageId || (role !== "user" && role !== "assistant")) return undefined;
+    return { type: "event", event: { type: "message-updated", sessionId, messageId, role } };
+  }
+  if (payload.type === "message.part.updated") {
+    if (!isRecord(properties.part) || properties.part.type !== "text") return undefined;
+    const sessionId = safeSessionId(properties.part.sessionID);
+    const messageId = safeSessionId(properties.part.messageID);
+    const text = boundedText(properties.part.text);
+    const delta = optionalText(properties, "delta");
+    if (!sessionId || !messageId || !text || delta === null) return undefined;
+    return {
+      type: "event",
+      event: {
+        type: "message-part-updated",
+        sessionId,
+        messageId,
+        text,
+        ...(delta === undefined ? {} : { delta }),
+      },
+    };
+  }
+  return undefined;
+}
+
 function dispatch(event: string, dataLines: readonly string[], options: SseOptions): void {
+  if (event === "message" && options.workspaceDirectory !== undefined) {
+    if (dataLines.length === 0) return;
+    try {
+      const signal = projectGlobalEvent(parseData(dataLines), options.workspaceDirectory);
+      if (signal) options.onSignal(signal);
+      else options.sampleUnknown?.("message");
+    } catch (error) {
+      options.onSignal({ type: "protocol-violation", error: error instanceof ProtocolViolationError ? error : new ProtocolViolationError() });
+    }
+    return;
+  }
   if (event === "") {
     if (dataLines.length === 0) return;
     try {
@@ -195,6 +331,7 @@ export async function connectOpenCodeSse(options: OpenCodeSseConnectionOptions):
   const done = consumeSse(readResponse(reader), {
     onSignal: options.onSignal,
     ...(options.sampleUnknown === undefined ? {} : { sampleUnknown: options.sampleUnknown }),
+    ...(options.workspaceDirectory === undefined ? {} : { workspaceDirectory: options.workspaceDirectory }),
   }).catch((error: unknown) => {
     if (closeRequested || controller.signal.aborted) return;
     throw error instanceof ProtocolViolationError ? error : new TransportDisconnectedError();
