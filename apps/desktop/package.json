@@ -1,0 +1,51 @@
+{
+  "name": "@halo-studio/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist-electron/main/main.js",
+  "scripts": {
+    "build:dependencies": "npm run build --workspace @halo-studio/config && npm run build --workspace @halo-studio/agent-pi && npm run build --workspace @halo-studio/agent-opencode && npm run build --workspace @halo-studio/ui",
+    "prebuild": "npm run build:dependencies && node ../../scripts/prepare-native-runtime.mjs electron",
+    "build:main": "vite build --mode main",
+    "build:preload": "vite build --mode preload",
+    "build:renderer": "vite build",
+    "build": "tsc -p tsconfig.json --noEmit && npm run build:main && npm run build:preload && npm run build:renderer",
+    "predev": "npm run build:dependencies && node ../../scripts/prepare-native-runtime.mjs electron",
+    "dev": "node ../../scripts/desktop-dev.mjs",
+    "presmoke:dev": "npm run build:dependencies && node ../../scripts/prepare-native-runtime.mjs electron",
+    "smoke:dev": "node ../../scripts/electron-dev-smoke.mjs",
+    "pretypecheck": "npm run build:dependencies",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build:dependencies && node ../../scripts/prepare-native-runtime.mjs node",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@halo-studio/agent-opencode": "0.1.0",
+    "@halo-studio/agent-pi": "0.1.0",
+    "@halo-studio/config": "0.1.0",
+    "@halo-studio/contracts": "0.1.0",
+    "@halo-studio/core": "0.1.0",
+    "@halo-studio/storage": "0.1.0",
+    "@halo-studio/ui": "0.1.0",
+    "lucide-react": "0.468.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.1.0",
+    "@types/node": "22.10.5",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "electron": "33.4.11",
+    "jsdom": "25.0.1",
+    "typescript": "5.7.3",
+    "vite": "6.4.3",
+    "vitest": "2.1.8"
+  },
+  "engines": {
+    "node": ">=20.18"
+  }
+}

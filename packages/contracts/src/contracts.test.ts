@@ -12,6 +12,7 @@ import {
   ipcContracts,
   jsonValueSchema,
   runtimeBindingSchema,
+  sessionEventChannel,
   workspaceIdSchema,
   type DataOf,
   type InputOf,
@@ -96,6 +97,46 @@ const storageHealth = {
   diagnostics: [],
 } satisfies DataOf<"storage.health">;
 
+const sessionSummary = {
+  agentKind: "pi",
+  sessionId: "pi-session-1",
+  title: "Current Pi session",
+  updatedAt: "2026-07-24T00:00:00.000Z",
+  active: true,
+} satisfies DataOf<"session.create">;
+
+const sessionHistory = {
+  session: sessionSummary,
+  messages: [
+    {
+      agentKind: "pi",
+      sessionId: sessionSummary.sessionId,
+      ordinal: 0,
+      role: "user",
+      text: "Review this workspace.",
+    },
+  ],
+} satisfies DataOf<"session.history">;
+
+const sessionSendResult = {
+  session: sessionSummary,
+  clientRequestId: selectionId,
+  accepted: true,
+} satisfies DataOf<"session.send">;
+
+const commandDescriptors = [
+  {
+    name: "/compact",
+    description: "Compact the current session.",
+    agentKind: "pi",
+    source: "native",
+    channel: "rpc",
+    allowedWhileRunning: false,
+    mutatesGlobalDefaults: false,
+    tuiOnly: false,
+  },
+] satisfies DataOf<"command.list">;
+
 const throwingPrototypeProxy = new Proxy(
   {},
   {
@@ -158,6 +199,39 @@ const validIpcFixtures = [
     stoppedRuntimeBinding,
   ),
   ipcFixture("runtime.snapshot", {}, [runtimeBinding]),
+  ipcFixture("session.snapshot", { workspaceId }, [sessionSummary]),
+  ipcFixture(
+    "session.create",
+    { workspaceId, agentKind: "pi" },
+    sessionSummary,
+  ),
+  ipcFixture(
+    "session.select",
+    { workspaceId, agentKind: "pi", sessionId: sessionSummary.sessionId },
+    sessionSummary,
+  ),
+  ipcFixture(
+    "session.history",
+    { workspaceId, agentKind: "pi", sessionId: sessionSummary.sessionId },
+    sessionHistory,
+  ),
+  ipcFixture(
+    "session.send",
+    {
+      workspaceId,
+      agentKind: "pi",
+      sessionId: sessionSummary.sessionId,
+      message: "Review this workspace.",
+      clientRequestId: selectionId,
+    },
+    sessionSendResult,
+  ),
+  ipcFixture(
+    "session.abort",
+    { workspaceId, agentKind: "pi", sessionId: sessionSummary.sessionId },
+    sessionSummary,
+  ),
+  ipcFixture("command.list", { workspaceId, agentKind: "pi" }, commandDescriptors),
   ipcFixture(
     "config.preview",
     {
@@ -508,13 +582,20 @@ describe("IPC contracts", () => {
     "runtime.start",
     "runtime.stop",
     "runtime.snapshot",
+    "session.snapshot",
+    "session.create",
+    "session.select",
+    "session.history",
+    "session.send",
+    "session.abort",
+    "command.list",
     "config.preview",
     "config.commit",
     "config.rollback",
     "storage.health",
   ];
 
-  it("exports exactly the first-phase business channels", () => {
+  it("exports the fixed R1 and R2 business channels", () => {
     expect(Object.keys(ipcContracts).sort()).toEqual(expectedChannels.sort());
     for (const forbidden of [
       "shell.exec",
@@ -522,9 +603,11 @@ describe("IPC contracts", () => {
       "fs.write",
       "sql.query",
       "terminal.write",
+      "session.execute",
     ]) {
       expect(forbidden in ipcContracts).toBe(false);
     }
+    expect(sessionEventChannel in ipcContracts).toBe(false);
   });
 
   it("accepts a typed request, data payload, and success response for every channel", () => {
@@ -576,6 +659,46 @@ describe("IPC contracts", () => {
     expect(probe.safeParse({}).success).toBe(true);
     expect(probe.safeParse({ workspaceId }).success).toBe(true);
     expect(probe.safeParse({ agentKind: "pi" }).success).toBe(false);
+  });
+
+  it("keeps session actions bound to opaque IDs and a trusted workspace handle", () => {
+    const send = ipcContracts["session.send"].request;
+    expect(
+      send.safeParse({
+        workspaceId,
+        agentKind: "pi",
+        sessionId: "session-a",
+        message: "Continue.",
+        clientRequestId: selectionId,
+      }).success,
+    ).toBe(true);
+    expect(
+      send.safeParse({
+        workspaceId,
+        agentKind: "pi",
+        sessionId: "C:\\arbitrary\\session.jsonl",
+        message: "Continue.",
+        clientRequestId: selectionId,
+      }).success,
+    ).toBe(true);
+    expect(
+      send.safeParse({
+        workspaceId,
+        agentKind: "pi",
+        sessionId: "session-a",
+        message: "",
+        clientRequestId: selectionId,
+      }).success,
+    ).toBe(false);
+    expect(
+      send.safeParse({
+        workspacePath: "C:\\arbitrary",
+        agentKind: "pi",
+        sessionId: "session-a",
+        message: "Continue.",
+        clientRequestId: selectionId,
+      }).success,
+    ).toBe(false);
   });
 
   it("limits config writes to target identifiers and structured operations", () => {
@@ -700,9 +823,11 @@ describe("command descriptors", () => {
     expect(
       commandDescriptorSchema.safeParse({ ...descriptor, source: "plugin" }).success,
     ).toBe(false);
-    expect(
-      commandDescriptorSchema.safeParse({ ...descriptor, description: "extra" })
-        .success,
-    ).toBe(false);
+    expect(commandDescriptorSchema.parse({ ...descriptor, description: "Compact now." })).toEqual({
+      ...descriptor,
+      description: "Compact now.",
+    });
+    expect(commandDescriptorSchema.safeParse({ ...descriptor, name: "compact" }).success)
+      .toBe(false);
   });
 });

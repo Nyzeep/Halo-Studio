@@ -1,0 +1,33 @@
+{
+  "name": "@halo-studio/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": ["./dist/tokens.css"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./tokens.css": "./dist/tokens.css"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-tokens.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "react": "18.3.1",
+    "typescript": "5.7.3"
+  },
+  "engines": {
+    "node": ">=20.18"
+  }
+}
