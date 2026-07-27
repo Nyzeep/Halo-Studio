@@ -15,6 +15,7 @@ halo-runtime = { workspace = true }
 halo-testkit = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
+sha2 = { workspace = true }
 # 凭据 canary 测试的清理通道：halo-sidecar CLI 没有删除子命令，
 # 测试结束后用 keyring 直接删除写入 Windows 凭据管理器的测试条目
 keyring = { workspace = true }

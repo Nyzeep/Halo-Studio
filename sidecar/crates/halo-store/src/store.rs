@@ -17,7 +17,7 @@ use crate::records::{
 const TERMINAL_STATES: [&str; 5] = ["accepted", "rejected", "cancelled", "failed", "interrupted"];
 
 /// 内嵌迁移脚本：新版本只允许在数组尾部追加，已发布条目不得修改。
-const MIGRATIONS: &[&str] = &[MIGRATION_V1, MIGRATION_V2];
+const MIGRATIONS: &[&str] = &[MIGRATION_V1, MIGRATION_V2, MIGRATION_V3];
 
 const MIGRATION_V1: &str = r#"
 CREATE TABLE trust_records (
@@ -115,6 +115,12 @@ CREATE INDEX idx_handoffs_task ON handoffs(task_id);
 // 新记录由 Sidecar 写入脱敏、限长目标，保证重启后的交接不依赖内存状态。
 const MIGRATION_V2: &str = r#"
 ALTER TABLE tasks ADD COLUMN goal TEXT NOT NULL DEFAULT '';
+"#;
+
+// 任务恢复和 review.get 都需要知道哪些文件曾发生人工介入。路径列表在任务表
+// 持久化；证据 files 列本来就是 JSON，新增 end_hash 以 serde 默认值兼容旧行。
+const MIGRATION_V3: &str = r#"
+ALTER TABLE tasks ADD COLUMN manual_edit_paths TEXT NOT NULL DEFAULT '[]';
 "#;
 
 pub struct Store {
@@ -269,11 +275,12 @@ impl Store {
     // ---------- 任务 ----------
 
     pub fn put_task(&self, t: &TaskRecord) -> Result<(), StoreError> {
+        let manual_edit_paths = serde_json::to_string(&t.manual_edit_paths)?;
         let conn = self.conn();
         conn.execute(
             "INSERT INTO tasks (task_id, agent, title, goal, state, attribution, baseline_head,
-                 baseline_captured_at, created_at, ended_at, cancel_mode)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                 manual_edit_paths, baseline_captured_at, created_at, ended_at, cancel_mode)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
              ON CONFLICT(task_id) DO UPDATE SET
                  agent                = excluded.agent,
                  title                = excluded.title,
@@ -281,6 +288,7 @@ impl Store {
                  state                = excluded.state,
                  attribution          = excluded.attribution,
                  baseline_head        = excluded.baseline_head,
+                 manual_edit_paths    = excluded.manual_edit_paths,
                  baseline_captured_at = excluded.baseline_captured_at,
                  created_at           = excluded.created_at,
                  ended_at             = excluded.ended_at,
@@ -293,6 +301,7 @@ impl Store {
                 t.state,
                 t.attribution,
                 t.baseline_head,
+                manual_edit_paths,
                 t.baseline_captured_at,
                 t.created_at,
                 t.ended_at,
@@ -306,8 +315,8 @@ impl Store {
         let conn = self.conn();
         let rec = conn
             .query_row(
-                "SELECT task_id, agent, title, goal, state, attribution, baseline_head,
-                        baseline_captured_at, created_at, ended_at, cancel_mode
+            "SELECT task_id, agent, title, goal, state, attribution, baseline_head,
+                        manual_edit_paths, baseline_captured_at, created_at, ended_at, cancel_mode
                  FROM tasks WHERE task_id = ?1",
                 params![task_id],
                 row_to_task,
@@ -321,7 +330,7 @@ impl Store {
         let conn = self.conn();
         let mut stmt = conn.prepare(
             "SELECT task_id, agent, title, goal, state, attribution, baseline_head,
-                    baseline_captured_at, created_at, ended_at, cancel_mode
+                    manual_edit_paths, baseline_captured_at, created_at, ended_at, cancel_mode
              FROM tasks ORDER BY created_at DESC, rowid DESC LIMIT ?1",
         )?;
         let rows = stmt.query_map(params![limit as i64], row_to_task)?;
@@ -397,6 +406,7 @@ impl Store {
                 change: f.change.clone(),
                 diff,
                 truncated: tr,
+                end_hash: f.end_hash.clone(),
             });
         }
 
@@ -696,10 +706,14 @@ fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<TaskRecord> {
         state: row.get(4)?,
         attribution: row.get(5)?,
         baseline_head: row.get(6)?,
-        baseline_captured_at: row.get(7)?,
-        created_at: row.get(8)?,
-        ended_at: row.get(9)?,
-        cancel_mode: row.get(10)?,
+        manual_edit_paths: {
+            let paths: String = row.get(7)?;
+            parse_json_col(7, &paths)?
+        },
+        baseline_captured_at: row.get(8)?,
+        created_at: row.get(9)?,
+        ended_at: row.get(10)?,
+        cancel_mode: row.get(11)?,
     })
 }
 
@@ -759,6 +773,7 @@ mod tests {
                 path: "src/a.rs".to_owned(),
                 change: "modified".to_owned(),
                 diff: "-old\n+new\n".to_owned(),
+                end_hash: None,
             }],
             verification_status: "passed".to_owned(),
             verification_detail: "ok".to_owned(),
@@ -819,7 +834,7 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
     }
 
     #[test]
@@ -843,10 +858,11 @@ mod tests {
         }
 
         let store = Store::open(&path, StoreLimits::default()).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 2);
+        assert_eq!(store.schema_version().unwrap(), 3);
         let task = store.get_task("task-v1").unwrap().unwrap();
         assert_eq!(task.title, "旧任务标题");
         assert!(task.goal.is_empty(), "旧记录应显式使用空目标回退");
+        assert!(task.manual_edit_paths.is_empty(), "旧记录应回退为空路径集合");
     }
 
     /// 凭据红线：表结构中不得出现任何密钥类列名。

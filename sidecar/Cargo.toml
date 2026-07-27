@@ -25,6 +25,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 time = { version = "0.3", features = ["serde", "formatting", "parsing", "macros", "serde-well-known"] }
 rand = "0.8"
 regex = "1"
+globset = "0.4"
 rusqlite = { version = "0.32", features = ["bundled"] }
 ureq = { version = "2.10", features = ["json"] }
 keyring = { version = "3", features = ["windows-native"] }

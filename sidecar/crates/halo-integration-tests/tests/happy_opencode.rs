@@ -4,7 +4,7 @@
 
 mod support;
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use support::{contains_lower_hex_run, fake_opencode_exe, Sidecar, TestRepo};
 
 #[test]
@@ -92,22 +92,62 @@ fn opencode_full_chain_with_fresh_token_per_start() {
     }
     assert_ne!(digests[0], digests[1], "每次启动必须生成全新认证信息");
 
-    // 公开 IPC 里无 token（64 位小写十六进制串）也无端口/token 字段泄漏
+    // 公开 IPC 里无 token（64 位小写十六进制串）也无端口/token 字段泄漏。
+    // `end_hash` 是交付证据中的公开内容摘要；只有字段名和格式都正确时才从 token 探测中排除。
     for line in sc.transcript_snapshot() {
+        assert!(!line.contains("HALO_OC_TOKEN"), "IPC 行不得出现 token 变量名：{line}");
+        let mut v: Value = match serde_json::from_str(line.trim_start_matches(['<', '>', ' '])) {
+            Ok(v) => v,
+            Err(_) => {
+                assert!(
+                    !contains_lower_hex_run(&line, 64),
+                    "IPC 行疑似泄漏 token：{line}"
+                );
+                continue;
+            }
+        };
+        redact_end_hashes(&mut v);
+        let rendered = v.to_string();
         assert!(
-            !contains_lower_hex_run(&line, 64),
+            !contains_lower_hex_run(&rendered, 64),
             "IPC 行疑似泄漏 token：{line}"
         );
-        assert!(!line.contains("HALO_OC_TOKEN"), "IPC 行不得出现 token 变量名：{line}");
-        let v: Value = match serde_json::from_str(line.trim_start_matches(['<', '>', ' '])) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let rendered = v.to_string();
         assert!(!rendered.contains("\"port\""), "IPC 消息不得携带端口字段：{line}");
         assert!(!rendered.contains("\"token\""), "IPC 消息不得携带 token 字段：{line}");
     }
 
     let status = sc.shutdown();
     assert!(status.success());
+}
+
+fn redact_end_hashes(value: &mut Value) {
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                redact_end_hashes(value);
+            }
+        }
+        Value::Object(fields) => redact_end_hashes_in_object(fields),
+        _ => {}
+    }
+}
+
+fn redact_end_hashes_in_object(fields: &mut Map<String, Value>) {
+    for (key, value) in fields {
+        if key == "end_hash" && value.as_str().is_some_and(is_public_sha256) {
+            *value = Value::String("<public content hash>".to_string());
+        } else {
+            redact_end_hashes(value);
+        }
+    }
+}
+
+fn is_public_sha256(value: &str) -> bool {
+    let Some(digest) = value.strip_prefix("sha256:") else {
+        return false;
+    };
+    digest.len() == 64
+        && digest
+            .chars()
+            .all(|character| character.is_ascii_digit() || character.is_ascii_lowercase())
 }

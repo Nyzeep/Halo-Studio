@@ -15,6 +15,7 @@ fn task(id: &str, state: &str, created_at: &str) -> TaskRecord {
         goal: format!("任务 {id} 的详细目标"),
         state: state.to_owned(),
         attribution: "agent_only".to_owned(),
+        manual_edit_paths: vec![],
         baseline_head: Some("abc123".to_owned()),
         baseline_captured_at: "2026-07-26T08:00:00Z".to_owned(),
         created_at: created_at.to_owned(),
@@ -43,6 +44,7 @@ fn file(path: &str, diff: &str) -> FileChangeDraft {
         path: path.to_owned(),
         change: "modified".to_owned(),
         diff: diff.to_owned(),
+        end_hash: None,
     }
 }
 
@@ -52,7 +54,7 @@ fn open_is_idempotent_and_keeps_data() {
     let path = dir.path().join("halo.db");
     {
         let store = Store::open(&path, StoreLimits::default()).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 2);
+        assert_eq!(store.schema_version().unwrap(), 3);
         store
             .put_task(&task("task-1", "running", "2026-07-26T08:00:00Z"))
             .unwrap();
@@ -60,13 +62,13 @@ fn open_is_idempotent_and_keeps_data() {
     }
     // 第二次 open：迁移不得重复执行，数据完整保留
     let store = Store::open(&path, StoreLimits::default()).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 2);
+    assert_eq!(store.schema_version().unwrap(), 3);
     assert_eq!(store.get_task("task-1").unwrap().unwrap().state, "running");
     assert_eq!(store.latest_evidence("task-1").unwrap().unwrap().version, 1);
     drop(store);
     // 第三次仍幂等
     let store = Store::open(&path, StoreLimits::default()).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 2);
+    assert_eq!(store.schema_version().unwrap(), 3);
 }
 
 #[test]
@@ -103,6 +105,7 @@ fn evidence_roundtrip_keeps_all_fields() {
     d.verification_status = "failed".to_owned();
     d.verification_detail = "2 个用例失败".to_owned();
     d.verification_source = "agent".to_owned();
+    d.files[0].end_hash = Some("sha256:abc".to_owned());
 
     store.append_evidence("task-9", &d).unwrap();
     let rec = store.latest_evidence("task-9").unwrap().unwrap();
@@ -117,6 +120,7 @@ fn evidence_roundtrip_keeps_all_fields() {
     assert_eq!(rec.files[0].change, "modified");
     assert_eq!(rec.files[0].diff, "-a\n+b\n");
     assert!(!rec.files[0].truncated);
+    assert_eq!(rec.files[0].end_hash.as_deref(), Some("sha256:abc"));
     assert_eq!(rec.verification_status, "failed");
     assert_eq!(rec.verification_detail, "2 个用例失败");
     assert_eq!(rec.verification_source, "agent");

@@ -140,6 +140,20 @@ impl GitClient {
         Ok(files)
     }
 
+    /// 受 Git ignore 规则约束的候选文件清单，供 fs.search / 快速打开使用。
+    /// `-z` 保留空格和中文路径；协议输出统一使用 `/` 分隔符。
+    pub fn ls_candidate_files(&self) -> Result<Vec<String>, GitError> {
+        let out = self.run(
+            &["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+            None,
+        )?;
+        Ok(out
+            .split('\0')
+            .filter(|path| !path.is_empty())
+            .map(|path| path.replace('\\', "/"))
+            .collect())
+    }
+
     /// 两棵树之间的关联变更，按文件切分（含 added/modified/deleted/renamed 与
     /// per-file diff 文本）。
     pub fn diff_trees(&self, base_tree: &str, end_tree: &str) -> Result<Vec<FileDiff>, GitError> {
@@ -191,9 +205,28 @@ impl GitClient {
             .collect())
     }
 
+    /// 读取指定树中某个文件的原始字节。只用于结束树取证，绝不访问或修改工作树。
+    pub fn show_tree_file(&self, tree: &str, path: &str) -> Result<Vec<u8>, GitError> {
+        let object = format!("{tree}:{path}");
+        self.run_bytes(&["cat-file", "blob", &object], None)
+    }
+
+    /// 读取指定树文件的对象大小，供调用方在读取字节前实施内存上限。
+    pub fn tree_file_size(&self, tree: &str, path: &str) -> Result<u64, GitError> {
+        let object = format!("{tree}:{path}");
+        let raw = self.run(&["cat-file", "-s", &object], None)?;
+        raw.trim()
+            .parse::<u64>()
+            .map_err(|_| GitError::Command("cat-file 未返回有效对象大小".to_string()))
+    }
+
     /// 统一 git 调用入口：只读命令 + 临时索引写入两类。
     /// core.quotepath=off 使空格与中文路径原样输出。
     fn run(&self, args: &[&str], index_file: Option<&Path>) -> Result<String, GitError> {
+        Ok(String::from_utf8_lossy(&self.run_bytes(args, index_file)?).into_owned())
+    }
+
+    fn run_bytes(&self, args: &[&str], index_file: Option<&Path>) -> Result<Vec<u8>, GitError> {
         let mut cmd = Command::new("git");
         cmd.arg("-c")
             .arg("core.quotepath=off")
@@ -215,7 +248,7 @@ impl GitClient {
                 brief.trim()
             )));
         }
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+        Ok(output.stdout)
     }
 }
 
@@ -453,6 +486,18 @@ mod tests {
             renamed.diff
         );
         assert_eq!(diffs.len(), 4, "{diffs:?}");
+    }
+
+    #[test]
+    fn show_tree_file_reads_binary_bytes_from_captured_tree() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(tmp.path());
+        let bytes = [0_u8, 1, 2, 0xff, b'\n'];
+        fs::write(repo.join("binary.bin"), bytes).unwrap();
+        let client = GitClient::new(&repo);
+        let tree = client.capture_tree().unwrap();
+        assert_eq!(client.show_tree_file(&tree, "binary.bin").unwrap(), bytes);
+        assert_eq!(client.tree_file_size(&tree, "binary.bin").unwrap(), bytes.len() as u64);
     }
 
     #[test]

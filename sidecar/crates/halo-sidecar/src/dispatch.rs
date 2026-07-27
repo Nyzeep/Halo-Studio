@@ -1,6 +1,7 @@
 //! 方法路由：hello 门禁、typed params 解析、统一错误映射（契约错误码 + 中文文案）。
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crossbeam_channel::unbounded;
@@ -9,12 +10,14 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use halo_config::{AgentKind, CredentialStore};
+use halo_core::{manual_edit_note, Attribution, ManualEditOp};
 use halo_protocol::methods::{self, AgentKind as AgentKindDto};
 use halo_protocol::{ErrorBody, ErrorCode, RequestEnvelope, Response, PROTOCOL_VERSION};
 use halo_runtime::{OpenCodeRuntime, PiRuntime, RuntimeState, Timeouts, OPENCODE_LOCKED_VERSION};
 use halo_store::Store;
 
 use crate::git::{GitClient, GitError};
+use crate::fs::{self, FsError};
 use crate::mapping::{self, now_ts};
 use crate::server::{EventBus, EventGapError};
 use crate::state::{lock, ActiveWorkspace, AgentHandle, AppState};
@@ -25,8 +28,9 @@ use crate::task_flow::{self, FlowCtx};
 pub const CREDENTIAL_ENV_VAR: &str = "HALO_PROVIDER_API_KEY";
 
 const CAPABILITIES: &[&str] = &[
-    "workspace", "config", "pi", "opencode", "task", "review", "handoff", "history",
+    "workspace", "config", "pi", "opencode", "task", "review", "handoff", "history", "fs",
 ];
+const MANUAL_EDIT_OVERFLOW_NOTE: &str = "此后仍有更多文件发生人工编辑（逐条记录已省略）";
 
 /// 统一错误载体：code 为契约错误码，message 为中文用户可读文案。
 #[derive(Debug)]
@@ -75,6 +79,53 @@ impl From<GitError> for SidecarError {
             GitError::Command(_) => ErrorCode::Internal,
         };
         SidecarError::new(code, e.to_string())
+    }
+}
+
+impl From<FsError> for SidecarError {
+    fn from(error: FsError) -> Self {
+        match error {
+            FsError::OutsideWorkspace(path) => SidecarError::with_details(
+                ErrorCode::FsPathOutsideWorkspace,
+                format!("路径超出工作区范围：{path}"),
+                json!({"path": path}),
+            ),
+            FsError::NotFound(path) => SidecarError::with_details(
+                ErrorCode::FsNotFound,
+                format!("路径不存在：{path}"),
+                json!({"path": path}),
+            ),
+            FsError::AlreadyExists(path) => SidecarError::with_details(
+                ErrorCode::FsAlreadyExists,
+                format!("目标已存在：{path}"),
+                json!({"path": path}),
+            ),
+            FsError::TooLarge { size } => SidecarError::with_details(
+                ErrorCode::FsTooLarge,
+                "文件内容超过 8 MiB 上限",
+                json!({"size": size, "max": fs::limits::FS_READ_MAX_BYTES}),
+            ),
+            FsError::Binary { size } => SidecarError::with_details(
+                ErrorCode::FsBinary,
+                "二进制文件不支持在编辑器中打开",
+                json!({"size": size}),
+            ),
+            FsError::Conflict {
+                current_hash,
+                mtime,
+            } => SidecarError::with_details(
+                ErrorCode::FsConflict,
+                "文件内容已被外部修改，请重新加载后再保存",
+                json!({"current_hash": current_hash, "mtime": mtime}),
+            ),
+            FsError::GitProtected(path) => SidecarError::with_details(
+                ErrorCode::FsGitProtected,
+                format!(".git 目录受只读保护：{path}"),
+                json!({"path": path}),
+            ),
+            FsError::InvalidName(message) => SidecarError::new(ErrorCode::InvalidParams, message),
+            FsError::Io(message) => SidecarError::internal(message),
+        }
     }
 }
 
@@ -213,6 +264,14 @@ impl Dispatcher {
             "handoff.create" => self.handoff_create(params),
             "history.list" => self.history_list(params),
             "history.evidence" => self.history_evidence(params),
+            "fs.list" => self.fs_list(params),
+            "fs.read" => self.fs_read(params),
+            "fs.write" => self.fs_write(params),
+            "fs.create_file" => self.fs_create_file(params),
+            "fs.create_dir" => self.fs_create_dir(params),
+            "fs.rename" => self.fs_rename(params),
+            "fs.stat" => self.fs_stat(params),
+            "fs.search" => self.fs_search(params),
             other => Err(SidecarError::new(
                 ErrorCode::MethodNotFound,
                 format!("未知方法：{other}"),
@@ -379,6 +438,184 @@ impl Dispatcher {
                 self.ctx.timeouts.shutdown_grace,
             );
         }
+    }
+
+    // ---------- fs.* ----------
+
+    fn trusted_workspace_root(&self) -> Result<String, SidecarError> {
+        let app = lock(&self.ctx.app);
+        let workspace = app.workspace.as_ref().ok_or_else(|| {
+            SidecarError::new(ErrorCode::WorkspaceNotActive, "当前没有活动工作区")
+        })?;
+        if !workspace.is_trusted() {
+            return Err(SidecarError::new(
+                ErrorCode::WorkspaceNotTrusted,
+                "工作区未确认信任，无法访问工作区文件",
+            ));
+        }
+        Ok(workspace.real_path.clone())
+    }
+
+    fn fs_list(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsListParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        ok(&fs::ops::list(Path::new(&root), &p.path, p.depth)?)
+    }
+
+    fn fs_read(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsReadParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        ok(&fs::ops::read(Path::new(&root), &p.path)?)
+    }
+
+    fn fs_write(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsWriteParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        let result = fs::ops::write(
+            Path::new(&root),
+            &p.path,
+            &p.content,
+            &p.expected_hash,
+            p.encoding,
+        )?;
+        self.record_fs_manual_edit(ManualEditOp::Write, &result.path, None);
+        ok(&result)
+    }
+
+    fn fs_create_file(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsCreateFileParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        let entry = fs::ops::create_file(Path::new(&root), &p.path, &p.content)?;
+        self.record_fs_manual_edit(ManualEditOp::CreateFile, &entry.path, None);
+        ok(&methods::fs::FsEntryResult { entry })
+    }
+
+    fn fs_create_dir(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsCreateDirParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        let entry = fs::ops::create_dir(Path::new(&root), &p.path)?;
+        self.record_fs_manual_edit(ManualEditOp::CreateDir, &entry.path, None);
+        ok(&methods::fs::FsEntryResult { entry })
+    }
+
+    fn fs_rename(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsRenameParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        let entry = fs::ops::rename(Path::new(&root), &p.from, &p.to)?;
+        self.record_fs_manual_edit(ManualEditOp::Rename, &p.from, Some(&entry.path));
+        ok(&methods::fs::FsEntryResult { entry })
+    }
+
+    fn fs_stat(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsStatParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        let entry = fs::ops::stat(Path::new(&root), &p.path)?;
+        ok(&methods::fs::FsEntryResult { entry })
+    }
+
+    fn fs_search(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsSearchParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        let git = GitClient::new(&root);
+        ok(&fs::search::search(Path::new(&root), &git, &p)?)
+    }
+
+    /// 保存成功后才尝试记录人工介入；证据存储失败不得反向让文件保存失败。
+    /// 同一路径只进入归因事实一次，但每次成功写入都会推送过程事件。
+    fn record_fs_manual_edit(&self, operation: ManualEditOp, path: &str, to_path: Option<&str>) {
+        let note = manual_edit_note(operation, path, to_path, &local_hhmm());
+        if self
+            .mark_manual_edit_internal(
+                None,
+                note.clone(),
+                note,
+                "fs_write",
+                to_path.or(Some(path)),
+                true,
+            )
+            .is_err()
+        {
+            eprintln!("[halo-sidecar] 人工介入归因未能写入本地历史");
+        }
+    }
+
+    /// 在内存、持久化记录和过程事件之间原子地推进一条人工介入事实。
+    /// `require_active_state` 用于 fs 写入：审查就绪后的保存不再改变已定稿证据。
+    fn mark_manual_edit_internal(
+        &self,
+        expected_task_id: Option<&str>,
+        attribution_note: String,
+        event_note: String,
+        source: &'static str,
+        path: Option<&str>,
+        require_active_state: bool,
+    ) -> Result<bool, SidecarError> {
+        let event = {
+            let mut app = lock(&self.ctx.app);
+            let Some(task) = app.task.as_mut().filter(|task| {
+                expected_task_id.is_none_or(|task_id| task.task_id == task_id)
+            }) else {
+                return match expected_task_id {
+                    Some(_) => Err(SidecarError::new(
+                        ErrorCode::TaskNotFound,
+                        "任务不存在或已结束，无法标记人工介入",
+                    )),
+                    None => Ok(false),
+                };
+            };
+            let state_allowed = if require_active_state {
+                matches!(
+                    task.state,
+                    halo_core::TaskState::Created
+                        | halo_core::TaskState::Running
+                        | halo_core::TaskState::AwaitingAction
+                        | halo_core::TaskState::Finishing
+                )
+            } else {
+                !task.state.is_terminal()
+            };
+            if !state_allowed {
+                return match expected_task_id {
+                    Some(_) => Err(SidecarError::new(
+                        ErrorCode::TaskNotFound,
+                        "任务不存在或已结束，无法标记人工介入",
+                    )),
+                    None => Ok(false),
+                };
+            }
+
+            let event_path = path.map(str::to_owned);
+            let previous_attribution = task.attribution.clone();
+            let previous_paths = task.manual_edit_paths.clone();
+            let is_new_path = event_path
+                .as_ref()
+                .map(|path| task.manual_edit_paths.insert(path.clone()))
+                .unwrap_or(true);
+            task.attribution = if event_path.is_some() {
+                attribution_after_manual_edit(&task.attribution, is_new_path, &attribution_note)
+            } else {
+                task
+                    .attribution
+                    .clone()
+                    .with_manual_edit(attribution_note.clone())
+            };
+            if event_path.is_none() || is_new_path {
+                let record = task.to_record();
+                if let Err(error) = self.ctx.store.put_task(&record) {
+                    task.attribution = previous_attribution;
+                    task.manual_edit_paths = previous_paths;
+                    return Err(error.into());
+                }
+            }
+            (task.task_id.clone(), event_path)
+        };
+        let (task_id, event_path) = event;
+        self.ctx.bus.emit(
+            Some(&task_id),
+            "task.manual_edit",
+            json!({"note": event_note, "source": source, "path": event_path}),
+        );
+        Ok(true)
     }
 
     // ---------- config.* ----------
@@ -775,28 +1012,15 @@ impl Dispatcher {
     fn task_mark_manual_edit(&mut self, params: Value) -> Result<Value, SidecarError> {
         let p: methods::task::MarkManualEditParams = parse(params)?;
         let note = halo_core::sanitize(&p.note);
-        let record = {
-            let mut app = lock(&self.ctx.app);
-            let task = app
-                .task
-                .as_mut()
-                .filter(|t| t.task_id == p.task_id && !t.state.is_terminal())
-                .ok_or_else(|| {
-                    SidecarError::new(
-                        ErrorCode::TaskNotFound,
-                        "任务不存在或已结束，无法标记人工介入",
-                    )
-                })?;
-            task.attribution = task
-                .attribution
-                .clone()
-                .with_manual_edit(format!("{}：{}", now_ts(), note));
-            task.to_record()
-        };
-        self.ctx.store.put_task(&record)?;
-        self.ctx
-            .bus
-            .emit(Some(&p.task_id), "task.manual_edit", json!({"note": note}));
+        let persisted_note = format!("{}：{}", now_ts(), note);
+        self.mark_manual_edit_internal(
+            Some(&p.task_id),
+            persisted_note,
+            note,
+            "user_marked",
+            None,
+            false,
+        )?;
         ok(&methods::task::MarkManualEditResult {
             attribution: methods::Attribution::Mixed,
         })
@@ -907,6 +1131,7 @@ impl Dispatcher {
         })?;
         ok(&mapping::evidence_record_to_bundle(
             record,
+            &rec.manual_edit_paths,
             record.version == latest_version,
         ))
     }
@@ -1107,6 +1332,69 @@ impl Dispatcher {
     }
 }
 
+fn attribution_after_manual_edit(
+    current: &Attribution,
+    is_new_path: bool,
+    note: &str,
+) -> Attribution {
+    if !is_new_path {
+        return current.clone();
+    }
+    match current {
+        Attribution::AgentOnly => current.clone().with_manual_edit(note),
+        Attribution::Mixed { reasons } if reasons.len() < halo_core::limits::MANUAL_EDIT_REASONS_MAX => {
+            current.clone().with_manual_edit(note)
+        }
+        Attribution::Mixed { reasons } if reasons.len() == halo_core::limits::MANUAL_EDIT_REASONS_MAX => {
+            current.clone().with_manual_edit(MANUAL_EDIT_OVERFLOW_NOTE)
+        }
+        Attribution::Mixed { .. } => current.clone(),
+    }
+}
+
+fn local_hhmm() -> String {
+    local_hhmm_impl()
+}
+
+#[cfg(target_os = "windows")]
+fn local_hhmm_impl() -> String {
+    #[repr(C)]
+    struct SystemTime {
+        year: u16,
+        month: u16,
+        day_of_week: u16,
+        day: u16,
+        hour: u16,
+        minute: u16,
+        second: u16,
+        milliseconds: u16,
+    }
+
+    unsafe extern "system" {
+        fn GetLocalTime(system_time: *mut SystemTime);
+    }
+
+    let mut local = SystemTime {
+        year: 0,
+        month: 0,
+        day_of_week: 0,
+        day: 0,
+        hour: 0,
+        minute: 0,
+        second: 0,
+        milliseconds: 0,
+    };
+    // GetLocalTime 只写入调用方提供的固定大小缓冲区，且没有可报告的失败路径。
+    unsafe { GetLocalTime(&mut local) };
+    format!("{:02}:{:02}", local.hour, local.minute)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn local_hhmm_impl() -> String {
+    let utc = time::OffsetDateTime::now_utc();
+    format!("{:02}:{:02} UTC", utc.hour(), utc.minute())
+}
+
 fn workspace_status_dto(ws: &ActiveWorkspace) -> methods::workspace::WorkspaceStatus {
     methods::workspace::WorkspaceStatus {
         active: true,
@@ -1153,6 +1441,7 @@ fn evidence_record_to_core(rec: &halo_store::EvidenceRecord) -> halo_core::Evide
                 },
                 diff: f.diff.clone(),
                 truncated: f.truncated,
+                end_hash: f.end_hash.clone(),
             })
             .collect(),
         verification: halo_core::Verification {
@@ -1328,6 +1617,111 @@ mod tests {
         repo
     }
 
+    #[test]
+    fn fs_cage_allows_workspace_files_and_rejects_escapes() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("工作区");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/main.rs"), "fn main() {}\n").unwrap();
+        fs::create_dir_all(root.join(".git")).unwrap();
+
+        let resolved = crate::fs::cage::resolve_existing(&root, "src/main.rs").unwrap();
+        assert!(resolved.ends_with("src/main.rs"));
+        assert!(matches!(
+            crate::fs::cage::resolve_existing(&root, "../outside.txt"),
+            Err(crate::fs::FsError::OutsideWorkspace(_))
+        ));
+
+        let git_target = crate::fs::cage::resolve_target(&root, ".git/config").unwrap();
+        assert!(matches!(
+            crate::fs::cage::ensure_not_git_protected(&root, &git_target.abs),
+            Err(crate::fs::FsError::GitProtected(_))
+        ));
+    }
+
+    #[test]
+    fn fs_ops_read_write_and_list_preserve_the_contract_boundary() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("工作区");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join(".git")).unwrap();
+        fs::write(root.join("src/main.rs"), b"\xef\xbb\xbffn main() {}\r\n").unwrap();
+        fs::write(root.join("z.txt"), "z").unwrap();
+
+        let read = crate::fs::ops::read(&root, "src/main.rs").unwrap();
+        assert_eq!(read.encoding, methods::fs::FsEncoding::Utf8Bom);
+        assert_eq!(read.line_ending, methods::fs::FsLineEnding::Crlf);
+        assert_eq!(read.content, "fn main() {}\r\n");
+
+        let write = crate::fs::ops::write(
+            &root,
+            "src/main.rs",
+            "fn main() { println!(\"ok\"); }\n",
+            &read.hash,
+            methods::fs::FsWriteEncoding::Utf8Bom,
+        )
+        .unwrap();
+        assert!(write.hash.starts_with("sha256:"));
+        assert!(fs::read(root.join("src/main.rs")).unwrap().starts_with(b"\xef\xbb\xbf"));
+        assert!(matches!(
+            crate::fs::ops::write(
+                &root,
+                "src/main.rs",
+                "stale",
+                &read.hash,
+                methods::fs::FsWriteEncoding::Utf8,
+            ),
+            Err(crate::fs::FsError::Conflict { .. })
+        ));
+
+        let list = crate::fs::ops::list(&root, "", 1).unwrap();
+        let paths: Vec<_> = list.entries.iter().map(|entry| entry.path.as_str()).collect();
+        assert_eq!(paths, vec!["src", "z.txt"]);
+    }
+
+    #[test]
+    fn fs_search_uses_git_candidates_and_returns_text_locations() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = init_repo(dir.path());
+        fs::create_dir_all(repo.join("src")).unwrap();
+        fs::write(repo.join("src/main.rs"), "fn main() {\n    println!(\"ok\");\n}\n").unwrap();
+        fs::write(repo.join("ignored.txt"), "fn main() {}\n").unwrap();
+        fs::write(repo.join(".gitignore"), "ignored.txt\n").unwrap();
+        let git = GitClient::new(&repo);
+
+        let paths = crate::fs::search::search(
+            &repo,
+            &git,
+            &methods::fs::FsSearchParams {
+                glob: Some("**/*.rs".to_string()),
+                query: None,
+                case_sensitive: false,
+                max_results: 50,
+            },
+        )
+        .unwrap();
+        assert_eq!(paths.items.len(), 1);
+        assert_eq!(paths.items[0].path, "src/main.rs");
+        assert_eq!(paths.items[0].line, None);
+
+        let matches = crate::fs::search::search(
+            &repo,
+            &git,
+            &methods::fs::FsSearchParams {
+                glob: None,
+                query: Some("println".to_string()),
+                case_sensitive: true,
+                max_results: 50,
+            },
+        )
+        .unwrap();
+        assert_eq!(matches.items.len(), 1);
+        assert_eq!(matches.items[0].path, "src/main.rs");
+        assert_eq!(matches.items[0].line, Some(2));
+        assert_eq!(matches.items[0].column, Some(5));
+        assert_eq!(matches.items[0].preview.as_deref(), Some("    println!(\"ok\");"));
+    }
+
     // ---------- hello 门禁 ----------
 
     #[test]
@@ -1353,6 +1747,7 @@ mod tests {
         let caps = result["capabilities"].as_array().unwrap();
         assert!(caps.iter().any(|c| c == "workspace"));
         assert!(caps.iter().any(|c| c == "handoff"));
+        assert!(caps.iter().any(|c| c == "fs"));
         // 握手后方法放行
         let resp = f.d.dispatch(req("workspace.status", json!({})));
         assert!(resp.ok);
@@ -1478,6 +1873,51 @@ mod tests {
             }
         }
         assert!(saw_changed >= 2, "打开与信任都应推送 workspace.changed");
+    }
+
+    #[test]
+    fn fs_methods_require_trust_and_use_workspace_relative_paths() {
+        let mut f = fixture();
+        hello(&mut f);
+        let no_workspace = f.d.dispatch(req("fs.list", json!({"path": "", "depth": 1})));
+        assert_eq!(err_code(&no_workspace), ErrorCode::WorkspaceNotActive);
+
+        let dir = tempfile::tempdir().unwrap();
+        let repo = init_repo(dir.path());
+        let opened = f
+            .d
+            .dispatch(req("workspace.open", json!({"path": repo.to_string_lossy()})));
+        let workspace_id = opened.result.unwrap()["workspace_id"].as_str().unwrap().to_string();
+        let untrusted = f.d.dispatch(req("fs.read", json!({"path": "a.txt"})));
+        assert_eq!(err_code(&untrusted), ErrorCode::WorkspaceNotTrusted);
+
+        let trusted = f.d.dispatch(req(
+            "workspace.trust",
+            json!({"workspace_id": workspace_id, "decision": "trust"}),
+        ));
+        assert!(trusted.ok);
+        let listed = f.d.dispatch(req("fs.list", json!({"path": "", "depth": 1})));
+        assert!(listed.ok, "{listed:?}");
+        assert_eq!(listed.result.as_ref().unwrap()["entries"][0]["path"], "a.txt");
+
+        let read = f.d.dispatch(req("fs.read", json!({"path": "a.txt"})));
+        let read_result = read.result.unwrap();
+        let write = f.d.dispatch(req(
+            "fs.write",
+            json!({
+                "path": "a.txt", "content": "新内容\n", "expected_hash": read_result["hash"], "encoding": "utf-8"
+            }),
+        ));
+        assert!(write.ok, "{write:?}");
+        assert_eq!(fs::read_to_string(repo.join("a.txt")).unwrap(), "新内容\n");
+
+        let protected = f.d.dispatch(req(
+            "fs.write",
+            json!({"path": ".git/config", "content": "x", "expected_hash": "sha256:any"}),
+        ));
+        assert_eq!(err_code(&protected), ErrorCode::FsGitProtected);
+        let bad_depth = f.d.dispatch(req("fs.list", json!({"path": "", "depth": 9})));
+        assert_eq!(err_code(&bad_depth), ErrorCode::InvalidParams);
     }
 
     #[test]
@@ -1653,6 +2093,68 @@ mod tests {
     }
 
     #[test]
+    fn fs_manual_edits_emit_each_time_but_persist_each_path_once() {
+        let mut f = fixture();
+        hello(&mut f);
+        install_active_task(&f.d.ctx, "task-fs", halo_core::TaskState::AwaitingAction);
+
+        f.d.record_fs_manual_edit(ManualEditOp::Write, "src/auth.rs", None);
+        f.d.record_fs_manual_edit(ManualEditOp::Write, "src/auth.rs", None);
+
+        let app = lock(&f.d.ctx.app);
+        let task = app.task.as_ref().unwrap();
+        let paths: Vec<_> = task.manual_edit_paths.iter().map(String::as_str).collect();
+        assert_eq!(paths, vec!["src/auth.rs"]);
+        let reasons = match &task.attribution {
+            Attribution::Mixed { reasons } => reasons,
+            Attribution::AgentOnly => panic!("成功写入必须使归因变为 mixed"),
+        };
+        assert_eq!(reasons.len(), 1, "同一路径重复保存不得扩大归因原因");
+        drop(app);
+
+        let stored = f.d.ctx.store.get_task("task-fs").unwrap().unwrap();
+        assert_eq!(stored.manual_edit_paths, vec!["src/auth.rs"]);
+
+        let events: Vec<_> = std::iter::from_fn(|| f.events.try_recv().ok())
+            .filter_map(|outbound| match outbound {
+                Outbound::Event(event) if event.event == "task.manual_edit" => Some(event),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(events.len(), 2, "每次成功写入都必须产生过程事件");
+        assert!(events.iter().all(|event| event.payload["path"] == "src/auth.rs"));
+
+        lock(&f.d.ctx.app).task.as_mut().unwrap().state = halo_core::TaskState::ReviewReady;
+        f.d.record_fs_manual_edit(ManualEditOp::Write, "src/later.rs", None);
+        let app = lock(&f.d.ctx.app);
+        assert!(
+            !app.task.as_ref().unwrap().manual_edit_paths.contains("src/later.rs"),
+            "review_ready 后的写入不应再改归因"
+        );
+    }
+
+    #[test]
+    fn manual_edit_reason_cap_keeps_one_overflow_summary() {
+        let mut attribution = Attribution::AgentOnly;
+        for index in 0..halo_core::limits::MANUAL_EDIT_REASONS_MAX {
+            attribution = attribution_after_manual_edit(&attribution, true, &format!("path-{index}"));
+        }
+        attribution = attribution_after_manual_edit(&attribution, true, "overflow");
+        attribution = attribution_after_manual_edit(&attribution, true, "overflow-again");
+
+        let reasons = match attribution {
+            Attribution::Mixed { reasons } => reasons,
+            Attribution::AgentOnly => panic!("应保持 mixed"),
+        };
+        assert_eq!(
+            reasons.len(),
+            halo_core::limits::MANUAL_EDIT_REASONS_MAX + 1,
+            "上限后只允许一条汇总说明"
+        );
+        assert_eq!(reasons.last().map(String::as_str), Some(MANUAL_EDIT_OVERFLOW_NOTE));
+    }
+
+    #[test]
     fn mark_verification_only_accepts_not_run() {
         let mut f = fixture();
         hello(&mut f);
@@ -1703,6 +2205,7 @@ mod tests {
                 goal: "审查任务的详细目标".to_string(),
                 state: "review_ready".to_string(),
                 attribution: "agent_only".to_string(),
+                manual_edit_paths: vec![],
                 baseline_head: Some("abc".to_string()),
                 baseline_captured_at: now_ts(),
                 created_at: now_ts(),
@@ -1723,6 +2226,7 @@ mod tests {
                             path: "src/auth.rs".to_string(),
                             change: "modified".to_string(),
                             diff: "+line".to_string(),
+                            end_hash: None,
                         }],
                         verification_status: "passed".to_string(),
                         verification_detail: "cargo test 通过".to_string(),
@@ -1743,6 +2247,7 @@ mod tests {
             instructions: "详细目标说明".to_string(),
             state,
             attribution: halo_core::Attribution::AgentOnly,
+            manual_edit_paths: Default::default(),
             baseline: halo_core::Baseline {
                 head: None,
                 tree: "tree".to_string(),

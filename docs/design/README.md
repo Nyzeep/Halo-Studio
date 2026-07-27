@@ -2,6 +2,10 @@
 
 依据 `requirements-alignment/03-ide-editor-and-reference-alignment.md`。
 
+## 当前发布依据
+
+真实 Agent 首个可用版本以 [04 - 真实 OpenCode 受管任务会话：需求对齐与范围统一](../requirements-alignment/04-real-opencode-managed-task-session.md) 与其 [06 - 规格](../requirements-alignment/06-real-opencode-managed-task-session-spec.md) 为当前发布边界。10–13、15 号设计的实现状态以下表为准，但不改变该发布边界；14 号真实协议设计在该对齐记录所列 P0 修订下实施。
+
 ## 编号规则
 
 - `references/R1–R5`：五个参考开源项目的分析报告（输入材料）。
@@ -22,7 +26,7 @@
 | 12 | [12-fs-contract-and-explorer.md](12-fs-contract-and-explorer.md) — 文件系统契约与资源管理器 | 已完成 |
 | 13 | [13-command-palette-and-quick-open.md](13-command-palette-and-quick-open.md) — 命令面板与快速打开 | 已完成 |
 | 14 | [14-agent-protocol-alignment.md](14-agent-protocol-alignment.md) — Pi/OpenCode 真实协议对齐 | 已完成 |
-| 15 | [15-differentiation-features.md](15-differentiation-features.md) — 差异化功能 | 已完成 |
+| 15 | [15-differentiation-features.md](15-differentiation-features.md) — 差异化功能 | 已实现（F1–F5） |
 
 ## 设计文档统一提纲
 

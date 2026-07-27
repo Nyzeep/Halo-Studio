@@ -243,7 +243,11 @@ pub fn cancel_mode_from_str(s: &str) -> CancelMode {
 
 // ---------- 证据 ----------
 
-pub fn evidence_record_to_bundle(rec: &halo_store::EvidenceRecord, is_latest: bool) -> ReviewBundle {
+pub fn evidence_record_to_bundle(
+    rec: &halo_store::EvidenceRecord,
+    manual_edit_paths: &[String],
+    is_latest: bool,
+) -> ReviewBundle {
     ReviewBundle {
         task_id: rec.task_id.clone(),
         evidence_version: rec.version,
@@ -251,6 +255,7 @@ pub fn evidence_record_to_bundle(rec: &halo_store::EvidenceRecord, is_latest: bo
         outcome: outcome_str_to_dto(&rec.outcome),
         attribution: attribution_str_to_dto(&rec.attribution),
         attribution_reasons: rec.attribution_reasons.clone(),
+        manual_edit_paths: manual_edit_paths.to_vec(),
         summary: rec.summary.clone(),
         files: rec
             .files
@@ -260,6 +265,7 @@ pub fn evidence_record_to_bundle(rec: &halo_store::EvidenceRecord, is_latest: bo
                 change: change_str_to_dto(&f.change),
                 diff: f.diff.clone(),
                 truncated: f.truncated,
+                end_hash: f.end_hash.clone(),
             })
             .collect(),
         verification: VerificationDto {

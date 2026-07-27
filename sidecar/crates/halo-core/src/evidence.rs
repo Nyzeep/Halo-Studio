@@ -31,6 +31,9 @@ pub struct FileEvidence {
     pub change: ChangeKind,
     pub diff: String,
     pub truncated: bool,
+    /// 结束树中文件字节的 sha256；删除项、超大文件和旧证据没有该事实。
+    #[serde(default)]
+    pub end_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -157,6 +160,7 @@ mod tests {
                 change: ChangeKind::Modified,
                 diff: "--- a/src/auth.rs\n+++ b/src/auth.rs\n".to_string(),
                 truncated: false,
+                end_hash: Some("sha256:abc".to_string()),
             }],
             verification: Verification::from_agent(VerificationStatus::Passed, "cargo test 通过"),
             created_at: "2026-07-26T08:00:00Z".to_string(),
@@ -221,5 +225,24 @@ mod tests {
         );
         assert_eq!(serde_json::to_string(&Outcome::Finished).unwrap(), "\"finished\"");
         assert_eq!(serde_json::to_string(&ChangeKind::Renamed).unwrap(), "\"renamed\"");
+    }
+
+    #[test]
+    fn file_evidence_end_hash_round_trips_and_old_payload_defaults_to_none() {
+        let file = FileEvidence {
+            path: "src/auth.rs".to_string(),
+            change: ChangeKind::Modified,
+            diff: "+line".to_string(),
+            truncated: false,
+            end_hash: Some("sha256:abc".to_string()),
+        };
+        let round_trip: FileEvidence = serde_json::from_str(&serde_json::to_string(&file).unwrap()).unwrap();
+        assert_eq!(round_trip, file);
+
+        let old: FileEvidence = serde_json::from_str(
+            r#"{"path":"src/auth.rs","change":"modified","diff":"+line","truncated":false}"#,
+        )
+        .unwrap();
+        assert_eq!(old.end_hash, None);
     }
 }

@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use crossbeam_channel::{bounded, unbounded, Receiver, RecvTimeoutError, Sender};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use halo_config::AgentKind;
 use halo_core::{cap, limits, sanitize, TaskEvent, TaskState, Verification};
@@ -23,6 +24,9 @@ use crate::mapping::{
 };
 use crate::server::EventBus;
 use crate::state::{lock, ActiveTask, AgentHandle, AppState};
+
+/// 与 fs.read/fs.write 的哈希口径一致；更大的文件只保留文件级证据，不做行级断言。
+const END_HASH_MAX_BYTES: usize = 8 * 1024 * 1024;
 
 /// 编排上下文：全部为共享句柄，可克隆进任务线程。
 #[derive(Clone)]
@@ -74,6 +78,7 @@ pub fn start_task(
         instructions: args.instructions.clone(),
         state: TaskState::Created,
         attribution: halo_core::Attribution::AgentOnly,
+        manual_edit_paths: Default::default(),
         baseline,
         created_at: now_ts(),
         ended_at: None,
@@ -424,17 +429,19 @@ fn append_evidence(
 
     let mut summary = sanitize(summary_raw);
     let mut files: Vec<halo_store::FileChangeDraft> = Vec::new();
-    match git
-        .capture_tree()
-        .and_then(|end| git.diff_trees(&baseline.tree, &end))
-    {
-        Ok(diffs) => {
+    match git.capture_tree().and_then(|end| {
+        let diffs = git.diff_trees(&baseline.tree, &end)?;
+        Ok((end, diffs))
+    }) {
+        Ok((end_tree, diffs)) => {
             for d in diffs {
                 let (diff, _) = cap(&sanitize(&d.diff), limits::VERSION_TOTAL_MAX);
+                let end_hash = end_tree_file_hash(git, &end_tree, &d.path, &d.change);
                 files.push(halo_store::FileChangeDraft {
                     path: d.path,
                     change: d.change,
                     diff,
+                    end_hash,
                 });
             }
         }
@@ -498,6 +505,19 @@ fn append_evidence(
             Err(())
         }
     }
+}
+
+fn end_tree_file_hash(git: &GitClient, end_tree: &str, path: &str, change: &str) -> Option<String> {
+    if change == "deleted" {
+        return None;
+    }
+    let size = git.tree_file_size(end_tree, path).ok()?;
+    if size > END_HASH_MAX_BYTES as u64 {
+        return None;
+    }
+    let bytes = git.show_tree_file(end_tree, path).ok()?;
+    let digest = Sha256::digest(bytes);
+    Some(format!("sha256:{digest:x}"))
 }
 
 fn mark_evidence_persistence_failure(ctx: &FlowCtx, task_id: &str) {
@@ -701,6 +721,7 @@ mod tests {
             instructions: "修改仓库文件".to_string(),
             state: TaskState::Running,
             attribution: halo_core::Attribution::AgentOnly,
+            manual_edit_paths: Default::default(),
             baseline,
             created_at: now_ts(),
             ended_at: None,

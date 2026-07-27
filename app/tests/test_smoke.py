@@ -30,11 +30,15 @@ REQUIRED_VIEWMODELS = (
     "ReviewViewModel",
     "HandoffViewModel",
     "HistoryViewModel",
+    "ShellViewModel",
+    "ExplorerViewModel",
 )
 
 CONTEXT_PROPERTY_NAMES = (
     "appVM", "workspaceVM", "configVM", "runtimeVM", "taskVM",
     "traceVM", "reviewVM", "handoffVM", "historyVM",
+    "shellVM", "explorerVM",
+    "editorService", "commandRegistry", "paletteVM",
 )
 
 
@@ -107,7 +111,9 @@ QQuickStyle.setStyle("Fusion")
 app = QGuiApplication(sys.argv)
 engine = QQmlApplicationEngine()
 names = ["appVM", "workspaceVM", "configVM", "runtimeVM", "taskVM",
-         "traceVM", "reviewVM", "handoffVM", "historyVM"]
+         "traceVM", "reviewVM", "handoffVM", "historyVM", "shellVM", "explorerVM"]
+names.append("editorService")
+names.extend(["whenContext", "commandRegistry", "paletteVM"])
 stubs = [QObject() for _ in names]
 for name, stub in zip(names, stubs):
     engine.rootContext().setContextProperty(name, stub)
@@ -120,7 +126,7 @@ os._exit(0 if ok else 5)
 
 
 def test_qml_loads_with_stub_context():
-    """Main.qml 必须能在 offscreen 下完成加载（根对象存在），与并行模块解耦。"""
+    """Main.qml 必须能在 offscreen 下完成加载（根对象存在），与模块装配解耦。"""
     proc = _run(["-c", _PROBE_SOURCE])
     assert proc.returncode == 0, (
         f"QML 加载失败（退出码 {proc.returncode}）\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
@@ -149,7 +155,7 @@ def test_review_diff_component_is_readonly():
 
 
 def test_main_qml_exposes_required_context_names():
-    """Main.qml 与视图必须只经约定的 9 个上下文属性名访问视图模型。"""
+    """Main.qml 与视图必须只经约定的上下文属性名访问视图模型。"""
     qml_text = "\n".join(
         f.read_text(encoding="utf-8") for f in sorted(QML_DIR.rglob("*.qml"))
     )

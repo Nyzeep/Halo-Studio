@@ -29,6 +29,8 @@ VIEWMODEL_SPECS: tuple[tuple[str, str], ...] = (
     ("reviewVM", "ReviewViewModel"),
     ("handoffVM", "HandoffViewModel"),
     ("historyVM", "HistoryViewModel"),
+    ("shellVM", "ShellViewModel"),
+    ("explorerVM", "ExplorerViewModel"),
 )
 
 
@@ -109,8 +111,13 @@ class AppContext:
     client: Any
     bridge: ContractClientBridge
     viewmodels: Dict[str, Any]
+    editor_service: Any
+    services: Dict[str, Any]
 
     def shutdown(self) -> None:
+        shell = self.viewmodels.get("shellVM")
+        if shell is not None and hasattr(shell, "flush"):
+            shell.flush()
         try:
             self.client.close()
         except Exception as exc:  # 关闭失败只记录，不阻塞退出
@@ -157,7 +164,7 @@ def assemble(engine) -> AppContext:
     for prop_name, cls_name in VIEWMODEL_SPECS:
         vm_cls = getattr(viewmodels_module, cls_name)
         try:
-            viewmodels[prop_name] = vm_cls(bridge)
+            viewmodels[prop_name] = vm_cls() if cls_name == "ShellViewModel" else vm_cls(bridge)
         except Exception as exc:
             raise AppAssemblyError(
                 f"{cls_name} 构造失败（装配假定签名 {cls_name}(client)）：{exc}"
@@ -166,6 +173,129 @@ def assemble(engine) -> AppContext:
     root_context = engine.rootContext()
     for prop_name, _ in VIEWMODEL_SPECS:
         root_context.setContextProperty(prop_name, viewmodels[prop_name])
+
+    try:
+        from halo_studio.editor import create_editor_service
+
+        editor_service = create_editor_service(bridge)
+    except Exception as exc:
+        raise AppAssemblyError(f"编辑器服务装配失败：{exc}") from exc
+    root_context.setContextProperty("editorService", editor_service)
+    viewmodels["explorerVM"].set_editor(editor_service)
+
+    try:
+        from halo_studio.differentiation import (
+            AttributionGutterController,
+            BaselineBadgeController,
+            ManualEditNotifier,
+            ReviewJumpViewModel,
+            TaskContextViewModel,
+        )
+
+        manual_edit_notifier = ManualEditNotifier(bridge)
+        task_context_vm = TaskContextViewModel(editor_service, client=bridge)
+        review_jump_vm = ReviewJumpViewModel(viewmodels["reviewVM"], viewmodels["workspaceVM"])
+        baseline_badges = BaselineBadgeController(
+            bridge,
+            viewmodels["explorerVM"],
+            editor_service,
+            viewmodels["workspaceVM"],
+        )
+        attribution_gutter = AttributionGutterController(
+            bridge,
+            editor_service,
+            viewmodels["workspaceVM"],
+            manual_edit_notifier,
+        )
+    except Exception as exc:
+        raise AppAssemblyError(f"差异化 IDE 服务装配失败：{exc}") from exc
+    root_context.setContextProperty("manualEditNotifier", manual_edit_notifier)
+    root_context.setContextProperty("taskContextVM", task_context_vm)
+    root_context.setContextProperty("reviewJumpVM", review_jump_vm)
+
+    def _open_review_file(path: str, line: int) -> None:
+        editor_service.openFile(path, line)
+        viewmodels["shellVM"].showEditor()
+
+    review_jump_vm.openInEditorRequested.connect(_open_review_file)
+
+    try:
+        from halo_studio.commands.builtin import BuiltinCommandActions, register_builtin_commands
+        from halo_studio.commands.registry import CommandRegistry
+        from halo_studio.commands.when_context import WhenContext
+        from halo_studio.viewmodels.file_index import FileIndex
+        from halo_studio.viewmodels.palette_vm import PaletteViewModel
+
+        when_context = WhenContext()
+        command_registry = CommandRegistry(when_context)
+        file_index = FileIndex(bridge, when_context)
+        palette_vm = PaletteViewModel(command_registry, file_index, editor_service)
+
+        class LayoutActions:
+            def show_view(self, view_id: str) -> None:
+                mapping = {"tasks": "task", "handoff": "review"}
+                viewmodels["shellVM"].activate(mapping.get(view_id, view_id))
+
+            def toggle_sidebar(self) -> None:
+                viewmodels["shellVM"].toggleSideBar()
+
+            def toggle_bottom_panel(self) -> None:
+                viewmodels["shellVM"].toggleBottomPanel()
+
+        register_builtin_commands(
+            command_registry,
+            BuiltinCommandActions(
+                layout=LayoutActions(),
+                palette=palette_vm,
+                editor=editor_service,
+                workspace=viewmodels["workspaceVM"],
+                task=viewmodels["taskVM"],
+                review=viewmodels["reviewVM"],
+                handoff=viewmodels["handoffVM"],
+                task_context=task_context_vm,
+                review_jump=review_jump_vm,
+            ),
+        )
+    except Exception as exc:
+        raise AppAssemblyError(f"命令面板服务装配失败：{exc}") from exc
+    root_context.setContextProperty("whenContext", when_context)
+    root_context.setContextProperty("commandRegistry", command_registry)
+    root_context.setContextProperty("paletteVM", palette_vm)
+
+    # Explorer 不自行猜测工作区状态；它消费已经由 WorkspaceViewModel 证实的状态。
+    def _sync_explorer_workspace() -> None:
+        workspace = viewmodels["workspaceVM"]
+        viewmodels["explorerVM"].set_workspace_state(
+            workspace.active,
+            workspace.trustState,
+            workspace.realPath,
+        )
+
+    viewmodels["workspaceVM"].statusChanged.connect(_sync_explorer_workspace)
+
+    def _sync_when_context() -> None:
+        workspace = viewmodels["workspaceVM"]
+        when_context.set_key("hasWorkspace", workspace.active and workspace.trustState == "trusted")
+        when_context.set_key("hasActiveEditor", editor_service.activeDocument is not None)
+        when_context.set_key(
+            "taskRunning",
+            viewmodels["taskVM"].state in {"created", "running", "awaiting_action", "finishing"},
+        )
+
+    viewmodels["workspaceVM"].statusChanged.connect(_sync_when_context)
+    viewmodels["workspaceVM"].statusChanged.connect(file_index.invalidate)
+    viewmodels["taskVM"].taskChanged.connect(_sync_when_context)
+    viewmodels["taskVM"].taskChanged.connect(file_index.invalidate)
+    editor_service.activeChanged.connect(_sync_when_context)
+    _sync_when_context()
+
+    def _sync_differentiation_task() -> None:
+        task = viewmodels["taskVM"]
+        baseline_badges.sync_task(task.taskId, task.state, task.latestEvidenceVersion)
+        attribution_gutter.sync_task(task.taskId, task.state, task.latestEvidenceVersion)
+
+    viewmodels["taskVM"].taskChanged.connect(_sync_differentiation_task)
+    _sync_differentiation_task()
 
     # 连接建立后拉取初始状态（全部走契约方法，无业务旁路）
     def _on_connected(_result: dict) -> None:
@@ -185,4 +315,20 @@ def assemble(engine) -> AppContext:
     except Exception as exc:
         print(f"[HALO-BOOT] Sidecar 启动请求失败（界面将显示原因）：{exc}", file=sys.stderr)
 
-    return AppContext(client=client, bridge=bridge, viewmodels=viewmodels)
+    return AppContext(
+        client=client,
+        bridge=bridge,
+        viewmodels=viewmodels,
+        editor_service=editor_service,
+        services={
+            "whenContext": when_context,
+            "commandRegistry": command_registry,
+            "fileIndex": file_index,
+            "paletteVM": palette_vm,
+            "manualEditNotifier": manual_edit_notifier,
+            "taskContextVM": task_context_vm,
+            "reviewJumpVM": review_jump_vm,
+            "baselineBadges": baseline_badges,
+            "attributionGutter": attribution_gutter,
+        },
+    )

@@ -68,15 +68,17 @@ mod tests {
             files: vec![
                 FileEvidence {
                     path: "src/auth.rs".to_string(),
-                    change: ChangeKind::Modified,
-                    diff: "+let key = \"sk-abcdefgh12345678\";".to_string(),
-                    truncated: false,
+                change: ChangeKind::Modified,
+                diff: "+let key = \"sk-abcdefgh12345678\";".to_string(),
+                truncated: false,
+                end_hash: None,
                 },
                 FileEvidence {
                     path: "src/lib.rs".to_string(),
-                    change: ChangeKind::Modified,
-                    diff: "+pub mod auth;".to_string(),
-                    truncated: false,
+                change: ChangeKind::Modified,
+                diff: "+pub mod auth;".to_string(),
+                truncated: false,
+                end_hash: None,
                 },
             ],
             verification: Verification {

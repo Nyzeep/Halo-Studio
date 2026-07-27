@@ -9,9 +9,11 @@ ColumnLayout {
     id: reviewPage
 
     signal handoffRequested(string taskId, var selectedFiles)
+    signal openInEditorRequested(string path, int line)
 
     readonly property var rVM: (typeof reviewVM !== "undefined") ? reviewVM : null
     readonly property var tVM: (typeof taskVM !== "undefined") ? taskVM : null
+    readonly property var jumpVM: (typeof reviewJumpVM !== "undefined") ? reviewJumpVM : null
 
     // 依赖 evidenceVersion（notify=bundleChanged）：证据更新后强制重取当前文件 Diff
     readonly property string currentDiff: {
@@ -131,6 +133,13 @@ ColumnLayout {
                 clip: true
                 spacing: 2
                 model: (reviewPage.rVM !== null && reviewPage.rVM.files !== undefined) ? reviewPage.rVM.files : null
+                onCurrentIndexChanged: {
+                    if (reviewPage.jumpVM === null || reviewPage.rVM === null || currentIndex < 0)
+                        return
+                    var entry = reviewPage.rVM.files.get(currentIndex)
+                    if (entry)
+                        reviewPage.jumpVM.setCurrentFile(String(entry.path), String(entry.change), String(entry.diff), Boolean(entry.truncated))
+                }
                 ScrollBar.vertical: ScrollBar {}
                 delegate: Rectangle {
                     width: fileList.width
@@ -161,6 +170,17 @@ ColumnLayout {
                             visible: Util.isTrue(model.truncated)
                             label: "已截断"
                             tone: Theme.warn
+                        }
+                        ToolButton {
+                            readonly property var jumpInfo: reviewPage.jumpVM === null ? ({ "canOpen": false, "reason": "不可用" }) : reviewPage.jumpVM.describe(String(model.path), String(model.change), String(model.diff), Boolean(model.truncated))
+                            text: "\ue8a7"
+                            font.family: Theme.fontIcon
+                            enabled: Boolean(jumpInfo.canOpen)
+                            ToolTip.visible: hovered
+                            ToolTip.text: Boolean(jumpInfo.canOpen)
+                                          ? "定位基于证据版本 v" + (reviewPage.rVM ? reviewPage.rVM.evidenceVersion : 0) + "，文件此后再编辑可能已漂移"
+                                          : String(jumpInfo.reason)
+                            onClicked: reviewPage.openInEditorRequested(String(jumpInfo.editorPath), Number(jumpInfo.editorLine))
                         }
                     }
                 }

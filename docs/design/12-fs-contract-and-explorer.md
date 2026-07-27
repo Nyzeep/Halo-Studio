@@ -390,14 +390,14 @@ fn require_trusted_root(&self) -> Result<PathBuf, SidecarError> {
 
 ```rust
 /// fs.write / fs.create_file / fs.create_dir / fs.rename 成功后调用。
-/// 存在非终态任务时：task.attribution.with_manual_edit(...) + store.put_task
-/// + bus.emit(task.manual_edit, {"note": …, "source": "fs_write", "path": rel})。
-/// note 默认文案："经内嵌编辑器写入：<path>"；去抖/汇总策略（同一文件连续保存
-/// 是否合并 reason）由 15 号设计文档裁决，本处仅保证每次成功写入都到达该函数。
-fn maybe_mark_manual_edit(&self, rel_path: &str)
+/// 当前任务处于 created/running/awaiting_action/finishing 时调用：更新 Mixed
+/// 归因并持久化路径集合，再 emit(task.manual_edit, {"note": …,
+/// "source": "fs_write", "path": rel})。review_ready 及之后不再改归因。
+/// 每次成功写入都会 emit；reason 与持久化路径按（任务、路径）去重，失败不得阻断 fs 响应。
+fn record_fs_manual_edit(&self, op: ManualEditOp, path: &str, to_path: Option<&str>)
 ```
 
-实现上与既有 `task_mark_manual_edit` 共享内部路径：把 dispatch.rs 中"归因转 mixed + put_task + emit"三步抽为私有 fn `mark_manual_edit_internal(&self, note: &str, source: &str, path: Option<&str>)`，两个入口共用，避免语义漂移。
+显式 `task.mark_manual_edit` 仍保留为用户主动标记入口；自动路径的操作文案、上限与结束树证据语义以 15 号设计文档为准。
 
 ### 5.3 GitClient 增量（`git.rs`）
 

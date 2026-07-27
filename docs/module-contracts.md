@@ -56,9 +56,12 @@ impl TaskState { pub fn apply(self, ev: &TaskEvent) -> Result<TaskState, Transit
 
 // 归因：基线前修改永不归因 Agent；人工介入 → Mixed
 pub enum Attribution { AgentOnly, Mixed { reasons: Vec<String> } }
+pub enum ManualEditOp { Write, CreateFile, CreateDir, Rename }
+pub fn manual_edit_note(op: ManualEditOp, path: &str, to_path: Option<&str>, local_hhmm: &str) -> String;
 pub struct Baseline { pub head: Option<String>, pub tree: String, pub dirty_files: Vec<String>, pub captured_at: String }
 
 // 证据（追加式：只能 new 下一个版本，禁止修改旧版本）
+pub struct FileEvidence { pub path: String, pub change: ChangeKind, pub diff: String, pub truncated: bool, pub end_hash: Option<String> }
 pub struct EvidenceVersion { pub version: u32, pub outcome: Outcome, pub attribution: Attribution, pub summary: String, pub files: Vec<FileEvidence>, pub verification: Verification, pub created_at: String }
 pub struct EvidenceLog(/* 私有 Vec */);
 impl EvidenceLog { pub fn append(&mut self, draft: EvidenceDraft) -> &EvidenceVersion; pub fn latest(&self) -> Option<&EvidenceVersion>; }
@@ -74,7 +77,7 @@ pub fn build_handoff(evidence: &EvidenceVersion, goal: &str, selected: Option<&[
 // 脱敏与限长（store 与 sidecar 出口双重使用）
 pub fn sanitize(text: &str) -> String;                 // 常见密钥模式替换为 [REDACTED]
 pub fn cap(text: &str, max_bytes: usize) -> (String, bool /*truncated*/);
-pub mod limits { pub const SUMMARY_MAX: usize = 16*1024; pub const FILE_DIFF_MAX: usize = 256*1024; pub const VERSION_TOTAL_MAX: usize = 4*1024*1024; pub const TRACE_TEXT_MAX: usize = 4*1024; }
+pub mod limits { pub const SUMMARY_MAX: usize = 16*1024; pub const FILE_DIFF_MAX: usize = 256*1024; pub const VERSION_TOTAL_MAX: usize = 4*1024*1024; pub const TRACE_TEXT_MAX: usize = 4*1024; pub const MANUAL_EDIT_REASONS_MAX: usize = 64; }
 ```
 
 **测试**：状态机全迁移表（合法+非法）；identity_changed 降级；追加式证据不可覆盖；sanitize 对典型密钥样式（`sk-…`、`AKIA…`、`Bearer …`、`password=`、PEM 头）全部命中；cap 截断标记。
@@ -138,7 +141,7 @@ impl Store {
 }
 ```
 
-表：`schema_version` / `trust_records(real_path PK, root_commit, trusted, decided_at)` / `launch_configs` / `tasks` / `evidence(task_id, version, …, PRIMARY KEY(task_id,version))` / `decisions` / `handoffs`。
+表：`schema_version` / `trust_records(real_path PK, root_commit, trusted, decided_at)` / `launch_configs` / `tasks`（含 JSON `manual_edit_paths`）/ `evidence(task_id, version, …, PRIMARY KEY(task_id,version))`（files JSON 含可选 `end_hash`）/ `decisions` / `handoffs`。
 
 **测试**：迁移幂等；append-only（尝试重写同版本 → 错误）；mark_non_terminal_interrupted；超限内容截断并带 truncated 标记。（脱敏断言在 sidecar 单测与集成测试层完成。）
 
@@ -176,7 +179,7 @@ src/main.rs        — CLI: 默认 serve；`cred set <ref>`(stdin 读密钥,写 
 src/server.rs      — stdin 读循环、stdout 唯一写线程、EventBus{next_seq, ring}
 src/dispatch.rs    — method 字符串 → handler；hello 门禁；统一错误映射
 src/state.rs       — AppState { workspace, store, configs, pi, opencode, task }（Mutex 保护）
-src/git.rs         — GitClient：canonicalize+校验、rev-parse、临时索引 write-tree 捕获基线树、diff-tree 生成任务关联 diff、status 脏文件
+src/git.rs         — GitClient：canonicalize+校验、rev-parse、临时索引 write-tree 捕获基线树、diff-tree 生成任务关联 diff、status 脏文件、只读 cat-file 取结束树文件字节
 src/task_flow.rs   — 任务编排：前置校验→基线→runtime.run_task→事件规范化→终态→证据落库
 ```
 
@@ -206,6 +209,7 @@ halo_studio/viewmodels/*.py     — AppViewModel(连接状态/协议版本/不�
 halo_studio/qml/Main.qml        — ApplicationWindow：左侧工作区/运行时状态栏，中部 Task/Trace，审查页，交接对话框，配置页；
                                   底部状态条常显 Sidecar 连接、协议版本、不可用原因
 halo_studio/main.py             — 入口；`--smoke` 加载 QML 校验根对象后打印 "SMOKE-OK" 退出 0（不依赖 Electron/浏览器）
+halo_studio/differentiation/**  — 任务上下文草稿、人工介入通知、审查跳转、基线徽章与归因 gutter；只消费 Sidecar/编辑器公开事实，不读本地工作区
 ```
 
 - ViewModel 只经 client 说契约语言，无业务旁路；审查视图**只读**（TextArea readOnly，无保存/编辑动作）。
@@ -231,4 +235,5 @@ halo_studio/main.py             — 入口；`--smoke` 加载 QML 校验根对�
 | py-ipc | `app/halo_studio/ipc/**`, `app/tests/fake_sidecar.py`, `app/tests/test_connection*.py` |
 | py-viewmodels | `app/halo_studio/viewmodels/**`, `app/tests/test_viewmodels*.py` |
 | py-qml | `app/halo_studio/qml/**`, `app/halo_studio/main.py`, `app/halo_studio/app.py`, `app/tests/test_smoke*.py` |
+| py-differentiation | `app/halo_studio/differentiation/**`, `app/tests/test_differentiation.py` |
 | scripts/docs | `scripts/**`, `docs/traceability.md` |

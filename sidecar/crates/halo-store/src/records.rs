@@ -48,6 +48,9 @@ pub struct TaskRecord {
     pub state: String,
     /// "agent_only" | "mixed"
     pub attribution: String,
+    /// 任务活跃期经工作台发生人工写入的路径集合。旧记录默认空集合。
+    #[serde(default)]
+    pub manual_edit_paths: Vec<String>,
     pub baseline_head: Option<String>,
     pub baseline_captured_at: String,
     pub created_at: String,
@@ -81,6 +84,9 @@ pub struct FileChangeDraft {
     /// modified|added|deleted|renamed
     pub change: String,
     pub diff: String,
+    /// 结束树中该文件字节的 sha256；删除或超过读取上限时为空。
+    #[serde(default)]
+    pub end_hash: Option<String>,
 }
 
 /// 交付证据版本（同构 IPC `ReviewBundle` 的持久化部分；is_latest 由读取时推导）。
@@ -109,6 +115,9 @@ pub struct FileEvidenceRecord {
     pub change: String,
     pub diff: String,
     pub truncated: bool,
+    /// 旧证据文件 JSON 没有该字段时回退为 None。
+    #[serde(default)]
+    pub end_hash: Option<String>,
 }
 
 /// 审查决定记录（同构 IPC `Decision`）。

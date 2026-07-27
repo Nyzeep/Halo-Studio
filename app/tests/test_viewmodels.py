@@ -441,6 +441,32 @@ class TestTaskViewModel:
         assert client.last().params == {"task_id": "task-1"}
         client.emit_event("task.cancelled", {"mode": "forced"}, task_id="task-1")
         assert vm.cancelMode == "forced"
+        assert client.last().method == "task.status"
+        assert client.last().params == {"task_id": "task-1"}
+        client.ok(
+            {
+                "task": {
+                    **TASK_STATUS,
+                    "state": "cancelled",
+                    "cancel_mode": "forced",
+                    "latest_evidence_version": 1,
+                }
+            }
+        )
+        assert vm.state == "cancelled"
+        assert vm.latestEvidenceVersion == 1
+
+    def test_workspace_change_clears_the_previous_task(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "attribution": "mixed"}})
+
+        client.emit_event("workspace.changed", {"active": True, "workspace_id": "workspace-2"})
+
+        assert vm.taskId == ""
+        assert vm.state == ""
+        assert vm.attribution == ""
+        assert vm.latestEvidenceVersion == 0
 
     def test_mark_verification_not_run_params(self, core_app, client):
         vm = self._make_vm(client)
@@ -583,9 +609,16 @@ REVIEW_BUNDLE = {
     "outcome": "finished",
     "attribution": "mixed",
     "attribution_reasons": ["用户于 08:12 标记人工编辑"],
+    "manual_edit_paths": ["src/auth.rs"],
     "summary": "修复了登录超时",
     "files": [
-        {"path": "src/auth.rs", "change": "modified", "diff": "--- a\n+++ b", "truncated": False},
+        {
+            "path": "src/auth.rs",
+            "change": "modified",
+            "diff": "--- a\n+++ b",
+            "truncated": False,
+            "end_hash": "sha256:abc",
+        },
         {"path": "src/big.rs", "change": "added", "diff": "…", "truncated": True},
     ],
     "verification": {"status": "passed", "detail": "cargo test 通过", "source": "agent"},
@@ -606,6 +639,7 @@ class TestReviewViewModel:
         assert vm.outcome == "finished"
         assert vm.attribution == "mixed"
         assert vm.attributionReasons == ["用户于 08:12 标记人工编辑"]
+        assert vm.manualEditPaths == ["src/auth.rs"]
         assert vm.baselineDirtyFiles == ["docs/x.md"]
         assert vm.verificationStatus == "passed"
         assert vm.verificationSource == "agent"
@@ -616,6 +650,8 @@ class TestReviewViewModel:
         assert model.data(idx, model.ChangeRole) == "modified"
         assert model.data(idx, model.DiffRole) == "--- a\n+++ b"
         assert model.data(idx, model.TruncatedRole) is False
+        assert model.data(idx, model.EndHashRole) == "sha256:abc"
+        assert model.roleNames()[model.EndHashRole] == b"endHash"
         assert model.data(model.index(1, 0), model.TruncatedRole) is True
 
     def test_readonly_no_write_api(self, core_app, client):

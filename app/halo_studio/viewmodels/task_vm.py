@@ -13,6 +13,7 @@ from .base import BaseViewModel
 class TaskViewModel(BaseViewModel):
     formChanged = Signal()
     taskChanged = Signal()
+    taskCreated = Signal()
 
     def __init__(self, client, parent: QObject | None = None) -> None:
         super().__init__(client, parent)
@@ -30,6 +31,7 @@ class TaskViewModel(BaseViewModel):
         client.subscribe("task.state", self._on_task_state)
         client.subscribe("task.cancelled", self._on_task_cancelled)
         client.subscribe("task.manual_edit", self._on_manual_edit)
+        client.subscribe("workspace.changed", self._on_workspace_changed)
 
     def _reset_task_fields(self) -> None:
         self._task_id = ""
@@ -58,7 +60,7 @@ class TaskViewModel(BaseViewModel):
             "notes": self._notes or None,
             "handoff_id": self._handoff_id or None,
         }
-        self._client.request("task.create", spec, self._on_task_ok, self._set_error)
+        self._client.request("task.create", spec, self._on_create_ok, self._set_error)
 
     @Slot()
     def cancel(self) -> None:
@@ -100,6 +102,14 @@ class TaskViewModel(BaseViewModel):
         task = result.get("task")
         if isinstance(task, dict):
             self._apply_task(task)
+        elif self._task_id:
+            self._reset_task_fields()
+            self.taskChanged.emit()
+
+    def _on_create_ok(self, result: dict) -> None:
+        self._on_task_ok(result)
+        if isinstance((result or {}).get("task"), dict):
+            self.taskCreated.emit()
 
     def _on_task_state(self, envelope: dict) -> None:
         payload = envelope.get("payload") or {}
@@ -112,12 +122,15 @@ class TaskViewModel(BaseViewModel):
         self._apply_task(task)
 
     def _on_task_cancelled(self, envelope: dict) -> None:
-        if self._task_id and envelope.get("task_id") not in (None, self._task_id):
+        event_task_id = str(envelope.get("task_id") or self._task_id)
+        if self._task_id and event_task_id != self._task_id:
             return
         mode = (envelope.get("payload") or {}).get("mode")
         if mode and mode != self._cancel_mode:
             self._cancel_mode = str(mode)
             self.taskChanged.emit()
+        if event_task_id:
+            self._refresh_terminal_task(event_task_id)
 
     def _on_manual_edit(self, envelope: dict) -> None:
         if self._task_id and envelope.get("task_id") not in (None, self._task_id):
@@ -125,6 +138,24 @@ class TaskViewModel(BaseViewModel):
         if self._attribution != "mixed":
             self._attribution = "mixed"
             self.taskChanged.emit()
+
+    def _on_workspace_changed(self, _envelope: dict) -> None:
+        if not self._task_id:
+            return
+        self._reset_task_fields()
+        self.taskChanged.emit()
+
+    def _refresh_terminal_task(self, task_id: str) -> None:
+        def on_ok(result: dict) -> None:
+            task = (result or {}).get("task")
+            if (
+                isinstance(task, dict)
+                and self._task_id == task_id
+                and str(task.get("task_id") or "") == task_id
+            ):
+                self._apply_task(task)
+
+        self._client.request("task.status", {"task_id": task_id}, on_ok)
 
     def _apply_task(self, task: dict) -> None:
         self._task_id = str(task.get("task_id") or "")

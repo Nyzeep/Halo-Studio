@@ -38,6 +38,9 @@ pub struct ReviewFile {
     pub change: FileChange,
     pub diff: String,
     pub truncated: bool,
+    /// 结束树中文件内容的 sha256。删除、超大文件和旧证据为 null。
+    #[serde(default)]
+    pub end_hash: Option<String>,
 }
 
 /// 验证结论（含来源）；task.verification 事件 payload 同构。
@@ -59,6 +62,9 @@ pub struct ReviewBundle {
     pub outcome: ReviewOutcome,
     pub attribution: Attribution,
     pub attribution_reasons: Vec<String>,
+    /// 任务活跃期经工作台发生人工写入的工作区相对路径（去重）。
+    #[serde(default)]
+    pub manual_edit_paths: Vec<String>,
     /// 脱敏、大小受限
     pub summary: String,
     pub files: Vec<ReviewFile>,

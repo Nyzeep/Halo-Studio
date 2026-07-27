@@ -24,12 +24,14 @@ class ReviewFileListModel(QAbstractListModel):
     ChangeRole = PathRole + 1
     DiffRole = PathRole + 2
     TruncatedRole = PathRole + 3
+    EndHashRole = PathRole + 4
 
     _ROLE_KEYS = {
         PathRole: "path",
         ChangeRole: "change",
         DiffRole: "diff",
         TruncatedRole: "truncated",
+        EndHashRole: "endHash",
     }
 
     def __init__(self, parent: QObject | None = None) -> None:
@@ -54,6 +56,7 @@ class ReviewFileListModel(QAbstractListModel):
             self.ChangeRole: b"change",
             self.DiffRole: b"diff",
             self.TruncatedRole: b"truncated",
+            self.EndHashRole: b"endHash",
         }
 
     @Slot(int, result="QVariantMap")
@@ -70,6 +73,7 @@ class ReviewFileListModel(QAbstractListModel):
                 "change": str(f.get("change") or ""),
                 "diff": str(f.get("diff") or ""),
                 "truncated": bool(f.get("truncated", False)),
+                "endHash": str(f.get("end_hash") or ""),
             }
             for f in files
         ]
@@ -95,6 +99,7 @@ class ReviewViewModel(BaseViewModel):
         self._outcome = ""
         self._attribution = ""
         self._attribution_reasons: list = []
+        self._manual_edit_paths: list = []
         self._summary = ""
         self._verification_status = ""
         self._verification_detail = ""
@@ -145,6 +150,7 @@ class ReviewViewModel(BaseViewModel):
         self._outcome = str(bundle.get("outcome") or "")
         self._attribution = str(bundle.get("attribution") or "")
         self._attribution_reasons = list(bundle.get("attribution_reasons") or [])
+        self._manual_edit_paths = list(bundle.get("manual_edit_paths") or [])
         self._summary = str(bundle.get("summary") or "")
         verification = bundle.get("verification") or {}
         self._verification_status = str(verification.get("status") or "")
@@ -181,6 +187,9 @@ class ReviewViewModel(BaseViewModel):
     def _get_attribution_reasons(self) -> list:
         return list(self._attribution_reasons)
 
+    def _get_manual_edit_paths(self) -> list:
+        return list(self._manual_edit_paths)
+
     def _get_summary(self) -> str:
         return self._summary
 
@@ -214,6 +223,7 @@ class ReviewViewModel(BaseViewModel):
     outcome = Property(str, _get_outcome, notify=bundleChanged)
     attribution = Property(str, _get_attribution, notify=bundleChanged)
     attributionReasons = Property("QVariantList", _get_attribution_reasons, notify=bundleChanged)
+    manualEditPaths = Property("QVariantList", _get_manual_edit_paths, notify=bundleChanged)
     summary = Property(str, _get_summary, notify=bundleChanged)
     files = Property(QObject, _get_files_model, constant=True)
     verificationStatus = Property(str, _get_verification_status, notify=bundleChanged)

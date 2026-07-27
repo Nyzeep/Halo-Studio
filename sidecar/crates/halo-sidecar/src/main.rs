@@ -3,6 +3,7 @@
 //! `cred check <ref>` 输出引用存在性。契约见 docs/module-contracts.md 第 6 节。
 
 mod dispatch;
+mod fs;
 mod git;
 mod mapping;
 mod server;

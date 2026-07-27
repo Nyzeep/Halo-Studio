@@ -1,6 +1,7 @@
 //! AppState：活动工作区、受管运行时句柄、当前任务的进程内状态。
 //! 持久化真相在 halo-store；这里只保存运行期上下文与路由。
 
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -115,6 +116,8 @@ pub struct ActiveTask {
     pub instructions: String,
     pub state: halo_core::TaskState,
     pub attribution: halo_core::Attribution,
+    /// 活跃任务期经工作台发生人工写入的路径；BTreeSet 保证持久化和展示稳定有序。
+    pub manual_edit_paths: BTreeSet<String>,
     pub baseline: halo_core::Baseline,
     pub created_at: String,
     pub ended_at: Option<String>,
@@ -141,6 +144,7 @@ impl ActiveTask {
             goal,
             state: self.state.as_str().to_string(),
             attribution: crate::mapping::attribution_core_to_str(&self.attribution).to_string(),
+            manual_edit_paths: self.manual_edit_paths.iter().cloned().collect(),
             baseline_head: self.baseline.head.clone(),
             baseline_captured_at: self.baseline.captured_at.clone(),
             created_at: self.created_at.clone(),

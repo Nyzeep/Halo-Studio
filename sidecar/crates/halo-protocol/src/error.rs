@@ -41,6 +41,13 @@ pub enum ErrorCode {
     HandoffNotFound,
     LineTooLong,
     ParseError,
+    FsPathOutsideWorkspace,
+    FsTooLarge,
+    FsBinary,
+    FsConflict,
+    FsNotFound,
+    FsAlreadyExists,
+    FsGitProtected,
 }
 
 /// 响应中的错误体；`message` 为中文用户可读文案，绝不携带凭据明文。

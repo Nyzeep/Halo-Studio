@@ -13,7 +13,7 @@ pub mod task;
 pub mod text;
 pub mod trust;
 
-pub use attribution::{Attribution, Baseline, ChangePartition};
+pub use attribution::{manual_edit_note, Attribution, Baseline, ChangePartition, ManualEditOp};
 pub use evidence::{
     ChangeKind, EvidenceDraft, EvidenceLog, EvidenceVersion, FileEvidence, Outcome, Verification,
     VerificationSource, VerificationStatus,

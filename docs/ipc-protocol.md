@@ -162,6 +162,8 @@ JSON Schema 副本见 `protocol/v1/`。
 - 一个活动工作区同一时刻只允许一个非终态任务；违反返回 `TASK_ALREADY_RUNNING`。
 - 前置条件：工作区 trusted、目标运行时 ready，否则 `WORKSPACE_NOT_TRUSTED` / `RUNTIME_NOT_READY`。
 - 任务创建时 Sidecar 记录 Git 基线（HEAD、临时索引 write-tree 的树对象、脏文件清单）；基线前已有修改永不归因给 Agent。
+- 当前任务处于 `created` / `running` / `awaiting_action` / `finishing` 时，成功的 `fs.write`、`fs.create_file`、`fs.create_dir`、`fs.rename` 会自动发出 `task.manual_edit`（`source: "fs_write"`）。每次成功写入都推送事件；持久化归因原因与 `manual_edit_paths` 按（任务、路径）去重。`review_ready` 及之后的写入不再改变该任务归因。
+- 自动归因的持久化或事件发送失败不影响文件操作本身的成功响应；归因只负责诚实标记，绝不充当保存门禁。
 - 取消流程：先经原生通道请求停止 → 超时（默认 10s，可测试注入）→ 强制终止；事件 `task.cancelled` 的 payload 带 `{"mode": "native"|"forced"}`。
 - Sidecar 重启后发现非终态任务 → 标记 `interrupted`，不自动恢复或重放。
 
@@ -199,6 +201,7 @@ JSON Schema 副本见 `protocol/v1/`。
 - 只有**最新**证据版本可以 accept/reject；对旧版本操作返回 `EVIDENCE_NOT_LATEST`。
 - accept/reject 只写入本地结论记录：不执行任何 `git commit/push/branch/tag`、不回滚、不删除文件。
 - 验证结果只来自 Agent 原生运行时事件或用户 `task.mark_verification` 显式标记 not_run。
+- `end_hash` 缺失、文件 diff 被截断或当前文件哈希失配时，编辑器只能展示文件级变更徽章，不能展示行级归因装饰。
 
 ### 3.6 交接（handoff.*）
 
@@ -245,7 +248,7 @@ JSON Schema 副本见 `protocol/v1/`。
 | `trace.item` | `TraceItem` | 结构化运行轨迹条目 |
 | `task.action_request` | `{"request_id": …, "kind": "permission"\|"clarification", "prompt": "…", "channel": "native"}` | Agent 暂停等待用户经其原生通道决定；Halo 不提供通用批准对话框或决议 API。Agent 经原生通道获得决定并恢复输出后，适配器再把任务带回 `running`。 |
 | `task.verification` | `{"status": "passed"\|"failed"\|"not_run", "detail": "…", "source": "agent"\|"user_marked"}` | |
-| `task.manual_edit` | `{"note": "…", "source": "user_marked", "path": null}` | 人工介入由本地开发者显式标记；首期不提供编辑器写入通道。 |
+| `task.manual_edit` | `{"note": "…", "source": "user_marked"\|"fs_write", "path": null\|"src/auth.rs"}` | 显式标记使用 `user_marked` 与 `path: null`；任务活跃期成功的文件系统写入自动使用 `fs_write` 与非空工作区相对路径。 |
 | `task.cancelled` | `{"mode": "native"\|"forced"}` | |
 | `task.finished` | `{"outcome": "finished"\|"failed", "evidence_version": 1\|null, "reason": "evidence_persistence_failed"\|null}` | 证据成功落库时给出版本并进入可审查状态；本地证据写入失败时 `outcome=failed`、`evidence_version=null`，不得进入可审查状态。 |
 
