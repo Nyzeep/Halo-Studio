@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "halo://protocol/v1/envelope.schema.json",
+  "title": "Halo Studio IPC v1 封包",
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response" },
+    { "$ref": "#/$defs/event" }
+  ],
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": ["v", "kind", "id", "method", "params"],
+      "properties": {
+        "v": { "const": 1 },
+        "kind": { "const": "request" },
+        "id": { "type": "string", "pattern": "^r-" },
+        "method": {
+          "type": "string",
+          "enum": [
+            "sidecar.hello",
+            "workspace.open", "workspace.trust", "workspace.close", "workspace.status",
+            "config.list", "config.save", "config.delete", "config.credential_check",
+            "runtime.probe", "runtime.start", "runtime.stop", "runtime.status",
+            "task.create", "task.cancel", "task.mark_manual_edit", "task.mark_verification", "task.status", "task.snapshot",
+            "review.get", "delivery.accept", "delivery.reject",
+            "handoff.preview", "handoff.create",
+            "history.list", "history.evidence"
+          ]
+        },
+        "params": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "response": {
+      "type": "object",
+      "required": ["v", "kind", "id", "ok"],
+      "properties": {
+        "v": { "const": 1 },
+        "kind": { "const": "response" },
+        "id": { "type": "string" },
+        "ok": { "type": "boolean" },
+        "result": { "type": "object" },
+        "error": { "$ref": "#/$defs/error" }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "ok": { "const": true } } },
+          "then": {
+            "required": ["result"],
+            "not": { "required": ["error"] }
+          },
+          "else": {
+            "required": ["error"],
+            "not": { "required": ["result"] }
+          }
+        }
+      ]
+    },
+    "event": {
+      "type": "object",
+      "required": ["v", "kind", "seq", "ts", "task_id", "event", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "kind": { "const": "event" },
+        "seq": { "type": "integer", "minimum": 0 },
+        "ts": { "type": "string", "format": "date-time" },
+        "task_id": { "type": ["string", "null"] },
+        "event": {
+          "type": "string",
+          "enum": [
+            "sidecar.state", "workspace.changed", "runtime.state",
+            "task.state", "task.phase", "trace.item", "task.action_request",
+            "task.verification", "task.manual_edit", "task.cancelled", "task.finished"
+          ]
+        },
+        "payload": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "HELLO_REQUIRED", "PROTOCOL_VERSION_UNSUPPORTED", "METHOD_NOT_FOUND", "INVALID_PARAMS", "INTERNAL",
+            "WORKSPACE_PATH_INVALID", "WORKSPACE_NOT_READABLE", "WORKSPACE_NOT_GIT", "WORKSPACE_NOT_TRUSTED",
+            "WORKSPACE_NOT_ACTIVE", "WORKSPACE_IDENTITY_CHANGED",
+            "CREDENTIAL_STORE_UNAVAILABLE", "CREDENTIAL_NOT_FOUND", "ENV_NOT_WHITELISTED", "CONFIG_NOT_FOUND", "CONFIG_CONFLICT",
+            "RUNTIME_NOT_READY", "RUNTIME_PROBE_FAILED", "RUNTIME_VERSION_MISMATCH", "RUNTIME_ALREADY_RUNNING",
+            "TASK_ALREADY_RUNNING", "TASK_RUNNING", "TASK_NOT_FOUND", "TASK_STILL_RUNNING", "TASK_NOT_REVIEWABLE",
+            "EVIDENCE_NOT_FOUND", "EVIDENCE_NOT_LATEST", "EVENT_GAP", "HANDOFF_NOT_FOUND", "LINE_TOO_LONG", "PARSE_ERROR"
+          ]
+        },
+        "message": { "type": "string" },
+        "details": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,14 @@
+# 不依赖 serde：Secret 的序列化路径在依赖层面即被截断（孤儿规则同时阻止下游补实现）。
+[package]
+name = "halo-config"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+keyring = { workspace = true }
+sha2 = { workspace = true }
+similar = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
