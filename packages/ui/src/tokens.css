@@ -1,0 +1,22 @@
+:root {
+  color-scheme: dark;
+  --halo-bg: #181818;
+  --halo-bg-elevated: #202020;
+  --halo-bg-surface: #252526;
+  --halo-bg-hover: #2a2d2e;
+  --halo-bg-active: #37373d;
+  --halo-border: #3c3c3c;
+  --halo-border-subtle: #2d2d2d;
+  --halo-text: #cccccc;
+  --halo-text-muted: #969696;
+  --halo-text-strong: #f0f0f0;
+  --halo-focus: #3794ff;
+  --halo-focus-strong: #0078d4;
+  --halo-success: #73c991;
+  --halo-warning: #cca700;
+  --halo-danger: #f14c4c;
+  --halo-info: #75beff;
+  --halo-status: #007acc;
+  --halo-font: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --halo-mono: "Cascadia Code", Consolas, "Microsoft YaHei UI", monospace;
+}

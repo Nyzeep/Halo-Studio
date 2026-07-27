@@ -57,6 +57,10 @@ cd sidecar; cargo build --workspace; cargo test --workspace
 .\scripts\smoke-windows.ps1
 ```
 
+## 迁移说明
+
+合并历史中可能保留 `apps/`、`packages/` 和旧 Node/Electron 辅助文件，作为只读历史参考。它们不构成当前产品的开发、构建、测试或发布入口；当前可执行入口仅以本仓库的 Rust、Python 与 PowerShell 脚本为准。
+
 ## 安全与边界（不可回退项）
 
 - 凭据明文只在 Sidecar 启动受管应用时短暂读取；不进入 UI、IPC、日志、Diff、备份或 SQLite。凭据录入走 `halo-sidecar cred set <ref>`（stdin），UI 只处理凭据引用。
