@@ -2,24 +2,5 @@
   "name": "halo-studio",
   "version": "0.2.0",
   "private": true,
-  "type": "module",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
-  "scripts": {
-    "prepare:native:node": "node scripts/prepare-native-runtime.mjs node",
-    "prepare:native:electron": "node scripts/prepare-native-runtime.mjs electron",
-    "dev": "node scripts/run-workspace-script.mjs dev",
-    "build": "node scripts/run-workspace-script.mjs build",
-    "typecheck": "node scripts/run-workspace-script.mjs typecheck",
-    "pretest": "npm run prepare:native:node",
-    "test": "node --test scripts/assert-repository.test.mjs scripts/desktop-dev.test.mjs scripts/electron-renderer-probe.test.mjs scripts/prepare-native-runtime.test.mjs scripts/run-workspace-script.test.mjs scripts/windows-smoke.test.mjs && node scripts/run-workspace-script.mjs test",
-    "check:repository": "node scripts/assert-repository.mjs",
-    "verify": "npm run check:repository && npm run typecheck && npm test && npm run build"
-  },
-  "engines": {
-    "node": ">=20.18",
-    "npm": ">=10.8"
-  }
+  "description": "Halo Studio 原生可验证交付工作台的归档 Node 参考元数据；不提供可运行产品入口。"
 }
