@@ -309,58 +309,63 @@ pub fn run_task_loop_with_finish(
 
     let ending = loop {
         crossbeam_channel::select! {
-            recv(events_rx) -> msg => match msg {
-                Err(_) => break Ending::RuntimeFailed { reason: "运行时事件通道意外中断".to_string() },
-                Ok(RuntimeEvent::State(RuntimeState::Failed { reason, .. })) =>
-                    break Ending::RuntimeFailed { reason },
-                Ok(RuntimeEvent::State(RuntimeState::Stopped)) =>
-                    break Ending::RuntimeFailed { reason: "受管运行时在任务结束前停止".to_string() },
-                Ok(RuntimeEvent::State(_)) => {}
-                Ok(RuntimeEvent::Trace(item)) => on_trace(ctx, task_id, &item),
-                Ok(RuntimeEvent::ActionRequest { request_id, kind, prompt }) => {
-                    if agent != AgentKind::OpenCode {
-                        break Ending::RuntimeFailed {
-                            reason: "当前受管执行器不支持一次性操作请求".to_string(),
-                        };
-                    }
-                    on_action_request(ctx, task_id, &request_id, &kind, &prompt);
+            recv(events_rx) -> msg => {
+                if lock(&ctx.app).shutting_down {
+                    break Ending::RuntimeFailed { reason: "Sidecar 正在退出".to_string() };
                 }
-                Ok(RuntimeEvent::ActionResolved { request_id }) =>
-                    on_action_resolved(ctx, task_id, &request_id),
-                Ok(RuntimeEvent::Verification { status, detail }) =>
-                    on_verification(ctx, task_id, &status, &detail),
-                Ok(RuntimeEvent::SessionReply { text }) => on_session_reply(ctx, task_id, &text),
-                Ok(RuntimeEvent::TaskDone { outcome, summary }) => {
-                    // OpenCode 受管会话只能由开发者显式结束；任何运行时 TaskDone
-                    // 都是迟到/兼容层信号，不能把 running 或 waiting 误判为正常结束。
-                    if agent == AgentKind::OpenCode {
-                        continue;
+                match msg {
+                    Err(_) => break Ending::RuntimeFailed { reason: "运行时事件通道意外中断".to_string() },
+                    Ok(RuntimeEvent::State(RuntimeState::Failed { reason, .. })) =>
+                        break Ending::RuntimeFailed { reason },
+                    Ok(RuntimeEvent::State(RuntimeState::Stopped)) =>
+                        break Ending::RuntimeFailed { reason: "受管运行时在任务结束前停止".to_string() },
+                    Ok(RuntimeEvent::State(_)) => {}
+                    Ok(RuntimeEvent::Trace(item)) => on_trace(ctx, task_id, &item),
+                    Ok(RuntimeEvent::ActionRequest { request_id, kind, prompt }) => {
+                        if agent != AgentKind::OpenCode {
+                            break Ending::RuntimeFailed {
+                                reason: "当前受管执行器不支持一次性操作请求".to_string(),
+                            };
+                        }
+                        on_action_request(ctx, task_id, &request_id, &kind, &prompt);
                     }
-                    let waiting_for_developer = {
-                        let app = lock(&ctx.app);
-                        app.task
-                            .as_ref()
-                            .is_some_and(|task| task.task_id == task_id && task.state == TaskState::WaitingDeveloper)
-                    };
-                    // OpenCode 的首轮回合以 SessionReply 结束。即使服务端或旧适配层随后
-                    // 迟到一个 TaskDone，也不能把开发者尚未结束的会话自动送进交付审查。
-                    if waiting_for_developer {
-                        continue;
-                    }
-                    let awaiting_action = {
-                        let app = lock(&ctx.app);
-                        app.task.as_ref().is_some_and(|task| {
-                            task.task_id == task_id
-                                && task.state == TaskState::AwaitingAction
-                                && !task.action_requests.is_empty()
-                        })
-                    };
-                    if awaiting_action {
-                        break Ending::RuntimeFailed {
-                            reason: "受管 Agent 在操作请求尚未得到确认前结束".to_string(),
+                    Ok(RuntimeEvent::ActionResolved { request_id }) =>
+                        on_action_resolved(ctx, task_id, &request_id),
+                    Ok(RuntimeEvent::Verification { status, detail }) =>
+                        on_verification(ctx, task_id, &status, &detail),
+                    Ok(RuntimeEvent::SessionReply { text }) => on_session_reply(ctx, task_id, &text),
+                    Ok(RuntimeEvent::TaskDone { outcome, summary }) => {
+                        // OpenCode 受管会话只能由开发者显式结束；任何运行时 TaskDone
+                        // 都是迟到/兼容层信号，不能把 running 或 waiting 误判为正常结束。
+                        if agent == AgentKind::OpenCode {
+                            continue;
+                        }
+                        let waiting_for_developer = {
+                            let app = lock(&ctx.app);
+                            app.task
+                                .as_ref()
+                                .is_some_and(|task| task.task_id == task_id && task.state == TaskState::WaitingDeveloper)
                         };
+                        // OpenCode 的首轮回合以 SessionReply 结束。即使服务端或旧适配层随后
+                        // 迟到一个 TaskDone，也不能把开发者尚未结束的会话自动送进交付审查。
+                        if waiting_for_developer {
+                            continue;
+                        }
+                        let awaiting_action = {
+                            let app = lock(&ctx.app);
+                            app.task.as_ref().is_some_and(|task| {
+                                task.task_id == task_id
+                                    && task.state == TaskState::AwaitingAction
+                                    && !task.action_requests.is_empty()
+                            })
+                        };
+                        if awaiting_action {
+                            break Ending::RuntimeFailed {
+                                reason: "受管 Agent 在操作请求尚未得到确认前结束".to_string(),
+                            };
+                        }
+                        break Ending::Done { outcome, summary };
                     }
-                    break Ending::Done { outcome, summary };
                 }
             },
             recv(cancel_rx) -> msg => {
@@ -412,6 +417,20 @@ pub fn run_task_loop_with_finish(
             }
         }
     };
+
+    // shutdown 已经切断了活动任务路由；停止受管进程产生的迟到事件不能再
+    // 被解释为失败、取消或新的交付证据。
+    if {
+        let app = lock(&ctx.app);
+        app.shutting_down
+            || !app
+                .task
+                .as_ref()
+                .is_some_and(|task| task.task_id == task_id)
+    } {
+        clear_route(ctx, agent);
+        return;
+    }
 
     match ending {
         Ending::ExplicitFinish => {
@@ -527,6 +546,15 @@ fn on_trace(ctx: &FlowCtx, task_id: &str, item: &halo_runtime::RuntimeTraceItem)
     let (text, _) = cap(&sanitize(&item.text), limits::TRACE_TEXT_MAX);
     // detail 是 Agent 原生输出的任意 JSON：整树递归脱敏后才允许进入事件 payload
     let detail = sanitize_json_strings(&item.detail, limits::TRACE_TEXT_MAX);
+    let app = lock(&ctx.app);
+    if app.shutting_down
+        || !app
+            .task
+            .as_ref()
+            .is_some_and(|task| task.task_id == task_id && !task.state.is_terminal())
+    {
+        return;
+    }
     ctx.bus.emit(
         Some(task_id),
         "trace.item",
@@ -683,12 +711,18 @@ fn on_verification(ctx: &FlowCtx, task_id: &str, status: &str, detail: &str) {
     };
     let (detail, _) = cap(&sanitize(detail), limits::TRACE_TEXT_MAX);
     let verification = Verification::from_agent(status, detail.clone());
-    {
-        let mut app = lock(&ctx.app);
-        if let Some(task) = app.task.as_mut().filter(|t| t.task_id == task_id) {
-            task.verification_agent = Some(verification.clone());
-        }
+    let mut app = lock(&ctx.app);
+    if app.shutting_down {
+        return;
     }
+    let Some(task) = app
+        .task
+        .as_mut()
+        .filter(|task| task.task_id == task_id && !task.state.is_terminal())
+    else {
+        return;
+    };
+    task.verification_agent = Some(verification.clone());
     ctx.bus.emit(
         Some(task_id),
         "task.verification",
@@ -838,9 +872,19 @@ fn append_evidence(
         created_at: now_ts(),
     };
 
+    // 与 shutdown 串行化：取得活动任务锁后再追加，关闭流程一旦先取得锁就
+    // 不会留下“中断后才生成”的失败证据。
+    let mut app = lock(&ctx.app);
+    if app.shutting_down
+        || !app
+            .task
+            .as_ref()
+            .is_some_and(|task| task.task_id == task_id)
+    {
+        return Err(());
+    }
     match ctx.store.append_evidence(task_id, &draft) {
         Ok(version) => {
-            let mut app = lock(&ctx.app);
             if let Some(task) = app.task.as_mut().filter(|t| t.task_id == task_id) {
                 task.latest_evidence_version = version;
             }
@@ -2123,6 +2167,37 @@ mod tests {
         assert!(
             detail["long"].as_str().expect("long 应仍为字符串").len() <= limits::TRACE_TEXT_MAX
         );
+    }
+
+    #[test]
+    fn shutdown_drops_late_trace_and_verification_events() {
+        let f = fixture();
+        install_running_task(&f, "task-shutdown-events");
+        lock(&f.ctx.app).shutting_down = true;
+
+        on_trace(
+            &f.ctx,
+            "task-shutdown-events",
+            &RuntimeTraceItem {
+                kind: "agent_note".to_string(),
+                text: "迟到轨迹".to_string(),
+                detail: json!({}),
+            },
+        );
+        on_verification(
+            &f.ctx,
+            "task-shutdown-events",
+            "passed",
+            "迟到验证",
+        );
+
+        assert!(drain_events(&f.events).is_empty());
+        assert!(lock(&f.ctx.app)
+            .task
+            .as_ref()
+            .unwrap()
+            .verification_agent
+            .is_none());
     }
 
     #[test]

@@ -26,6 +26,7 @@ struct ServeArgs {
     require_isolated_state: bool,
     lock_file: Option<String>,
     dispose_marker_file: Option<String>,
+    write_marker_file: Option<String>,
 }
 
 #[derive(Default)]
@@ -36,6 +37,7 @@ struct FakeState {
     pending_permissions: BTreeMap<String, PendingFakeAction>,
     pending_questions: BTreeMap<String, PendingFakeAction>,
     event_clients: Vec<mpsc::Sender<Vec<u8>>>,
+    write_marker_file: Option<String>,
 }
 
 struct FakeSession {
@@ -125,7 +127,10 @@ fn main() {
             std::process::exit(1);
         }
     };
-    let state = Arc::new(Mutex::new(FakeState::default()));
+    let state = Arc::new(Mutex::new(FakeState {
+        write_marker_file: serve.write_marker_file.clone(),
+        ..FakeState::default()
+    }));
     emit_listening_line(&mode, serve.port);
 
     if mode == "exit_early" {
@@ -231,6 +236,10 @@ fn parse_serve_args(args: &[String]) -> Result<ServeArgs, String> {
             "--dispose-marker-file" => {
                 index += 1;
                 serve.dispose_marker_file = args.get(index).cloned();
+            }
+            "--write-marker-file" => {
+                index += 1;
+                serve.write_marker_file = args.get(index).cloned();
             }
             _ => {}
         }
@@ -454,6 +463,12 @@ fn emit_round(state: Arc<Mutex<FakeState>>, mode: String, session_id: String, pr
     };
     if round == 1 && prompt.contains("写入 hello_from_agent.txt") {
         let _ = std::fs::write("hello_from_agent.txt", "created by fake opencode\n");
+        let marker = lock_state(&state).write_marker_file.clone();
+        if let Some(marker) = marker {
+            if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(marker) {
+                let _ = writeln!(file, "agent_write");
+            }
+        }
     }
     let missing_busy_eof = mode == "missing_busy_eof";
     if !missing_busy_eof {

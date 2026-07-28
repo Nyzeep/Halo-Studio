@@ -131,30 +131,40 @@ fn shutdown(
     store: &Arc<Store>,
     timeouts: Timeouts,
 ) {
-    // 当前非终态任务 → interrupted（不自动恢复或重放）
+    // 先设置关闭闸门并移除内存活动任务，防止停止运行时产生的迟到事件再次
+    // 触碰会话、证据或公开事件；运行时路由随后由 stop_slot 统一切断。
     let record = {
         let mut guard = state::lock(app);
-        match guard.task.as_mut() {
-            Some(task) if !task.state.is_terminal() => {
-                match task.state.apply(&halo_core::TaskEvent::MarkInterrupted) {
-                    Ok(next) => {
-                        task.state = next;
-                        task.ended_at = Some(mapping::now_ts());
-                        Some(task.to_record())
-                    }
-                    Err(_) => None,
-                }
+        guard.shutting_down = true;
+        guard.task.take().and_then(|mut task| {
+            task.session_messages.clear();
+            task.action_requests.clear();
+            task.cancel_tx = None;
+            task.finish_tx = None;
+            if task.state.is_terminal() {
+                return None;
             }
-            _ => None,
-        }
+            match task.state.apply(&halo_core::TaskEvent::MarkInterrupted) {
+                Ok(next) => {
+                    task.state = next;
+                    task.ended_at = Some(mapping::now_ts());
+                    Some(task.to_record())
+                }
+                Err(_) => None,
+            }
+        })
     };
-    if let Some(rec) = record {
-        if let Err(e) = store.put_task(&rec) {
-            eprintln!("[halo-sidecar] 退出时任务标记失败：{e}");
-        }
-    }
     for agent in [halo_config::AgentKind::Pi, halo_config::AgentKind::OpenCode] {
         state::stop_slot(app, bus, agent, timeouts.shutdown_grace);
+    }
+    if let Some(rec) = record {
+        if store.put_task(&rec).is_err() {
+            eprintln!("[halo-sidecar] 退出时任务标记失败");
+        }
+    }
+    // 兜底处理已经持久化但不再挂在当前内存路由上的非终态任务。
+    if store.mark_non_terminal_interrupted().is_err() {
+        eprintln!("[halo-sidecar] 退出时中断收口失败");
     }
 }
 
@@ -244,5 +254,85 @@ mod tests {
         std::env::set_var("HALO_DATA_DIR", "D:\\自定义 数据目录");
         assert_eq!(data_dir().unwrap(), PathBuf::from("D:\\自定义 数据目录"));
         std::env::remove_var("HALO_DATA_DIR");
+    }
+
+    #[test]
+    fn shutdown_persists_interruption_and_clears_active_session_boundary() {
+        let data_dir = tempfile::tempdir().expect("创建测试数据目录失败");
+        let store = Arc::new(
+            Store::open(
+                &data_dir.path().join("halo.db"),
+                StoreLimits::default(),
+            )
+            .expect("打开测试存储失败"),
+        );
+        let (out_tx, _out_rx) = unbounded();
+        let bus = Arc::new(server::EventBus::new(out_tx));
+        let app = Arc::new(Mutex::new(state::AppState::new()));
+        let (route_tx, _route_rx) = unbounded();
+        let mut task = state::ActiveTask {
+            task_id: "task-shutdown".to_string(),
+            agent: halo_config::AgentKind::OpenCode,
+            title: "退出清理测试".to_string(),
+            instructions: "活动任务说明".to_string(),
+            state: halo_core::TaskState::Running,
+            attribution: halo_core::Attribution::AgentOnly,
+            manual_edit_paths: Default::default(),
+            baseline: halo_core::Baseline {
+                head: None,
+                tree: "tree".to_string(),
+                dirty_files: vec![],
+                captured_at: "2026-07-28T00:00:00Z".to_string(),
+            },
+            created_at: "2026-07-28T00:00:00Z".to_string(),
+            ended_at: None,
+            cancel_mode: None,
+            latest_evidence_version: 0,
+            verification_agent: None,
+            verification_user: None,
+            session_messages: vec![],
+            action_requests: Default::default(),
+            cancellation_requested: false,
+            finish_requested: false,
+            cancel_tx: None,
+            finish_tx: None,
+        };
+        task.append_session_message(
+            halo_protocol::methods::task::TaskSessionMessageRole::Agent,
+            "仅存于活动会话的回复",
+        );
+        task.action_requests.insert(
+            "action-shutdown".to_string(),
+            halo_protocol::methods::task::TaskActionRequest {
+                request_id: "action-shutdown".to_string(),
+                kind: halo_protocol::methods::task::TaskActionKind::Permission,
+                prompt: "仅存于活动会话的请求".to_string(),
+                decision_sent: false,
+            },
+        );
+        store.put_task(&task.to_record()).expect("写入测试任务失败");
+        {
+            let mut guard = state::lock(&app);
+            guard.task = Some(task);
+            guard.slot_mut(halo_config::AgentKind::OpenCode).task_tx = Some(route_tx);
+        }
+
+        shutdown(&app, &bus, &store, Timeouts {
+            ready: Duration::ZERO,
+            cancel_grace: Duration::ZERO,
+            shutdown_grace: Duration::ZERO,
+        });
+
+        let stored = store
+            .get_task("task-shutdown")
+            .expect("读取测试任务失败")
+            .expect("中断任务应保留");
+        assert_eq!(stored.state, "interrupted");
+        let guard = state::lock(&app);
+        assert!(guard.task.is_none(), "退出后不得保留活动任务路由");
+        assert!(guard
+            .slot(halo_config::AgentKind::OpenCode)
+            .task_tx
+            .is_none());
     }
 }

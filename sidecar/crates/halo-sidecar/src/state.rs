@@ -275,6 +275,9 @@ pub fn append_active_session_message(
 ) -> Option<halo_protocol::methods::task::TaskSessionMessage> {
     let message = {
         let mut app = lock(app);
+        if app.shutting_down {
+            return None;
+        }
         let task = app
             .task
             .as_mut()
@@ -299,6 +302,8 @@ pub struct AppState {
     pub pi: RuntimeSlot,
     pub opencode: RuntimeSlot,
     pub task: Option<ActiveTask>,
+    /// 退出流程已开始；迟到的运行时事件不得再触碰任务、证据或 IPC。
+    pub shutting_down: bool,
 }
 
 impl AppState {
@@ -308,6 +313,7 @@ impl AppState {
             pi: RuntimeSlot::new(),
             opencode: RuntimeSlot::new(),
             task: None,
+            shutting_down: false,
         }
     }
 
@@ -348,24 +354,31 @@ pub fn spawn_runtime_forwarder(
             if let RuntimeEvent::State(s) = &ev {
                 let update = {
                     let mut guard = lock(&app);
-                    let slot = guard.slot_mut(agent);
-                    if slot.generation != generation {
+                    if guard.shutting_down {
                         None
                     } else {
-                        let changed = slot.last_state != *s;
-                        slot.last_state = s.clone();
-                        let version = slot.version.clone();
-                        Some((runtime_state_payload(agent, s, version), changed))
+                        let slot = guard.slot_mut(agent);
+                        if slot.generation != generation {
+                            None
+                        } else {
+                            let changed = slot.last_state != *s;
+                            slot.last_state = s.clone();
+                            let version = slot.version.clone();
+                            Some((runtime_state_payload(agent, s, version), changed))
+                        }
                     }
                 };
                 if let Some((payload, true)) = update {
-                    bus.emit(None, "runtime.state", payload);
+                    let guard = lock(&app);
+                    if !guard.shutting_down {
+                        bus.emit(None, "runtime.state", payload);
+                    }
                 }
             }
             let task_tx = {
                 let guard = lock(&app);
                 let slot = guard.slot(agent);
-                (slot.generation == generation)
+                (!guard.shutting_down && slot.generation == generation)
                     .then(|| slot.task_tx.clone())
                     .flatten()
             };
