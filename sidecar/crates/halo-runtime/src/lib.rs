@@ -6,7 +6,10 @@ mod opencode;
 mod pi;
 mod process;
 
-pub use opencode::{OpenCodeHandle, OpenCodeRuntime, OPENCODE_LOCKED_VERSION};
+pub use opencode::{
+    OpenCodeHandle, OpenCodeRuntime, OPENCODE_COMPATIBILITY_PROFILE,
+    OPENCODE_MIN_SUPPORTED_VERSION,
+};
 pub use pi::{PiHandle, PiRuntime};
 
 use std::collections::HashMap;
@@ -58,7 +61,6 @@ pub enum RuntimeEvent {
 /// 启动命令；env 已由 halo-config 按白名单构好，可能含注入凭据，故 Debug 不输出任何值。
 pub struct LaunchCmd {
     pub exe: String,
-    pub args: Vec<String>,
     pub env: HashMap<String, String>,
     pub cwd: String,
 }
@@ -67,7 +69,6 @@ impl fmt::Debug for LaunchCmd {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LaunchCmd")
             .field("exe", &self.exe)
-            .field("args", &self.args)
             .field("env", &format_args!("<{} 个变量，值已隐藏>", self.env.len()))
             .field("cwd", &self.cwd)
             .finish()
@@ -123,6 +124,8 @@ pub enum RuntimeError {
     VersionMismatch(String),
     #[error("受管应用拒绝了本次认证，请重新启动运行时以生成新的认证信息")]
     Unauthorized,
+    #[error("当前运行时尚不具备所请求的兼容性能力：{0}")]
+    CapabilityUnavailable(String),
 }
 
 /// Mutex 中毒时继续使用内部值：本 crate 的共享状态均为简单标量/映射，恢复使用不破坏不变量，
@@ -192,10 +195,12 @@ mod tests {
     #[test]
     fn launch_cmd_debug_hides_env_values() {
         let mut env = HashMap::new();
-        env.insert("HALO_OC_TOKEN".to_string(), "super-secret-value".to_string());
+        env.insert(
+            "OPENCODE_SERVER_PASSWORD".to_string(),
+            "super-secret-value".to_string(),
+        );
         let cmd = LaunchCmd {
             exe: "pi.exe".into(),
-            args: vec!["--rpc".into()],
             env,
             cwd: "D:\\repo".into(),
         };

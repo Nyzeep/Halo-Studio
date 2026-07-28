@@ -207,8 +207,6 @@ LAUNCH_CONFIG = {
     "model": "gpt-5",
     "thinking_level": "medium",
     "credential_ref": "halo/pi/openai",
-    "extra_args": [],
-    "env_overrides": {},
     "created_at": "2026-07-26T08:00:00Z",
     "updated_at": "2026-07-26T08:00:00Z",
 }
@@ -233,14 +231,13 @@ class TestConfigViewModel:
         secret = "sk-plain-secret-123456"
         vm.save(
             {
+                "config_id": "cfg-existing",
                 "name": "Pi + GPT",
                 "agent": "pi",
                 "executable_path": "C:\\tools\\pi\\pi.exe",
                 "model": "gpt-5",
                 "thinking_level": "low",
                 "credential_ref": "halo/pi/openai",
-                "extra_args": [],
-                "env_overrides": {},
                 # 恶意/误传字段：必须在进入请求前被丢弃
                 "api_key": secret,
                 "credential_plaintext": secret,
@@ -252,6 +249,7 @@ class TestConfigViewModel:
         assert "api_key" not in req.params
         assert "credential_plaintext" not in req.params
         assert "password" not in req.params
+        assert "config_id" not in req.params
         assert secret not in repr(req.params)
         # 服务端返回的配置进入模型后同样不含明文
         client.ok({"config": {**LAUNCH_CONFIG, "api_key": secret}})
@@ -320,10 +318,10 @@ class TestRuntimeViewModel:
 
         client.emit_event(
             "runtime.state",
-            {"agent": "opencode", "state": "ready", "reason": None, "recovery_hint": None, "version": "0.4.2"},
+            {"agent": "opencode", "state": "ready", "reason": None, "recovery_hint": None, "version": "1.18.5"},
         )
         assert vm.opencodeState == "ready"
-        assert vm.opencodeVersion == "0.4.2"
+        assert vm.opencodeVersion == "1.18.5"
         # pi 保持失败态不被覆盖
         assert vm.piState == "failed"
 
@@ -348,6 +346,21 @@ class TestRuntimeViewModel:
         message = "工作区尚未被信任，无法启动受管运行时。"
         client.err("WORKSPACE_NOT_TRUSTED", message)
         assert vm.errorMessage == message
+
+    def test_probe_surfaces_compatible_and_unsupported_results(self, core_app, client):
+        vm = RuntimeViewModel(client)
+        vm.probe("opencode", "cfg-1")
+        assert client.last().method == "runtime.probe"
+        assert client.last().params == {"agent": "opencode", "config_id": "cfg-1"}
+        client.ok({"agent": "opencode", "version": "1.18.5", "supported": True})
+        assert vm.opencodeCompatibility == "supported"
+        assert "1.18.5" in vm.opencodeProbeMessage
+
+        vm.probe("opencode", "cfg-1")
+        client.ok({"agent": "opencode", "version": "2.0.0", "supported": False})
+        assert vm.opencodeCompatibility == "unsupported"
+        assert "2.0.0" in vm.opencodeProbeMessage
+        assert "安装稳定版 OpenCode 1.18.5 或更高的 1.x" in vm.opencodeProbeMessage
 
 
 # --------------------------------------------------------------- TaskViewModel

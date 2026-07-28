@@ -279,7 +279,7 @@ fn read_message_tolerates_trailing_newline() {
 
 #[test]
 fn error_code_strings_are_stable() {
-    // 与 protocol/v1/envelope.schema.json 的枚举一字不差（全部 38 个）。
+    // 与 protocol/v1/envelope.schema.json 的枚举一字不差（全部 39 个）。
     let pairs: &[(ErrorCode, &str)] = &[
         (ErrorCode::HelloRequired, "HELLO_REQUIRED"),
         (ErrorCode::ProtocolVersionUnsupported, "PROTOCOL_VERSION_UNSUPPORTED"),
@@ -301,6 +301,10 @@ fn error_code_strings_are_stable() {
         (ErrorCode::RuntimeProbeFailed, "RUNTIME_PROBE_FAILED"),
         (ErrorCode::RuntimeVersionMismatch, "RUNTIME_VERSION_MISMATCH"),
         (ErrorCode::RuntimeAlreadyRunning, "RUNTIME_ALREADY_RUNNING"),
+        (
+            ErrorCode::RuntimeCapabilityUnavailable,
+            "RUNTIME_CAPABILITY_UNAVAILABLE",
+        ),
         (ErrorCode::TaskAlreadyRunning, "TASK_ALREADY_RUNNING"),
         (ErrorCode::TaskRunning, "TASK_RUNNING"),
         (ErrorCode::TaskNotFound, "TASK_NOT_FOUND"),
@@ -320,7 +324,7 @@ fn error_code_strings_are_stable() {
         (ErrorCode::FsAlreadyExists, "FS_ALREADY_EXISTS"),
         (ErrorCode::FsGitProtected, "FS_GIT_PROTECTED"),
     ];
-    assert_eq!(pairs.len(), 38);
+    assert_eq!(pairs.len(), 39);
     for (code, expected) in pairs {
         assert_eq!(serde_json::to_value(code).unwrap(), json!(expected));
         let back: ErrorCode = serde_json::from_value(json!(expected)).unwrap();
@@ -546,8 +550,6 @@ fn launch_config_shape_snapshot() {
         model: "gpt-5".to_string(),
         thinking_level: ThinkingLevel::High,
         credential_ref: Some("halo/pi/openai".to_string()),
-        extra_args: vec![],
-        env_overrides: Default::default(),
     };
     assert_eq!(
         serde_json::to_value(&input).unwrap(),
@@ -557,9 +559,7 @@ fn launch_config_shape_snapshot() {
             "executable_path": "C:\\tools\\pi\\pi.exe",
             "model": "gpt-5",
             "thinking_level": "high",
-            "credential_ref": "halo/pi/openai",
-            "extra_args": [],
-            "env_overrides": {}
+            "credential_ref": "halo/pi/openai"
         })
     );
 
@@ -571,8 +571,6 @@ fn launch_config_shape_snapshot() {
         model: input.model.clone(),
         thinking_level: input.thinking_level,
         credential_ref: input.credential_ref.clone(),
-        extra_args: input.extra_args.clone(),
-        env_overrides: input.env_overrides.clone(),
         created_at: "2026-07-26T08:00:00Z".to_string(),
         updated_at: "2026-07-26T08:00:00Z".to_string(),
     };
@@ -589,6 +587,28 @@ fn launch_config_shape_snapshot() {
         serde_json::to_value(&check).unwrap(),
         json!({"exists": true, "store_available": true})
     );
+}
+
+#[test]
+fn launch_config_input_rejects_arbitrary_launch_arguments_and_environment_overrides() {
+    for forbidden in [
+        json!({"extra_args": ["--unsafe"]}),
+        json!({"env_overrides": {"PATH": "C:\\override"}}),
+    ] {
+        let mut value = json!({
+            "name": "OpenCode",
+            "agent": "opencode",
+            "executable_path": "C:\\tools\\opencode.exe",
+            "model": "gpt-5",
+            "thinking_level": "off",
+            "credential_ref": "halo/opencode/provider"
+        });
+        value.as_object_mut().unwrap().extend(forbidden.as_object().unwrap().clone());
+        assert!(
+            serde_json::from_value::<LaunchConfigInput>(value).is_err(),
+            "受管启动配置不得接受任意命令或环境注入"
+        );
+    }
 }
 
 // ---------- runtime ----------

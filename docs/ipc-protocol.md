@@ -84,18 +84,12 @@ JSON Schema 副本见 `protocol/v1/`。
   "executable_path": "C:\\tools\\pi\\pi.exe",
   "model": "gpt-5",
   "thinking_level": "off" | "low" | "medium" | "high",
-  "credential_ref": "halo/pi/openai",     // 或 null
-  "credential_env_var": "ANTHROPIC_API_KEY",// 或 null=按 provider 默认表推导（14 号设计文档 4.7）；
-                                            // 显式值须匹配 ^[A-Z][A-Z0-9_]{2,63}$、不得与环境白名单冲突、
-                                            // 不得为保留名（OPENCODE_SERVER_PASSWORD/OPENCODE_SERVER_USERNAME/
-                                            // PI_CODING_AGENT_DIR/PI_SKIP_VERSION_CHECK），违规 INVALID_PARAMS
-  "extra_args": [],
-  "env_overrides": {}                       // 仅白名单内变量名可出现，违规返回 ENV_NOT_WHITELISTED
+  "credential_ref": "halo/pi/openai"      // 或 null；只允许凭据引用名
 }
 ```
 
 - 操作系统凭据存储不可用时：`config.save`（含 credential_ref 的）与 `runtime.start` 一律**失败关闭**，返回 `CREDENTIAL_STORE_UNAVAILABLE`，绝不回退到明文文件。
-- 子进程环境 = 显式白名单（`SYSTEMROOT`、`WINDIR`、`PATH`、`TEMP`、`TMP`、`USERPROFILE`、`COMSPEC`、`PATHEXT`、`SystemDrive`、`NUMBER_OF_PROCESSORS`、`PROCESSOR_ARCHITECTURE`）+ Sidecar 在启动瞬间注入的凭据变量。宿主其余环境变量一律不继承。
+- 配置不接受任意启动参数、凭据环境变量名或环境覆盖；子进程环境 = 显式白名单（`SYSTEMROOT`、`WINDIR`、`PATH`、`TEMP`、`TMP`、`USERPROFILE`、`COMSPEC`、`PATHEXT`、`SystemDrive`、`NUMBER_OF_PROCESSORS`、`PROCESSOR_ARCHITECTURE`）+ Sidecar 在启动瞬间注入的凭据变量。OpenCode 的模型必须以受支持的 `provider/model` 形式指定，Sidecar 据此使用内置白名单映射选择真实 Provider 变量；该映射不经 UI 或 IPC 配置，未知 Provider 失败关闭。宿主其余环境变量一律不继承。
 
 ### 3.3 受管运行时（runtime.*）
 
@@ -117,7 +111,8 @@ JSON Schema 副本见 `protocol/v1/`。
 ```
 
 - Pi：版本探测 + RPC `get_state` 就绪检查通过后才允许 `ready`。
-- OpenCode：仅回环地址 + 每次启动新认证信息 + 健康检查 + 精确版本握手通过后才 `ready`。**端口与认证信息不出现在任何 result/event 中**。
+- OpenCode：采用 `opencode-server-1.x` 兼容性档案，仅接受稳定 `>= 1.18.5, < 2.0.0`。以 `<exe> serve --hostname 127.0.0.1 --port <p>` 启动，仅绑定回环地址；每次启动生成新的私有密码并仅以 `OPENCODE_SERVER_PASSWORD` 注入子进程，使用用户名 `opencode` 的 HTTP Basic 认证调用 `GET /global/health`。响应必须为 `{"healthy": true, "version": "…"}` 且版本满足档案后才 `ready`；认证、健康、版本或就绪后的 server 进程退出均失败关闭并给出中文恢复建议。停止时调用 `POST /global/dispose`，无论请求结果都显式结束 server 子进程：dispose 成功为 `Graceful`，请求失败或超时为 `Forced`。**端口、认证用户名、密码和 Authorization 值不出现在任何 params/result/event、日志、错误或存储中**。
+- OpenCode 运行隔离：每次启动都设置私有的 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_CACHE_HOME` 与 `XDG_STATE_HOME`，不得读取或写入用户全局 OpenCode 配置、数据、缓存或状态。
 - 状态变化推送事件 `runtime.state`（payload = `{"agent": …} ∪ RuntimeStateInfo`）。
 
 ### 3.4 任务（task.*）
@@ -130,6 +125,8 @@ JSON Schema 副本见 `protocol/v1/`。
 | `task.mark_verification` | `{"task_id": …, "status": "not_run", "note": "…"}` | `{"ok": true}`（用户显式标记未执行） |
 | `task.status` | `{"task_id": …}` 或 `{}`（当前任务） | `{"task": TaskStatus \| null}` |
 | `task.snapshot` | `{"after_seq": 40}` | `{"task": TaskStatus\|null, "last_seq": 42, "events": [Event...]}`；缓冲不足覆盖 after_seq 时返回错误 `EVENT_GAP`，UI 应整体重建视图 |
+
+本票只交付 OpenCode 的真实受管启动闭环，尚未接入真实 session/message/event 协议。因此 OpenCode 运行时已经 `ready` 时，`task.create` 返回 `RUNTIME_CAPABILITY_UNAVAILABLE`，并给出等待受管会话票实现的中文恢复建议；不得向旧假设任务端点发送请求或伪造任务成功。Pi 任务行为不受此限制。
 
 ```jsonc
 // TaskSpec — 任务只携带用户显式提供的内容，绝不自动附带完整工作区或历史
@@ -268,7 +265,7 @@ JSON Schema 副本见 `protocol/v1/`。
 `HELLO_REQUIRED` · `PROTOCOL_VERSION_UNSUPPORTED` · `METHOD_NOT_FOUND` · `INVALID_PARAMS` · `INTERNAL` ·
 `WORKSPACE_PATH_INVALID` · `WORKSPACE_NOT_READABLE` · `WORKSPACE_NOT_GIT` · `WORKSPACE_NOT_TRUSTED` · `WORKSPACE_NOT_ACTIVE` · `WORKSPACE_IDENTITY_CHANGED` ·
 `CREDENTIAL_STORE_UNAVAILABLE` · `CREDENTIAL_NOT_FOUND` · `ENV_NOT_WHITELISTED` · `CONFIG_NOT_FOUND` · `CONFIG_CONFLICT` ·
-`RUNTIME_NOT_READY` · `RUNTIME_PROBE_FAILED` · `RUNTIME_VERSION_MISMATCH` · `RUNTIME_ALREADY_RUNNING` ·
+`RUNTIME_NOT_READY` · `RUNTIME_PROBE_FAILED` · `RUNTIME_VERSION_MISMATCH` · `RUNTIME_ALREADY_RUNNING` · `RUNTIME_CAPABILITY_UNAVAILABLE` ·
 `TASK_ALREADY_RUNNING` · `TASK_RUNNING`（阻止工作区切换/关闭） · `TASK_NOT_FOUND` · `TASK_STILL_RUNNING` · `TASK_NOT_REVIEWABLE` ·
 `EVIDENCE_NOT_FOUND` · `EVIDENCE_NOT_LATEST` · `EVENT_GAP` · `HANDOFF_NOT_FOUND` · `LINE_TOO_LONG` · `PARSE_ERROR`
 

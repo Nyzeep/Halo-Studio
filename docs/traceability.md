@@ -7,8 +7,10 @@
 > 本轮实测：`scripts\test-all.ps1` 通过（Rust workspace 252 例，0 失败；Python
 > 63 通过、1 条设计内条件跳过）；`scripts\smoke-windows.ps1` 退出码 0（默认平台
 > `SMOKE-OK`，根入口、app、sidecar 与 QML 全部静态红线 PASS）。
-> 真实运行时资格不由受控假进程替代：Pi 未安装；本机 OpenCode 为 `1.18.5`，与当前
-> 锁定版本 `0.4.2` 不匹配；Credential Manager 正向注入需要可写的交互式会话。
+> 真实运行时资格不由受控假进程替代：Pi 未安装；本机 OpenCode `1.18.5` 属于当前稳定
+> `>= 1.18.5, < 2.0.0` 兼容性档案，已在私有 XDG 环境实测 `serve` 的回环绑定、每次启动
+> Basic 认证、`/global/health`、`/global/dispose` 和进程清理。完整 Sidecar 二进制端到端
+> 验证受本机 MSVC 链接工具链阻断；Credential Manager 正向注入仍需要可写的交互式会话。
 
 | 任务 | 验收标准 | 实现 | 验证 |
 | --- | --- | --- | --- |
@@ -28,10 +30,10 @@
 | 04 | EOF、无效协议、异常退出、停止与取消均产生真实可恢复状态 | `pi.rs`（EOF/坏帧 → Failed{reason, recovery_hint}）、`halo-sidecar/src/task_flow.rs`（RuntimeFailed → 任务 failed） | `pi.rs::tests::eof_marks_failed_with_chinese_reason_and_hint / bad_json_frame_marks_failed / stop_graceful_when_child_exits_in_grace / stop_forced_when_child_ignores_grace`、`runtime_failures.rs::pi_not_ready_times_out_with_reason_and_hint / pi_garbage_frames_fail_startup`、`task_flow.rs::tests::runtime_failure_mid_task_marks_failed` |
 | 04 | Pi 启动配置不经 UI/公开 IPC 暴露 Provider 凭据 | `halo-protocol/src/methods/config.rs`（LaunchConfig 仅 credential_ref）、`halo-runtime/src/lib.rs`（LaunchCmd Debug 隐藏 env 值） | `halo-runtime` 单测 `launch_cmd_debug_hides_env_values`、`credential_canary.rs`、`contract.rs::launch_config_shape_snapshot` |
 | 04 | 受控 Pi 进程集成测试覆盖分帧、乱序、就绪失败、停止 | `sidecar/crates/halo-testkit/src/bin/fake_pi.rs` | `pi.rs::tests::out_of_order_and_unknown_ids_are_tolerated`（内存管道分帧/乱序）、`halo-testkit/tests/fake_pi.rs`（8 例）、`runtime_failures.rs`、`cancel.rs` |
-| 05 OpenCode 受管运行时 | 仅回环地址 + 每次启动新认证信息 | `sidecar/crates/halo-runtime/src/opencode.rs`（固定 127.0.0.1、空闲端口、每次 32 字节随机 hex token 经 HALO_OC_TOKEN 注入） | `happy_opencode.rs::opencode_full_chain_with_fresh_token_per_start`（两次启动 SHA-256 摘要不同）、`halo-testkit/tests/fake_opencode.rs::rejects_wrong_or_missing_token_with_401`（假服务强制校验 Bearer 且只绑回环） |
-| 05 | 健康检查 + 精确版本握手后才可用；端口与认证信息不进公开状态 | `opencode.rs`（/health + /version 与 OPENCODE_LOCKED_VERSION=0.4.2 完全相等；端口/token 不出现在公开 getter/Debug） | `opencode.rs::tests::start_ready_when_health_and_version_ok / debug_and_errors_never_leak_port_or_token / locked_version_constant_is_exact`、`happy_opencode.rs`（RuntimeStateInfo 公开形状仅契约 4 字段；IPC 全量扫描无 64 位 hex、无 port/token 字段） |
-| 05 | 健康失败、版本不匹配、服务退出、停止均有恢复建议与清理 | `opencode.rs`（Failed{reason, recovery_hint}；shutdown 超时 kill） | `runtime_failures.rs::opencode_wrong_version_is_version_mismatch / opencode_unhealthy_times_out_health_check / opencode_bad_token_fails_closed`（断言中文 reason + recovery_hint + runtime.state failed 事件）、`opencode.rs::tests::health_failure_times_out_as_failed / version_mismatch_fails_with_marker / unauthorized_fails_fast / stop_forces_kill_when_child_hangs` |
-| 05 | 受控 OpenCode 服务集成测试覆盖认证、健康、版本、优雅停止 | `halo-testkit/src/bin/fake_opencode.rs` | `halo-testkit/tests/fake_opencode.rs`（7 例：401、unhealthy、wrong_version、优雅停止、hang_on_shutdown 强杀）、`happy_opencode.rs`、`runtime_failures.rs` |
+| 05 OpenCode 受管运行时 | 仅回环地址 + 每次启动新认证信息 | `sidecar/crates/halo-runtime/src/opencode.rs`（固定 `127.0.0.1`、空闲端口、每次启动私有 `OPENCODE_SERVER_PASSWORD`） | `happy_opencode.rs`（每次启动生成不同的认证材料摘要）、`halo-testkit/tests/fake_opencode.rs`（假服务只绑定回环并拒绝错误或缺失的 Basic 认证） |
+| 05 | `opencode-server-1.x` 档案仅接受稳定 `>= 1.18.5, < 2.0.0`；认证健康检查通过才可用，端口与认证信息不进公开状态 | `opencode.rs`（stdout ready 行绑定确认 + Basic 认证 `GET /global/health`，由健康响应的 version 验证档案；端口和认证材料不出现在公开 getter/Debug） | `opencode.rs::tests`（健康、缺少版本、版本不兼容、认证失败与凭据不泄漏）、`happy_opencode.rs`（RuntimeStateInfo 仅公开契约字段） |
+| 05 | 健康失败、版本不兼容、服务退出、停止均有恢复建议与清理 | `opencode.rs`（Failed{reason, recovery_hint}；就绪后监督 server 进程；`POST /global/dispose` 后仍显式结束 server，成功为 Graceful，失败/超时为 Forced） | `runtime_failures.rs`（版本、健康、认证和 `exit_early` 均断言中文 reason + recovery_hint + runtime.state failed 事件）、`opencode.rs::tests`（global dispose 成功回收、失败强制回收） |
+| 05 | 受控 OpenCode 服务集成测试覆盖 Basic 认证、健康、兼容档案、停止与无旧假协议回退 | `halo-testkit/src/bin/fake_opencode.rs` | `halo-testkit/tests/fake_opencode.rs`（Basic 401、unhealthy、版本档案、`/global/dispose`、hang_on_dispose）、`happy_opencode.rs`、`runtime_failures.rs`；OpenCode `task.create` 返回 capability unavailable，不调用旧任务协议 |
 | 06 单任务与结构化运行轨迹 | 一个活动工作区同一时刻只允许一个运行中任务 | `dispatch.rs::task_create`（has_running_task → TASK_ALREADY_RUNNING）、`state.rs::has_running_task` | `evidence_versions.rs`（运行中再建任务 → TASK_ALREADY_RUNNING 实测） |
 | 06 | 任务只接收用户显式提供的说明、文件、Diff、补充信息 | `halo-protocol/src/methods/task.rs`（TaskSpec）、`halo-runtime/src/lib.rs`（RunTaskSpec 四字段）、`dispatch.rs::task_create`（不附带工作区/历史；handoff 上下文仅在显式 handoff_id 时并入） | `contract.rs::task_create_params_shape_snapshot`、`app/tests/test_viewmodels.py::test_create_sends_spec_with_nulls`、`halo-testkit/tests/fake_pi.rs::happy_full_script`（run_task params 形状） |
 | 06 | 原生输出统一为有序事件与可恢复快照；主界面非原始终端输出 | `halo-sidecar/src/server.rs`（EventBus：全局 seq + 1024 环形缓冲）、`task_flow.rs`（RuntimeEvent → trace.item/task.phase 规范化 + sanitize + cap）、`app/halo_studio/viewmodels/trace_vm.py`、`app/halo_studio/qml/views/TaskView.qml`（结构化轨迹列表） | `happy_pi.rs`（seq 严格递增、phase 顺序、trace 四类）、`event_recovery.rs::snapshot_after_seq_semantics_and_event_gap`（增量/尾部/EVENT_GAP/环形缓冲 1024）、`server.rs::tests`（seq_starts_at_one、ring_keeps_exactly_last_1024_events）、`task_flow.rs::tests::trace_detail_strings_are_recursively_sanitized_and_capped`（trace.item 的 detail JSON 整树递归脱敏 + TRACE_TEXT_MAX 截断）、`test_viewmodels.py::TestTraceViewModel`（排序去重、快照重建、EVENT_GAP 以 oldest_available_seq 重拉） |
@@ -62,7 +64,7 @@
 ## 发布资格待完成
 
 1. Pi 真实安装版不在本机 PATH；需在已安装 Pi 的 Windows 环境执行版本探测、RPC `get_state`、取消和工作区写入资格验证。
-2. 本机 OpenCode `1.18.5` 与 `halo-runtime` 锁定的 `0.4.2` 不匹配。应先确认目标锁定版本及其 `serve`/health/version 契约，再进行真实服务资格验证；不得为通过当前机器而静默修改锁定常量。
+2. 本机 OpenCode `1.18.5` 已完成真实服务协议资格验证：私有 XDG 环境中的 `serve` 仅绑定 `127.0.0.1`，无认证健康检查返回 401，每次新 Basic 认证后的 `/global/health` 返回 200，`/global/dispose` 成功且直接子进程被回收；未使用旧假设协议。完整 Sidecar 二进制端到端验证仍待本机 MSVC 链接器及 `msvcrt.lib` 可用后执行。
 3. 当前非交互式 Windows Credential Manager 会话只能证明失败关闭和 canary 不回显。可写会话仍需运行正向注入链并确认凭据不进入 UI、IPC、SQLite、日志、Diff、备份和交接包。
 
 ## 后续对齐项

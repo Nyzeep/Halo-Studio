@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use crate::secret::Secret;
@@ -13,8 +13,8 @@ pub enum AgentKind {
 impl AgentKind {
     pub fn as_str(&self) -> &'static str {
         match self {
-            AgentKind::Pi => "pi",
-            AgentKind::OpenCode => "opencode",
+            Self::Pi => "pi",
+            Self::OpenCode => "opencode",
         }
     }
 }
@@ -22,10 +22,10 @@ impl AgentKind {
 impl FromStr for AgentKind {
     type Err = ConfigError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "pi" => Ok(AgentKind::Pi),
-            "opencode" => Ok(AgentKind::OpenCode),
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "pi" => Ok(Self::Pi),
+            "opencode" => Ok(Self::OpenCode),
             other => Err(ConfigError::InvalidField {
                 field: "agent".to_string(),
                 reason: format!("不支持的取值：{other}（仅允许 pi / opencode）"),
@@ -46,10 +46,10 @@ pub enum ThinkingLevel {
 impl ThinkingLevel {
     pub fn as_str(&self) -> &'static str {
         match self {
-            ThinkingLevel::Off => "off",
-            ThinkingLevel::Low => "low",
-            ThinkingLevel::Medium => "medium",
-            ThinkingLevel::High => "high",
+            Self::Off => "off",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
         }
     }
 }
@@ -57,12 +57,12 @@ impl ThinkingLevel {
 impl FromStr for ThinkingLevel {
     type Err = ConfigError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "off" => Ok(ThinkingLevel::Off),
-            "low" => Ok(ThinkingLevel::Low),
-            "medium" => Ok(ThinkingLevel::Medium),
-            "high" => Ok(ThinkingLevel::High),
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "off" => Ok(Self::Off),
+            "low" => Ok(Self::Low),
+            "medium" => Ok(Self::Medium),
+            "high" => Ok(Self::High),
             other => Err(ConfigError::InvalidField {
                 field: "thinking_level".to_string(),
                 reason: format!("不支持的取值：{other}（仅允许 off / low / medium / high）"),
@@ -71,9 +71,7 @@ impl FromStr for ThinkingLevel {
     }
 }
 
-/// 受管启动配置（config 自有类型，字段与 IPC 文档 LaunchConfigInput 同构，
-/// 由 halo-sidecar 负责与协议 DTO 互转）。`credential_ref` 只存引用名，
-/// 永不携带凭据明文。
+/// 受管启动配置。凭据只以引用名存在；不接受任意启动参数或环境覆盖。
 #[derive(Debug, Clone, PartialEq)]
 pub struct LaunchConfig {
     pub id: String,
@@ -83,8 +81,6 @@ pub struct LaunchConfig {
     pub model: String,
     pub thinking_level: ThinkingLevel,
     pub credential_ref: Option<String>,
-    pub extra_args: Vec<String>,
-    pub env_overrides: HashMap<String, String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -93,11 +89,9 @@ pub struct LaunchConfig {
 pub enum ConfigError {
     #[error("启动配置字段无效：{field}：{reason}")]
     InvalidField { field: String, reason: String },
-    #[error("环境变量不在白名单内：{name}")]
-    EnvNotWhitelisted { name: String },
 }
 
-/// 子进程环境白名单（IPC 文档 3.2 节锁定）；宿主其余环境变量一律不继承。
+/// 子进程环境白名单；宿主其余环境变量一律不继承。
 pub const ENV_WHITELIST: &[&str] = &[
     "SYSTEMROOT",
     "WINDIR",
@@ -112,85 +106,93 @@ pub const ENV_WHITELIST: &[&str] = &[
     "PROCESSOR_ARCHITECTURE",
 ];
 
-/// Windows 环境变量名不区分大小写，命中后统一使用白名单中的规范拼写。
-fn canonical_whitelist_name(name: &str) -> Option<&'static str> {
-    ENV_WHITELIST
-        .iter()
-        .copied()
-        .find(|w| w.eq_ignore_ascii_case(name))
+/// Pi 仍经由既有受管运行时适配器连接；其凭据变量不会由启动配置档开放配置。
+pub const PI_CREDENTIAL_ENV_VAR: &str = "HALO_PROVIDER_API_KEY";
+
+/// 解析受管子进程唯一可接收的凭据变量。
+///
+/// OpenCode 使用自身识别的 Provider 专用变量。模型标识中的 Provider 前缀是明确持久化的
+/// 模型选择，而不是任意环境变量输入。未知 Provider 必须失败关闭，避免拼写错误静默产生未认证会话。
+pub fn credential_env_var_for(agent: AgentKind, model: &str) -> Result<&'static str, ConfigError> {
+    match agent {
+        AgentKind::Pi => Ok(PI_CREDENTIAL_ENV_VAR),
+        AgentKind::OpenCode => opencode_credential_env_var(model),
+    }
 }
 
-pub fn validate_launch_config(cfg: &LaunchConfig) -> Result<(), ConfigError> {
-    if cfg.executable_path.trim().is_empty() {
-        return Err(ConfigError::InvalidField {
-            field: "executable_path".to_string(),
-            reason: "不能为空".to_string(),
-        });
+fn opencode_credential_env_var(model: &str) -> Result<&'static str, ConfigError> {
+    let Some((provider, model_name)) = model.trim().split_once('/') else {
+        return Err(invalid_opencode_model());
+    };
+    if provider.is_empty() || model_name.trim().is_empty() {
+        return Err(invalid_opencode_model());
     }
-    validate_env_override_names(&cfg.env_overrides)?;
+
+    match provider {
+        "openai" => Ok("OPENAI_API_KEY"),
+        "anthropic" => Ok("ANTHROPIC_API_KEY"),
+        "deepseek" => Ok("DEEPSEEK_API_KEY"),
+        "groq" => Ok("GROQ_API_KEY"),
+        "mistral" => Ok("MISTRAL_API_KEY"),
+        "openrouter" => Ok("OPENROUTER_API_KEY"),
+        "xai" => Ok("XAI_API_KEY"),
+        _ => Err(invalid_opencode_model()),
+    }
+}
+
+fn invalid_opencode_model() -> ConfigError {
+    ConfigError::InvalidField {
+        field: "model".to_string(),
+        reason: "OpenCode 模型必须使用受支持的 provider/model 形式".to_string(),
+    }
+}
+
+pub fn validate_launch_config(config: &LaunchConfig) -> Result<(), ConfigError> {
+    validate_required("executable_path", &config.executable_path)?;
+    validate_required("model", &config.model)?;
+    if let Some(credential_ref) = &config.credential_ref {
+        validate_required("credential_ref", credential_ref)?;
+    }
+    if config.agent == AgentKind::OpenCode {
+        opencode_credential_env_var(&config.model)?;
+    }
     Ok(())
 }
 
-/// overrides 名称校验：违白名单 => EnvNotWhitelisted；
-/// 大小写归一化后重复 => InvalidField（避免覆盖结果不确定）。
-/// 按字典序遍历，保证同一输入产生确定的错误。
-fn validate_env_override_names(overrides: &HashMap<String, String>) -> Result<(), ConfigError> {
-    let mut names: Vec<&String> = overrides.keys().collect();
-    names.sort();
-    let mut seen: HashSet<&'static str> = HashSet::new();
-    for name in names {
-        match canonical_whitelist_name(name) {
-            None => {
-                return Err(ConfigError::EnvNotWhitelisted { name: name.clone() });
-            }
-            Some(canon) => {
-                if !seen.insert(canon) {
-                    return Err(ConfigError::InvalidField {
-                        field: "env_overrides".to_string(),
-                        reason: format!("变量 {canon} 在大小写归一化后重复出现"),
-                    });
-                }
-            }
-        }
+fn validate_required(field: &str, value: &str) -> Result<(), ConfigError> {
+    if value.trim().is_empty() {
+        return Err(ConfigError::InvalidField {
+            field: field.to_string(),
+            reason: "不能为空".to_string(),
+        });
     }
     Ok(())
 }
 
 /// 构造子进程环境：
-/// 1. 宿主环境只透传白名单变量（键统一为规范拼写）；
-/// 2. overrides 必须全部位于白名单内，覆盖宿主同名值；
-/// 3. `injected` 为启动瞬间注入的凭据变量——返回 map 为 HashMap，
-///    同名键在结果中只出现一次，注入值覆盖此前任何来源的同名值。
+/// 1. 宿主环境只透传固定白名单变量（键统一为规范拼写）；
+/// 2. `injected` 仅在启动瞬间加入凭据变量；
+/// 3. 任何配置层的任意环境覆盖均不存在。
 ///
 /// 返回值中含凭据明文，仅限启动注入点使用，不得日志化或持久化。
 pub fn build_child_env(
     host: &HashMap<String, String>,
-    overrides: &HashMap<String, String>,
     injected: Vec<(String, Secret)>,
-) -> Result<HashMap<String, String>, ConfigError> {
-    validate_env_override_names(overrides)?;
+) -> HashMap<String, String> {
+    let mut env = HashMap::new();
 
-    let mut env: HashMap<String, String> = HashMap::new();
-
-    for canon in ENV_WHITELIST {
-        if let Some(value) = host.get(*canon) {
-            env.insert((*canon).to_string(), value.clone());
+    for canonical_name in ENV_WHITELIST {
+        if let Some(value) = host.get(*canonical_name) {
+            env.insert((*canonical_name).to_string(), value.clone());
             continue;
         }
-        // 精确拼写未命中时做大小写不敏感匹配；取字典序最小的键保证确定性。
         let mut matches: Vec<(&String, &String)> = host
             .iter()
-            .filter(|(k, _)| k.eq_ignore_ascii_case(canon))
+            .filter(|(name, _)| name.eq_ignore_ascii_case(canonical_name))
             .collect();
-        matches.sort_by(|a, b| a.0.cmp(b.0));
+        matches.sort_by(|left, right| left.0.cmp(right.0));
         if let Some((_, value)) = matches.first() {
-            env.insert((*canon).to_string(), (*value).clone());
-        }
-    }
-
-    for (name, value) in overrides {
-        if let Some(canon) = canonical_whitelist_name(name) {
-            env.insert(canon.to_string(), value.clone());
+            env.insert((*canonical_name).to_string(), (*value).clone());
         }
     }
 
@@ -198,7 +200,7 @@ pub fn build_child_env(
         env.insert(name, secret.expose().to_string());
     }
 
-    Ok(env)
+    env
 }
 
 #[cfg(test)]
@@ -214,38 +216,29 @@ mod tests {
             model: "gpt-5".to_string(),
             thinking_level: ThinkingLevel::Medium,
             credential_ref: Some("halo/pi/openai".to_string()),
-            extra_args: vec![],
-            env_overrides: HashMap::new(),
             created_at: "2026-07-26T08:00:00Z".to_string(),
             updated_at: "2026-07-26T08:00:00Z".to_string(),
         }
     }
 
     #[test]
-    fn validate_accepts_wellformed_config() {
-        let mut cfg = sample_config();
-        cfg.env_overrides
-            .insert("TEMP".to_string(), "D:\\tmp".to_string());
-        assert!(validate_launch_config(&cfg).is_ok());
+    fn validate_accepts_reference_only_launch_config() {
+        assert!(validate_launch_config(&sample_config()).is_ok());
     }
 
     #[test]
-    fn validate_rejects_empty_executable_path() {
-        let mut cfg = sample_config();
-        cfg.executable_path = "   ".to_string();
-        let err = validate_launch_config(&cfg).unwrap_err();
-        assert!(
-            matches!(err, ConfigError::InvalidField { ref field, .. } if field == "executable_path")
-        );
-    }
-
-    #[test]
-    fn validate_rejects_env_override_outside_whitelist() {
-        let mut cfg = sample_config();
-        cfg.env_overrides
-            .insert("LD_PRELOAD".to_string(), "evil.dll".to_string());
-        let err = validate_launch_config(&cfg).unwrap_err();
-        assert!(matches!(err, ConfigError::EnvNotWhitelisted { ref name } if name == "LD_PRELOAD"));
+    fn validate_rejects_empty_required_values() {
+        for field in ["executable_path", "model", "credential_ref"] {
+            let mut config = sample_config();
+            match field {
+                "executable_path" => config.executable_path = "   ".to_string(),
+                "model" => config.model = "   ".to_string(),
+                "credential_ref" => config.credential_ref = Some("   ".to_string()),
+                _ => unreachable!(),
+            }
+            let error = validate_launch_config(&config).expect_err("空字段必须拒绝");
+            assert!(matches!(error, ConfigError::InvalidField { field: ref actual, .. } if actual == field));
+        }
     }
 
     #[test]
@@ -264,22 +257,26 @@ mod tests {
     }
 
     #[test]
-    fn build_child_env_passes_through_whitelist_only() {
+    fn build_child_env_passes_only_whitelist_and_injected_credentials() {
         let mut host = HashMap::new();
         host.insert("PATH".to_string(), "C:\\Windows".to_string());
         host.insert("USERPROFILE".to_string(), "C:\\Users\\dev".to_string());
         host.insert("OPENAI_API_KEY".to_string(), "host-leak".to_string());
-        host.insert("HTTP_PROXY".to_string(), "http://proxy".to_string());
 
-        let env = build_child_env(&host, &HashMap::new(), vec![]).unwrap();
+        let env = build_child_env(
+            &host,
+            vec![("OPENAI_API_KEY".to_string(), Secret::new("sk-live-42"))],
+        );
         assert_eq!(env.get("PATH").map(String::as_str), Some("C:\\Windows"));
         assert_eq!(
             env.get("USERPROFILE").map(String::as_str),
             Some("C:\\Users\\dev")
         );
-        assert!(!env.contains_key("OPENAI_API_KEY"));
-        assert!(!env.contains_key("HTTP_PROXY"));
-        assert_eq!(env.len(), 2);
+        assert_eq!(
+            env.get("OPENAI_API_KEY").map(String::as_str),
+            Some("sk-live-42")
+        );
+        assert_eq!(env.len(), 3);
     }
 
     #[test]
@@ -288,7 +285,7 @@ mod tests {
         host.insert("Path".to_string(), "C:\\Windows".to_string());
         host.insert("SystemRoot".to_string(), "C:\\Windows".to_string());
 
-        let env = build_child_env(&host, &HashMap::new(), vec![]).unwrap();
+        let env = build_child_env(&host, vec![]);
         assert_eq!(env.get("PATH").map(String::as_str), Some("C:\\Windows"));
         assert_eq!(
             env.get("SYSTEMROOT").map(String::as_str),
@@ -298,68 +295,40 @@ mod tests {
     }
 
     #[test]
-    fn build_child_env_override_wins_over_host() {
-        let mut host = HashMap::new();
-        host.insert("TEMP".to_string(), "C:\\host-temp".to_string());
-        let mut overrides = HashMap::new();
-        overrides.insert("TEMP".to_string(), "D:\\task-temp".to_string());
-
-        let env = build_child_env(&host, &overrides, vec![]).unwrap();
-        assert_eq!(env.get("TEMP").map(String::as_str), Some("D:\\task-temp"));
-    }
-
-    #[test]
-    fn build_child_env_rejects_override_outside_whitelist() {
-        let mut overrides = HashMap::new();
-        overrides.insert("EVIL_VAR".to_string(), "1".to_string());
-        let err = build_child_env(&HashMap::new(), &overrides, vec![]).unwrap_err();
-        assert!(matches!(err, ConfigError::EnvNotWhitelisted { ref name } if name == "EVIL_VAR"));
-    }
-
-    #[test]
-    fn build_child_env_rejects_case_duplicated_overrides() {
-        let mut overrides = HashMap::new();
-        overrides.insert("PATH".to_string(), "a".to_string());
-        overrides.insert("Path".to_string(), "b".to_string());
-        let err = build_child_env(&HashMap::new(), &overrides, vec![]).unwrap_err();
-        assert!(matches!(err, ConfigError::InvalidField { ref field, .. } if field == "env_overrides"));
-    }
-
-    #[test]
-    fn build_child_env_injected_credential_appears_exactly_once() {
-        let mut host = HashMap::new();
-        host.insert("PATH".to_string(), "C:\\Windows".to_string());
-        // 宿主里已有同名（非白名单）变量：必须被丢弃，最终只保留注入值。
-        host.insert("OPENAI_API_KEY".to_string(), "stale-host-value".to_string());
-
-        let env = build_child_env(
-            &host,
-            &HashMap::new(),
-            vec![("OPENAI_API_KEY".to_string(), Secret::new("sk-live-42"))],
-        )
-        .unwrap();
-
-        let occurrences = env.keys().filter(|k| *k == "OPENAI_API_KEY").count();
-        assert_eq!(occurrences, 1);
+    fn opencode_provider_prefix_selects_a_fixed_credential_variable() {
+        for (model, env_var) in [
+            ("openai/gpt-5", "OPENAI_API_KEY"),
+            ("anthropic/claude-sonnet-4", "ANTHROPIC_API_KEY"),
+            ("openrouter/auto", "OPENROUTER_API_KEY"),
+        ] {
+            assert_eq!(
+                credential_env_var_for(AgentKind::OpenCode, model).unwrap(),
+                env_var
+            );
+        }
         assert_eq!(
-            env.get("OPENAI_API_KEY").map(String::as_str),
-            Some("sk-live-42")
+            credential_env_var_for(AgentKind::Pi, "gpt-5").unwrap(),
+            PI_CREDENTIAL_ENV_VAR
         );
-        assert_eq!(env.len(), 2); // PATH + 注入变量，宿主同名值未混入
     }
 
     #[test]
-    fn build_child_env_duplicate_injection_keeps_single_entry_last_wins() {
-        let env = build_child_env(
-            &HashMap::new(),
-            &HashMap::new(),
-            vec![
-                ("HALO_OC_TOKEN".to_string(), Secret::new("first")),
-                ("HALO_OC_TOKEN".to_string(), Secret::new("second")),
-            ],
-        )
-        .unwrap();
-        assert_eq!(env.len(), 1);
-        assert_eq!(env.get("HALO_OC_TOKEN").map(String::as_str), Some("second"));
+    fn opencode_unknown_or_ambiguous_provider_fails_closed() {
+        for model in ["gpt-5", "unknown/gpt-5", "openai/"] {
+            let error = credential_env_var_for(AgentKind::OpenCode, model)
+                .expect_err("OpenCode 凭据变量必须来自受控 provider 映射");
+            assert!(matches!(error, ConfigError::InvalidField { field, .. } if field == "model"));
+        }
+    }
+
+    #[test]
+    fn validate_rejects_opencode_configs_without_a_known_provider() {
+        let mut config = sample_config();
+        config.agent = AgentKind::OpenCode;
+        config.model = "gpt-5".to_string();
+
+        let error = validate_launch_config(&config)
+            .expect_err("OpenCode 配置必须在保存前选择受支持的 provider/model");
+        assert!(matches!(error, ConfigError::InvalidField { field, .. } if field == "model"));
     }
 }

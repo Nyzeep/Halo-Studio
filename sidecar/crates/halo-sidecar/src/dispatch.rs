@@ -9,11 +9,11 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use halo_config::{AgentKind, CredentialStore};
+use halo_config::{credential_env_var_for, AgentKind, CredentialStore};
 use halo_core::{manual_edit_note, Attribution, ManualEditOp};
 use halo_protocol::methods::{self, AgentKind as AgentKindDto};
 use halo_protocol::{ErrorBody, ErrorCode, RequestEnvelope, Response, PROTOCOL_VERSION};
-use halo_runtime::{OpenCodeRuntime, PiRuntime, RuntimeState, Timeouts, OPENCODE_LOCKED_VERSION};
+use halo_runtime::{OpenCodeRuntime, PiRuntime, RuntimeState, Timeouts};
 use halo_store::Store;
 
 use crate::git::{GitClient, GitError};
@@ -22,10 +22,6 @@ use crate::mapping::{self, now_ts};
 use crate::server::{EventBus, EventGapError};
 use crate::state::{lock, ActiveWorkspace, AgentHandle, AppState};
 use crate::task_flow::{self, FlowCtx};
-
-/// 凭据注入的固定环境变量名：受管应用从该变量读取 Provider 密钥；
-/// 值只在启动瞬间存在于子进程环境，绝不落日志或 IPC。
-pub const CREDENTIAL_ENV_VAR: &str = "HALO_PROVIDER_API_KEY";
 
 const CAPABILITIES: &[&str] = &[
     "workspace", "config", "pi", "opencode", "task", "review", "handoff", "history", "fs",
@@ -151,13 +147,7 @@ impl From<halo_config::CredentialError> for SidecarError {
 
 impl From<halo_config::ConfigError> for SidecarError {
     fn from(e: halo_config::ConfigError) -> Self {
-        use halo_config::ConfigError as CE;
-        match &e {
-            CE::EnvNotWhitelisted { .. } => {
-                SidecarError::new(ErrorCode::EnvNotWhitelisted, e.to_string())
-            }
-            CE::InvalidField { .. } => SidecarError::new(ErrorCode::InvalidParams, e.to_string()),
-        }
+        SidecarError::new(ErrorCode::InvalidParams, e.to_string())
     }
 }
 
@@ -168,6 +158,7 @@ impl From<halo_runtime::RuntimeError> for SidecarError {
             RE::Spawn(_) | RE::Probe(_) => ErrorCode::RuntimeProbeFailed,
             RE::NotReady(_) | RE::InvalidState | RE::Unauthorized => ErrorCode::RuntimeNotReady,
             RE::VersionMismatch(_) => ErrorCode::RuntimeVersionMismatch,
+            RE::CapabilityUnavailable(_) => ErrorCode::RuntimeCapabilityUnavailable,
             RE::Io(_) => ErrorCode::Internal,
         };
         SidecarError::new(code, e.to_string())
@@ -651,12 +642,6 @@ impl Dispatcher {
                 methods::config::ThinkingLevel::High => halo_config::ThinkingLevel::High,
             },
             credential_ref: input.credential_ref.clone(),
-            extra_args: input.extra_args.clone(),
-            env_overrides: input
-                .env_overrides
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
             created_at: now.clone(),
             updated_at: now.clone(),
         };
@@ -678,8 +663,6 @@ impl Dispatcher {
             model: input.model,
             thinking_level: mapping::thinking_dto_to_str(input.thinking_level).to_string(),
             credential_ref: input.credential_ref,
-            extra_args: input.extra_args,
-            env_overrides: input.env_overrides,
             created_at: now.clone(),
             updated_at: now,
         };
@@ -728,6 +711,31 @@ impl Dispatcher {
             })
     }
 
+    fn record_runtime_failure(
+        &self,
+        agent: AgentKind,
+        version: Option<String>,
+        reason: impl Into<String>,
+        recovery_hint: impl Into<String>,
+    ) {
+        let state = RuntimeState::Failed {
+            reason: reason.into(),
+            recovery_hint: recovery_hint.into(),
+        };
+        let (payload, changed) = {
+            let mut app = lock(&self.ctx.app);
+            let slot = app.slot_mut(agent);
+            slot.version = version;
+            let changed = slot.last_state != state;
+            slot.last_state = state.clone();
+            let payload = mapping::runtime_state_payload(agent, &state, slot.version.clone());
+            (payload, changed)
+        };
+        if changed {
+            self.ctx.bus.emit(None, "runtime.state", payload);
+        }
+    }
+
     // ---------- runtime.* ----------
 
     fn runtime_probe(&mut self, params: Value) -> Result<Value, SidecarError> {
@@ -747,7 +755,7 @@ impl Dispatcher {
         .map_err(|e| SidecarError::new(ErrorCode::RuntimeProbeFailed, e.to_string()))?;
         let supported = match agent {
             AgentKind::Pi => true,
-            AgentKind::OpenCode => version == OPENCODE_LOCKED_VERSION,
+            AgentKind::OpenCode => OpenCodeRuntime::is_compatible_version(&version),
         };
         lock(&self.ctx.app).slot_mut(agent).version = Some(version.clone());
         ok(&methods::runtime::RuntimeProbeResult {
@@ -768,18 +776,21 @@ impl Dispatcher {
             ));
         }
 
-        let cwd = {
-            let app = lock(&self.ctx.app);
-            let ws = app.workspace.as_ref().ok_or_else(|| {
-                SidecarError::new(ErrorCode::WorkspaceNotActive, "没有活动工作区，无法启动运行时")
-            })?;
-            if !ws.is_trusted() {
-                return Err(SidecarError::new(
-                    ErrorCode::WorkspaceNotTrusted,
-                    "工作区未确认信任，无法启动受管运行时",
-                ));
-            }
-            let slot = app.slot(agent);
+        let (cwd, previous_handle, runtime_generation) = {
+            let mut app = lock(&self.ctx.app);
+            let cwd = {
+                let ws = app.workspace.as_ref().ok_or_else(|| {
+                    SidecarError::new(ErrorCode::WorkspaceNotActive, "没有活动工作区，无法启动运行时")
+                })?;
+                if !ws.is_trusted() {
+                    return Err(SidecarError::new(
+                        ErrorCode::WorkspaceNotTrusted,
+                        "工作区未确认信任，无法启动受管运行时",
+                    ));
+                }
+                ws.real_path.clone()
+            };
+            let slot = app.slot_mut(agent);
             if matches!(
                 slot.effective_state(),
                 RuntimeState::Starting | RuntimeState::Ready
@@ -789,58 +800,130 @@ impl Dispatcher {
                     "该受管应用已在运行",
                 ));
             }
-            ws.real_path.clone()
+            // 失败的运行时可以重试。先脱离其终态句柄，避免第二次失败后 runtime.status 仍报告旧原因。
+            let runtime_generation = slot.advance_generation();
+            (cwd, slot.handle.take(), runtime_generation)
         };
+        drop(previous_handle);
 
-        // 真实探测：版本必须可读；OpenCode 额外要求与锁定版本完全相等
-        let version = match agent {
-            AgentKind::Pi => PiRuntime::probe(&config.executable_path),
-            AgentKind::OpenCode => OpenCodeRuntime::probe(&config.executable_path),
-        }
-        .map_err(|e| SidecarError::new(ErrorCode::RuntimeProbeFailed, e.to_string()))?;
-        if agent == AgentKind::OpenCode && version != OPENCODE_LOCKED_VERSION {
+        if agent == AgentKind::OpenCode && config.credential_ref.is_none() {
+            self.record_runtime_failure(
+                agent,
+                None,
+                "OpenCode 启动配置缺少凭据引用，已失败关闭",
+                "请先在系统凭据存储中录入密钥，并为 OpenCode 配置选择对应的凭据引用后重试",
+            );
             return Err(SidecarError::new(
-                ErrorCode::RuntimeVersionMismatch,
-                format!("OpenCode 版本不匹配：检测到 {version}，要求 {OPENCODE_LOCKED_VERSION}"),
+                ErrorCode::CredentialNotFound,
+                "OpenCode 启动配置缺少凭据引用，无法启动受管运行时",
             ));
         }
 
-        // 子进程环境 = 白名单 + 配置 overrides + 启动瞬间注入的凭据
+        let credential_env_var = match credential_env_var_for(agent, &config.model) {
+            Ok(env_var) => env_var,
+            Err(_) => {
+                if agent == AgentKind::OpenCode {
+                    self.record_runtime_failure(
+                        agent,
+                        None,
+                        "OpenCode 模型的 Provider 凭据映射不受支持，启动已失败关闭",
+                        "请将模型填写为受支持的 provider/model 形式，例如 openai/gpt-5，然后重新启动",
+                    );
+                }
+                return Err(SidecarError::new(
+                    ErrorCode::InvalidParams,
+                    "OpenCode 模型必须使用受支持的 provider/model 形式，无法安全选择凭据环境变量",
+                ));
+            }
+        };
+
+        // 先解析凭据引用，避免在凭据不可用时执行任意配置路径；没有明文回退。
         let host: HashMap<String, String> = std::env::vars().collect();
-        let overrides: HashMap<String, String> = config
-            .env_overrides
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
         let mut injected: Vec<(String, halo_config::Secret)> = Vec::new();
         if let Some(ref_name) = &config.credential_ref {
             if !self.ctx.cred.available() {
+                if agent == AgentKind::OpenCode {
+                    self.record_runtime_failure(
+                        agent,
+                        None,
+                        "操作系统凭据存储不可用，OpenCode 启动已失败关闭",
+                        "请恢复系统凭据存储后重新启动；不会回退到明文凭据",
+                    );
+                }
                 return Err(SidecarError::new(
                     ErrorCode::CredentialStoreUnavailable,
                     "操作系统凭据存储不可用，启动已失败关闭",
                 ));
             }
-            let secret = self.ctx.cred.get(ref_name)?;
-            injected.push((CREDENTIAL_ENV_VAR.to_string(), secret));
+            let secret = match self.ctx.cred.get(ref_name) {
+                Ok(secret) => secret,
+                Err(error) => {
+                    if agent == AgentKind::OpenCode {
+                        self.record_runtime_failure(
+                            agent,
+                            None,
+                            "OpenCode 所需的凭据引用不可用",
+                            "请检查凭据引用是否存在于操作系统凭据存储后重新启动",
+                        );
+                    }
+                    return Err(error.into());
+                }
+            };
+            injected.push((credential_env_var.to_string(), secret));
         }
-        let env = halo_config::build_child_env(&host, &overrides, injected)?;
+
+        // 真实探测：版本必须可读；OpenCode 只允许已知稳定 1.x 兼容性档案。
+        let version = match agent {
+            AgentKind::Pi => PiRuntime::probe(&config.executable_path),
+            AgentKind::OpenCode => OpenCodeRuntime::probe(&config.executable_path),
+        };
+        let version = match version {
+            Ok(version) => version,
+            Err(error) => {
+                if agent == AgentKind::OpenCode {
+                    self.record_runtime_failure(
+                        agent,
+                        None,
+                        "无法探测 OpenCode 版本",
+                        "请确认 OpenCode 可执行文件有效后重新探测或启动",
+                    );
+                }
+                return Err(SidecarError::new(ErrorCode::RuntimeProbeFailed, error.to_string()));
+            }
+        };
+        if agent == AgentKind::OpenCode && !OpenCodeRuntime::is_compatible_version(&version) {
+            self.record_runtime_failure(
+                agent,
+                Some(version),
+                "OpenCode 版本不受兼容性档案支持（RUNTIME_VERSION_MISMATCH）：需要稳定版 1.18.5 或更高的 1.x",
+                "请安装稳定版 OpenCode 1.18.5 或更高的 1.x 版本后重新启动",
+            );
+            return Err(SidecarError::new(
+                ErrorCode::RuntimeVersionMismatch,
+                "OpenCode 版本不受兼容性档案支持：需要稳定版 1.18.5 或更高的 1.x",
+            ));
+        }
+
+        {
+            let mut app = lock(&self.ctx.app);
+            app.slot_mut(agent).version = Some(version.clone());
+        }
+
+        // 子进程环境 = 固定白名单 + 启动瞬间注入的凭据；没有配置层环境覆盖。
+        let env = halo_config::build_child_env(&host, injected);
 
         let cmd = halo_runtime::LaunchCmd {
             exe: config.executable_path.clone(),
-            args: config.extra_args.clone(),
             env,
             cwd,
         };
 
         let (tx, rx) = unbounded();
-        {
-            let mut app = lock(&self.ctx.app);
-            app.slot_mut(agent).version = Some(version.clone());
-        }
         crate::state::spawn_runtime_forwarder(
             Arc::clone(&self.ctx.app),
             Arc::clone(&self.ctx.bus),
             agent,
+            runtime_generation,
             rx,
         );
 
@@ -860,13 +943,13 @@ impl Dispatcher {
             let mut app = lock(&self.ctx.app);
             let slot = app.slot_mut(agent);
             slot.task_tx = None;
+            slot.advance_generation();
             slot.handle.take()
         };
         let state = match handle {
             Some(h) => {
                 h.stop(self.ctx.timeouts.shutdown_grace);
-                let mut app = lock(&self.ctx.app);
-                app.slot_mut(agent).last_state = RuntimeState::Stopped;
+                crate::state::mark_slot_stopped(&self.ctx.app, &self.ctx.bus, agent);
                 RuntimeState::Stopped
             }
             None => lock(&self.ctx.app).slot(agent).effective_state(),
@@ -927,6 +1010,13 @@ impl Dispatcher {
             return Err(SidecarError::new(
                 ErrorCode::InvalidParams,
                 "agent 与所选配置的受管应用不一致",
+            ));
+        }
+
+        if agent == AgentKind::OpenCode {
+            return Err(SidecarError::new(
+                ErrorCode::RuntimeCapabilityUnavailable,
+                "OpenCode 真实会话尚未接入；当前版本仅支持受管启动、认证和健康检查。请改用 Pi 完成任务，或等待受管 OpenCode 会话功能上线",
             ));
         }
 
@@ -1552,6 +1642,27 @@ mod tests {
         }
     }
 
+    struct ReadyHandle;
+
+    impl AgentHandle for ReadyHandle {
+        fn run_task(
+            &self,
+            _spec: &halo_runtime::RunTaskSpec,
+        ) -> Result<(), halo_runtime::RuntimeError> {
+            Ok(())
+        }
+
+        fn cancel_native(&self) {}
+
+        fn stop(&self, _grace: std::time::Duration) -> halo_runtime::StopOutcome {
+            halo_runtime::StopOutcome::Graceful
+        }
+
+        fn state(&self) -> RuntimeState {
+            RuntimeState::Ready
+        }
+    }
+
     struct Fixture {
         d: Dispatcher,
         events: Receiver<Outbound>,
@@ -1840,7 +1951,7 @@ mod tests {
             "config.save",
             json!({
                 "name": "Pi", "agent": "pi", "executable_path": "C:\\pi.exe", "model": "m",
-                "thinking_level": "off", "credential_ref": null, "extra_args": [], "env_overrides": {}
+                "thinking_level": "off", "credential_ref": null
             }),
         ));
         assert!(resp.ok, "{resp:?}");
@@ -1884,10 +1995,14 @@ mod tests {
 
         let dir = tempfile::tempdir().unwrap();
         let repo = init_repo(dir.path());
-        let opened = f
-            .d
-            .dispatch(req("workspace.open", json!({"path": repo.to_string_lossy()})));
-        let workspace_id = opened.result.unwrap()["workspace_id"].as_str().unwrap().to_string();
+        let opened = f.d.dispatch(req(
+            "workspace.open",
+            json!({"path": repo.to_string_lossy()}),
+        ));
+        let workspace_id = opened.result.unwrap()["workspace_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
         let untrusted = f.d.dispatch(req("fs.read", json!({"path": "a.txt"})));
         assert_eq!(err_code(&untrusted), ErrorCode::WorkspaceNotTrusted);
 
@@ -1949,21 +2064,147 @@ mod tests {
         assert_eq!(resp.result.unwrap()["trust"], "trusted");
     }
 
+    struct WorkspaceClosingHandle {
+        stopped: std::sync::atomic::AtomicBool,
+    }
+
+    impl AgentHandle for WorkspaceClosingHandle {
+        fn run_task(
+            &self,
+            _spec: &halo_runtime::RunTaskSpec,
+        ) -> Result<(), halo_runtime::RuntimeError> {
+            Ok(())
+        }
+
+        fn cancel_native(&self) {}
+
+        fn stop(&self, _grace: std::time::Duration) -> halo_runtime::StopOutcome {
+            self.stopped
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            halo_runtime::StopOutcome::Graceful
+        }
+
+        fn state(&self) -> RuntimeState {
+            RuntimeState::Ready
+        }
+    }
+
+    #[test]
+    fn workspace_close_publishes_stopped_before_workspace_changed() {
+        let mut f = fixture();
+        hello(&mut f);
+        let dir = tempfile::tempdir().unwrap();
+        let repo = init_repo(dir.path());
+        let opened = f.d.dispatch(req(
+            "workspace.open",
+            json!({"path": repo.to_string_lossy()}),
+        ));
+        assert!(opened.ok, "{opened:?}");
+
+        // workspace.open 的通知不属于本次关闭的可观察行为。
+        let _: Vec<_> = f.events.try_iter().collect();
+        let handle = Arc::new(WorkspaceClosingHandle {
+            stopped: std::sync::atomic::AtomicBool::new(false),
+        });
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let slot = app.slot_mut(AgentKind::OpenCode);
+            slot.last_state = RuntimeState::Ready;
+            slot.version = Some("1.18.5".to_string());
+            slot.handle = Some(handle.clone());
+        }
+
+        let closed = f.d.dispatch(req("workspace.close", json!({})));
+        assert!(closed.ok, "{closed:?}");
+        assert!(handle.stopped.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(
+            lock(&f.d.ctx.app).slot(AgentKind::OpenCode).last_state,
+            RuntimeState::Stopped
+        );
+
+        let events: Vec<_> = f
+            .events
+            .try_iter()
+            .filter_map(|outbound| match outbound {
+                Outbound::Event(event) => Some(event),
+                Outbound::Response(_) => None,
+            })
+            .collect();
+        assert_eq!(events.len(), 2, "关闭只应广播运行时停止和工作区关闭事件");
+        assert_eq!(events[0].event, "runtime.state");
+        assert_eq!(events[0].payload["agent"], "opencode");
+        assert_eq!(events[0].payload["state"], "stopped");
+        assert_eq!(events[0].payload["version"], "1.18.5");
+        assert_eq!(events[1].event, "workspace.changed");
+        assert_eq!(events[1].payload["active"], false);
+        assert!(events[0].seq < events[1].seq);
+    }
+
+    #[test]
+    fn workspace_switch_publishes_stopped_before_new_workspace_changed() {
+        let mut f = fixture();
+        hello(&mut f);
+        let first_dir = tempfile::tempdir().unwrap();
+        let second_dir = tempfile::tempdir().unwrap();
+        let first_repo = init_repo(first_dir.path());
+        let second_repo = init_repo(second_dir.path());
+        let opened = f.d.dispatch(req(
+            "workspace.open",
+            json!({"path": first_repo.to_string_lossy()}),
+        ));
+        assert!(opened.ok, "{opened:?}");
+
+        let _: Vec<_> = f.events.try_iter().collect();
+        let handle = Arc::new(WorkspaceClosingHandle {
+            stopped: std::sync::atomic::AtomicBool::new(false),
+        });
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let slot = app.slot_mut(AgentKind::OpenCode);
+            slot.last_state = RuntimeState::Ready;
+            slot.version = Some("1.18.5".to_string());
+            slot.handle = Some(handle.clone());
+        }
+
+        let switched = f.d.dispatch(req(
+            "workspace.open",
+            json!({"path": second_repo.to_string_lossy()}),
+        ));
+        assert!(switched.ok, "{switched:?}");
+        assert!(handle.stopped.load(std::sync::atomic::Ordering::SeqCst));
+
+        let events: Vec<_> = f
+            .events
+            .try_iter()
+            .filter_map(|outbound| match outbound {
+                Outbound::Event(event) => Some(event),
+                Outbound::Response(_) => None,
+            })
+            .collect();
+        assert_eq!(events.len(), 2, "切换只应广播运行时停止和新工作区事件");
+        assert_eq!(events[0].event, "runtime.state");
+        assert_eq!(events[0].payload["agent"], "opencode");
+        assert_eq!(events[0].payload["state"], "stopped");
+        assert_eq!(events[1].event, "workspace.changed");
+        assert_eq!(events[1].payload["active"], true);
+        assert!(events[0].seq < events[1].seq);
+    }
+
     // ---------- config 错误映射 ----------
 
     #[test]
-    fn config_save_rejects_env_outside_whitelist() {
+    fn config_save_rejects_arbitrary_launch_injection_fields() {
         let mut f = fixture();
         hello(&mut f);
         let resp = f.d.dispatch(req(
             "config.save",
             json!({
                 "name": "x", "agent": "pi", "executable_path": "C:\\pi.exe", "model": "m",
-                "thinking_level": "low", "credential_ref": null, "extra_args": [],
+                "thinking_level": "low", "credential_ref": null,
                 "env_overrides": {"LD_PRELOAD": "evil.dll"}
             }),
         ));
-        assert_eq!(err_code(&resp), ErrorCode::EnvNotWhitelisted);
+        assert_eq!(err_code(&resp), ErrorCode::InvalidParams);
     }
 
     #[test]
@@ -1974,8 +2215,7 @@ mod tests {
             "config.save",
             json!({
                 "name": "x", "agent": "pi", "executable_path": "C:\\pi.exe", "model": "m",
-                "thinking_level": "low", "credential_ref": "halo/pi/openai", "extra_args": [],
-                "env_overrides": {}
+                "thinking_level": "low", "credential_ref": "halo/pi/openai"
             }),
         ));
         assert_eq!(err_code(&resp), ErrorCode::CredentialStoreUnavailable);
@@ -1984,10 +2224,118 @@ mod tests {
             "config.save",
             json!({
                 "name": "x", "agent": "pi", "executable_path": "C:\\pi.exe", "model": "m",
-                "thinking_level": "low", "credential_ref": null, "extra_args": [], "env_overrides": {}
+                "thinking_level": "low", "credential_ref": null
             }),
         ));
         assert!(resp.ok, "{resp:?}");
+    }
+
+    #[test]
+    fn opencode_start_with_missing_credential_reference_reports_failed_state_and_recovery() {
+        let mut f = fixture();
+        hello(&mut f);
+        let dir = tempfile::tempdir().unwrap();
+        let repo = init_repo(dir.path());
+        let opened = f
+            .d
+            .dispatch(req("workspace.open", json!({"path": repo.to_string_lossy()})));
+        let workspace_id = opened.result.unwrap()["workspace_id"].as_str().unwrap().to_string();
+        let trusted = f.d.dispatch(req(
+            "workspace.trust",
+            json!({"workspace_id": workspace_id, "decision": "trust"}),
+        ));
+        assert!(trusted.ok);
+
+        let saved = f.d.dispatch(req(
+            "config.save",
+            json!({
+                "name": "OpenCode",
+                "agent": "opencode",
+                "executable_path": "C:\\tools\\opencode.exe",
+                "model": "openai/gpt-5",
+                "thinking_level": "off",
+                "credential_ref": "halo/missing/opencode"
+            }),
+        ));
+        assert!(saved.ok, "{saved:?}");
+        let config_id = saved.result.unwrap()["config"]["config_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let start = f.d.dispatch(req(
+            "runtime.start",
+            json!({"agent": "opencode", "config_id": config_id}),
+        ));
+        assert_eq!(err_code(&start), ErrorCode::CredentialNotFound);
+        let status = f
+            .d
+            .dispatch(req("runtime.status", json!({})))
+            .result
+            .unwrap();
+        assert_eq!(status["opencode"]["state"], "failed");
+        assert!(status["opencode"]["reason"].as_str().unwrap_or_default().contains("凭据引用"));
+        assert!(!status["opencode"]["recovery_hint"].as_str().unwrap_or_default().is_empty());
+        assert_eq!(status["pi"]["state"], "not_probed");
+    }
+
+    #[test]
+    fn opencode_start_without_credential_reference_fails_closed_before_launch() {
+        let mut f = fixture();
+        hello(&mut f);
+        let dir = tempfile::tempdir().unwrap();
+        let repo = init_repo(dir.path());
+        let opened = f.d.dispatch(req(
+            "workspace.open",
+            json!({"path": repo.to_string_lossy()}),
+        ));
+        let workspace_id = opened.result.unwrap()["workspace_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let trusted = f.d.dispatch(req(
+            "workspace.trust",
+            json!({"workspace_id": workspace_id, "decision": "trust"}),
+        ));
+        assert!(trusted.ok);
+
+        let saved = f.d.dispatch(req(
+            "config.save",
+            json!({
+                "name": "OpenCode 无凭据引用",
+                "agent": "opencode",
+                "executable_path": "C:\\tools\\opencode.exe",
+                "model": "openai/gpt-5",
+                "thinking_level": "off",
+                "credential_ref": null
+            }),
+        ));
+        assert!(saved.ok, "{saved:?}");
+        let config_id = saved.result.unwrap()["config"]["config_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let start = f.d.dispatch(req(
+            "runtime.start",
+            json!({"agent": "opencode", "config_id": config_id}),
+        ));
+        assert_eq!(err_code(&start), ErrorCode::CredentialNotFound);
+        let status = f
+            .d
+            .dispatch(req("runtime.status", json!({})))
+            .result
+            .unwrap();
+        assert_eq!(status["opencode"]["state"], "failed");
+        assert!(status["opencode"]["version"].is_null());
+        assert!(status["opencode"]["reason"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("缺少凭据引用"));
+        assert!(!status["opencode"]["recovery_hint"]
+            .as_str()
+            .unwrap_or_default()
+            .is_empty());
     }
 
     #[test]
@@ -2035,6 +2383,36 @@ mod tests {
         let result = resp.result.unwrap();
         assert_eq!(result["pi"]["state"], "not_probed");
         assert_eq!(result["opencode"]["state"], "not_probed");
+    }
+
+    #[test]
+    fn runtime_stop_publishes_stopped_state_after_generation_advance() {
+        let mut f = fixture();
+        hello(&mut f);
+        while f.events.try_recv().is_ok() {}
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let slot = app.slot_mut(AgentKind::OpenCode);
+            slot.last_state = RuntimeState::Ready;
+            slot.version = Some("1.18.5".to_string());
+            slot.handle = Some(std::sync::Arc::new(ReadyHandle));
+        }
+
+        let response = f.d.dispatch(req("runtime.stop", json!({"agent": "opencode"})));
+
+        assert!(response.ok, "{response:?}");
+        assert_eq!(response.result.unwrap()["state"], "stopped");
+        let outbound = f
+            .events
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .expect("runtime.stop 必须广播 runtime.state");
+        let Outbound::Event(event) = outbound else {
+            panic!("runtime.stop 必须产生事件");
+        };
+        assert_eq!(event.event, "runtime.state");
+        assert_eq!(event.payload["agent"], "opencode");
+        assert_eq!(event.payload["state"], "stopped");
+        assert_eq!(event.payload["version"], "1.18.5");
     }
 
     #[test]

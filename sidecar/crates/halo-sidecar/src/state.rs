@@ -68,6 +68,8 @@ pub struct RuntimeSlot {
     pub last_state: RuntimeState,
     pub version: Option<String>,
     pub handle: Option<Arc<dyn AgentHandle>>,
+    /// 每次启动或停止都推进。迟到的旧实例事件不得覆盖当前实例状态。
+    pub generation: u64,
     /// 任务事件路由：当前任务的事件消费端；无任务时为 None。
     pub task_tx: Option<Sender<RuntimeEvent>>,
 }
@@ -78,8 +80,14 @@ impl RuntimeSlot {
             last_state: RuntimeState::NotProbed,
             version: None,
             handle: None,
+            generation: 0,
             task_tx: None,
         }
+    }
+
+    pub fn advance_generation(&mut self) -> u64 {
+        self.generation = self.generation.wrapping_add(1);
+        self.generation
     }
 
     /// 当前对外可见状态：有句柄时以句柄实时状态为准。
@@ -221,24 +229,35 @@ pub fn spawn_runtime_forwarder(
     app: Arc<Mutex<AppState>>,
     bus: Arc<EventBus>,
     agent: AgentKind,
+    generation: u64,
     rx: Receiver<RuntimeEvent>,
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         for ev in rx {
             if let RuntimeEvent::State(s) = &ev {
-                let (payload, changed): (Value, bool) = {
+                let update = {
                     let mut guard = lock(&app);
                     let slot = guard.slot_mut(agent);
-                    let changed = slot.last_state != *s;
-                    slot.last_state = s.clone();
-                    let version = slot.version.clone();
-                    (runtime_state_payload(agent, s, version), changed)
+                    if slot.generation != generation {
+                        None
+                    } else {
+                        let changed = slot.last_state != *s;
+                        slot.last_state = s.clone();
+                        let version = slot.version.clone();
+                        Some((runtime_state_payload(agent, s, version), changed))
+                    }
                 };
-                if changed {
+                if let Some((payload, true)) = update {
                     bus.emit(None, "runtime.state", payload);
                 }
             }
-            let task_tx = { lock(&app).slot(agent).task_tx.clone() };
+            let task_tx = {
+                let guard = lock(&app);
+                let slot = guard.slot(agent);
+                (slot.generation == generation)
+                    .then(|| slot.task_tx.clone())
+                    .flatten()
+            };
             if let Some(tx) = task_tx {
                 let _ = tx.send(ev);
             }
@@ -246,17 +265,156 @@ pub fn spawn_runtime_forwarder(
     })
 }
 
+/// 在失效旧运行时事件流之后，显式发布当前槽位的最终停止状态。
+/// 这样旧 forwarder 不会覆盖新实例，事件订阅者也不会错过 stopped。
+pub fn mark_slot_stopped(app: &Arc<Mutex<AppState>>, bus: &Arc<EventBus>, agent: AgentKind) {
+    let (payload, changed) = {
+        let mut guard = lock(app);
+        let slot = guard.slot_mut(agent);
+        let state = RuntimeState::Stopped;
+        let changed = slot.last_state != state;
+        slot.last_state = state.clone();
+        let payload = runtime_state_payload(agent, &state, slot.version.clone());
+        (payload, changed)
+    };
+    if changed {
+        bus.emit(None, "runtime.state", payload);
+    }
+}
+
 /// 停止并清理一个槽位的受管运行时（工作区切换/撤销信任/关闭时使用）。
-/// runtime.state 事件由转发线程按句柄的真实事件播报，这里只兜底记录最终状态。
-pub fn stop_slot(app: &Arc<Mutex<AppState>>, _bus: &Arc<EventBus>, agent: AgentKind, grace: Duration) {
+/// 旧句柄事件在 generation 推进后被忽略，因此最终 stopped 由当前槽位显式广播。
+pub fn stop_slot(
+    app: &Arc<Mutex<AppState>>,
+    bus: &Arc<EventBus>,
+    agent: AgentKind,
+    grace: Duration,
+) {
     let handle = {
         let mut guard = lock(app);
         let slot = guard.slot_mut(agent);
         slot.task_tx = None;
+        slot.advance_generation();
         slot.handle.take()
     };
     if let Some(h) = handle {
         h.stop(grace);
-        lock(app).slot_mut(agent).last_state = RuntimeState::Stopped;
+        mark_slot_stopped(app, bus, agent);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossbeam_channel::unbounded;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct StoppableHandle {
+        stopped: AtomicBool,
+    }
+
+    impl AgentHandle for StoppableHandle {
+        fn run_task(&self, _spec: &RunTaskSpec) -> Result<(), RuntimeError> {
+            Ok(())
+        }
+
+        fn cancel_native(&self) {}
+
+        fn stop(&self, _grace: Duration) -> StopOutcome {
+            self.stopped.store(true, Ordering::SeqCst);
+            StopOutcome::Graceful
+        }
+
+        fn state(&self) -> RuntimeState {
+            RuntimeState::Ready
+        }
+    }
+
+    #[test]
+    fn stale_runtime_events_cannot_override_a_newer_instance() {
+        let app = Arc::new(Mutex::new(AppState::new()));
+        let (outbound_tx, outbound_rx) = unbounded();
+        let bus = Arc::new(EventBus::new(outbound_tx));
+
+        let first_generation = {
+            let mut guard = lock(&app);
+            guard.slot_mut(AgentKind::OpenCode).advance_generation()
+        };
+        let (old_tx, old_rx) = unbounded();
+        let old_forwarder = spawn_runtime_forwarder(
+            Arc::clone(&app),
+            Arc::clone(&bus),
+            AgentKind::OpenCode,
+            first_generation,
+            old_rx,
+        );
+
+        let second_generation = {
+            let mut guard = lock(&app);
+            guard.slot_mut(AgentKind::OpenCode).advance_generation()
+        };
+        let (new_tx, new_rx) = unbounded();
+        let new_forwarder = spawn_runtime_forwarder(
+            Arc::clone(&app),
+            Arc::clone(&bus),
+            AgentKind::OpenCode,
+            second_generation,
+            new_rx,
+        );
+
+        old_tx
+            .send(RuntimeEvent::State(RuntimeState::Failed {
+                reason: "过期实例失败".to_string(),
+                recovery_hint: "不应覆盖新实例".to_string(),
+            }))
+            .unwrap();
+        new_tx
+            .send(RuntimeEvent::State(RuntimeState::Ready))
+            .unwrap();
+        drop(old_tx);
+        drop(new_tx);
+        old_forwarder.join().unwrap();
+        new_forwarder.join().unwrap();
+
+        assert_eq!(
+            lock(&app).slot(AgentKind::OpenCode).last_state,
+            RuntimeState::Ready
+        );
+        let emitted: Vec<_> = outbound_rx.try_iter().collect();
+        assert_eq!(emitted.len(), 1, "过期实例不得推送 runtime.state");
+    }
+
+    #[test]
+    fn stop_slot_publishes_stopped_after_invalidating_old_forwarder() {
+        let app = Arc::new(Mutex::new(AppState::new()));
+        let (outbound_tx, outbound_rx) = unbounded();
+        let bus = Arc::new(EventBus::new(outbound_tx));
+        let handle = Arc::new(StoppableHandle {
+            stopped: AtomicBool::new(false),
+        });
+
+        {
+            let mut guard = lock(&app);
+            let slot = guard.slot_mut(AgentKind::OpenCode);
+            slot.last_state = RuntimeState::Ready;
+            slot.version = Some("1.18.5".to_string());
+            slot.handle = Some(handle.clone());
+        }
+
+        stop_slot(&app, &bus, AgentKind::OpenCode, Duration::ZERO);
+
+        assert!(handle.stopped.load(Ordering::SeqCst));
+        assert_eq!(
+            lock(&app).slot(AgentKind::OpenCode).last_state,
+            RuntimeState::Stopped
+        );
+        let outbound = outbound_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        let crate::server::Outbound::Event(event) = outbound else {
+            panic!("停止必须广播 runtime.state 事件");
+        };
+        assert_eq!(event.event, "runtime.state");
+        assert_eq!(event.payload["agent"], "opencode");
+        assert_eq!(event.payload["state"], "stopped");
+        assert_eq!(event.payload["version"], "1.18.5");
     }
 }

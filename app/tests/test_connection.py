@@ -125,6 +125,25 @@ def test_error_response_maps_to_request_error(tmp_path):
         assert err.details == {"workspace_id": "ws-x"}
 
 
+def test_runtime_capability_unavailable_is_request_error_without_disconnect(tmp_path):
+    script = {"responses": {
+        "task.create": {"error": {
+            "code": "RUNTIME_CAPABILITY_UNAVAILABLE",
+            "message": "当前 OpenCode 版本不支持受管任务执行",
+            "details": {"recovery": "请更新 OpenCode 后重试"},
+        }},
+    }}
+    with connected(tmp_path, script=script) as conn:
+        with pytest.raises(RequestError) as excinfo:
+            conn.request("task.create", {"agent": "opencode"}, timeout=5.0)
+        assert excinfo.value.code == "RUNTIME_CAPABILITY_UNAVAILABLE"
+        assert excinfo.value.details == {"recovery": "请更新 OpenCode 后重试"}
+
+        # 这是合法的业务失败，不能被当作未知协议错误关闭连接。
+        assert conn.is_connected
+        assert conn.request("workspace.status", timeout=5.0) == {"active": False}
+
+
 def test_request_timeout(tmp_path):
     script = {"responses": {"test.silent": {"no_response": True}}}
     with connected(tmp_path, script=script) as conn:

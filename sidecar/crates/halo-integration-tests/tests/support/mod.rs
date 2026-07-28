@@ -16,9 +16,60 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 /// 单次等待（响应/事件/进程退出）的统一上限。
 pub const WAIT: Duration = Duration::from_secs(30);
+
+/// 安装仅供当前集成测试使用的凭据引用。真实 Windows 凭据库不可用时返回 None，
+/// 调用方应跳过必须经过正向凭据注入的场景，而不是建立生产回退。
+pub struct TestCredentialGuard {
+    reference: String,
+}
+
+impl TestCredentialGuard {
+    pub fn reference(&self) -> &str {
+        &self.reference
+    }
+}
+
+impl Drop for TestCredentialGuard {
+    fn drop(&mut self) {
+        if let Ok(entry) = keyring::Entry::new("HaloStudio", &self.reference) {
+            let _ = entry.delete_credential();
+        }
+    }
+}
+
+pub fn install_test_credential() -> Option<TestCredentialGuard> {
+    use halo_config::{CredentialStore, Secret, WindowsCredentialStore};
+
+    let store = WindowsCredentialStore::new();
+    if !store.available() {
+        return None;
+    }
+
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("系统时钟应晚于 Unix epoch")
+        .as_nanos();
+    let reference = format!("halo/integration/opencode-{}-{nonce}", std::process::id());
+    let secret = Secret::new(format!(
+        "integration-credential-{}-{nonce}",
+        std::process::id()
+    ));
+    store
+        .set(&reference, &secret)
+        .expect("可用的系统凭据库应能写入集成测试引用");
+    Some(TestCredentialGuard { reference })
+}
+
+/// OpenCode 正向集成覆盖必须经过真实 Windows 凭据库。不可用不是通过条件，
+/// 以明确失败暴露测试环境缺失，避免把未执行的正向覆盖记为通过。
+pub fn require_test_credential() -> TestCredentialGuard {
+    install_test_credential()
+        .expect("Windows 凭据管理器不可用；OpenCode 正向启动集成测试必须在可写系统凭据存储环境运行")
+}
 
 // ---------- 二进制定位 ----------
 
@@ -48,6 +99,38 @@ pub fn fake_pi_exe() -> PathBuf {
 
 pub fn fake_opencode_exe() -> PathBuf {
     bin_path("fake-opencode")
+}
+
+/// 将测试脚本参数写到 fake 二进制同名旁路文件。生产 `LaunchConfig` 不再传递
+/// 任意参数或环境覆盖，测试仍可在不扩大生产接口的前提下构造故障场景。
+///
+/// 每个数据目录下都有独立的测试目录，避免并行测试相互覆盖脚本；它与数据目录
+/// 共同存活，因此“中断后重启”场景中的持久化配置仍能找到其测试替身。
+fn fake_variant(executable: &Path, args: &[&str], variant_dir: &Path) -> PathBuf {
+    if args.is_empty() {
+        return executable.to_path_buf();
+    }
+    let serialized = serde_json::to_vec(args).expect("测试脚本参数必须可序列化");
+    let digest = Sha256::digest(&serialized);
+    let suffix: String = digest[..8]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let stem = executable
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .expect("fake 可执行文件应有有效名称");
+    let extension = executable
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("exe");
+    let variant = variant_dir.join(format!("{stem}-{suffix}.{extension}"));
+    if !variant.exists() {
+        std::fs::copy(executable, &variant).expect("无法创建 fake 可执行文件变体");
+    }
+    std::fs::write(variant.with_extension("args.json"), serialized)
+        .expect("无法写入 fake 测试脚本参数");
+    variant
 }
 
 // ---------- 临时 Git 工作区 ----------
@@ -137,6 +220,7 @@ pub struct Sidecar {
     pub events: Arc<Mutex<Vec<Value>>>,
     pub data_dir: PathBuf,
     _data_tmp: Option<tempfile::TempDir>,
+    fake_variant_dir: PathBuf,
 }
 
 impl Sidecar {
@@ -157,6 +241,8 @@ impl Sidecar {
         data_tmp: Option<tempfile::TempDir>,
         extra_env: &[(&str, &str)],
     ) -> Sidecar {
+        let fake_variant_dir = data_dir.join("test-fake-variants");
+        std::fs::create_dir_all(&fake_variant_dir).expect("创建 fake 测试目录失败");
         let mut cmd = Command::new(sidecar_exe());
         cmd.env("HALO_DATA_DIR", &data_dir)
             .stdin(Stdio::piped())
@@ -208,6 +294,7 @@ impl Sidecar {
             events,
             data_dir,
             _data_tmp: data_tmp,
+            fake_variant_dir,
         }
     }
 
@@ -247,8 +334,8 @@ impl Sidecar {
             }
             assert!(
                 Instant::now() < deadline,
-                "等待 {method} 响应超时；transcript={:?}",
-                self.transcript_snapshot()
+                "等待 {method} 响应超时；已收到 {} 条协议消息",
+                self.transcript.lock().unwrap().len()
             );
             std::thread::sleep(Duration::from_millis(5));
         }
@@ -257,22 +344,42 @@ impl Sidecar {
     /// 期望成功，返回 result。
     pub fn ok(&mut self, method: &str, params: Value) -> Value {
         let resp = self.request(method, params);
-        assert_eq!(resp["ok"], true, "{method} 应成功：{resp}");
+        assert_eq!(
+            resp["ok"],
+            true,
+            "{method} 应成功（{}）",
+            response_summary(&resp)
+        );
         resp["result"].clone()
     }
 
     pub fn ok_with_timeout(&mut self, method: &str, params: Value, timeout: Duration) -> Value {
         let resp = self.request_with_timeout(method, params, timeout);
-        assert_eq!(resp["ok"], true, "{method} 应成功：{resp}");
+        assert_eq!(
+            resp["ok"],
+            true,
+            "{method} 应成功（{}）",
+            response_summary(&resp)
+        );
         resp["result"].clone()
     }
 
     /// 期望失败，返回 error（断言 code）。
     pub fn err(&mut self, method: &str, params: Value, expect_code: &str) -> Value {
         let resp = self.request(method, params);
-        assert_eq!(resp["ok"], false, "{method} 应失败：{resp}");
+        assert_eq!(
+            resp["ok"],
+            false,
+            "{method} 应失败（{}）",
+            response_summary(&resp)
+        );
         let error = resp["error"].clone();
-        assert_eq!(error["code"], expect_code, "{method} 错误码：{error}");
+        assert_eq!(
+            error["code"],
+            expect_code,
+            "{method} 错误码不符（{}）",
+            response_summary(&resp)
+        );
         error
     }
 
@@ -301,9 +408,9 @@ impl Sidecar {
             }
             assert!(
                 Instant::now() < deadline,
-                "等待事件超时：{what}；events={:?}；transcript={:?}",
-                self.events_snapshot(),
-                self.transcript_snapshot()
+                "等待事件超时：{what}；已收到 {} 个事件和 {} 条协议消息",
+                self.events.lock().unwrap().len(),
+                self.transcript.lock().unwrap().len()
             );
             std::thread::sleep(Duration::from_millis(10));
         }
@@ -371,20 +478,19 @@ impl Sidecar {
         &mut self,
         agent: &str,
         exe: &Path,
-        extra_args: &[&str],
+        test_harness_args: &[&str],
         credential_ref: Option<&str>,
     ) -> String {
+        let executable = fake_variant(exe, test_harness_args, &self.fake_variant_dir);
         let result = self.ok(
             "config.save",
             json!({
                 "name": format!("{agent} 集成配置"),
                 "agent": agent,
-                "executable_path": exe.to_string_lossy(),
-                "model": "gpt-5",
+                "executable_path": executable.to_string_lossy(),
+                "model": if agent == "opencode" { "openai/gpt-5" } else { "gpt-5" },
                 "thinking_level": "medium",
-                "credential_ref": credential_ref,
-                "extra_args": extra_args,
-                "env_overrides": {}
+                "credential_ref": credential_ref
             }),
         );
         result["config"]["config_id"]
@@ -441,6 +547,14 @@ impl Sidecar {
         });
         ev["payload"].clone()
     }
+}
+
+/// 失败信息只保留协议结构，避免测试基础设施在产品回归时把响应正文中的敏感值
+/// 回显到测试输出。
+fn response_summary(response: &Value) -> String {
+    let ok = response.get("ok").and_then(Value::as_bool);
+    let has_error = response.get("error").is_some();
+    format!("ok={ok:?}, has_error={has_error}")
 }
 
 impl Drop for Sidecar {

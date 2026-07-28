@@ -1,115 +1,306 @@
-//! OpenCode 回环服务适配器：锁定版本、回环端口、每次启动新 token、
-//! 健康检查 + 精确版本握手、HTTP 任务与事件长轮询。
-//! 端口与 token 仅存于句柄私有字段，不出现在任何公开 getter、Debug 或错误 message 中。
+//! OpenCode 1.x 受管回环服务适配器。
+//!
+//! 仅接受经过验证的稳定 1.x 兼容性档案：服务绑定回环地址，每次启动生成
+//! 新的 Basic 认证密码，并以 OpenCode Server 的 `/global/health` 完成真实就绪检查。
+//! 端口、认证密码和 Authorization 值只保留在私有句柄中，不进入 Debug、错误或事件。
 
+use std::collections::HashMap;
+use std::io::{BufRead, BufReader};
 use std::net::TcpListener;
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crossbeam_channel::Sender;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use crossbeam_channel::{bounded, Receiver, RecvTimeoutError, Sender};
 use rand::RngCore;
 use serde_json::Value;
+use tempfile::TempDir;
 
-use crate::process::{probe_version, wait_exit, ChildProcess, RealChild};
-use crate::{
-    lock, map_trace_event, LaunchCmd, RunTaskSpec, RuntimeError, RuntimeEvent, RuntimeState,
-    StopOutcome, Timeouts,
-};
+use crate::process::{probe_version, ChildProcess, RealChild};
+use crate::{lock, LaunchCmd, RunTaskSpec, RuntimeError, RuntimeEvent, RuntimeState, StopOutcome, Timeouts};
 
-pub const OPENCODE_LOCKED_VERSION: &str = "0.4.2";
+/// 已验证的 OpenCode Server 兼容性档案标识。新主版本须建立新档案后才能启动。
+pub const OPENCODE_COMPATIBILITY_PROFILE: &str = "opencode-server-1.x";
+/// 当前档案支持的最低稳定版 OpenCode。
+pub const OPENCODE_MIN_SUPPORTED_VERSION: &str = "1.18.5";
+
+const OPENCODE_DEFAULT_USERNAME: &str = "opencode";
+const OPENCODE_ISOLATED_STATE_DIRS: [(&str, &str); 4] = [
+    ("XDG_CONFIG_HOME", "config"),
+    ("XDG_DATA_HOME", "data"),
+    ("XDG_CACHE_HOME", "cache"),
+    ("XDG_STATE_HOME", "state"),
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct StableVersion {
+    major: u64,
+    minor: u64,
+    patch: u64,
+}
+
+impl StableVersion {
+    fn parse(version: &str) -> Option<Self> {
+        let mut pieces = version.split('.');
+        let major = parse_component(pieces.next()?)?;
+        let minor = parse_component(pieces.next()?)?;
+        let patch = parse_component(pieces.next()?)?;
+        if pieces.next().is_some() {
+            return None;
+        }
+        Some(Self {
+            major,
+            minor,
+            patch,
+        })
+    }
+}
+
+fn parse_component(component: &str) -> Option<u64> {
+    if component.is_empty()
+        || !component.chars().all(|c| c.is_ascii_digit())
+        || (component.len() > 1 && component.starts_with('0'))
+    {
+        return None;
+    }
+    component.parse().ok()
+}
+
+enum ReadyLine {
+    Confirmed,
+    AddressMismatch,
+    StreamClosed,
+}
+
+fn listening_url(line: &str) -> Option<&str> {
+    let marker = "opencode server listening on ";
+    let lower = line.to_ascii_lowercase();
+    let offset = lower.find(marker)?;
+    line[offset + marker.len()..]
+        .split_whitespace()
+        .next()
+        .map(|url| url.trim_end_matches('/'))
+}
+
+fn watch_ready_line(stdout: std::process::ChildStdout, port: u16) -> Receiver<ReadyLine> {
+    let (tx, rx) = bounded(1);
+    let expected = format!("http://127.0.0.1:{port}");
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        let mut confirmed = false;
+        for line in reader.lines() {
+            let Ok(line) = line else {
+                break;
+            };
+            let Some(url) = listening_url(&line) else {
+                continue;
+            };
+            if confirmed {
+                continue;
+            }
+            if url == expected {
+                // 保持消费 stdout，避免服务后续诊断输出堵塞或因管道关闭退出。
+                let _ = tx.send(ReadyLine::Confirmed);
+                confirmed = true;
+                continue;
+            }
+            let _ = tx.send(ReadyLine::AddressMismatch);
+            return;
+        }
+        if !confirmed {
+            let _ = tx.send(ReadyLine::StreamClosed);
+        }
+    });
+    rx
+}
+
+fn report_start_failure(tx: &Sender<RuntimeEvent>, reason: &str, recovery_hint: &str) {
+    let _ = tx.send(RuntimeEvent::State(RuntimeState::Failed {
+        reason: reason.to_string(),
+        recovery_hint: recovery_hint.to_string(),
+    }));
+}
 
 pub struct OpenCodeRuntime;
 
 impl OpenCodeRuntime {
-    /// 探测 `<exe> --version`，返回首行中的 semver。
+    /// 探测 `<exe> --version`，返回首行中的 semver 文本。
     pub fn probe(exe: &str) -> Result<String, RuntimeError> {
         probe_version(exe, "OpenCode")
     }
 
-    /// 启动 `<exe> serve --hostname 127.0.0.1 --port <p>`，完成健康检查与精确版本握手。
+    /// 兼容档案仅接受稳定的 `>= 1.18.5, < 2.0.0` OpenCode Server。
+    /// 预发布、带前缀、畸形版本和未知主版本均失败关闭。
+    pub fn is_compatible_version(version: &str) -> bool {
+        let Some(version) = StableVersion::parse(version) else {
+            return false;
+        };
+        version.major == 1
+            && (version.minor > 18 || (version.minor == 18 && version.patch >= 5))
+    }
+
+    /// 启动真实 OpenCode Server。认证只存在于该次进程及私有回环句柄中。
     pub fn start(
         cmd: LaunchCmd,
         tx: Sender<RuntimeEvent>,
         opts: Timeouts,
     ) -> Result<OpenCodeHandle, RuntimeError> {
-        let port = pick_free_port()?;
-        let token = random_hex_token();
+        let port = match pick_free_port() {
+            Ok(port) => port,
+            Err(error) => {
+                report_start_failure(
+                    &tx,
+                    "无法申请 OpenCode 回环服务端口",
+                    "请检查本机网络策略后重试；不会回退到非回环服务",
+                );
+                return Err(error);
+            }
+        };
+        let password = random_password();
+        let LaunchCmd {
+            exe,
+            mut env,
+            cwd,
+        } = cmd;
+        let runtime_dir = match isolated_opencode_state(&mut env) {
+            Ok(runtime_dir) => runtime_dir,
+            Err(error) => {
+                report_start_failure(
+                    &tx,
+                    "无法创建 OpenCode 隔离运行时目录",
+                    "请确认系统临时目录可用后重新启动；不会读取或复用全局 OpenCode 配置",
+                );
+                return Err(error);
+            }
+        };
 
-        let mut command = Command::new(&cmd.exe);
+        let mut command = Command::new(&exe);
         command
             .arg("serve")
             .arg("--hostname")
             .arg("127.0.0.1")
             .arg("--port")
-            .arg(port.to_string())
-            .args(&cmd.args);
-        // 子进程环境 = halo-config 构好的白名单环境 + 本次启动的新认证信息
+            .arg(port.to_string());
+        // 子进程环境 = halo-config 构造的白名单环境 + 本次 OpenCode Server 认证。
         command.env_clear();
-        command.envs(&cmd.env);
-        command.env("HALO_OC_TOKEN", &token);
-        if !cmd.cwd.is_empty() {
-            command.current_dir(&cmd.cwd);
+        command.envs(&env);
+        command.env("OPENCODE_SERVER_PASSWORD", &password);
+        if !cwd.is_empty() {
+            command.current_dir(&cwd);
         }
         command
             .stdin(Stdio::null())
-            .stdout(Stdio::null())
+            .stdout(Stdio::piped())
             .stderr(Stdio::null());
-        let child = command
-            .spawn()
-            .map_err(|e| RuntimeError::Spawn(format!("无法启动 OpenCode 进程：{e}")))?;
 
-        connect(
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(_) => {
+                report_start_failure(
+                    &tx,
+                    "无法启动 OpenCode 进程",
+                    "请确认 OpenCode 可执行文件有效且未被安全策略阻止后重试",
+                );
+                return Err(RuntimeError::Spawn("无法启动 OpenCode 进程".to_string()));
+            }
+        };
+
+        let stdout = match child.stdout.take() {
+            Some(stdout) => stdout,
+            None => {
+                let _ = child.kill();
+                report_start_failure(
+                    &tx,
+                    "无法确认 OpenCode 回环服务已监听",
+                    "请重新启动 OpenCode；若问题持续，请检查可执行文件是否完整",
+                );
+                return Err(RuntimeError::Spawn(
+                    "无法读取 OpenCode 就绪输出".to_string(),
+                ));
+            }
+        };
+        let ready_line = watch_ready_line(stdout, port);
+
+        let handle = connect_after_ready_line(
             port,
-            token,
+            password,
             Some(Box::new(RealChild::new(child))),
             tx,
             opts,
-        )
+            Some(ready_line),
+            Some(runtime_dir),
+        )?;
+        handle.monitor_child_exit();
+        Ok(handle)
     }
 }
 
 /// 绑定 127.0.0.1:0 取得空闲回环端口后立即释放。
 fn pick_free_port() -> Result<u16, RuntimeError> {
     let listener = TcpListener::bind(("127.0.0.1", 0))
-        .map_err(|e| RuntimeError::Spawn(format!("无法申请空闲回环端口：{e}")))?;
+        .map_err(|_| RuntimeError::Spawn("无法申请 OpenCode 回环服务端口".to_string()))?;
     let port = listener
         .local_addr()
-        .map_err(|e| RuntimeError::Spawn(format!("无法读取回环端口号：{e}")))?
+        .map_err(|_| RuntimeError::Spawn("无法读取 OpenCode 回环服务端口".to_string()))?
         .port();
     drop(listener);
     Ok(port)
 }
 
-/// 32 字节随机 hex token（64 个 hex 字符），每次启动全新生成。
-fn random_hex_token() -> String {
+/// 32 字节随机密码编码为 64 个十六进制字符；每次启动均重新生成。
+fn random_password() -> String {
     use std::fmt::Write as _;
+
     let mut bytes = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut bytes);
-    let mut s = String::with_capacity(64);
-    for b in bytes {
-        let _ = write!(s, "{b:02x}");
+    let mut password = String::with_capacity(64);
+    for byte in bytes {
+        let _ = write!(password, "{byte:02x}");
     }
-    s
+    password
+}
+
+/// 让每个受管 OpenCode 进程使用一次性目录，而不是用户的全局 OpenCode 状态。
+/// `USERPROFILE` 仍可保留给 Windows 子进程基础设施，但 OpenCode 的配置、数据、缓存
+/// 和状态根都由本次运行显式覆盖；目录由私有句柄持有并在退出后清理。
+fn isolated_opencode_state(env: &mut HashMap<String, String>) -> Result<TempDir, RuntimeError> {
+    let runtime_dir = tempfile::Builder::new()
+        .prefix("halo-opencode-")
+        .tempdir()
+        .map_err(|_| RuntimeError::Spawn("无法创建 OpenCode 隔离运行时目录".to_string()))?;
+
+    for (variable, directory_name) in OPENCODE_ISOLATED_STATE_DIRS {
+        let path = runtime_dir.path().join(directory_name);
+        std::fs::create_dir_all(&path).map_err(|_| {
+            RuntimeError::Spawn("无法创建 OpenCode 隔离运行时目录".to_string())
+        })?;
+        env.insert(variable.to_string(), path.to_string_lossy().into_owned());
+    }
+
+    Ok(runtime_dir)
+}
+
+fn basic_authorization(password: &str) -> String {
+    let credentials = format!("{OPENCODE_DEFAULT_USERNAME}:{password}");
+    format!("Basic {}", STANDARD.encode(credentials))
 }
 
 struct OcShared {
     state: Mutex<RuntimeState>,
     tx: Sender<RuntimeEvent>,
     agent: ureq::Agent,
-    // 端口与 token 为私有字段；错误 message 与 Debug 输出中一律不出现
+    // 连接细节及密码只存在私有字段；任何可观察文本均不得包含它们。
     port: u16,
-    token: String,
+    password: String,
     child: Mutex<Option<Box<dyn ChildProcess>>>,
-    /// 事件长轮询游标（已消费事件数）
-    events_cursor: AtomicU64,
+    runtime_dir: Mutex<Option<TempDir>>,
 }
 
 impl OcShared {
-    fn set_state(&self, s: RuntimeState) {
-        *lock(&self.state) = s.clone();
-        let _ = self.tx.send(RuntimeEvent::State(s));
+    fn set_state(&self, state: RuntimeState) {
+        *lock(&self.state) = state.clone();
+        let _ = self.tx.send(RuntimeEvent::State(state));
     }
 
     fn set_failed(&self, reason: &str, recovery_hint: &str) {
@@ -119,76 +310,155 @@ impl OcShared {
         });
     }
 
-    fn is_shutting_down(&self) -> bool {
-        matches!(
-            *lock(&self.state),
-            RuntimeState::Stopping | RuntimeState::Stopped
-        )
-    }
-
     fn kill_child(&self) {
         if let Some(mut child) = lock(&self.child).take() {
             child.kill();
         }
     }
 
-    /// 统一请求入口。错误 message 不包含 URL/端口/token。
-    fn request(
-        &self,
-        method: &str,
-        path: &str,
-        body: Option<&Value>,
-        timeout: Duration,
-    ) -> Result<Value, RuntimeError> {
-        let url = format!("http://127.0.0.1:{}{}", self.port, path);
-        let req = match method {
+    fn cleanup_runtime_dir(&self) {
+        drop(lock(&self.runtime_dir).take());
+    }
+
+    /// 统一回环请求入口。错误信息不包含 URL、端口或 Authorization 值。
+    fn request(&self, method: &str, path: &str, timeout: Duration) -> Result<Value, RuntimeError> {
+        let url = format!("http://127.0.0.1:{}{path}", self.port);
+        let request = match method {
             "GET" => self.agent.get(&url),
-            _ => self.agent.post(&url),
+            "POST" => self.agent.post(&url),
+            _ => return Err(RuntimeError::Io("不支持的 OpenCode 请求方法".to_string())),
         }
-        .set("Authorization", &format!("Bearer {}", self.token))
+        .set("Authorization", &basic_authorization(&self.password))
         .timeout(timeout);
-        let resp = match body {
-            Some(b) => req.send_json(b),
-            None => req.call(),
-        };
-        match resp {
-            Ok(r) => Ok(r.into_json::<Value>().unwrap_or(Value::Null)),
+
+        let response = request.call();
+        match response {
+            Ok(response) => Ok(response.into_json::<Value>().unwrap_or(Value::Null)),
             Err(ureq::Error::Status(401, _)) => Err(RuntimeError::Unauthorized),
             Err(ureq::Error::Status(code, _)) => {
                 Err(RuntimeError::Io(format!("OpenCode 返回了 HTTP {code}")))
             }
             Err(ureq::Error::Transport(_)) => {
-                Err(RuntimeError::Io("与 OpenCode 的本地连接失败".to_string()))
+                Err(RuntimeError::Io("与 OpenCode 的本地服务连接失败".to_string()))
             }
         }
     }
 }
 
-/// 就绪流程（生产与测试共用）：健康轮询 → 精确版本握手 → Ready。
+/// 健康检查完成后只接受可安全呈现的纯数字版本，避免把外部响应文本带入错误或事件。
+fn safe_version_for_reason(version: &str) -> Option<&str> {
+    if version.len() <= 32 && version.chars().all(|c| c.is_ascii_digit() || c == '.') {
+        Some(version)
+    } else {
+        None
+    }
+}
+
+/// 就绪流程（生产与测试共用）：真实 `/global/health` + Basic auth + 兼容性档案。
 fn connect(
     port: u16,
-    token: String,
+    password: String,
     child: Option<Box<dyn ChildProcess>>,
     tx: Sender<RuntimeEvent>,
     opts: Timeouts,
+) -> Result<OpenCodeHandle, RuntimeError> {
+    connect_after_ready_line(port, password, child, tx, opts, None, None)
+}
+
+fn connect_after_ready_line(
+    port: u16,
+    password: String,
+    child: Option<Box<dyn ChildProcess>>,
+    tx: Sender<RuntimeEvent>,
+    opts: Timeouts,
+    ready_line: Option<Receiver<ReadyLine>>,
+    runtime_dir: Option<TempDir>,
 ) -> Result<OpenCodeHandle, RuntimeError> {
     let shared = Arc::new(OcShared {
         state: Mutex::new(RuntimeState::Starting),
         tx,
         agent: ureq::agent(),
         port,
-        token,
+        password,
         child: Mutex::new(child),
-        events_cursor: AtomicU64::new(0),
+        runtime_dir: Mutex::new(runtime_dir),
     });
     let _ = shared.tx.send(RuntimeEvent::State(RuntimeState::Starting));
 
-    // 健康检查：轮询 GET /health 直到 200 {"status":"ok"}；401 立即失败关闭
     let deadline = Instant::now() + opts.ready;
+    if let Some(ready_line) = ready_line {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let ready = ready_line.recv_timeout(remaining);
+        match ready {
+            Ok(ReadyLine::Confirmed) => {}
+            Ok(ReadyLine::AddressMismatch) => {
+                let reason = "OpenCode 报告的监听地址与受管回环地址不一致";
+                shared.set_failed(
+                    reason,
+                    "请停止占用回环端口的其他程序后重新启动 OpenCode",
+                );
+                shared.kill_child();
+                return Err(RuntimeError::NotReady(reason.to_string()));
+            }
+            Ok(ReadyLine::StreamClosed) | Err(RecvTimeoutError::Disconnected) => {
+                let reason = "OpenCode 未确认受管回环服务已监听";
+                shared.set_failed(
+                    reason,
+                    "请确认 OpenCode 可执行文件有效且能以回环地址启动后重试",
+                );
+                shared.kill_child();
+                return Err(RuntimeError::NotReady(reason.to_string()));
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                let reason = "OpenCode 回环服务监听确认超时";
+                shared.set_failed(
+                    reason,
+                    "请确认 OpenCode 未被安全策略阻止，并检查是否有程序占用回环端口",
+                );
+                shared.kill_child();
+                return Err(RuntimeError::NotReady(reason.to_string()));
+            }
+        }
+    }
     loop {
-        match shared.request("GET", "/health", None, Duration::from_millis(500)) {
-            Ok(v) if v.get("status").and_then(Value::as_str) == Some("ok") => break,
-            Ok(_) => {}
+        match shared.request("GET", "/global/health", Duration::from_millis(500)) {
+            Ok(health) => {
+                let healthy = health.get("healthy").and_then(Value::as_bool);
+                match healthy {
+                    Some(true) => {
+                        let Some(version) = health.get("version").and_then(Value::as_str) else {
+                            let reason = format!(
+                                "OpenCode 健康检查缺少兼容性档案所需的版本能力（{OPENCODE_COMPATIBILITY_PROFILE}）"
+                            );
+                            shared.set_failed(
+                                &reason,
+                                "请安装稳定版 OpenCode 1.18.5 或更高的 1.x 版本后重新启动",
+                            );
+                            shared.kill_child();
+                            return Err(RuntimeError::VersionMismatch(
+                                "OpenCode 健康检查缺少版本能力".to_string(),
+                            ));
+                        };
+                        if !OpenCodeRuntime::is_compatible_version(version) {
+                            let detected = safe_version_for_reason(version).unwrap_or("格式无效");
+                            let reason = format!(
+                                "OpenCode 版本不受兼容性档案支持（RUNTIME_VERSION_MISMATCH）：检测到 {detected}，需要稳定版 {OPENCODE_MIN_SUPPORTED_VERSION} 或更高的 1.x"
+                            );
+                            shared.set_failed(
+                                &reason,
+                                "请安装稳定版 OpenCode 1.18.5 或更高的 1.x 版本后重新启动",
+                            );
+                            shared.kill_child();
+                            return Err(RuntimeError::VersionMismatch(
+                                "OpenCode 版本不符合兼容性档案".to_string(),
+                            ));
+                        }
+                        shared.set_state(RuntimeState::Ready);
+                        return Ok(OpenCodeHandle { shared });
+                    }
+                    Some(false) | None => {}
+                }
+            }
             Err(RuntimeError::Unauthorized) => {
                 shared.set_failed(
                     "OpenCode 拒绝了本次启动认证",
@@ -199,6 +469,7 @@ fn connect(
             }
             Err(_) => {}
         }
+
         if Instant::now() >= deadline {
             let reason = "OpenCode 健康检查超时：服务未在限定时间内就绪".to_string();
             shared.set_failed(
@@ -210,97 +481,13 @@ fn connect(
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-
-    // 精确版本握手：必须与锁定版本完全相等
-    let version = match shared.request("GET", "/version", None, Duration::from_secs(2)) {
-        Ok(v) => v
-            .get("version")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string(),
-        Err(e) => {
-            shared.set_failed(
-                "无法获取 OpenCode 版本信息",
-                "请查看 OpenCode 日志后重新启动运行时",
-            );
-            shared.kill_child();
-            return Err(e);
-        }
-    };
-    if version != OPENCODE_LOCKED_VERSION {
-        let reason = format!(
-            "OpenCode 版本不匹配（RUNTIME_VERSION_MISMATCH）：检测到 {version}，要求 {OPENCODE_LOCKED_VERSION}"
-        );
-        shared.set_failed(&reason, "请安装锁定版本的 OpenCode 后重新启动运行时");
-        shared.kill_child();
-        return Err(RuntimeError::VersionMismatch(format!(
-            "检测到 {version}，要求 {OPENCODE_LOCKED_VERSION}"
-        )));
-    }
-
-    shared.set_state(RuntimeState::Ready);
-    Ok(OpenCodeHandle { shared })
-}
-
-/// 事件长轮询线程：GET /events?after=n → 规范化事件流 → done 时发 TaskDone。
-fn poll_events(shared: &Arc<OcShared>) {
-    loop {
-        if shared.is_shutting_down() {
-            return;
-        }
-        let after = shared.events_cursor.load(Ordering::SeqCst);
-        let path = format!("/events?after={after}");
-        match shared.request("GET", &path, None, Duration::from_secs(30)) {
-            Ok(v) => {
-                let events = v
-                    .get("events")
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default();
-                for ev in &events {
-                    let _ = shared.tx.send(map_trace_event(ev));
-                }
-                shared
-                    .events_cursor
-                    .fetch_add(events.len() as u64, Ordering::SeqCst);
-                if v.get("done").and_then(Value::as_bool) == Some(true) {
-                    let outcome = v
-                        .get("outcome")
-                        .and_then(Value::as_str)
-                        .unwrap_or("failed")
-                        .to_string();
-                    let summary = v
-                        .get("summary")
-                        .and_then(Value::as_str)
-                        .unwrap_or("")
-                        .to_string();
-                    let _ = shared.tx.send(RuntimeEvent::TaskDone { outcome, summary });
-                    return;
-                }
-                if events.is_empty() {
-                    // 空轮询让步，避免对端立即返回空集时忙等
-                    std::thread::sleep(Duration::from_millis(50));
-                }
-            }
-            Err(_) => {
-                if shared.is_shutting_down() {
-                    return;
-                }
-                shared.set_failed(
-                    "OpenCode 事件流中断",
-                    "OpenCode 服务可能已退出；请重新启动运行时后重试任务",
-                );
-                return;
-            }
-        }
-    }
 }
 
 pub struct OpenCodeHandle {
     shared: Arc<OcShared>,
 }
 
-// 手写 Debug：端口与 token 绝不出现
+// 手写 Debug：端口和认证密码绝不出现。
 impl std::fmt::Debug for OpenCodeHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OpenCodeHandle")
@@ -310,58 +497,83 @@ impl std::fmt::Debug for OpenCodeHandle {
 }
 
 impl OpenCodeHandle {
-    /// POST /task 提交任务，并启动事件长轮询线程；过程与终局经事件通道送出。
-    pub fn run_task(&self, spec: &RunTaskSpec) -> Result<(), RuntimeError> {
+    /// 服务就绪后持续监督宿主进程。进程自行退出时，不能继续显示 ready。
+    fn monitor_child_exit(&self) {
+        let shared = Arc::downgrade(&self.shared);
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_millis(100));
+            let Some(shared) = shared.upgrade() else {
+                return;
+            };
+
+            let active = matches!(
+                *lock(&shared.state),
+                RuntimeState::Starting | RuntimeState::Ready
+            );
+            if !active {
+                return;
+            }
+
+            let exited = {
+                let mut child = lock(&shared.child);
+                child.as_mut().is_some_and(|child| child.has_exited())
+            };
+            if !exited {
+                continue;
+            }
+
+            let failure = RuntimeState::Failed {
+                reason: "OpenCode 进程已退出，运行时不再可用".to_string(),
+                recovery_hint: "请检查 OpenCode 的本地日志并重新启动运行时".to_string(),
+            };
+            let changed = {
+                let mut state = lock(&shared.state);
+                if matches!(*state, RuntimeState::Starting | RuntimeState::Ready) {
+                    *state = failure.clone();
+                    true
+                } else {
+                    false
+                }
+            };
+            if changed {
+                let _ = shared.tx.send(RuntimeEvent::State(failure));
+            }
+            shared.cleanup_runtime_dir();
+            return;
+        });
+    }
+
+    /// 本票仅实现启动兼容性档案。真实 session/message/event 协议由下一张票接入，
+    /// 不能退回旧的假设 `/task` 协议来伪造成功。
+    pub fn run_task(&self, _spec: &RunTaskSpec) -> Result<(), RuntimeError> {
         if *lock(&self.shared.state) != RuntimeState::Ready {
             return Err(RuntimeError::InvalidState);
         }
-        let body = serde_json::to_value(spec)
-            .map_err(|e| RuntimeError::Io(format!("任务参数序列化失败：{e}")))?;
-        self.shared
-            .request("POST", "/task", Some(&body), Duration::from_secs(10))?;
-        self.shared.events_cursor.store(0, Ordering::SeqCst);
-        let shared = Arc::clone(&self.shared);
-        std::thread::spawn(move || poll_events(&shared));
-        Ok(())
+        Err(RuntimeError::CapabilityUnavailable(
+            "OpenCode 真实会话尚未接入；请先确认运行时已就绪，并等待受管会话票实现".to_string(),
+        ))
     }
 
-    /// 经原生通道请求取消（POST /cancel，尽力而为）。
-    pub fn cancel_native(&self) {
-        let _ = self
-            .shared
-            .request("POST", "/cancel", None, Duration::from_secs(5));
-    }
+    /// 尚无 OpenCode session 时不存在原生取消请求；不能调用旧 `/cancel` 协议。
+    pub fn cancel_native(&self) {}
 
-    /// 优雅停止：POST /shutdown，等 grace；子进程未退出则强杀 → Forced。
+    /// OpenCode 的 dispose 只释放实例资源，不会退出 server 进程。
+    /// 请求成功后主动回收子进程才是该协议下的 Graceful；dispose 失败或超时则 Forced。
     pub fn stop(&self, grace: Duration) -> StopOutcome {
         if matches!(*lock(&self.shared.state), RuntimeState::Stopped) {
             return StopOutcome::Graceful;
         }
         self.shared.set_state(RuntimeState::Stopping);
-        let shutdown_ok = self
+        let dispose_ok = self
             .shared
-            .request("POST", "/shutdown", None, Duration::from_secs(2))
+            .request("POST", "/global/dispose", grace)
             .is_ok();
-        let outcome = {
-            let mut guard = lock(&self.shared.child);
-            match guard.as_mut() {
-                Some(child) => {
-                    if wait_exit(child.as_mut(), grace) {
-                        StopOutcome::Graceful
-                    } else {
-                        child.kill();
-                        StopOutcome::Forced
-                    }
-                }
-                // 无受监督子进程（测试注入场景）：以停止请求是否送达判定
-                None => {
-                    if shutdown_ok {
-                        StopOutcome::Graceful
-                    } else {
-                        StopOutcome::Forced
-                    }
-                }
-            }
+        self.shared.kill_child();
+        self.shared.cleanup_runtime_dir();
+        let outcome = if dispose_ok {
+            StopOutcome::Graceful
+        } else {
+            StopOutcome::Forced
         };
         self.shared.set_state(RuntimeState::Stopped);
         outcome
@@ -377,8 +589,9 @@ mod tests {
     use super::*;
     use crossbeam_channel::{unbounded, Receiver};
     use serde_json::json;
-    use std::collections::VecDeque;
-    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    const PASSWORD: &str = "test-password-not-for-output";
 
     fn short_opts() -> Timeouts {
         Timeouts {
@@ -388,7 +601,6 @@ mod tests {
         }
     }
 
-    /// tiny_http 临时假服务：校验 Bearer token，按闭包应答。
     struct TestServer {
         port: u16,
         seen: Arc<Mutex<Vec<String>>>,
@@ -399,52 +611,53 @@ mod tests {
     impl Drop for TestServer {
         fn drop(&mut self) {
             self.stop.store(true, Ordering::SeqCst);
-            if let Some(j) = self.join.take() {
-                let _ = j.join();
+            if let Some(join) = self.join.take() {
+                let _ = join.join();
             }
         }
     }
 
-    fn spawn_server<F>(expected_token: &str, handler: F) -> TestServer
+    /// 临时 OpenCode Server：仅接受文档规定的 Basic 认证，不记录认证内容。
+    fn spawn_server<F>(expected_password: &str, handler: F) -> TestServer
     where
         F: Fn(&str, &str) -> (u16, String) + Send + 'static,
     {
         let server = tiny_http::Server::http(("127.0.0.1", 0)).expect("无法启动假服务");
         let port = match server.server_addr() {
-            tiny_http::ListenAddr::IP(addr) => addr.port(),
+            tiny_http::ListenAddr::IP(address) => address.port(),
             #[allow(unreachable_patterns)]
             _ => panic!("假服务必须绑定 IP"),
         };
         let seen = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
-        let expected = format!("Bearer {expected_token}");
+        let expected = basic_authorization(expected_password);
         let seen_bg = Arc::clone(&seen);
         let stop_bg = Arc::clone(&stop);
         let join = std::thread::spawn(move || {
             while !stop_bg.load(Ordering::SeqCst) {
-                let req = match server.recv_timeout(Duration::from_millis(50)) {
-                    Ok(Some(r)) => r,
+                let request = match server.recv_timeout(Duration::from_millis(50)) {
+                    Ok(Some(request)) => request,
                     _ => continue,
                 };
-                let method = req.method().as_str().to_string();
-                let url = req.url().to_string();
-                let auth = req
-                    .headers()
-                    .iter()
-                    .find(|h| h.field.equiv("Authorization"))
-                    .map(|h| h.value.as_str().to_string());
+                let method = request.method().as_str().to_string();
+                let url = request.url().to_string();
+                let authorized = request.headers().iter().any(|header| {
+                    header.field.equiv("Authorization") && header.value.as_str() == expected
+                });
                 seen_bg.lock().unwrap().push(format!("{method} {url}"));
-                let (code, body) = if auth.as_deref() != Some(expected.as_str()) {
-                    (401, "{\"error\":\"unauthorized\"}".to_string())
-                } else {
+                let (status, body) = if authorized {
                     handler(&method, &url)
+                } else {
+                    (401, json!({"error": "unauthorized"}).to_string())
                 };
-                let header =
-                    tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
-                        .unwrap();
-                let _ = req.respond(
+                let header = tiny_http::Header::from_bytes(
+                    &b"Content-Type"[..],
+                    &b"application/json"[..],
+                )
+                .unwrap();
+                let _ = request.respond(
                     tiny_http::Response::from_string(body)
-                        .with_status_code(code)
+                        .with_status_code(status)
                         .with_header(header),
                 );
             }
@@ -457,80 +670,68 @@ mod tests {
         }
     }
 
-    fn happy_handler(method: &str, url: &str) -> (u16, String) {
-        match (method, url) {
-            ("GET", "/health") => (200, json!({"status": "ok"}).to_string()),
-            ("GET", "/version") => (200, json!({"version": OPENCODE_LOCKED_VERSION}).to_string()),
-            ("POST", "/task") => (200, json!({"accepted": true}).to_string()),
-            ("POST", "/cancel") => (200, json!({"cancelled": true}).to_string()),
-            ("POST", "/shutdown") => (200, json!({"stopping": true}).to_string()),
+    fn healthy_handler(method: &str, path: &str) -> (u16, String) {
+        match (method, path) {
+            ("GET", "/global/health") => (
+                200,
+                json!({"healthy": true, "version": OPENCODE_MIN_SUPPORTED_VERSION}).to_string(),
+            ),
+            ("POST", "/global/dispose") => (200, json!({}).to_string()),
             _ => (404, json!({"error": "not_found"}).to_string()),
         }
     }
 
-    fn wait_event(
-        rx: &Receiver<RuntimeEvent>,
-        pred: impl Fn(&RuntimeEvent) -> bool,
-    ) -> RuntimeEvent {
+    fn wait_event(rx: &Receiver<RuntimeEvent>, pred: impl Fn(&RuntimeEvent) -> bool) -> RuntimeEvent {
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
             let remaining = deadline
                 .checked_duration_since(Instant::now())
                 .expect("等待目标事件超时");
-            let ev = rx.recv_timeout(remaining).expect("事件通道超时或断开");
-            if pred(&ev) {
-                return ev;
+            let event = rx.recv_timeout(remaining).expect("事件通道超时或断开");
+            if pred(&event) {
+                return event;
             }
         }
     }
 
-    const TOKEN: &str = "aa11bb22cc33dd44ee55ff66aa77bb88cc99dd00ee11ff22aa33bb44cc55dd66";
-
     #[test]
-    fn start_ready_when_health_and_version_ok() {
-        let server = spawn_server(TOKEN, happy_handler);
+    fn start_ready_after_basic_authenticated_real_health_check() {
+        let server = spawn_server(PASSWORD, healthy_handler);
         let (tx, rx) = unbounded();
-        let handle = connect(server.port, TOKEN.to_string(), None, tx, short_opts())
-            .expect("健康 + 版本一致应就绪");
+        let handle = connect(server.port, PASSWORD.to_string(), None, tx, short_opts())
+            .expect("Basic 认证和健康检查通过后应就绪");
         assert_eq!(handle.state(), RuntimeState::Ready);
-        wait_event(&rx, |e| matches!(e, RuntimeEvent::State(RuntimeState::Ready)));
-        let seen = server.seen.lock().unwrap().clone();
-        assert!(seen.iter().any(|s| s == "GET /health"));
-        assert!(seen.iter().any(|s| s == "GET /version"));
+        wait_event(&rx, |event| matches!(event, RuntimeEvent::State(RuntimeState::Ready)));
+        assert!(
+            server
+                .seen
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|entry| entry == "GET /global/health"),
+            "启动必须调用 OpenCode 的真实健康端点"
+        );
     }
 
     #[test]
-    fn health_failure_times_out_as_failed() {
-        let server = spawn_server(TOKEN, |method, url| match (method, url) {
-            ("GET", "/health") => (500, "{\"status\":\"error\"}".to_string()),
-            _ => (404, "{}".to_string()),
-        });
-        let (tx, _rx) = unbounded();
-        let err = connect(server.port, TOKEN.to_string(), None, tx.clone(), short_opts())
-            .expect_err("健康检查失败应报错");
-        assert!(matches!(err, RuntimeError::NotReady(_)));
-        assert!(format!("{err}").contains("健康检查"));
-    }
-
-    #[test]
-    fn version_mismatch_fails_with_marker() {
-        let server = spawn_server(TOKEN, |method, url| match (method, url) {
-            ("GET", "/health") => (200, json!({"status": "ok"}).to_string()),
-            ("GET", "/version") => (200, json!({"version": "0.9.9"}).to_string()),
+    fn unhealthy_health_response_times_out_as_failed() {
+        let server = spawn_server(PASSWORD, |method, path| match (method, path) {
+            ("GET", "/global/health") => (200, json!({"healthy": false}).to_string()),
             _ => (404, "{}".to_string()),
         });
         let (tx, rx) = unbounded();
-        let err = connect(server.port, TOKEN.to_string(), None, tx, short_opts())
-            .expect_err("版本不一致必须失败");
-        assert!(matches!(err, RuntimeError::VersionMismatch(_)));
-        assert!(format!("{err}").contains("RUNTIME_VERSION_MISMATCH"));
-        let ev = wait_event(&rx, |e| {
-            matches!(e, RuntimeEvent::State(RuntimeState::Failed { .. }))
+        let error = connect(server.port, PASSWORD.to_string(), None, tx, short_opts())
+            .expect_err("未健康的服务不能就绪");
+        assert!(matches!(error, RuntimeError::NotReady(_)));
+        let event = wait_event(&rx, |event| {
+            matches!(event, RuntimeEvent::State(RuntimeState::Failed { .. }))
         });
-        match ev {
-            RuntimeEvent::State(RuntimeState::Failed { reason, recovery_hint }) => {
-                assert!(reason.contains("RUNTIME_VERSION_MISMATCH"), "reason={reason}");
-                assert!(reason.contains("0.9.9"));
+        match event {
+            RuntimeEvent::State(RuntimeState::Failed {
+                reason,
+                recovery_hint,
+            }) => {
+                assert!(reason.contains("健康检查"));
                 assert!(!recovery_hint.is_empty());
             }
             _ => unreachable!(),
@@ -538,165 +739,240 @@ mod tests {
     }
 
     #[test]
-    fn unauthorized_fails_fast() {
-        let server = spawn_server("expected-token-that-wont-match", happy_handler);
-        let (tx, rx) = unbounded();
-        let started = Instant::now();
-        let err = connect(server.port, TOKEN.to_string(), None, tx, short_opts())
-            .expect_err("401 必须失败关闭");
-        assert!(matches!(err, RuntimeError::Unauthorized));
-        // 401 应立即失败，而不是轮询到就绪超时
-        assert!(started.elapsed() < Duration::from_millis(700));
-        wait_event(&rx, |e| {
-            matches!(e, RuntimeEvent::State(RuntimeState::Failed { .. }))
-        });
-    }
-
-    #[test]
-    fn run_task_streams_events_then_done() {
-        let scripted: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::from([
-            json!({
-                "events": [
-                    {"kind": "phase", "text": "planning", "detail": {}},
-                    {"kind": "verification", "text": "", "detail": {"status": "passed", "detail": "验证通过"}}
-                ],
-                "done": false
-            })
-            .to_string(),
-            json!({"events": [], "done": true, "outcome": "finished", "summary": "任务完成"}).to_string(),
-        ])));
-        let scripted_bg = Arc::clone(&scripted);
-        let server = spawn_server(TOKEN, move |method, url| {
-            if method == "GET" && url.starts_with("/events") {
-                let body = scripted_bg
-                    .lock()
-                    .unwrap()
-                    .pop_front()
-                    .unwrap_or_else(|| json!({"events": [], "done": true, "outcome": "finished", "summary": ""}).to_string());
-                return (200, body);
-            }
-            happy_handler(method, url)
+    fn incompatible_health_version_fails_closed_with_recovery_hint() {
+        let server = spawn_server(PASSWORD, |method, path| match (method, path) {
+            ("GET", "/global/health") => (200, json!({"healthy": true, "version": "1.18.4"}).to_string()),
+            _ => (404, "{}".to_string()),
         });
         let (tx, rx) = unbounded();
-        let handle = connect(server.port, TOKEN.to_string(), None, tx, short_opts())
-            .expect("应就绪");
-        handle
-            .run_task(&RunTaskSpec {
-                instructions: "实现功能 X".into(),
-                files: vec!["src/x.rs".into()],
-                base_diff: None,
-                notes: None,
-            })
-            .expect("run_task 应成功");
-
-        let ev = wait_event(&rx, |e| matches!(e, RuntimeEvent::Trace(_)));
-        match ev {
-            RuntimeEvent::Trace(item) => assert_eq!(item.kind, "phase"),
-            _ => unreachable!(),
-        }
-        let ev = wait_event(&rx, |e| matches!(e, RuntimeEvent::Verification { .. }));
-        match ev {
-            RuntimeEvent::Verification { status, detail } => {
-                assert_eq!(status, "passed");
-                assert_eq!(detail, "验证通过");
+        let error = connect(server.port, PASSWORD.to_string(), None, tx, short_opts())
+            .expect_err("低于档案范围的版本必须失败");
+        assert!(matches!(error, RuntimeError::VersionMismatch(_)));
+        let event = wait_event(&rx, |event| {
+            matches!(event, RuntimeEvent::State(RuntimeState::Failed { .. }))
+        });
+        match event {
+            RuntimeEvent::State(RuntimeState::Failed {
+                reason,
+                recovery_hint,
+            }) => {
+                assert!(reason.contains("兼容性档案"));
+                assert!(reason.contains("1.18.4"));
+                assert!(!recovery_hint.is_empty());
             }
             _ => unreachable!(),
         }
-        let ev = wait_event(&rx, |e| matches!(e, RuntimeEvent::TaskDone { .. }));
-        match ev {
-            RuntimeEvent::TaskDone { outcome, summary } => {
-                assert_eq!(outcome, "finished");
-                assert_eq!(summary, "任务完成");
-            }
-            _ => unreachable!(),
-        }
-        // 游标推进：第二次长轮询必须携带 after=2
-        let deadline = Instant::now() + Duration::from_secs(3);
-        loop {
-            let seen = server.seen.lock().unwrap().clone();
-            if seen.iter().any(|s| s == "GET /events?after=0")
-                && seen.iter().any(|s| s == "GET /events?after=2")
-            {
-                break;
-            }
-            assert!(Instant::now() < deadline, "事件游标未按已消费数推进：{seen:?}");
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        assert!(server.seen.lock().unwrap().iter().any(|s| s == "POST /task"));
-    }
-
-    #[test]
-    fn cancel_native_posts_cancel() {
-        let server = spawn_server(TOKEN, happy_handler);
-        let (tx, _rx) = unbounded();
-        let handle = connect(server.port, TOKEN.to_string(), None, tx, short_opts())
-            .expect("应就绪");
-        handle.cancel_native();
-        assert!(server.seen.lock().unwrap().iter().any(|s| s == "POST /cancel"));
-    }
-
-    #[test]
-    fn stop_posts_shutdown_gracefully() {
-        let server = spawn_server(TOKEN, happy_handler);
-        let (tx, _rx) = unbounded();
-        let handle = connect(server.port, TOKEN.to_string(), None, tx, short_opts())
-            .expect("应就绪");
-        let outcome = handle.stop(Duration::from_millis(500));
-        assert_eq!(outcome, StopOutcome::Graceful);
-        assert_eq!(handle.state(), RuntimeState::Stopped);
         assert!(
-            server.seen.lock().unwrap().iter().any(|s| s == "POST /shutdown"),
-            "停止必须先走优雅停止请求路径"
+            !server
+                .seen
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|entry| entry == "GET /version"),
+            "不得退回旧版本端点"
         );
     }
 
     #[test]
-    fn stop_forces_kill_when_child_hangs() {
-        use crate::process::testchild::TestChild;
-        let server = spawn_server(TOKEN, |method, url| match (method, url) {
-            ("GET", "/health") => (200, json!({"status": "ok"}).to_string()),
-            ("GET", "/version") => (200, json!({"version": OPENCODE_LOCKED_VERSION}).to_string()),
-            // 模拟挂死：接受 shutdown 请求但进程永不退出
-            ("POST", "/shutdown") => (200, "{}".to_string()),
+    fn missing_health_version_capability_fails_closed() {
+        let server = spawn_server(PASSWORD, |method, path| match (method, path) {
+            ("GET", "/global/health") => (200, json!({"healthy": true}).to_string()),
             _ => (404, "{}".to_string()),
+        });
+        let (tx, rx) = unbounded();
+        let error = connect(server.port, PASSWORD.to_string(), None, tx, short_opts())
+            .expect_err("缺少健康版本能力必须失败");
+        assert!(matches!(error, RuntimeError::VersionMismatch(_)));
+        let event = wait_event(&rx, |event| {
+            matches!(event, RuntimeEvent::State(RuntimeState::Failed { .. }))
+        });
+        match event {
+            RuntimeEvent::State(RuntimeState::Failed { reason, .. }) => {
+                assert!(reason.contains("缺少兼容性档案"));
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn basic_authentication_failure_fails_fast() {
+        let server = spawn_server("a-different-password", healthy_handler);
+        let (tx, rx) = unbounded();
+        let started = Instant::now();
+        let error = connect(server.port, PASSWORD.to_string(), None, tx, short_opts())
+            .expect_err("认证失败必须失败关闭");
+        assert!(matches!(error, RuntimeError::Unauthorized));
+        assert!(started.elapsed() < Duration::from_millis(700));
+        wait_event(&rx, |event| {
+            matches!(event, RuntimeEvent::State(RuntimeState::Failed { .. }))
+        });
+    }
+
+    #[test]
+    fn legacy_task_protocol_is_not_a_production_fallback() {
+        let server = spawn_server(PASSWORD, healthy_handler);
+        let (tx, _rx) = unbounded();
+        let handle = connect(server.port, PASSWORD.to_string(), None, tx, short_opts())
+            .expect("应就绪");
+        let error = handle
+            .run_task(&RunTaskSpec {
+                instructions: "实现功能 X".into(),
+                files: vec![],
+                base_diff: None,
+                notes: None,
+            })
+            .expect_err("会话能力未接入时必须明确拒绝");
+        assert!(matches!(error, RuntimeError::CapabilityUnavailable(_)));
+        handle.cancel_native();
+        assert_eq!(handle.stop(Duration::from_millis(100)), StopOutcome::Graceful);
+        let seen = server.seen.lock().unwrap().clone();
+        for legacy_path in ["/task", "/events", "/cancel", "/shutdown", "/health", "/version"] {
+            assert!(
+                !seen.iter().any(|entry| entry.contains(legacy_path)),
+                "不得请求旧假设协议端点 {legacy_path}：{seen:?}"
+            );
+        }
+        assert!(seen.iter().any(|entry| entry == "POST /global/dispose"));
+    }
+
+    #[test]
+    fn stop_forces_kill_when_global_dispose_fails() {
+        use crate::process::testchild::TestChild;
+
+        let server = spawn_server(PASSWORD, |method, path| match (method, path) {
+            ("GET", "/global/health") => (
+                200,
+                json!({"healthy": true, "version": OPENCODE_MIN_SUPPORTED_VERSION}).to_string(),
+            ),
+            ("POST", "/global/dispose") => (500, json!({"error": "dispose_failed"}).to_string()),
+            _ => (404, json!({"error": "not_found"}).to_string()),
         });
         let child = TestChild::new();
         let (tx, _rx) = unbounded();
         let handle = connect(
             server.port,
-            TOKEN.to_string(),
+            PASSWORD.to_string(),
             Some(Box::new(child.clone())),
             tx,
             short_opts(),
         )
         .expect("应就绪");
-        let outcome = handle.stop(Duration::from_millis(150));
-        assert_eq!(outcome, StopOutcome::Forced);
-        assert!(child.killed.load(Ordering::SeqCst), "超时后必须强杀");
+        assert_eq!(handle.stop(Duration::from_millis(150)), StopOutcome::Forced);
+        assert!(child.killed.load(Ordering::SeqCst), "dispose 失败后必须回收子进程");
     }
 
     #[test]
-    fn debug_and_errors_never_leak_port_or_token() {
-        let server = spawn_server(TOKEN, happy_handler);
+    fn successful_global_dispose_reclaims_child_as_graceful() {
+        use crate::process::testchild::TestChild;
+
+        let server = spawn_server(PASSWORD, healthy_handler);
+        let child = TestChild::new();
         let (tx, _rx) = unbounded();
-        let handle = connect(server.port, TOKEN.to_string(), None, tx, short_opts())
-            .expect("应就绪");
-        let dbg = format!("{handle:?}");
-        assert!(!dbg.contains(TOKEN), "Debug 不得包含 token");
-        assert!(!dbg.contains(&server.port.to_string()), "Debug 不得包含端口");
+        let handle = connect(
+            server.port,
+            PASSWORD.to_string(),
+            Some(Box::new(child.clone())),
+            tx,
+            short_opts(),
+        )
+        .expect("应就绪");
 
-        // 错误 message 同样不得携带端口/token（用一个必然失败的请求验证）
-        let err = handle
-            .shared
-            .request("GET", "/no-such-path", None, Duration::from_millis(300))
-            .expect_err("404 应报错");
-        let msg = format!("{err}");
-        assert!(!msg.contains(TOKEN));
-        assert!(!msg.contains(&server.port.to_string()));
+        assert_eq!(handle.stop(Duration::from_millis(150)), StopOutcome::Graceful);
+        assert!(child.killed.load(Ordering::SeqCst));
     }
 
     #[test]
-    fn locked_version_constant_is_exact() {
-        assert_eq!(OPENCODE_LOCKED_VERSION, "0.4.2");
+    fn debug_and_errors_never_leak_connection_credentials() {
+        let server = spawn_server(PASSWORD, healthy_handler);
+        let (tx, _rx) = unbounded();
+        let handle = connect(server.port, PASSWORD.to_string(), None, tx, short_opts())
+            .expect("应就绪");
+        let debug = format!("{handle:?}");
+        assert!(!debug.contains(PASSWORD));
+        assert!(!debug.contains(&server.port.to_string()));
+
+        let error = handle
+            .shared
+            .request("GET", "/not-found", Duration::from_millis(300))
+            .expect_err("404 应报错");
+        let message = format!("{error}");
+        assert!(!message.contains(PASSWORD));
+        assert!(!message.contains(&server.port.to_string()));
+        assert!(!message.contains("Authorization"));
+    }
+
+    #[test]
+    fn isolated_state_overrides_global_opencode_locations() {
+        let mut env = HashMap::from([
+            ("USERPROFILE".to_string(), "C:\\Users\\developer".to_string()),
+            ("PATH".to_string(), "C:\\Windows".to_string()),
+        ]);
+        let runtime_dir = isolated_opencode_state(&mut env)
+            .expect("OpenCode 启动必须能创建隔离状态目录");
+
+        for (variable, _) in OPENCODE_ISOLATED_STATE_DIRS {
+            let path = std::path::PathBuf::from(
+                env.get(variable)
+                    .expect("隔离环境必须覆盖每个 OpenCode 状态根"),
+            );
+            assert!(path.starts_with(runtime_dir.path()));
+            assert!(path.is_dir());
+        }
+        assert_eq!(env["USERPROFILE"], "C:\\Users\\developer");
+    }
+
+    #[test]
+    fn compatibility_profile_accepts_stable_supported_opencode_1x_versions() {
+        for version in ["1.18.5", "1.18.6", "1.25.0", "1.99.42"] {
+            assert!(
+                OpenCodeRuntime::is_compatible_version(version),
+                "{version} 应通过 OpenCode 1.x 兼容性档案"
+            );
+        }
+    }
+
+    #[test]
+    fn compatibility_profile_rejects_versions_outside_the_known_stable_1x_range() {
+        for version in ["1.18.4", "1.18.5-beta.1", "2.0.0", "v1.18.5", "1.18", "unknown"] {
+            assert!(
+                !OpenCodeRuntime::is_compatible_version(version),
+                "{version} 不得被当作已知兼容档案"
+            );
+        }
+    }
+
+    #[test]
+    fn ready_line_requires_the_expected_loopback_listener() {
+        assert_eq!(
+            listening_url("opencode server listening on http://127.0.0.1:43123"),
+            Some("http://127.0.0.1:43123")
+        );
+        assert_eq!(
+            listening_url("opencode server listening on http://localhost:43123"),
+            Some("http://localhost:43123")
+        );
+        assert_eq!(listening_url("unrelated output"), None);
+    }
+
+    #[test]
+    fn mismatched_ready_line_fails_before_health_authentication() {
+        let (ready_tx, ready_rx) = crossbeam_channel::bounded(1);
+        ready_tx.send(ReadyLine::AddressMismatch).unwrap();
+        let (tx, rx) = unbounded();
+
+        let error = connect_after_ready_line(
+            43123,
+            PASSWORD.to_string(),
+            None,
+            tx,
+            short_opts(),
+            Some(ready_rx),
+            None,
+        )
+        .expect_err("监听地址不一致时不得发送健康检查");
+        assert!(matches!(error, RuntimeError::NotReady(_)));
+        wait_event(&rx, |event| {
+            matches!(event, RuntimeEvent::State(RuntimeState::Failed { .. }))
+        });
     }
 }

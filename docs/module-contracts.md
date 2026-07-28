@@ -97,12 +97,14 @@ pub trait CredentialStore: Send + Sync {
 pub struct WindowsCredentialStore;   // keyring(windows-native)。service 固定 "HaloStudio"
 pub struct CredentialError { … }     // 变体：StoreUnavailable / NotFound / Backend(String)——message 不含明文
 
-// LaunchConfig 为 config 自有类型（字段与 IPC 文档 LaunchConfigInput 同构），由 halo-sidecar 映射
-pub struct LaunchConfig { pub id: String, pub name: String, pub agent: AgentKind, pub executable_path: String, pub model: String, pub thinking_level: ThinkingLevel, pub credential_ref: Option<String>, pub extra_args: Vec<String>, pub env_overrides: HashMap<String,String>, pub created_at: String, pub updated_at: String }
-pub fn validate_launch_config(cfg: &LaunchConfig) -> Result<(), ConfigError>;  // env_overrides 违白名单 => EnvNotWhitelisted
+// LaunchConfig 为 config 自有类型（字段与 IPC 文档 LaunchConfigInput 同构），由 halo-sidecar 映射。
+// 凭据只保存引用名；不接受任意启动参数、凭据环境变量名或环境覆盖。
+pub struct LaunchConfig { pub id: String, pub name: String, pub agent: AgentKind, pub executable_path: String, pub model: String, pub thinking_level: ThinkingLevel, pub credential_ref: Option<String>, pub created_at: String, pub updated_at: String }
+pub fn validate_launch_config(cfg: &LaunchConfig) -> Result<(), ConfigError>;
+pub fn credential_env_var_for(agent: AgentKind, model: &str) -> Result<&'static str, ConfigError>; // OpenCode provider/model -> 固定白名单变量
 
 pub const ENV_WHITELIST: &[&str] = &["SYSTEMROOT","WINDIR","PATH","TEMP","TMP","USERPROFILE","COMSPEC","PATHEXT","SystemDrive","NUMBER_OF_PROCESSORS","PROCESSOR_ARCHITECTURE"];
-pub fn build_child_env(host: &HashMap<String,String>, overrides: &HashMap<String,String>, injected: Vec<(String, Secret)>) -> Result<HashMap<String,String>, ConfigError>;
+pub fn build_child_env(host: &HashMap<String,String>, injected: Vec<(String, Secret)>) -> HashMap<String,String>;
 
 // 配置事务（对 Pi/OpenCode 原生配置文件；与 Agent 任务完全无关）
 pub struct ConfigTransaction { … }
@@ -114,7 +116,7 @@ impl ConfigTransaction {
 }
 ```
 
-**测试**：内存 `FakeCredentialStore`（含 available=false 模式）验证失败关闭；build_child_env 拒绝白名单外变量、注入变量只在返回 map 中出现一次；事务的冲突/原子写/回滚（tempfile）；`format!("{:?}", secret)` 不含明文。
+**测试**：内存 `FakeCredentialStore`（含 available=false 模式）验证失败关闭；build_child_env 仅透传白名单、注入变量只在返回 map 中出现一次；事务的冲突/原子写/回滚（tempfile）；`format!("{:?}", secret)` 不含明文。
 
 ## 4. sidecar/crates/halo-store —— 本地持久化（SQLite）
 
@@ -152,23 +154,24 @@ impl Store {
 **适配器协议（本项目的权威定义，halo-testkit 假进程按此实现）**：
 
 - Pi：`<exe> --rpc` 后 stdio JSONL。探测 `<exe> --version` → 首行 semver。就绪：发 `{"id":1,"method":"get_state"}` 期待 `{"id":1,"result":{"state":"idle"}}`（超时默认 10s，可注入）。任务：`{"id":N,"method":"run_task","params":{instructions,files,base_diff,notes}}`；Pi 以 `{"method":"event","params":{TraceItem 同构}}` 流式通知，`kind` 含 phase/agent_note/file_hint/action_request/verification，最后 `{"id":N,"result":{"outcome":"finished"|"failed","summary":…}}`。取消：`{"id":M,"method":"cancel"}` → Pi 应结束 run_task。EOF/坏帧 → Failed{reason}。
-- OpenCode：锁定版本常量 `pub const OPENCODE_LOCKED_VERSION: &str = "0.4.2";`。启动 `<exe> serve --hostname 127.0.0.1 --port <p>`，`p` 由 Sidecar 选空闲端口；每次启动生成 32 字节随机 hex token，经环境变量 `HALO_OC_TOKEN` 传入；所有 HTTP 请求带 `Authorization: Bearer <token>`。健康 `GET /health`→200 `{"status":"ok"}`；版本 `GET /version`→`{"version":"0.4.2"}` 必须与锁定值**完全相等**，否则 Failed{RUNTIME_VERSION_MISMATCH}。任务 `POST /task`；事件长轮询 `GET /events?after=<n>`（返回 `{"events":[…],"done":bool,"outcome":…}`）；取消 `POST /cancel`；优雅停止 `POST /shutdown`，超时后 kill。
+- OpenCode：兼容性档案为 `OPENCODE_COMPATIBILITY_PROFILE = "opencode-server-1.x"`，只接受稳定 `>= 1.18.5, < 2.0.0`；未知主版本、预发布或畸形版本均失败关闭。模型以受支持的 `provider/model` 形式选择，Sidecar 用内置白名单映射把凭据引用短暂注入相应的真实 Provider 环境变量；不接受任意变量名，未知 Provider 失败关闭。启动 `<exe> serve --hostname 127.0.0.1 --port <p>`，`p` 由 Sidecar 选空闲端口。每次启动生成私有随机密码，仅以 `OPENCODE_SERVER_PASSWORD` 注入受管进程；全部 HTTP 请求以用户名 `opencode` 使用 Basic 认证。就绪请求为 `GET /global/health`，必须返回 `{"healthy":true,"version":"…"}`，并由该响应的版本验证兼容档案；认证失败、非健康响应、缺少版本、版本不兼容或就绪后 server 进程退出均记录为 `Failed { reason, recovery_hint }`，不得伪造在线状态。OpenCode 的真实 session/message/event 协议尚不属于本票：`OpenCodeHandle::run_task` 返回 `CapabilityUnavailable`，生产路径不得保留或调用旧的任务、事件、取消端点。停止先请求 `POST /global/dispose`；dispose 仅释放实例资源，Sidecar 仍显式结束 server 子进程。请求成功返回 `Graceful`，请求失败或超时返回 `Forced`。端口、认证用户名、密码与 Authorization 值只存于私有句柄，绝不进入 Debug、错误、事件、IPC、日志或存储。
+- OpenCode 运行隔离：运行时在私有临时目录中创建配置、数据、缓存和状态根，并以 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_CACHE_HOME`、`XDG_STATE_HOME` 注入每次启动；这些目录由私有运行时句柄持有，不会复用用户全局 OpenCode 状态。
 
 ```rust
 pub enum RuntimeState { NotProbed, Probing, Starting, Ready, Failed { reason: String, recovery_hint: String }, Stopping, Stopped }
 pub struct RuntimeTraceItem { pub kind: String, pub text: String, pub detail: serde_json::Value }   // runtime 自有类型；sidecar 映射为契约 TraceItem
 pub enum RuntimeEvent { State(RuntimeState), Trace(RuntimeTraceItem), ActionRequest { request_id: String, kind: String, prompt: String }, Verification { status: String, detail: String }, TaskDone { outcome: String, summary: String } }
-pub struct LaunchCmd { pub exe: String, pub args: Vec<String>, pub env: HashMap<String,String>, pub cwd: String } // env 已由 halo-config 构好
+pub struct LaunchCmd { pub exe: String, pub env: HashMap<String,String>, pub cwd: String } // env 已由 halo-config 构好
 
 pub struct RunTaskSpec { pub instructions: String, pub files: Vec<String>, pub base_diff: Option<String>, pub notes: Option<String> }  // runtime 自有类型
 pub struct PiRuntime;   impl PiRuntime   { pub fn probe(exe:&str)->Result<String,RuntimeError>; pub fn start(cmd:LaunchCmd, tx:Sender<RuntimeEvent>, opts:Timeouts)->Result<PiHandle,RuntimeError>; }
 pub struct PiHandle;    impl PiHandle    { pub fn run_task(&self, spec:&RunTaskSpec)->Result<(),RuntimeError>; pub fn cancel_native(&self); pub fn stop(&self, grace:Duration)->StopOutcome; pub fn state(&self)->RuntimeState; }
-pub struct OpenCodeRuntime / OpenCodeHandle;  // 同构 API；内部持有端口+token，**绝不**出现在任何公开 getter/Debug 中
+pub struct OpenCodeRuntime / OpenCodeHandle;  // 同构启动/停止 API；内部持有端口和认证信息，**绝不**出现在任何公开 getter/Debug 中
 pub enum StopOutcome { Graceful, Forced }
 pub struct Timeouts { pub ready: Duration, pub cancel_grace: Duration, pub shutdown_grace: Duration } // Default 10s/10s/5s
 ```
 
-**测试**：不 spawn 真进程的单元测试用 transport trait 注入内存管道（分帧、乱序 id 响应、EOF、坏 JSON）；OpenCode 用 `tiny_http` 起临时假服务测健康/版本不匹配/401。真实子进程集成测试放 `sidecar/tests/`（用 halo-testkit 的 bin）。
+**测试**：Pi 的不 spawn 真进程单元测试用 transport trait 注入内存管道（分帧、乱序 id 响应、EOF、坏 JSON）；OpenCode 用临时 HTTP 服务覆盖 Basic 认证、`/global/health`、版本不兼容、缺少版本与认证失败，并断言认证信息不泄漏。真实子进程集成测试放 `sidecar/tests/`（用 halo-testkit 的 bin）；还必须覆盖 OpenCode 的 `task.create` 返回能力不可用，确认不存在旧协议回退。
 
 ## 6. sidecar/crates/halo-sidecar —— 可执行入口
 
@@ -194,8 +197,7 @@ Git 基线/关联变更算法（锁定）：
 
 bins：`fake-pi`、`fake-opencode`，严格实现第 5 节适配器协议。行为经环境变量脚本化：
 `FAKE_PI_MODE` = `happy` | `not_ready`(get_state 永不回) | `garbage`(输出坏帧) | `crash_mid_task` | `hang_on_cancel`(忽略 cancel，验证强杀) | `action_request`(中途发权限请求) | `verify_fail`；`FAKE_PI_VERSION` 覆盖版本输出。
-`FAKE_OC_MODE` = `happy` | `unhealthy` | `wrong_version` | `bad_token`(401) | `exit_early` | `hang_on_shutdown`；假服务必须校验 Bearer token 且只绑 127.0.0.1。
-happy 模式产出固定脚本：phase(planning→editing→verifying)、写一个真实文件（cwd 下 `hello_from_agent.txt`）、verification passed、outcome finished —— 集成测试据此断言真实文件变更与证据。
+`FAKE_OC_MODE` = `happy` | `unhealthy` | `old_version` | `wrong_version` | `major_version` | `malformed_version` | `pre_release_version` | `missing_health_version` | `bad_auth`(401) | `wrong_ready_address` | `missing_ready_line` | `exit_early` | `dispose_failure` | `hang_on_dispose`；假服务必须只绑定 `127.0.0.1`，校验 `OPENCODE_SERVER_PASSWORD` 对应的 Basic 认证，并实现 `GET /global/health` 与 `POST /global/dispose`。本票的 happy 仅证明 OpenCode 真实启动、认证、健康与停止闭环；不提供旧任务、事件或取消端点，也不伪造任务完成。
 
 ## 8. app/halo_studio —— PySide6/QML
 

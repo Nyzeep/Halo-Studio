@@ -17,7 +17,7 @@ use crate::records::{
 const TERMINAL_STATES: [&str; 5] = ["accepted", "rejected", "cancelled", "failed", "interrupted"];
 
 /// 内嵌迁移脚本：新版本只允许在数组尾部追加，已发布条目不得修改。
-const MIGRATIONS: &[&str] = &[MIGRATION_V1, MIGRATION_V2, MIGRATION_V3];
+const MIGRATIONS: &[&str] = &[MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4];
 
 const MIGRATION_V1: &str = r#"
 CREATE TABLE trust_records (
@@ -123,6 +123,34 @@ const MIGRATION_V3: &str = r#"
 ALTER TABLE tasks ADD COLUMN manual_edit_paths TEXT NOT NULL DEFAULT '[]';
 "#;
 
+// v4 收紧启动配置：历史上的任意参数和环境覆盖会成为启动注入通道，迁移时只复制
+// 可执行文件、模型、思考级别和凭据引用等安全字段。
+const MIGRATION_V4: &str = r#"
+CREATE TABLE launch_configs_v4 (
+    config_id       TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    agent           TEXT NOT NULL,
+    executable_path TEXT NOT NULL,
+    model           TEXT NOT NULL,
+    thinking_level  TEXT NOT NULL,
+    credential_ref  TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+
+INSERT INTO launch_configs_v4 (
+    config_id, name, agent, executable_path, model, thinking_level,
+    credential_ref, created_at, updated_at
+)
+SELECT
+    config_id, name, agent, executable_path, model, thinking_level,
+    credential_ref, created_at, updated_at
+FROM launch_configs;
+
+DROP TABLE launch_configs;
+ALTER TABLE launch_configs_v4 RENAME TO launch_configs;
+"#;
+
 pub struct Store {
     conn: Mutex<Connection>,
     limits: StoreLimits,
@@ -138,6 +166,9 @@ impl Store {
         }
         let mut conn = Connection::open(path)?;
         conn.busy_timeout(Duration::from_secs(5))?;
+        // 启动配置曾允许任意环境覆盖。迁移删除这些列时必须擦除旧页，不能只让
+        // SQLite 将其标记为空闲，否则历史明文值仍可能留在数据库文件中。
+        conn.execute_batch("PRAGMA secure_delete=ON")?;
         // WAL：本地单进程多线程访问下的稳妥默认（该 PRAGMA 会返回一行，须用查询而非 execute）
         let _mode: String = conn.query_row("PRAGMA journal_mode=WAL", [], |row| row.get(0))?;
         migrate(&mut conn)?;
@@ -215,7 +246,7 @@ impl Store {
         let conn = self.conn();
         let mut stmt = conn.prepare(
             "SELECT config_id, name, agent, executable_path, model, thinking_level,
-                    credential_ref, extra_args, env_overrides, created_at, updated_at
+                    credential_ref, created_at, updated_at
              FROM launch_configs ORDER BY created_at ASC, config_id ASC",
         )?;
         let rows = stmt.query_map([], row_to_config)?;
@@ -227,13 +258,11 @@ impl Store {
     }
 
     pub fn put_config(&self, cfg: &LaunchConfigRecord) -> Result<(), StoreError> {
-        let extra_args = serde_json::to_string(&cfg.extra_args)?;
-        let env_overrides = serde_json::to_string(&cfg.env_overrides)?;
         let conn = self.conn();
         conn.execute(
             "INSERT INTO launch_configs (config_id, name, agent, executable_path, model,
-                 thinking_level, credential_ref, extra_args, env_overrides, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                 thinking_level, credential_ref, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(config_id) DO UPDATE SET
                  name            = excluded.name,
                  agent           = excluded.agent,
@@ -241,8 +270,6 @@ impl Store {
                  model           = excluded.model,
                  thinking_level  = excluded.thinking_level,
                  credential_ref  = excluded.credential_ref,
-                 extra_args      = excluded.extra_args,
-                 env_overrides   = excluded.env_overrides,
                  created_at      = excluded.created_at,
                  updated_at      = excluded.updated_at",
             params![
@@ -253,8 +280,6 @@ impl Store {
                 cfg.model,
                 cfg.thinking_level,
                 cfg.credential_ref,
-                extra_args,
-                env_overrides,
                 cfg.created_at,
                 cfg.updated_at,
             ],
@@ -645,6 +670,7 @@ fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
             supported: MIGRATIONS.len(),
         });
     }
+    let removes_legacy_injection_columns = current < 4;
     if current < MIGRATIONS.len() {
         for sql in &MIGRATIONS[current..] {
             tx.execute_batch(sql)?;
@@ -656,6 +682,21 @@ fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
         )?;
     }
     tx.commit()?;
+
+    if removes_legacy_injection_columns {
+        // 先将旧 WAL 页合并并截断，再重写主库；任何一步失败都拒绝打开数据库，
+        // 避免把可能残留的历史环境覆盖值继续暴露给产品运行时。
+        checkpoint_and_truncate_wal(conn)?;
+        conn.execute_batch("VACUUM")?;
+        checkpoint_and_truncate_wal(conn)?;
+    }
+    Ok(())
+}
+
+fn checkpoint_and_truncate_wal(conn: &Connection) -> Result<(), StoreError> {
+    let _: (i64, i64, i64) = conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    })?;
     Ok(())
 }
 
@@ -680,8 +721,6 @@ fn parse_json_col<T: serde::de::DeserializeOwned>(idx: usize, raw: &str) -> rusq
 }
 
 fn row_to_config(row: &rusqlite::Row<'_>) -> rusqlite::Result<LaunchConfigRecord> {
-    let extra_args: String = row.get(7)?;
-    let env_overrides: String = row.get(8)?;
     Ok(LaunchConfigRecord {
         config_id: row.get(0)?,
         name: row.get(1)?,
@@ -690,10 +729,8 @@ fn row_to_config(row: &rusqlite::Row<'_>) -> rusqlite::Result<LaunchConfigRecord
         model: row.get(4)?,
         thinking_level: row.get(5)?,
         credential_ref: row.get(6)?,
-        extra_args: parse_json_col(7, &extra_args)?,
-        env_overrides: parse_json_col(8, &env_overrides)?,
-        created_at: row.get(9)?,
-        updated_at: row.get(10)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
     })
 }
 
@@ -834,7 +871,7 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
     }
 
     #[test]
@@ -858,7 +895,7 @@ mod tests {
         }
 
         let store = Store::open(&path, StoreLimits::default()).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 3);
+        assert_eq!(store.schema_version().unwrap(), 4);
         let task = store.get_task("task-v1").unwrap().unwrap();
         assert_eq!(task.title, "旧任务标题");
         assert!(task.goal.is_empty(), "旧记录应显式使用空目标回退");

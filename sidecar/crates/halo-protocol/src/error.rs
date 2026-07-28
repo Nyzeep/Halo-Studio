@@ -30,6 +30,7 @@ pub enum ErrorCode {
     RuntimeProbeFailed,
     RuntimeVersionMismatch,
     RuntimeAlreadyRunning,
+    RuntimeCapabilityUnavailable,
     TaskAlreadyRunning,
     TaskRunning,
     TaskNotFound,

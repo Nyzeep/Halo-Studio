@@ -2,8 +2,6 @@
 //! 枚举类字段以契约锁定的小写蛇形字符串存储（"pi"、"review_ready"、"agent_only"…），
 //! 由 halo-sidecar 负责与协议 DTO / halo-core 领域类型互转。
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 
 /// 工作区信任记录。键为 canonicalize 后的真实路径；
@@ -29,9 +27,6 @@ pub struct LaunchConfigRecord {
     pub thinking_level: String,
     /// 只存 Windows 凭据管理器条目名（引用名），绝不存任何密钥明文
     pub credential_ref: Option<String>,
-    pub extra_args: Vec<String>,
-    /// 白名单校验由 halo-config 负责，本层只做透明存取
-    pub env_overrides: BTreeMap<String, String>,
     pub created_at: String,
     pub updated_at: String,
 }

@@ -89,8 +89,6 @@ pub fn config_record_to_dto(rec: &halo_store::LaunchConfigRecord) -> LaunchConfi
         model: rec.model.clone(),
         thinking_level: thinking_str_to_dto(&rec.thinking_level),
         credential_ref: rec.credential_ref.clone(),
-        extra_args: rec.extra_args.clone(),
-        env_overrides: rec.env_overrides.clone(),
         created_at: rec.created_at.clone(),
         updated_at: rec.updated_at.clone(),
     }

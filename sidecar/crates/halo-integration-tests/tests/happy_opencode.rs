@@ -1,153 +1,156 @@
-//! 场景 2：OpenCode 完整链路 happy path。
-//! 校验回环服务链路、每次启动新认证信息（经 fake 落盘的 SHA-256 摘要对比两次启动
-//! 的 token 不同），并断言公开 IPC 状态里无端口、无 token。
+//! 场景 2：OpenCode 1.x 受管启动闭环。
+//! 校验真实回环服务、每次启动新 Basic 认证、兼容性档案和独立运行时状态；
+//! 本票不得经旧 `/task` 协议伪造任务完成。
 
 mod support;
 
-use serde_json::{json, Map, Value};
-use support::{contains_lower_hex_run, fake_opencode_exe, Sidecar, TestRepo};
+use std::time::Duration;
+
+use serde_json::json;
+use support::{
+    contains_lower_hex_run, fake_opencode_exe, require_test_credential, wait_process_lock_held,
+    wait_process_lock_released, Sidecar, TestRepo,
+};
 
 #[test]
-fn opencode_full_chain_with_fresh_token_per_start() {
+fn opencode_1x_starts_with_fresh_basic_authentication_and_keeps_pi_unprobed() {
+    let credential = require_test_credential();
     let repo = TestRepo::new();
     let digest_dir = tempfile::tempdir().expect("创建摘要目录失败");
-    let digest_file = digest_dir.path().join("token 摘要.txt");
+    let digest_file = digest_dir.path().join("password 摘要.txt");
     let digest_arg = digest_file.to_string_lossy().to_string();
 
-    let mut sc = Sidecar::start(&[]);
+    let mut sc = Sidecar::start(&[("HALO_SHUTDOWN_GRACE_MS", "200")]);
     sc.hello();
     sc.open_and_trust(&repo.path_str());
-
-    let cfg = sc.save_config(
+    let config_id = sc.save_config(
         "opencode",
         &fake_opencode_exe(),
-        &["--token-digest-file", &digest_arg],
-        None,
+        &[
+            "--password-digest-file",
+            &digest_arg,
+            "--require-credential-env",
+            "OPENAI_API_KEY",
+            "--require-isolated-state",
+        ],
+        Some(credential.reference()),
     );
 
-    // 第一次启动：健康检查 + 精确版本握手通过后 ready
-    sc.start_runtime("opencode", &cfg);
-    sc.wait_event("runtime.state ready", |e| {
-        e["event"] == "runtime.state"
-            && e["payload"]["agent"] == "opencode"
-            && e["payload"]["state"] == "ready"
+    sc.start_runtime("opencode", &config_id);
+    sc.wait_event("runtime.state ready", |event| {
+        event["event"] == "runtime.state"
+            && event["payload"]["agent"] == "opencode"
+            && event["payload"]["state"] == "ready"
     });
 
-    // 完整任务链路
-    let task_id = sc.create_task("opencode", &cfg, "OpenCode 写入问候文件");
-    let finished = sc.wait_task_finished(&task_id);
-    assert_eq!(finished["outcome"], "finished");
-    assert_eq!(finished["evidence_version"], 1);
-
-    let phases: Vec<String> = sc
-        .events_snapshot()
-        .iter()
-        .filter(|e| e["event"] == "task.phase" && e["task_id"] == task_id.as_str())
-        .filter_map(|e| e["payload"]["phase"].as_str().map(str::to_string))
-        .collect();
-    assert_eq!(phases, ["planning", "editing", "verifying"], "{phases:?}");
-
-    let bundle = sc.ok("review.get", json!({"task_id": task_id}));
-    assert_eq!(bundle["outcome"], "finished");
-    assert!(
-        bundle["files"]
-            .as_array()
-            .expect("files 应为数组")
-            .iter()
-            .any(|f| f["path"] == "hello_from_agent.txt" && f["change"] == "added"),
-        "OpenCode 关联变更应包含真实写入的文件"
-    );
-    assert_eq!(bundle["verification"]["status"], "passed");
-
-    // runtime.status：每个受管应用独立状态，且公开形状里没有端口/token 字段
     let status = sc.ok("runtime.status", json!({}));
+    assert_eq!(status["opencode"]["state"], "ready");
+    assert_eq!(status["opencode"]["version"], "1.18.5");
+    assert_eq!(
+        status["pi"]["state"], "not_probed",
+        "Pi 状态必须独立如实呈现"
+    );
     for agent in ["pi", "opencode"] {
         let info = status[agent].as_object().expect("runtime 状态应为对象");
         let mut keys: Vec<&str> = info.keys().map(String::as_str).collect();
         keys.sort_unstable();
-        assert_eq!(
-            keys,
-            ["reason", "recovery_hint", "state", "version"],
-            "RuntimeStateInfo 公开形状只允许契约字段：{agent}"
-        );
+        assert_eq!(keys, ["reason", "recovery_hint", "state", "version"]);
     }
-    assert_eq!(status["opencode"]["state"], "ready");
-    assert_eq!(status["opencode"]["version"], "0.4.2");
-    assert_eq!(status["pi"]["state"], "not_probed", "Pi 状态不得被合并为全局在线");
 
-    // 第二次启动：先停止，再启动，fake 会把新 token 的摘要追加到同一文件
+    // 受管会话属于下一张票。当前应明确拒绝，而非调用旧 `/task` 伪造在线完成。
+    let error = sc.err(
+        "task.create",
+        json!({
+            "agent": "opencode", "config_id": config_id, "title": "不应伪造任务",
+            "instructions": "不能调用旧协议"
+        }),
+        "RUNTIME_CAPABILITY_UNAVAILABLE",
+    );
+    assert!(error["message"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("真实会话尚未接入"));
+
     let stopped = sc.ok("runtime.stop", json!({"agent": "opencode"}));
     assert_eq!(stopped["state"], "stopped");
-    sc.start_runtime("opencode", &cfg);
+    sc.start_runtime("opencode", &config_id);
 
     let digests: Vec<String> = std::fs::read_to_string(&digest_file)
-        .expect("fake-opencode 应已写入 token 摘要文件")
+        .expect("fake-opencode 应已写入认证摘要")
         .lines()
         .map(str::to_string)
         .collect();
-    assert_eq!(digests.len(), 2, "两次启动应各写入一行摘要：{digests:?}");
-    for d in &digests {
-        assert_eq!(d.len(), 64, "SHA-256 摘要应为 64 个十六进制字符：{d}");
-        assert!(d.chars().all(|c| c.is_ascii_hexdigit()), "{d}");
-    }
-    assert_ne!(digests[0], digests[1], "每次启动必须生成全新认证信息");
-
-    // 公开 IPC 里无 token（64 位小写十六进制串）也无端口/token 字段泄漏。
-    // `end_hash` 是交付证据中的公开内容摘要；只有字段名和格式都正确时才从 token 探测中排除。
-    for line in sc.transcript_snapshot() {
-        assert!(!line.contains("HALO_OC_TOKEN"), "IPC 行不得出现 token 变量名：{line}");
-        let mut v: Value = match serde_json::from_str(line.trim_start_matches(['<', '>', ' '])) {
-            Ok(v) => v,
-            Err(_) => {
-                assert!(
-                    !contains_lower_hex_run(&line, 64),
-                    "IPC 行疑似泄漏 token：{line}"
-                );
-                continue;
-            }
-        };
-        redact_end_hashes(&mut v);
-        let rendered = v.to_string();
-        assert!(
-            !contains_lower_hex_run(&rendered, 64),
-            "IPC 行疑似泄漏 token：{line}"
-        );
-        assert!(!rendered.contains("\"port\""), "IPC 消息不得携带端口字段：{line}");
-        assert!(!rendered.contains("\"token\""), "IPC 消息不得携带 token 字段：{line}");
-    }
-
-    let status = sc.shutdown();
-    assert!(status.success());
-}
-
-fn redact_end_hashes(value: &mut Value) {
-    match value {
-        Value::Array(values) => {
-            for value in values {
-                redact_end_hashes(value);
-            }
-        }
-        Value::Object(fields) => redact_end_hashes_in_object(fields),
-        _ => {}
-    }
-}
-
-fn redact_end_hashes_in_object(fields: &mut Map<String, Value>) {
-    for (key, value) in fields {
-        if key == "end_hash" && value.as_str().is_some_and(is_public_sha256) {
-            *value = Value::String("<public content hash>".to_string());
-        } else {
-            redact_end_hashes(value);
-        }
-    }
-}
-
-fn is_public_sha256(value: &str) -> bool {
-    let Some(digest) = value.strip_prefix("sha256:") else {
-        return false;
-    };
-    digest.len() == 64
-        && digest
+    assert_eq!(digests.len(), 2, "两次启动应各记录一个密码摘要");
+    assert_ne!(digests[0], digests[1], "每次启动必须生成新的 Basic 密码");
+    for digest in &digests {
+        assert_eq!(digest.len(), 64);
+        assert!(digest
             .chars()
-            .all(|character| character.is_ascii_digit() || character.is_ascii_lowercase())
+            .all(|character| character.is_ascii_hexdigit()));
+    }
+
+    // 公开 IPC 不得暴露认证变量、端口或 Basic Authorization 内容。
+    for line in sc.transcript_snapshot() {
+        assert!(
+            !line.contains("OPENCODE_SERVER_PASSWORD"),
+            "IPC 泄漏认证变量名"
+        );
+        assert!(!line.contains("Authorization"), "IPC 泄漏认证头");
+        assert!(!line.contains("\"port\""), "IPC 泄漏回环端口字段");
+        assert!(
+            !contains_lower_hex_run(&line, 64),
+            "IPC 疑似泄漏本次 OpenCode 认证信息"
+        );
+    }
+
+    assert!(sc.shutdown().success());
+}
+
+#[test]
+fn opencode_stop_forces_process_exit_after_global_dispose_variants() {
+    let credential = require_test_credential();
+    let repo = TestRepo::new();
+    let locks = tempfile::tempdir().expect("创建锁目录失败");
+    let mut sc = Sidecar::start(&[("HALO_SHUTDOWN_GRACE_MS", "200")]);
+    sc.hello();
+    sc.open_and_trust(&repo.path_str());
+
+    for mode in ["happy", "dispose_failure", "hang_on_dispose"] {
+        let lock_file = locks.path().join(format!("{mode}.lock"));
+        let lock_arg = lock_file.to_string_lossy().to_string();
+        let dispose_marker = locks.path().join(format!("{mode}.dispose"));
+        let dispose_marker_arg = dispose_marker.to_string_lossy().to_string();
+        let config_id = sc.save_config(
+            "opencode",
+            &fake_opencode_exe(),
+            &[
+                "--mode",
+                mode,
+                "--lock-file",
+                &lock_arg,
+                "--dispose-marker-file",
+                &dispose_marker_arg,
+            ],
+            Some(credential.reference()),
+        );
+        sc.start_runtime("opencode", &config_id);
+        assert!(
+            wait_process_lock_held(&lock_file, Duration::from_secs(5)),
+            "{mode} OpenCode 进程应持有锁文件"
+        );
+
+        let stopped = sc.ok("runtime.stop", json!({"agent": "opencode"}));
+        assert_eq!(stopped["state"], "stopped");
+        assert_eq!(
+            std::fs::read_to_string(&dispose_marker).as_deref(),
+            Ok("global_dispose"),
+            "{mode} 停止必须调用 OpenCode 的 /global/dispose"
+        );
+        assert!(
+            wait_process_lock_released(&lock_file, Duration::from_secs(5)),
+            "{mode} dispose 后 Sidecar 必须强制回收 OpenCode 进程"
+        );
+    }
+
+    assert!(sc.shutdown().success());
 }

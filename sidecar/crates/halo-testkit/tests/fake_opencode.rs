@@ -1,223 +1,288 @@
-//! fake-opencode 集成测试：spawn 真实 bin，按第 5 节 OpenCode 回环服务协议交互。
+//! fake-opencode 的独立契约测试：只模拟 OpenCode 1.x Server 的真实启动边界。
 
-mod support;
-
-use std::process::{Command, Stdio};
+use std::net::TcpListener;
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::Value;
-use support::KillOnDrop;
+use ureq::{Agent, Response};
 
-const TOKEN: &str = "test-token-1234567890abcdef";
+const PASSWORD: &str = "fake-opencode-test-password";
 
 struct OcProc {
-    child: KillOnDrop,
+    child: Child,
     port: u16,
 }
 
+impl OcProc {
+    fn try_running(&mut self) -> bool {
+        self.child.try_wait().ok().flatten().is_none()
+    }
+
+    fn kill_now(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+impl Drop for OcProc {
+    fn drop(&mut self) {
+        self.kill_now();
+    }
+}
+
 fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("申请空闲端口失败")
-        .local_addr()
-        .expect("读取本地地址失败")
-        .port()
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("无法申请测试端口");
+    listener.local_addr().expect("无法读取测试端口").port()
 }
 
 fn spawn_oc(mode: &str, dir: &std::path::Path) -> OcProc {
     let port = free_port();
     let child = Command::new(env!("CARGO_BIN_EXE_fake-opencode"))
-        .args(["serve", "--hostname", "127.0.0.1", "--port", &port.to_string()])
+        .args([
+            "serve",
+            "--hostname",
+            "127.0.0.1",
+            "--port",
+            &port.to_string(),
+        ])
         .env("FAKE_OC_MODE", mode)
-        .env("HALO_OC_TOKEN", TOKEN)
+        .env("OPENCODE_SERVER_PASSWORD", PASSWORD)
         .current_dir(dir)
+        .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .expect("启动 fake-opencode 失败");
-    let oc = OcProc {
-        child: KillOnDrop::new(child),
-        port,
-    };
-    wait_listening(port);
+    let mut oc = OcProc { child, port };
+    wait_until_server_accepts_requests(&mut oc);
     oc
 }
 
-/// 用纯 TCP 连接探测端口就绪，避开鉴权与模式差异。
-fn wait_listening(port: u16) {
-    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok() {
-            return;
-        }
-        assert!(Instant::now() < deadline, "等待 fake-opencode 监听超时");
-        std::thread::sleep(Duration::from_millis(25));
-    }
-}
-
-fn agent() -> ureq::Agent {
+fn agent() -> Agent {
     ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(2))
         .build()
 }
 
-fn get_with_token(port: u16, path: &str, token: &str) -> Result<ureq::Response, ureq::Error> {
+fn basic_header(username: &str, password: &str) -> String {
+    format!(
+        "Basic {}",
+        STANDARD.encode(format!("{username}:{password}"))
+    )
+}
+
+fn get_with_password(port: u16, path: &str, password: &str) -> Result<Response, ureq::Error> {
     agent()
         .get(&format!("http://127.0.0.1:{port}{path}"))
-        .set("Authorization", &format!("Bearer {token}"))
+        .set("Authorization", &basic_header("opencode", password))
         .call()
 }
 
-fn post_with_token(port: u16, path: &str, token: &str) -> Result<ureq::Response, ureq::Error> {
+fn post_with_password(port: u16, path: &str, password: &str) -> Result<Response, ureq::Error> {
     agent()
         .post(&format!("http://127.0.0.1:{port}{path}"))
-        .set("Authorization", &format!("Bearer {token}"))
-        .set("Content-Type", "application/json")
-        .send_string("{}")
+        .set("Authorization", &basic_header("opencode", password))
+        .call()
 }
 
-fn status_of(result: Result<ureq::Response, ureq::Error>) -> u16 {
-    match result {
-        Ok(resp) => resp.status(),
-        Err(ureq::Error::Status(code, _)) => code,
-        Err(e) => panic!("HTTP 传输错误：{e}"),
-    }
+fn post_with_password_timeout(
+    port: u16,
+    path: &str,
+    password: &str,
+    timeout: Duration,
+) -> Result<Response, ureq::Error> {
+    ureq::AgentBuilder::new()
+        .timeout(timeout)
+        .build()
+        .post(&format!("http://127.0.0.1:{port}{path}"))
+        .set("Authorization", &basic_header("opencode", password))
+        .call()
 }
 
-fn body_of(result: Result<ureq::Response, ureq::Error>) -> Value {
-    match result {
-        Ok(resp) => resp.into_json().expect("响应体不是合法 JSON"),
-        Err(e) => panic!("HTTP 请求失败：{e}"),
-    }
-}
-
-#[test]
-fn happy_task_flow_and_graceful_shutdown() {
-    let dir = tempfile::tempdir().expect("创建临时目录失败");
-    let mut oc = spawn_oc("happy", dir.path());
-
-    let health = body_of(get_with_token(oc.port, "/health", TOKEN));
-    assert_eq!(health["status"], "ok");
-
-    let version = body_of(get_with_token(oc.port, "/version", TOKEN));
-    assert_eq!(version["version"], "0.4.2");
-
-    assert_eq!(status_of(post_with_token(oc.port, "/task", TOKEN)), 200);
-
-    // 长轮询直到 done
-    let mut events: Vec<Value> = Vec::new();
-    let outcome;
-    let deadline = Instant::now() + Duration::from_secs(15);
+/// 子进程与首个 HTTP 请求之间存在正常的启动竞争。用真实健康端点重试，
+/// 并把任意 HTTP 状态都当作“已开始监听”，以便 bad_auth 也能被测试。
+fn wait_until_server_accepts_requests(oc: &mut OcProc) {
+    let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        assert!(Instant::now() < deadline, "等待事件流完成超时");
-        let page = body_of(get_with_token(
-            oc.port,
-            &format!("/events?after={}", events.len()),
-            TOKEN,
-        ));
-        if let Some(arr) = page["events"].as_array() {
-            events.extend(arr.iter().cloned());
-        }
-        if page["done"] == true {
-            outcome = page["outcome"].clone();
-            break;
+        match get_with_password(oc.port, "/global/health", PASSWORD) {
+            Ok(_) | Err(ureq::Error::Status(_, _)) => return,
+            Err(ureq::Error::Transport(_)) => {
+                assert!(oc.try_running(), "fake-opencode 在监听前异常退出");
+                assert!(Instant::now() < deadline, "等待 fake-opencode 监听超时");
+                std::thread::sleep(Duration::from_millis(20));
+            }
         }
     }
-    assert_eq!(outcome, "finished");
-    let phases: Vec<&str> = events
-        .iter()
-        .filter(|e| e["kind"] == "phase")
-        .filter_map(|e| e["detail"]["phase"].as_str())
-        .collect();
-    assert_eq!(phases, ["planning", "editing", "verifying"]);
-    assert!(events.iter().any(|e| e["kind"] == "agent_note"));
-    assert!(events
-        .iter()
-        .any(|e| e["kind"] == "file_hint" && e["detail"]["path"] == "hello_from_agent.txt"));
-    assert!(events
-        .iter()
-        .any(|e| e["kind"] == "verification" && e["detail"]["status"] == "passed"));
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("hello_from_agent.txt"))
-            .expect("happy 模式必须真实写入文件"),
-        "hello from agent"
-    );
+}
 
-    assert_eq!(status_of(post_with_token(oc.port, "/shutdown", TOKEN)), 200);
-    let status = oc
-        .child
-        .wait_exit(Duration::from_secs(5))
-        .expect("shutdown 后应优雅退出");
-    assert_eq!(status.code(), Some(0));
+fn status_of(result: Result<Response, ureq::Error>) -> u16 {
+    match result {
+        Ok(response) => response.status(),
+        Err(ureq::Error::Status(status, _)) => status,
+        Err(_) => panic!("请求失败"),
+    }
+}
+
+fn body_of(result: Result<Response, ureq::Error>) -> Value {
+    match result {
+        Ok(response) => response.into_json().expect("响应应为 JSON"),
+        Err(_) => panic!("请求失败"),
+    }
 }
 
 #[test]
-fn rejects_wrong_or_missing_token_with_401() {
+fn serves_authenticated_opencode_1x_health_and_global_dispose_contract() {
     let dir = tempfile::tempdir().expect("创建临时目录失败");
     let mut oc = spawn_oc("happy", dir.path());
 
-    // 错误 token
-    assert_eq!(status_of(get_with_token(oc.port, "/health", "wrong-token")), 401);
-    // 缺失 Authorization 头
+    let health = body_of(get_with_password(oc.port, "/global/health", PASSWORD));
+    assert_eq!(health["healthy"], true);
+    assert_eq!(health["version"], halo_testkit::OPENCODE_VERSION);
+
+    assert_eq!(
+        status_of(post_with_password(oc.port, "/global/dispose", PASSWORD)),
+        200
+    );
+    assert!(
+        oc.try_running(),
+        "dispose 仅释放服务资源，不应替监督者退出进程"
+    );
+    oc.kill_now();
+}
+
+#[test]
+fn rejects_wrong_or_missing_basic_authentication() {
+    let dir = tempfile::tempdir().expect("创建临时目录失败");
+    let mut oc = spawn_oc("happy", dir.path());
+
+    assert_eq!(
+        status_of(get_with_password(
+            oc.port,
+            "/global/health",
+            "different-test-password"
+        )),
+        401
+    );
+    let wrong_username = agent()
+        .get(&format!("http://127.0.0.1:{}/global/health", oc.port))
+        .set("Authorization", &basic_header("not-opencode", PASSWORD))
+        .call();
+    assert_eq!(status_of(wrong_username), 401);
     let missing = agent()
-        .get(&format!("http://127.0.0.1:{}/health", oc.port))
+        .get(&format!("http://127.0.0.1:{}/global/health", oc.port))
         .call();
     assert_eq!(status_of(missing), 401);
-    // 正确 token 正常通过
-    assert_eq!(status_of(get_with_token(oc.port, "/health", TOKEN)), 200);
-
-    assert!(oc.child.try_running());
-}
-
-#[test]
-fn bad_token_mode_rejects_even_correct_token() {
-    let dir = tempfile::tempdir().expect("创建临时目录失败");
-    let mut oc = spawn_oc("bad_token", dir.path());
-    assert_eq!(status_of(get_with_token(oc.port, "/health", TOKEN)), 401);
-    assert!(oc.child.try_running());
-}
-
-#[test]
-fn wrong_version_mode_reports_mismatched_version() {
-    let dir = tempfile::tempdir().expect("创建临时目录失败");
-    let oc = spawn_oc("wrong_version", dir.path());
-    let version = body_of(get_with_token(oc.port, "/version", TOKEN));
-    // 与锁定版本 0.4.2 不相等，上游应据此判 RUNTIME_VERSION_MISMATCH
-    assert_eq!(version["version"], "9.9.9");
-}
-
-#[test]
-fn unhealthy_mode_returns_500_on_health() {
-    let dir = tempfile::tempdir().expect("创建临时目录失败");
-    let oc = spawn_oc("unhealthy", dir.path());
-    assert_eq!(status_of(get_with_token(oc.port, "/health", TOKEN)), 500);
-    // 版本端点不受 unhealthy 影响
-    let version = body_of(get_with_token(oc.port, "/version", TOKEN));
-    assert_eq!(version["version"], "0.4.2");
-}
-
-#[test]
-fn hang_on_shutdown_mode_requires_kill() {
-    let dir = tempfile::tempdir().expect("创建临时目录失败");
-    let mut oc = spawn_oc("hang_on_shutdown", dir.path());
-
-    assert_eq!(status_of(post_with_token(oc.port, "/shutdown", TOKEN)), 200);
-    std::thread::sleep(Duration::from_millis(600));
-    assert!(
-        oc.child.try_running(),
-        "hang_on_shutdown 模式不应因 /shutdown 退出，需要强杀"
+    assert_eq!(
+        status_of(get_with_password(oc.port, "/global/health", PASSWORD)),
+        200
     );
-    oc.child.kill_now();
-    assert!(oc.child.wait_exit(Duration::from_secs(5)).is_some());
+    assert!(oc.try_running());
 }
 
 #[test]
-fn exit_early_mode_exits_by_itself() {
+fn exposes_profile_failure_modes_without_legacy_endpoints() {
     let dir = tempfile::tempdir().expect("创建临时目录失败");
-    let mut oc = spawn_oc("exit_early", dir.path());
-    // 启动后约 2 秒自行退出
-    assert!(
-        oc.child.wait_exit(Duration::from_secs(6)).is_some(),
-        "exit_early 模式应自行退出"
+    for (mode, expected) in [
+        ("old_version", Value::String("1.18.4".to_string())),
+        ("newer_1x", Value::String("1.19.0".to_string())),
+        ("major_version", Value::String("2.0.0".to_string())),
+        ("malformed_version", Value::String("1.18".to_string())),
+        (
+            "pre_release_version",
+            Value::String("1.18.5-beta.1".to_string()),
+        ),
+    ] {
+        let mut oc = spawn_oc(mode, dir.path());
+        let health = body_of(get_with_password(oc.port, "/global/health", PASSWORD));
+        assert_eq!(health["healthy"], true);
+        assert_eq!(health["version"], expected, "mode={mode}");
+        assert_eq!(
+            status_of(post_with_password(oc.port, "/global/dispose", PASSWORD)),
+            200
+        );
+        assert!(oc.try_running(), "成功 dispose 后进程仍应由监督者回收");
+        oc.kill_now();
+    }
+
+    let mut missing_version = spawn_oc("missing_health_version", dir.path());
+    let health = body_of(get_with_password(
+        missing_version.port,
+        "/global/health",
+        PASSWORD,
+    ));
+    assert_eq!(health["healthy"], true);
+    assert!(health.get("version").is_none());
+    assert_eq!(
+        status_of(post_with_password(
+            missing_version.port,
+            "/global/dispose",
+            PASSWORD
+        )),
+        200
     );
+    assert!(
+        missing_version.try_running(),
+        "成功 dispose 后进程仍应由监督者回收"
+    );
+    missing_version.kill_now();
+
+    let mut oc = spawn_oc("happy", dir.path());
+    for path in ["/health", "/version", "/events"] {
+        assert_eq!(status_of(get_with_password(oc.port, path, PASSWORD)), 404);
+    }
+    for path in ["/task", "/cancel", "/shutdown", "/instance/dispose"] {
+        assert_eq!(status_of(post_with_password(oc.port, path, PASSWORD)), 404);
+    }
+    assert_eq!(
+        status_of(post_with_password(oc.port, "/global/dispose", PASSWORD)),
+        200
+    );
+    assert!(oc.try_running(), "成功 dispose 后进程仍应由监督者回收");
+    oc.kill_now();
+}
+
+#[test]
+fn unhealthy_and_bad_auth_modes_fail_closed() {
+    let dir = tempfile::tempdir().expect("创建临时目录失败");
+    let mut unhealthy = spawn_oc("unhealthy", dir.path());
+    let health = body_of(get_with_password(
+        unhealthy.port,
+        "/global/health",
+        PASSWORD,
+    ));
+    assert_eq!(health["healthy"], false);
+    unhealthy.kill_now();
+
+    let mut bad_auth = spawn_oc("bad_auth", dir.path());
+    assert_eq!(
+        status_of(get_with_password(bad_auth.port, "/global/health", PASSWORD)),
+        401
+    );
+    bad_auth.kill_now();
+}
+
+#[test]
+fn dispose_failure_and_timeout_require_force_kill() {
+    let dir = tempfile::tempdir().expect("创建临时目录失败");
+    let mut failed = spawn_oc("dispose_failure", dir.path());
+
+    assert_eq!(
+        status_of(post_with_password(failed.port, "/global/dispose", PASSWORD)),
+        500
+    );
+    assert!(failed.try_running(), "dispose 失败后进程必须由监督者强杀");
+    failed.kill_now();
+
+    let mut hanging = spawn_oc("hang_on_dispose", dir.path());
+    let result = post_with_password_timeout(
+        hanging.port,
+        "/global/dispose",
+        PASSWORD,
+        Duration::from_millis(250),
+    );
+    assert!(matches!(result, Err(ureq::Error::Transport(_))));
+    assert!(hanging.try_running(), "dispose 超时后进程必须由监督者强杀");
+    hanging.kill_now();
 }

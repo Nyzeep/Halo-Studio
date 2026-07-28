@@ -27,7 +27,7 @@
 5. **单工作区、单任务**：并发边界收敛为"一个活动工作区 + 一个非终态任务"，跨 Agent 协作只能经审查后的手动交接。
 6. **中断如实标记**：Sidecar 启动时把库中非终态任务标记 `interrupted`；不自动恢复/重放。
 7. **同步线程模型**：JSONL + 子进程监督的负载下，std 线程 + crossbeam channel 比 async 栈更小的复杂度与审计面。
-8. **OpenCode 回环端口的 TOCTOU 属设计内边界**：Sidecar 先探测空闲端口、再启动 `opencode serve` 绑定该端口，两步之间端口理论上可被本机其他进程抢占（time-of-check-to-time-of-use）。影响面仅限本机同用户环境：服务只绑定 127.0.0.1，不出网。既有缓解：每次启动生成全新的 32 字节随机 Bearer token（经 `HALO_OC_TOKEN` 注入，绝不进入 IPC/日志），Sidecar 所有请求带 token 且以 `/health` + `/version` 精确握手把关——端口被抢占最多表现为启动失败（握手不通过 → `Failed{reason, recovery_hint}`，用户重试即换新端口），冒充进程拿不到 token 也无法让 Sidecar 误认为就绪。据此不引入端口移交/句柄继承等额外机制。
+8. **OpenCode 回环端口的 TOCTOU 属设计内边界**：Sidecar 先探测空闲端口、再启动 `opencode serve` 绑定该端口，两步之间端口理论上可被本机其他进程抢占（time-of-check-to-time-of-use）。影响面仅限本机同用户环境：服务只绑定 `127.0.0.1`，不出网。既有缓解：每次启动生成新的私有密码，仅经 `OPENCODE_SERVER_PASSWORD` 注入子进程；Sidecar 以用户名 `opencode` 的 HTTP Basic 认证请求 `GET /global/health`。此外，只有子进程 stdout 的 ready 行确认其正在监听预期的 `http://127.0.0.1:<port>` 后，才进行认证健康检查。端口被抢占、ready 行地址不符、认证失败或健康检查不通过均表现为启动失败（`Failed{reason, recovery_hint}`；用户重试会换新端口），不会把非预期服务伪造为 ready。据此不引入端口移交/句柄继承等额外机制。
 
 ## 数据位置
 

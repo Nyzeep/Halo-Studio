@@ -347,6 +347,7 @@ dependencies = [
 name = "halo-runtime"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "crossbeam-channel",
  "rand",
  "serde",
@@ -396,6 +397,7 @@ dependencies = [
 name = "halo-testkit"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "serde_json",
  "sha2",
  "tempfile",

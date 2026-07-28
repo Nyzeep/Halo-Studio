@@ -45,7 +45,50 @@ RowLayout {
                         taskPage.rtVM.start(agentPi.checked ? "pi" : "opencode", String(configSelect.currentValue))
                 }
             }
+            Button {
+                text: "检查兼容性"
+                enabled: configSelect.currentValue !== undefined && configSelect.currentValue !== null
+                onClicked: {
+                    if (taskPage.rtVM !== null && taskPage.rtVM.probe)
+                        taskPage.rtVM.probe(agentPi.checked ? "pi" : "opencode", String(configSelect.currentValue))
+                }
+            }
         }
+        Text {
+            Layout.fillWidth: true
+            text: {
+                if (taskPage.rtVM === null)
+                    return "兼容性：—"
+                var isOpenCode = agentOpenCode.checked
+                var compatibility = isOpenCode ? taskPage.rtVM.opencodeCompatibility : taskPage.rtVM.piCompatibility
+                var message = isOpenCode ? taskPage.rtVM.opencodeProbeMessage : taskPage.rtVM.piProbeMessage
+                if (compatibility === "not_checked")
+                    return "兼容性：尚未检查"
+                return "兼容性：" + message
+            }
+            color: Theme.textDim
+            wrapMode: Text.Wrap
+            font.pixelSize: 12
+        }
+        Text {
+            Layout.fillWidth: true
+            visible: taskPage.rtVM !== null && (agentOpenCode.checked
+                ? Util.hasText(taskPage.rtVM.opencodeReason) : Util.hasText(taskPage.rtVM.piReason))
+            text: "运行时原因：" + (agentOpenCode.checked ? taskPage.rtVM.opencodeReason : taskPage.rtVM.piReason)
+            color: Theme.danger
+            wrapMode: Text.Wrap
+            font.pixelSize: 12
+        }
+        Text {
+            Layout.fillWidth: true
+            visible: taskPage.rtVM !== null && (agentOpenCode.checked
+                ? Util.hasText(taskPage.rtVM.opencodeRecoveryHint) : Util.hasText(taskPage.rtVM.piRecoveryHint))
+            text: "恢复建议：" + (agentOpenCode.checked ? taskPage.rtVM.opencodeRecoveryHint : taskPage.rtVM.piRecoveryHint)
+            color: Theme.warn
+            wrapMode: Text.Wrap
+            font.pixelSize: 12
+        }
+        ErrorLabel { Layout.fillWidth: true; vm: taskPage.rtVM }
         Text { text: "任务标题（选填，默认取目标首行）"; color: Theme.textDim; font.pixelSize: 12 }
         TextField {
             id: titleInput

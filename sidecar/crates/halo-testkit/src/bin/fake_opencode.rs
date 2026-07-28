@@ -1,55 +1,45 @@
-//! fake-opencode：受控假 OpenCode 回环服务。
-//! `--version` 输出版本首行（FAKE_OC_VERSION 覆盖，默认 0.4.2），供 Sidecar 探测使用；
-//! 解析 `serve --hostname 127.0.0.1 --port <n>`；只绑 127.0.0.1；
-//! 全部端点校验 `Authorization: Bearer == HALO_OC_TOKEN`，不符回 401。
-//! 行为由 FAKE_OC_MODE 脚本化：happy | unhealthy | wrong_version | bad_token |
-//! exit_early | hang_on_shutdown。token 值只在内存中比对，绝不写入日志或响应。
+//! fake-opencode：仅用于 Sidecar 集成测试的 OpenCode 1.x Server 替身。
 //!
-//! Sidecar 以白名单环境启动子进程（宿主 FAKE_* 变量不会传入），因此脚本开关亦可经
-//! 命令行参数注入（Sidecar 会把 LaunchConfig.extra_args 附加在 serve 参数后）：
-//! `--mode <m>`（优先于 FAKE_OC_MODE）、`--token-digest-file <path>`（启动时把收到的
-//! HALO_OC_TOKEN 的 SHA-256 十六进制摘要**追加**写入该文件——只写摘要不写明文，
-//! 供“每次启动新认证信息”测试对比两次启动的 token 确实不同）。
+//! 它严格模拟本票的公开 Server 边界：`serve --hostname 127.0.0.1 --port <n>`、
+//! `OPENCODE_SERVER_PASSWORD` Basic 认证、`GET /global/health`、
+//! `POST /global/dispose`。不存在旧 `/task`、`/events`、`/cancel` 或 `/shutdown`。
 
+use std::fs::{File, OpenOptions};
 use std::io::Write as _;
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::{Duration, Instant};
+#[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
+use std::time::Duration;
 
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tiny_http::{Header, Method, Request, Response, Server};
 
-use halo_testkit::ScriptStep;
-
 #[derive(Default)]
-struct TaskShared {
-    events: Vec<Value>,
-    done: bool,
-    outcome: Option<String>,
-    summary: Option<String>,
-    cancel_requested: bool,
-}
-
-/// serve 子命令解析结果。
 struct ServeArgs {
     hostname: String,
     port: u16,
-    mode: Option<String>,
-    token_digest_file: Option<String>,
+    password_digest_file: Option<String>,
+    required_credential_env: Option<String>,
+    require_isolated_state: bool,
+    lock_file: Option<String>,
+    dispose_marker_file: Option<String>,
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.iter().any(|a| a == "--version") {
-        let version = std::env::var("FAKE_OC_VERSION")
-            .unwrap_or_else(|_| halo_testkit::OPENCODE_VERSION.to_string());
-        println!("{version}");
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    args.extend(halo_testkit::test_harness_args());
+    let mode = configured_mode(&args);
+
+    if args.iter().any(|arg| arg == "--version") {
+        println!("{}", version_for_mode(&mode));
         return;
     }
+
     let serve = match parse_serve_args(&args) {
-        Ok(v) => v,
-        Err(msg) => {
-            eprintln!("fake-opencode: {msg}");
+        Ok(serve) => serve,
+        Err(message) => {
+            eprintln!("fake-opencode: {message}");
             std::process::exit(2);
         }
     };
@@ -57,253 +47,239 @@ fn main() {
         eprintln!("fake-opencode: 只允许绑定 127.0.0.1");
         std::process::exit(2);
     }
-    let (hostname, port) = (serve.hostname, serve.port);
-    let mode = serve
-        .mode
-        .or_else(|| std::env::var("FAKE_OC_MODE").ok())
-        .unwrap_or_else(|| "happy".to_string());
-    let token = std::env::var("HALO_OC_TOKEN").ok();
-    if let (Some(path), Some(t)) = (&serve.token_digest_file, &token) {
-        // 只落 SHA-256 摘要，明文 token 绝不写入任何文件
-        let digest = {
-            let mut h = Sha256::new();
-            h.update(t.as_bytes());
-            let out = h.finalize();
-            out.iter().fold(String::with_capacity(64), |mut s, b| {
-                use std::fmt::Write as _;
-                let _ = write!(s, "{b:02x}");
-                s
-            })
-        };
-        let write_result = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .and_then(|mut f| writeln!(f, "{digest}"));
-        if let Err(e) = write_result {
-            eprintln!("fake-opencode: 写入 token 摘要文件失败：{e}");
+
+    let password = std::env::var("OPENCODE_SERVER_PASSWORD").ok();
+    if let Some(env_var) = &serve.required_credential_env {
+        if std::env::var_os(env_var).is_none() {
+            eprintln!("fake-opencode: 缺少受管 Provider 凭据变量");
             std::process::exit(1);
         }
     }
-    let expected_auth = token.map(|t| format!("Bearer {t}"));
+    if serve.require_isolated_state && !has_isolated_state_dirs() {
+        eprintln!("fake-opencode: 缺少受管 OpenCode 隔离状态目录");
+        std::process::exit(1);
+    }
+    if let (Some(path), Some(password)) = (&serve.password_digest_file, &password) {
+        if let Err(error) = append_digest(path, password) {
+            eprintln!("fake-opencode: 写入认证摘要失败：{error}");
+            std::process::exit(1);
+        }
+    }
+    let expected_auth = password.map(|password| basic_authorization("opencode", &password));
 
-    let server = match Server::http((hostname.as_str(), port)) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("fake-opencode: 绑定 127.0.0.1:{port} 失败：{e}");
+    let _lock_file = match &serve.lock_file {
+        Some(path) => Some(open_exclusive_lock(path).unwrap_or_else(|error| {
+            eprintln!("fake-opencode: 无法独占锁文件 {path}：{error}");
+            std::process::exit(1);
+        })),
+        None => None,
+    };
+
+    let server = match Server::http((serve.hostname.as_str(), serve.port)) {
+        Ok(server) => server,
+        Err(error) => {
+            eprintln!("fake-opencode: 绑定回环服务失败：{error}");
             std::process::exit(1);
         }
     };
+    emit_listening_line(&mode, serve.port);
 
     if mode == "exit_early" {
-        // 模拟服务在启动后不久非预期死亡
         std::thread::spawn(|| {
             std::thread::sleep(Duration::from_secs(2));
             std::process::exit(1);
         });
     }
 
-    let state: Arc<Mutex<TaskShared>> = Arc::new(Mutex::new(TaskShared::default()));
-
-    // 每个请求独立线程处理：/events 长轮询期间 /cancel、/shutdown 仍须可达
     for request in server.incoming_requests() {
-        let state = Arc::clone(&state);
-        let mode = mode.clone();
-        let expected_auth = expected_auth.clone();
-        std::thread::spawn(move || handle(request, &mode, expected_auth.as_deref(), &state));
+        handle(
+            request,
+            &mode,
+            expected_auth.as_deref(),
+            serve.dispose_marker_file.as_deref(),
+        );
+    }
+}
+
+fn configured_mode(args: &[String]) -> String {
+    args.windows(2)
+        .find_map(|pair| (pair[0] == "--mode").then(|| pair[1].clone()))
+        .or_else(|| std::env::var("FAKE_OC_MODE").ok())
+        .unwrap_or_else(|| "happy".to_string())
+}
+
+fn version_for_mode(mode: &str) -> &'static str {
+    match mode {
+        "old_version" => "1.18.4",
+        "newer_1x" => "1.19.0",
+        "wrong_version" | "major_version" => halo_testkit::OPENCODE_WRONG_VERSION,
+        "malformed_version" => "1.18",
+        "pre_release_version" => "1.18.5-beta.1",
+        _ => halo_testkit::OPENCODE_VERSION,
+    }
+}
+
+/// 真实 OpenCode 会在 stdout 报告监听地址；受管运行时据此验证它确实是所要求的
+/// 回环端点。该行只写入受管子进程 stdout，由运行时私下消费，绝不转发到 IPC。
+fn emit_listening_line(mode: &str, port: u16) {
+    if mode == "missing_ready_line" {
+        return;
+    }
+    let host = if mode == "wrong_ready_address" {
+        "0.0.0.0"
+    } else {
+        "127.0.0.1"
+    };
+    let mut stdout = std::io::stdout().lock();
+    if writeln!(stdout, "opencode server listening on http://{host}:{port}")
+        .and_then(|_| stdout.flush())
+        .is_err()
+    {
+        std::process::exit(1);
     }
 }
 
 fn parse_serve_args(args: &[String]) -> Result<ServeArgs, String> {
     if args.first().map(String::as_str) != Some("serve") {
         return Err(
-            "用法：fake-opencode --version | fake-opencode serve --hostname 127.0.0.1 --port <n> [--mode <m>] [--token-digest-file <path>]"
+            "用法：fake-opencode --version | fake-opencode serve --hostname 127.0.0.1 --port <n>"
                 .to_string(),
         );
     }
-    let mut hostname: Option<String> = None;
-    let mut port: Option<u16> = None;
-    let mut mode: Option<String> = None;
-    let mut token_digest_file: Option<String> = None;
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
+    let mut serve = ServeArgs::default();
+    let mut index = 1;
+    while index < args.len() {
+        match args[index].as_str() {
             "--hostname" => {
-                i += 1;
-                hostname = args.get(i).cloned();
+                index += 1;
+                serve.hostname = args.get(index).cloned().unwrap_or_default();
             }
             "--port" => {
-                i += 1;
-                port = args.get(i).and_then(|p| p.parse().ok());
+                index += 1;
+                serve.port = args
+                    .get(index)
+                    .and_then(|port| port.parse().ok())
+                    .unwrap_or_default();
             }
             "--mode" => {
-                i += 1;
-                mode = args.get(i).cloned();
+                index += 1;
             }
-            "--token-digest-file" => {
-                i += 1;
-                token_digest_file = args.get(i).cloned();
+            "--password-digest-file" => {
+                index += 1;
+                serve.password_digest_file = args.get(index).cloned();
+            }
+            "--require-credential-env" => {
+                index += 1;
+                serve.required_credential_env = args.get(index).cloned();
+            }
+            "--require-isolated-state" => serve.require_isolated_state = true,
+            "--lock-file" => {
+                index += 1;
+                serve.lock_file = args.get(index).cloned();
+            }
+            "--dispose-marker-file" => {
+                index += 1;
+                serve.dispose_marker_file = args.get(index).cloned();
             }
             _ => {}
         }
-        i += 1;
+        index += 1;
     }
-    match (hostname, port) {
-        (Some(h), Some(p)) => Ok(ServeArgs {
-            hostname: h,
-            port: p,
-            mode,
-            token_digest_file,
-        }),
-        _ => Err("缺少 --hostname 或 --port 参数".to_string()),
+    if serve.hostname.is_empty() || serve.port == 0 {
+        return Err("缺少 --hostname 或 --port 参数".to_string());
     }
+    Ok(serve)
 }
 
-fn handle(request: Request, mode: &str, expected_auth: Option<&str>, state: &Arc<Mutex<TaskShared>>) {
-    let authorized = match expected_auth {
-        Some(expect) => request
+fn has_isolated_state_dirs() -> bool {
+    [
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_STATE_HOME",
+    ]
+    .iter()
+    .all(|name| {
+        std::env::var_os(name)
+            .filter(|value| !value.is_empty())
+            .is_some_and(|value| std::path::Path::new(&value).is_dir())
+    })
+}
+
+fn basic_authorization(username: &str, password: &str) -> String {
+    format!(
+        "Basic {}",
+        STANDARD.encode(format!("{username}:{password}"))
+    )
+}
+
+fn append_digest(path: &str, password: &str) -> std::io::Result<()> {
+    let digest = Sha256::digest(password.as_bytes());
+    let digest = digest
+        .iter()
+        .fold(String::with_capacity(64), |mut text, byte| {
+            use std::fmt::Write as _;
+            let _ = write!(text, "{byte:02x}");
+            text
+        });
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .and_then(|mut file| writeln!(file, "{digest}"))
+}
+
+fn open_exclusive_lock(path: &str) -> std::io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.create(true).read(true).write(true);
+    #[cfg(windows)]
+    options.share_mode(0);
+    options.open(path)
+}
+
+fn handle(
+    request: Request,
+    mode: &str,
+    expected_auth: Option<&str>,
+    dispose_marker_file: Option<&str>,
+) {
+    let authorized = expected_auth.is_some_and(|expected| {
+        request
             .headers()
             .iter()
-            .any(|h| h.field.equiv("Authorization") && h.value.as_str() == expect),
-        // HALO_OC_TOKEN 未设置时没有任何合法 token：失败关闭
-        None => false,
-    };
-    if !authorized || mode == "bad_token" {
+            .any(|header| header.field.equiv("Authorization") && header.value.as_str() == expected)
+    });
+    if !authorized || mode == "bad_auth" {
         respond_json(request, 401, &json!({"error": "unauthorized"}));
         return;
     }
 
-    let url = request.url().to_string();
-    let (path, query) = match url.split_once('?') {
-        Some((p, q)) => (p.to_string(), q.to_string()),
-        None => (url, String::new()),
-    };
-    let method = request.method().clone();
-
-    match (method, path.as_str()) {
-        (Method::Get, "/health") => {
-            if mode == "unhealthy" {
-                respond_json(request, 500, &json!({"status": "error"}));
-            } else {
-                respond_json(request, 200, &json!({"status": "ok"}));
+    let path = request.url().to_string();
+    match (request.method().clone(), path.as_str()) {
+        (Method::Get, "/global/health") => match mode {
+            "unhealthy" => respond_json(request, 200, &json!({"healthy": false})),
+            "missing_health_version" => respond_json(request, 200, &json!({"healthy": true})),
+            _ => respond_json(
+                request,
+                200,
+                &json!({"healthy": true, "version": version_for_mode(mode)}),
+            ),
+        },
+        // OpenCode 的 dispose 只回收服务器内部资源，不承诺退出宿主进程。
+        // 受管监督者必须在宽限期后主动终止进程；三个模式分别覆盖成功、失败和超时。
+        (Method::Post, "/global/dispose") => {
+            if let Some(path) = dispose_marker_file {
+                let _ = std::fs::write(path, "global_dispose");
             }
-        }
-        (Method::Get, "/version") => {
-            let v = if mode == "wrong_version" {
-                halo_testkit::OPENCODE_WRONG_VERSION
-            } else {
-                halo_testkit::OPENCODE_VERSION
-            };
-            respond_json(request, 200, &json!({"version": v}));
-        }
-        (Method::Post, "/task") => {
-            {
-                let mut s = lock(state);
-                *s = TaskShared::default();
-            }
-            let st = Arc::clone(state);
-            std::thread::spawn(move || run_happy_task(&st));
-            respond_json(request, 200, &json!({"accepted": true}));
-        }
-        (Method::Get, "/events") => {
-            let after = parse_after(&query);
-            let snapshot = wait_events(state, after);
-            respond_json(request, 200, &snapshot);
-        }
-        (Method::Post, "/cancel") => {
-            lock(state).cancel_requested = true;
-            respond_json(request, 200, &json!({"accepted": true}));
-        }
-        (Method::Post, "/shutdown") => {
-            respond_json(request, 200, &json!({"accepted": true}));
-            if mode != "hang_on_shutdown" {
-                // 留出把响应写回套接字的时间再优雅退出
-                std::thread::sleep(Duration::from_millis(50));
-                std::process::exit(0);
+            match mode {
+                "dispose_failure" => {
+                    respond_json(request, 500, &json!({"error": "dispose_failed"}))
+                }
+                "hang_on_dispose" => std::thread::sleep(Duration::from_secs(30)),
+                _ => respond_json(request, 200, &json!({})),
             }
         }
         _ => respond_json(request, 404, &json!({"error": "not_found"})),
-    }
-}
-
-fn run_happy_task(state: &Arc<Mutex<TaskShared>>) {
-    for step in halo_testkit::happy_script() {
-        if lock(state).cancel_requested {
-            let mut s = lock(state);
-            s.done = true;
-            s.outcome = Some("cancelled".to_string());
-            return;
-        }
-        match step {
-            ScriptStep::Emit(item) => lock(state).events.push(item),
-            ScriptStep::WriteAgentFile => {
-                if let Err(e) = halo_testkit::write_agent_file() {
-                    eprintln!(
-                        "fake-opencode: 写入 {} 失败：{e}",
-                        halo_testkit::AGENT_FILE_NAME
-                    );
-                    let mut s = lock(state);
-                    s.done = true;
-                    s.outcome = Some("failed".to_string());
-                    return;
-                }
-            }
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    let mut s = lock(state);
-    s.done = true;
-    s.outcome = Some("finished".to_string());
-    s.summary = Some(halo_testkit::HAPPY_SUMMARY.to_string());
-}
-
-/// 长轮询：等到出现 after 之后的新事件或任务完成为止，最长约 10 秒。
-fn wait_events(state: &Arc<Mutex<TaskShared>>, after: usize) -> Value {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        {
-            let s = lock(state);
-            if s.done || s.events.len() > after {
-                let events: Vec<Value> = s.events.iter().skip(after).cloned().collect();
-                return json!({
-                    "events": events,
-                    "done": s.done,
-                    "outcome": s.outcome,
-                    "summary": s.summary,
-                });
-            }
-        }
-        if Instant::now() >= deadline {
-            let s = lock(state);
-            return json!({
-                "events": [],
-                "done": s.done,
-                "outcome": s.outcome,
-                "summary": s.summary,
-            });
-        }
-        std::thread::sleep(Duration::from_millis(25));
-    }
-}
-
-fn parse_after(query: &str) -> usize {
-    query
-        .split('&')
-        .find_map(|kv| {
-            let (k, v) = kv.split_once('=')?;
-            if k == "after" {
-                v.parse().ok()
-            } else {
-                None
-            }
-        })
-        .unwrap_or(0)
-}
-
-fn lock<'a>(state: &'a Arc<Mutex<TaskShared>>) -> MutexGuard<'a, TaskShared> {
-    match state.lock() {
-        Ok(g) => g,
-        Err(poisoned) => poisoned.into_inner(),
     }
 }
 
