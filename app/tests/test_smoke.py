@@ -174,6 +174,15 @@ def test_task_view_exposes_only_one_time_action_controls():
     assert "\u6c38\u4e45" not in task_view
 
 
+def test_task_view_exposes_waiting_only_follow_up_and_explicit_finish_controls():
+    task_view = (QML_DIR / "views" / "TaskView.qml").read_text(encoding="utf-8")
+    assert "taskPage.tVM.sendMessage" in task_view
+    assert "taskPage.tVM.finishSession" in task_view
+    assert 'taskPage.tVM.state === "waiting_developer"' in task_view
+    assert "conversationActionPending" in task_view
+    assert "taskPage.tVM.cancel()" in task_view
+
+
 def test_main_qml_exposes_required_context_names():
     """Main.qml 与视图必须只经约定的上下文属性名访问视图模型。"""
     qml_text = "\n".join(

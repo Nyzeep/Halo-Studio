@@ -80,3 +80,12 @@
 | `awaiting_action` 只在匹配请求的真实 Agent 反馈后转为 `running`、`waiting_developer` 或 `failed`；已确认的精确卡片经 `task.action_resolved` 移除 | `halo-runtime/src/opencode.rs`（asked/replied/rejected 与私有请求映射）、`halo-runtime/src/lib.rs`（`ActionResolved`）、`halo-sidecar/src/task_flow.rs`、`app/halo_studio/viewmodels/task_vm.py` | `halo-runtime/src/opencode.rs` 测试、`halo-sidecar/src/task_flow.rs` 测试、`halo-integration-tests/tests/happy_opencode.rs`、`app/tests/test_viewmodels.py::TestTaskViewModel::test_action_resolved_removes_only_the_matching_submitted_request` |
 | 不匹配、重复、拒绝与取消稳定失败，不会批准其他请求 | `halo-sidecar/src/dispatch.rs`、`halo-sidecar/src/task_flow.rs`、`halo-sidecar/src/state.rs`（fail-closed handle） | `halo-sidecar/src/dispatch.rs` 与 `task_flow.rs` 测试、`halo-integration-tests/tests/happy_opencode.rs`、`app/tests/test_viewmodels.py` |
 | 会话、端口、认证和开发者回答不进入历史、日志或公开卡片状态 | `halo-runtime/src/opencode.rs`、`halo-sidecar/src/task_flow.rs`、`TaskViewModel`（回答仅作单次 IPC 参数） | `halo-runtime/src/opencode.rs` 测试、`halo-integration-tests/tests/happy_opencode.rs`、`app/tests/test_viewmodels.py` |
+
+## #13 追问、显式结束与交付审查
+
+| 验收项 | 实现 | 验证 |
+| --- | --- | --- |
+| 仅 `waiting_developer` 可向同一 OpenCode session 追问并展示整理回复 | `task.send_message` 协议、`OpenCodeHandle::send_message` 每轮闸门与私有回复游标、`TaskViewModel`/`TaskView.qml` | core/协议/Sidecar/runtime 单测、ViewModel 与 QML 烟测 |
+| 显式结束与取消独立，运行中不能正常结束 | `task.finish` 独立控制通道、`FinishRequested` 状态迁移、OpenCode `TaskDone` 忽略规则 | `task_flow`/`dispatch` 状态门控测试，既有 cancel 测试 |
+| 结束后复用任务基线生成 Diff、摘要、验证并进入只读审查 | `task_flow::append_evidence`、`ReviewViewModel` 自动加载、`ShellViewModel.showReview` | 显式结束取证单测、Review ViewModel 行为测试、只读 Diff 红线 |
+| 会话不持久化；接受/拒绝不改 Git 或文件 | `ActiveTask.session_messages` 内存边界、`to_record`/EvidenceDraft 无会话字段、既有 `delivery_decide` | 会话 sentinel 不进入 evidence；`delivery_git_invariance.rs` 与只读 ViewModel 测试 |

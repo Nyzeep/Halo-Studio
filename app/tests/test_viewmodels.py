@@ -426,6 +426,79 @@ class TestTaskViewModel:
             "handoff_id": None,
         }
 
+    def test_follow_up_is_only_sent_from_waiting_developer(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "waiting_developer"}})
+        client.ok({
+            "task": {**TASK_STATUS, "state": "waiting_developer"},
+            "last_seq": 0,
+            "events": [],
+            "session_messages": SESSION_MESSAGES,
+            "action_requests": [],
+        })
+
+        vm.sendMessage("  请再补充一个回归测试  ")
+        request = client.last()
+        assert request.method == "task.send_message"
+        assert request.params == {"task_id": "task-1", "message": "请再补充一个回归测试"}
+        assert vm.state == "waiting_developer"
+
+        client.ok({"accepted": True})
+        assert vm.state == "waiting_developer"
+
+        client.emit_event(
+            "task.state",
+            {"state": "running", "task": {**TASK_STATUS, "state": "running"}},
+            task_id="task-1",
+        )
+        vm.sendMessage("不能并发发送")
+        assert vm.errorCode == "TASK_STILL_RUNNING"
+        assert [r.method for r in client.requests].count("task.send_message") == 1
+
+    def test_empty_follow_up_fails_closed_in_viewmodel(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "waiting_developer"}})
+        client.ok({
+            "task": {**TASK_STATUS, "state": "waiting_developer"},
+            "last_seq": 0,
+            "events": [],
+            "session_messages": SESSION_MESSAGES,
+            "action_requests": [],
+        })
+
+        vm.sendMessage("   ")
+        assert vm.errorCode == "INVALID_PARAMS"
+        assert all(r.method != "task.send_message" for r in client.requests)
+
+    def test_finish_session_is_explicit_and_does_not_reuse_cancel(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "waiting_developer"}})
+        client.ok({
+            "task": {**TASK_STATUS, "state": "waiting_developer"},
+            "last_seq": 0,
+            "events": [],
+            "session_messages": SESSION_MESSAGES,
+            "action_requests": [],
+        })
+
+        vm.finishSession()
+        request = client.last()
+        assert request.method == "task.finish"
+        assert request.params == {"task_id": "task-1"}
+        assert vm.state == "waiting_developer"
+        assert all(r.method != "task.cancel" for r in client.requests)
+
+        client.ok({"accepted": True})
+        client.emit_event(
+            "task.state",
+            {"state": "finishing", "task": {**TASK_STATUS, "state": "finishing"}},
+            task_id="task-1",
+        )
+        assert vm.state == "finishing"
+
     def test_create_ok_applies_status_and_events_drive_transitions(self, core_app, client):
         vm = self._make_vm(client)
         vm.create()
@@ -1290,6 +1363,59 @@ REVIEW_BUNDLE = {
 
 
 class TestReviewViewModel:
+    def test_finished_session_auto_loads_exact_evidence_and_announces_review(self, core_app, client):
+        vm = ReviewViewModel(client)
+        ready = []
+        vm.reviewReady.connect(lambda: ready.append(True))
+
+        client.emit_event(
+            "task.finished",
+            {"outcome": "finished", "evidence_version": 2},
+            task_id="task-1",
+        )
+        request = client.last()
+        assert request.method == "review.get"
+        assert request.params == {"task_id": "task-1", "version": 2}
+        client.ok(REVIEW_BUNDLE)
+
+        assert vm.taskId == "task-1"
+        assert vm.evidenceVersion == 2
+        assert ready == [True]
+
+        client.emit_event(
+            "task.finished",
+            {"outcome": "failed", "evidence_version": 3},
+            task_id="task-1",
+        )
+        assert [request.method for request in client.requests].count("review.get") == 1
+
+    def test_new_auto_loaded_review_does_not_keep_previous_task_decision(self, core_app, client):
+        vm = ReviewViewModel(client)
+        vm.load("task-1", 2)
+        client.ok(REVIEW_BUNDLE)
+        vm.accept()
+        client.ok({
+            "decision": {
+                "kind": "accepted",
+                "reason": None,
+                "decided_at": "2025-01-01T00:00:00Z",
+            }
+        })
+        assert vm.decisionKind == "accepted"
+
+        client.emit_event(
+            "task.finished",
+            {"outcome": "finished", "evidence_version": 1},
+            task_id="task-2",
+        )
+        next_bundle = {**REVIEW_BUNDLE, "task_id": "task-2", "evidence_version": 1}
+        client.ok(next_bundle)
+
+        assert vm.taskId == "task-2"
+        assert vm.decisionKind == ""
+        assert vm.decisionReason == ""
+        assert vm.decidedAt == ""
+
     def test_load_populates_bundle_and_files_model(self, core_app, client):
         vm = ReviewViewModel(client)
         vm.load("task-1")

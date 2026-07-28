@@ -58,6 +58,10 @@ class ShellViewModel(QObject):
         self._set_center_mode("editor")
 
     @Slot()
+    def showReview(self) -> None:
+        self._set_center_mode("review")
+
+    @Slot()
     def toggleSideBar(self) -> None:
         self._set_side_bar_visible(not self._side_bar_visible)
 

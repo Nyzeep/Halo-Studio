@@ -21,6 +21,7 @@ class TaskViewModel(BaseViewModel):
     taskCreated = Signal()
     sessionChanged = Signal()
     actionRequestsChanged = Signal()
+    conversationActionChanged = Signal()
 
     def __init__(self, client, parent: QObject | None = None) -> None:
         super().__init__(client, parent)
@@ -42,6 +43,7 @@ class TaskViewModel(BaseViewModel):
         self._action_requests: list[dict] = []
         self._resolved_action_request_ids: set[str] = set()
         self._action_resolution_blocked = False
+        self._conversation_action_pending = False
         # 当前 TaskStatus
         self._reset_task_fields()
         client.subscribe("task.state", self._on_task_state)
@@ -69,6 +71,7 @@ class TaskViewModel(BaseViewModel):
         had_messages = bool(self._session_messages)
         had_action_requests = bool(self._action_requests)
         was_action_resolution_blocked = self._action_resolution_blocked
+        was_conversation_action_pending = self._conversation_action_pending
         self._session_messages = []
         self._snapshot_session_messages = []
         self._session_events = {}
@@ -76,10 +79,13 @@ class TaskViewModel(BaseViewModel):
         self._action_requests = []
         self._resolved_action_request_ids = set()
         self._action_resolution_blocked = False
+        self._conversation_action_pending = False
         if had_messages:
             self.sessionChanged.emit()
         if had_action_requests or was_action_resolution_blocked:
             self.actionRequestsChanged.emit()
+        if was_conversation_action_pending:
+            self.conversationActionChanged.emit()
 
     # ---- 命令 ----
 
@@ -111,6 +117,42 @@ class TaskViewModel(BaseViewModel):
             {"task_id": self._task_id},
             self._on_cancel_ok,
             self._on_cancel_error,
+        )
+
+    @Slot(str)
+    def sendMessage(self, message: str) -> None:  # noqa: N802
+        self._clear_error()
+        message = str(message or "").strip()
+        if not message:
+            self._set_error({"code": "INVALID_PARAMS", "message": "后续消息不能为空"})
+            return
+        if self._state != "waiting_developer" or self._conversation_action_pending:
+            self._set_error(
+                {"code": "TASK_STILL_RUNNING", "message": "只有等待开发者时才能发送后续消息"}
+            )
+            return
+        self._set_conversation_action_pending(True)
+        self._client.request(
+            "task.send_message",
+            {"task_id": self._task_id, "message": message},
+            self._on_conversation_action_ok,
+            self._on_conversation_action_error,
+        )
+
+    @Slot()
+    def finishSession(self) -> None:  # noqa: N802
+        self._clear_error()
+        if self._state != "waiting_developer" or self._conversation_action_pending:
+            self._set_error(
+                {"code": "TASK_STILL_RUNNING", "message": "只有等待开发者时才能结束会话"}
+            )
+            return
+        self._set_conversation_action_pending(True)
+        self._client.request(
+            "task.finish",
+            {"task_id": self._task_id},
+            self._on_conversation_action_ok,
+            self._on_conversation_action_error,
         )
 
     @Slot(str)
@@ -275,6 +317,22 @@ class TaskViewModel(BaseViewModel):
     def _on_cancel_error(self, error: dict) -> None:
         self._set_error(error)
 
+    def _on_conversation_action_ok(self, result: dict) -> None:
+        if (result or {}).get("accepted") is True:
+            return
+        self._set_conversation_action_pending(False)
+        self._set_error({"code": "TASK_STILL_RUNNING", "message": "会话动作未被接受"})
+
+    def _on_conversation_action_error(self, error: dict) -> None:
+        self._set_conversation_action_pending(False)
+        self._set_error(error)
+
+    def _set_conversation_action_pending(self, pending: bool) -> None:
+        if self._conversation_action_pending == pending:
+            return
+        self._conversation_action_pending = pending
+        self.conversationActionChanged.emit()
+
     def _on_manual_edit(self, envelope: dict) -> None:
         if self._task_id and envelope.get("task_id") not in (None, self._task_id):
             return
@@ -362,7 +420,12 @@ class TaskViewModel(BaseViewModel):
             self._apply_task(task)
         snapshot_messages = []
         snapshot_action_requests = []
-        snapshot_is_active = str(task.get("state") or "") not in _TERMINAL_TASK_STATES
+        snapshot_is_active = str(task.get("state") or "") in {
+            "created",
+            "running",
+            "waiting_developer",
+            "awaiting_action",
+        }
         can_restore_action_requests = (
             self._state == "awaiting_action" and not self._action_resolution_blocked
         )
@@ -570,6 +633,8 @@ class TaskViewModel(BaseViewModel):
         self._task_agent = str(task.get("agent") or "")
         self._task_title = str(task.get("title") or "")
         self._state = str(task.get("state") or "")
+        if self._state != "waiting_developer":
+            self._set_conversation_action_pending(False)
         self._attribution = str(task.get("attribution") or "")
         self._cancel_mode = str(task.get("cancel_mode") or "")
         self._latest_evidence_version = int(task.get("latest_evidence_version") or 0)
@@ -577,7 +642,7 @@ class TaskViewModel(BaseViewModel):
         self._baseline_head = str(baseline.get("head") or "")
         self._created_at = str(task.get("created_at") or "")
         self._ended_at = str(task.get("ended_at") or "")
-        if self._state in _TERMINAL_TASK_STATES:
+        if self._state in _TERMINAL_TASK_STATES or self._state in {"finishing", "review_ready"}:
             self._reset_session_messages()
         self.taskChanged.emit()
 
@@ -698,6 +763,9 @@ class TaskViewModel(BaseViewModel):
     def _get_action_resolution_blocked(self) -> bool:
         return self._action_resolution_blocked
 
+    def _get_conversation_action_pending(self) -> bool:
+        return self._conversation_action_pending
+
     taskId = Property(str, _get_task_id, notify=taskChanged)
     taskAgent = Property(str, _get_task_agent, notify=taskChanged)
     taskTitle = Property(str, _get_task_title, notify=taskChanged)
@@ -711,3 +779,6 @@ class TaskViewModel(BaseViewModel):
     sessionMessages = Property("QVariantList", _get_session_messages, notify=sessionChanged)
     actionRequests = Property("QVariantList", _get_action_requests, notify=actionRequestsChanged)
     actionResolutionBlocked = Property(bool, _get_action_resolution_blocked, notify=actionRequestsChanged)
+    conversationActionPending = Property(
+        bool, _get_conversation_action_pending, notify=conversationActionChanged
+    )

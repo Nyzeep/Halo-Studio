@@ -22,7 +22,7 @@
             "workspace.open", "workspace.trust", "workspace.close", "workspace.status",
             "config.list", "config.save", "config.delete", "config.credential_check",
             "runtime.probe", "runtime.start", "runtime.stop", "runtime.status",
-            "task.create", "task.cancel", "task.resolve_action", "task.mark_manual_edit", "task.mark_verification", "task.status", "task.snapshot",
+            "task.create", "task.send_message", "task.finish", "task.cancel", "task.resolve_action", "task.mark_manual_edit", "task.mark_verification", "task.status", "task.snapshot",
             "review.get", "delivery.accept", "delivery.reject",
             "handoff.preview", "handoff.create",
             "history.list", "history.evidence",

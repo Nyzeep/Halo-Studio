@@ -13,7 +13,7 @@ use halo_config::{credential_env_var_for, AgentKind, CredentialStore};
 use halo_core::{manual_edit_note, Attribution, ManualEditOp};
 use halo_protocol::methods::{self, AgentKind as AgentKindDto};
 use halo_protocol::{ErrorBody, ErrorCode, RequestEnvelope, Response, PROTOCOL_VERSION};
-use halo_runtime::{OpenCodeRuntime, PiRuntime, RuntimeState, Timeouts};
+use halo_runtime::{OpenCodeRuntime, PiRuntime, RuntimeEvent, RuntimeState, Timeouts};
 use halo_store::Store;
 
 use crate::git::{GitClient, GitError};
@@ -162,6 +162,7 @@ impl From<halo_runtime::RuntimeError> for SidecarError {
             RE::ActionRequestNotFound => ErrorCode::ActionRequestNotFound,
             RE::ActionRequestAlreadyResolved => ErrorCode::ActionRequestAlreadyResolved,
             RE::ActionRequestDeliveryUncertain => ErrorCode::ActionRequestNotPending,
+            RE::SessionNotWaiting => ErrorCode::TaskStillRunning,
             RE::Io(_) => ErrorCode::Internal,
         };
         SidecarError::new(code, e.to_string())
@@ -246,6 +247,8 @@ impl Dispatcher {
             "runtime.stop" => self.runtime_stop(params),
             "runtime.status" => self.runtime_status(params),
             "task.create" => self.task_create(params),
+            "task.send_message" => self.task_send_message(params),
+            "task.finish" => self.task_finish(params),
             "task.cancel" => self.task_cancel(params),
             "task.resolve_action" => self.task_resolve_action(params),
             "task.mark_manual_edit" => self.task_mark_manual_edit(params),
@@ -1090,7 +1093,7 @@ impl Dispatcher {
                         format!("任务不存在：{}", p.task_id),
                     )
                 })?;
-            if task.state.is_terminal() || task.cancellation_requested {
+            if task.state.is_terminal() || task.cancellation_requested || task.finish_requested {
                 return ok(&methods::task::CancelTaskResult { accepted: false });
             }
             // 先建立取消屏障再取得运行时闸门；在此之后不能再有本次决议离开进程。
@@ -1109,6 +1112,93 @@ impl Dispatcher {
             .map(task_flow::request_cancel)
             .unwrap_or(false);
         ok(&methods::task::CancelTaskResult { accepted })
+    }
+
+    fn task_send_message(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::task::SendTaskMessageParams = parse(params)?;
+        let message = p.message.trim();
+        if message.is_empty() {
+            return Err(SidecarError::new(
+                ErrorCode::InvalidParams,
+                "后续消息不能为空",
+            ));
+        }
+        let (handle, task_tx) = {
+            let app = lock(&self.ctx.app);
+            let task = app
+                .task
+                .as_ref()
+                .filter(|task| task.task_id == p.task_id)
+                .ok_or_else(|| {
+                    SidecarError::new(ErrorCode::TaskNotFound, "当前任务不存在")
+                })?;
+            if task.state != halo_core::TaskState::WaitingDeveloper
+                || task.cancellation_requested
+                || task.finish_requested
+            {
+                return Err(SidecarError::new(
+                    ErrorCode::TaskStillRunning,
+                    "只有等待开发者的活动任务可以发送后续消息",
+                ));
+            }
+            let handle = app.slot(task.agent).handle.clone().ok_or_else(|| {
+                SidecarError::new(ErrorCode::RuntimeNotReady, "受管应用尚未就绪")
+            })?;
+            (handle, app.slot(task.agent).task_tx.clone())
+        };
+
+        task_flow::apply_event(&self.flow_ctx(), &p.task_id, &halo_core::TaskEvent::FollowUpSent);
+        crate::state::append_active_session_message(
+            &self.ctx.app,
+            &self.ctx.bus,
+            &p.task_id,
+            methods::task::TaskSessionMessageRole::User,
+            message,
+        );
+        if let Err(error) = handle.send_message(message) {
+            if let Some(task_tx) = task_tx {
+                let _ = task_tx.send(RuntimeEvent::State(RuntimeState::Failed {
+                    reason: "后续消息未能安全提交给受管运行时".to_string(),
+                    recovery_hint: "请重新启动运行时并创建新任务".to_string(),
+                }));
+            }
+            return Err(SidecarError::from(error));
+        }
+        ok(&methods::task::SendTaskMessageResult { accepted: true })
+    }
+
+    fn task_finish(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::task::FinishTaskParams = parse(params)?;
+        let finish_tx = {
+            let mut app = lock(&self.ctx.app);
+            let task = app
+                .task
+                .as_mut()
+                .filter(|task| task.task_id == p.task_id)
+                .ok_or_else(|| SidecarError::new(ErrorCode::TaskNotFound, "当前任务不存在"))?;
+            if task.state != halo_core::TaskState::WaitingDeveloper
+                || task.cancellation_requested
+                || task.finish_requested
+            {
+                return Err(SidecarError::new(
+                    ErrorCode::TaskStillRunning,
+                    "只有等待开发者的活动任务可以显式结束会话",
+                ));
+            }
+            let finish_tx = task.finish_tx.clone().ok_or_else(|| {
+                SidecarError::internal("任务缺少显式结束控制通道")
+            })?;
+            task.finish_requested = true;
+            finish_tx
+        };
+        let accepted = task_flow::request_finish(&finish_tx);
+        if !accepted {
+            let mut app = lock(&self.ctx.app);
+            if let Some(task) = app.task.as_mut().filter(|task| task.task_id == p.task_id) {
+                task.finish_requested = false;
+            }
+        }
+        ok(&methods::task::FinishTaskResult { accepted })
     }
 
     fn task_resolve_action(&mut self, params: Value) -> Result<Value, SidecarError> {
@@ -1221,18 +1311,44 @@ impl Dispatcher {
 
     fn task_snapshot(&mut self, params: Value) -> Result<Value, SidecarError> {
         let p: methods::task::TaskSnapshotParams = parse(params)?;
-        let (last_seq, events) = self.ctx.bus.events_after(p.after_seq)?;
-        let (task, session_messages, action_requests) = {
+        let (last_seq, mut events) = self.ctx.bus.events_after(p.after_seq)?;
+        let (task, session_messages, action_requests, session_is_active) = {
             let app = lock(&self.ctx.app);
             match app.task.as_ref() {
-                Some(task) => (
-                    Some(task.to_status()),
-                    task.session_messages.clone(),
-                    task.action_requests.values().cloned().collect(),
-                ),
-                None => (None, vec![], vec![]),
+                Some(task) => {
+                    let session_is_active = matches!(
+                        task.state,
+                        halo_core::TaskState::Created
+                            | halo_core::TaskState::Running
+                            | halo_core::TaskState::WaitingDeveloper
+                            | halo_core::TaskState::AwaitingAction
+                    );
+                    (
+                        Some(task.to_status()),
+                        if session_is_active {
+                            task.session_messages.clone()
+                        } else {
+                            vec![]
+                        },
+                        if session_is_active {
+                            task.action_requests.values().cloned().collect()
+                        } else {
+                            vec![]
+                        },
+                        session_is_active,
+                    )
+                }
+                None => (None, vec![], vec![], false),
             }
         };
+        if !session_is_active {
+            events.retain(|event| {
+                !matches!(
+                    event.event.as_str(),
+                    "task.session_message" | "task.action_request" | "task.action_resolved"
+                )
+            });
+        }
         ok(&methods::task::TaskSnapshotResult {
             task,
             last_seq,
@@ -1717,6 +1833,46 @@ mod tests {
     struct ActionHandle {
         decisions: Mutex<Vec<(String, halo_runtime::ActionDecision)>>,
         cancel_begins: AtomicUsize,
+    }
+
+    struct SessionHandle {
+        messages: Mutex<Vec<String>>,
+    }
+
+    impl SessionHandle {
+        fn new() -> Self {
+            Self {
+                messages: Mutex::new(vec![]),
+            }
+        }
+    }
+
+    impl AgentHandle for SessionHandle {
+        fn run_task(
+            &self,
+            _spec: &halo_runtime::RunTaskSpec,
+        ) -> Result<(), halo_runtime::RuntimeError> {
+            Ok(())
+        }
+
+        fn send_message(&self, message: &str) -> Result<(), halo_runtime::RuntimeError> {
+            self.messages.lock().unwrap().push(message.to_string());
+            Ok(())
+        }
+
+        fn finish_session(&self) -> Result<(), halo_runtime::RuntimeError> {
+            Ok(())
+        }
+
+        fn cancel_native(&self) {}
+
+        fn stop(&self, _grace: std::time::Duration) -> halo_runtime::StopOutcome {
+            halo_runtime::StopOutcome::Graceful
+        }
+
+        fn state(&self) -> RuntimeState {
+            RuntimeState::Ready
+        }
     }
 
     impl ActionHandle {
@@ -2536,6 +2692,63 @@ mod tests {
     }
 
     #[test]
+    fn follow_up_and_finish_are_waiting_only_and_use_independent_controls() {
+        let mut f = fixture();
+        hello(&mut f);
+        install_active_task(
+            &f.d.ctx,
+            "task-session-control",
+            halo_core::TaskState::WaitingDeveloper,
+        );
+        let handle = Arc::new(SessionHandle::new());
+        let (finish_tx, finish_rx) = crossbeam_channel::bounded(1);
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let task = app.task.as_mut().unwrap();
+            task.agent = AgentKind::OpenCode;
+            task.finish_tx = Some(finish_tx);
+            app.slot_mut(AgentKind::OpenCode).handle = Some(handle.clone());
+        }
+
+        let empty = f.d.dispatch(req(
+            "task.send_message",
+            json!({"task_id": "task-session-control", "message": "   "}),
+        ));
+        assert_eq!(err_code(&empty), ErrorCode::InvalidParams);
+
+        let sent = f.d.dispatch(req(
+            "task.send_message",
+            json!({"task_id": "task-session-control", "message": "  请继续检查  "}),
+        ));
+        assert!(sent.ok, "{sent:?}");
+        assert_eq!(*handle.messages.lock().unwrap(), vec!["请继续检查"]);
+        assert_eq!(
+            lock(&f.d.ctx.app).task.as_ref().unwrap().state,
+            halo_core::TaskState::Running
+        );
+        let running_finish = f.d.dispatch(req(
+            "task.finish",
+            json!({"task_id": "task-session-control"}),
+        ));
+        assert_eq!(err_code(&running_finish), ErrorCode::TaskStillRunning);
+        assert!(finish_rx.try_recv().is_err());
+
+        lock(&f.d.ctx.app).task.as_mut().unwrap().state =
+            halo_core::TaskState::WaitingDeveloper;
+        let finished = f.d.dispatch(req(
+            "task.finish",
+            json!({"task_id": "task-session-control"}),
+        ));
+        assert!(finished.ok, "{finished:?}");
+        finish_rx.try_recv().expect("显式结束应使用独立通道");
+        assert!(!lock(&f.d.ctx.app)
+            .task
+            .as_ref()
+            .unwrap()
+            .cancellation_requested);
+    }
+
+    #[test]
     fn task_resolve_action_exposes_only_the_matching_pending_card_and_prevents_duplicates() {
         let mut f = fixture();
         hello(&mut f);
@@ -2899,6 +3112,64 @@ mod tests {
         assert!(status.result.unwrap()["task"].get("session_messages").is_none());
     }
 
+    #[test]
+    fn task_snapshot_does_not_replay_session_records_after_delivery_review() {
+        let mut f = fixture();
+        hello(&mut f);
+        install_active_task(&f.d.ctx, "task-session", halo_core::TaskState::WaitingDeveloper);
+        crate::state::append_active_session_message(
+            &f.d.ctx.app,
+            &f.d.ctx.bus,
+            "task-session",
+            methods::task::TaskSessionMessageRole::User,
+            "完成后不得重放的追问",
+        )
+        .unwrap();
+        f.d.ctx.bus.emit(
+            Some("task-session"),
+            "task.action_request",
+            json!({"prompt": "完成后不得重放的操作请求"}),
+        );
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let task = app.task.as_mut().unwrap();
+            task.state = halo_core::TaskState::ReviewReady;
+            task.action_requests.insert(
+                "request-after".to_string(),
+                methods::task::TaskActionRequest {
+                    request_id: "request-after".to_string(),
+                    kind: methods::task::TaskActionKind::Permission,
+                    prompt: "stale action".to_string(),
+                    decision_sent: false,
+                },
+            );
+        }
+
+        let snapshot = f
+            .d
+            .dispatch(req("task.snapshot", json!({"after_seq": 0})));
+        assert!(snapshot.ok, "{snapshot:?}");
+        let result = snapshot.result.unwrap();
+        assert_eq!(result["session_messages"], json!([]));
+        assert_eq!(result["action_requests"], json!([]));
+        assert!(result["events"].as_array().unwrap().iter().all(|event| {
+            !matches!(
+                event["event"].as_str(),
+                Some("task.session_message" | "task.action_request" | "task.action_resolved")
+            )
+        }));
+        assert!(!result.to_string().contains("完成后不得重放"));
+
+        lock(&f.d.ctx.app).task.as_mut().unwrap().state = halo_core::TaskState::Finishing;
+        let finishing_snapshot = f
+            .d
+            .dispatch(req("task.snapshot", json!({"after_seq": 0})));
+        assert!(finishing_snapshot.ok, "{finishing_snapshot:?}");
+        let finishing_result = finishing_snapshot.result.unwrap();
+        assert_eq!(finishing_result["session_messages"], json!([]));
+        assert_eq!(finishing_result["action_requests"], json!([]));
+    }
+
     // ---------- review / delivery / handoff / history ----------
 
     fn seed_reviewable_task(ctx: &Ctx, task_id: &str, versions: u32) {
@@ -2968,7 +3239,9 @@ mod tests {
             session_messages: vec![],
             action_requests: Default::default(),
             cancellation_requested: false,
+            finish_requested: false,
             cancel_tx: None,
+            finish_tx: None,
         };
         ctx.store.put_task(&task.to_record()).unwrap();
         lock(&ctx.app).task = Some(task);

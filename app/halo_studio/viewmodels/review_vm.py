@@ -83,6 +83,7 @@ class ReviewFileListModel(QAbstractListModel):
 class ReviewViewModel(BaseViewModel):
     bundleChanged = Signal()
     decisionChanged = Signal()
+    reviewReady = Signal()
 
     def __init__(self, client, parent: QObject | None = None) -> None:
         super().__init__(client, parent)
@@ -91,6 +92,10 @@ class ReviewViewModel(BaseViewModel):
         self._decision_kind = ""
         self._decision_reason = ""
         self._decided_at = ""
+        self._auto_request: tuple[str, int] | None = None
+        client.subscribe("task.finished", self._on_task_finished)
+        client.subscribe("task.state", self._on_task_state)
+        client.subscribe("workspace.changed", self._on_workspace_changed)
 
     def _reset_bundle_fields(self) -> None:
         self._task_id = ""
@@ -106,6 +111,14 @@ class ReviewViewModel(BaseViewModel):
         self._verification_source = ""
         self._baseline_dirty_files: list = []
 
+    def _reset_decision_fields(self) -> None:
+        if not (self._decision_kind or self._decision_reason or self._decided_at):
+            return
+        self._decision_kind = ""
+        self._decision_reason = ""
+        self._decided_at = ""
+        self.decisionChanged.emit()
+
     # ---- 命令 ----
 
     @Slot(str)
@@ -115,6 +128,21 @@ class ReviewViewModel(BaseViewModel):
         if version is not None:
             params["version"] = int(version)
         self._client.request("review.get", params, self._on_bundle_ok, self._set_error)
+
+    def _auto_load(self, task_id: str, version: int) -> None:
+        key = (task_id, version)
+        if not task_id or version <= 0 or self._auto_request == key:
+            return
+        if self._task_id == task_id and self._evidence_version == version:
+            self.reviewReady.emit()
+            return
+        self._auto_request = key
+        self._client.request(
+            "review.get",
+            {"task_id": task_id, "version": version},
+            lambda bundle: self._on_auto_bundle_ok(bundle, key),
+            lambda error: self._on_auto_bundle_error(error, key),
+        )
 
     @Slot()
     def accept(self) -> None:
@@ -144,8 +172,12 @@ class ReviewViewModel(BaseViewModel):
 
     def _on_bundle_ok(self, bundle: dict) -> None:
         bundle = bundle or {}
-        self._task_id = str(bundle.get("task_id") or "")
-        self._evidence_version = int(bundle.get("evidence_version") or 0)
+        next_task_id = str(bundle.get("task_id") or "")
+        next_evidence_version = int(bundle.get("evidence_version") or 0)
+        if (next_task_id, next_evidence_version) != (self._task_id, self._evidence_version):
+            self._reset_decision_fields()
+        self._task_id = next_task_id
+        self._evidence_version = next_evidence_version
         self._is_latest = bool(bundle.get("is_latest", False))
         self._outcome = str(bundle.get("outcome") or "")
         self._attribution = str(bundle.get("attribution") or "")
@@ -158,6 +190,49 @@ class ReviewViewModel(BaseViewModel):
         self._verification_source = str(verification.get("source") or "")
         self._baseline_dirty_files = list(bundle.get("baseline_dirty_files") or [])
         self._files_model.reset_with(list(bundle.get("files") or []))
+        self.bundleChanged.emit()
+
+    def _on_auto_bundle_ok(self, bundle: dict, key: tuple[str, int]) -> None:
+        if self._auto_request != key:
+            return
+        self._auto_request = None
+        if (
+            str((bundle or {}).get("task_id") or "") != key[0]
+            or int((bundle or {}).get("evidence_version") or 0) != key[1]
+        ):
+            return
+        self._on_bundle_ok(bundle)
+        self.reviewReady.emit()
+
+    def _on_auto_bundle_error(self, error: dict, key: tuple[str, int]) -> None:
+        if self._auto_request != key:
+            return
+        self._auto_request = None
+        self._set_error(error)
+
+    def _on_task_finished(self, envelope: dict) -> None:
+        payload = envelope.get("payload") or {}
+        if payload.get("outcome") != "finished":
+            return
+        task_id = str(envelope.get("task_id") or payload.get("task_id") or "")
+        version = payload.get("evidence_version")
+        if isinstance(version, int):
+            self._auto_load(task_id, version)
+
+    def _on_task_state(self, envelope: dict) -> None:
+        payload = envelope.get("payload") or {}
+        task = payload.get("task") or {}
+        if not isinstance(task, dict) or task.get("state") != "review_ready":
+            return
+        version = task.get("latest_evidence_version")
+        if isinstance(version, int):
+            self._auto_load(str(task.get("task_id") or ""), version)
+
+    def _on_workspace_changed(self, _envelope: dict) -> None:
+        self._auto_request = None
+        self._reset_bundle_fields()
+        self._reset_decision_fields()
+        self._files_model.reset_with([])
         self.bundleChanged.emit()
 
     def _on_decision_ok(self, result: dict) -> None:

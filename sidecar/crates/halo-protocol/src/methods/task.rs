@@ -95,6 +95,33 @@ pub struct CancelTaskResult {
     pub accepted: bool,
 }
 
+/// task.send_message params。message 仅用于当前活动会话，不进入持久化历史。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SendTaskMessageParams {
+    pub task_id: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SendTaskMessageResult {
+    pub accepted: bool,
+}
+
+/// task.finish params/result。accepted 仅表示显式结束已交给编排线程。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct FinishTaskParams {
+    pub task_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct FinishTaskResult {
+    pub accepted: bool,
+}
+
 /// task.mark_manual_edit params
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

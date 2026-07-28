@@ -73,6 +73,7 @@ pub fn start_task(
     let task_id = format!("task-{}", uuid::Uuid::new_v4());
     let (task_tx, task_rx) = unbounded::<RuntimeEvent>();
     let (cancel_tx, cancel_rx) = bounded::<()>(4);
+    let (finish_tx, finish_rx) = bounded::<()>(1);
 
     let task = ActiveTask {
         task_id: task_id.clone(),
@@ -92,7 +93,9 @@ pub fn start_task(
         session_messages: vec![],
         action_requests: Default::default(),
         cancellation_requested: false,
+        finish_requested: false,
         cancel_tx: Some(cancel_tx),
+        finish_tx: Some(finish_tx),
     };
 
     let created_status = task.to_status();
@@ -137,7 +140,7 @@ pub fn start_task(
     let thread_git = GitClient::new(PathBuf::from(git_root));
     let thread_task_id = task_id.clone();
     std::thread::spawn(move || {
-        run_task_loop(
+        run_task_loop_with_finish(
             &thread_ctx,
             &thread_git,
             &thread_task_id,
@@ -145,6 +148,7 @@ pub fn start_task(
             handle,
             task_rx,
             cancel_rx,
+            finish_rx,
         );
     });
 
@@ -274,10 +278,33 @@ pub fn run_task_loop(
     events_rx: Receiver<RuntimeEvent>,
     cancel_rx: Receiver<()>,
 ) {
+    run_task_loop_with_finish(
+        ctx,
+        git,
+        task_id,
+        agent,
+        handle,
+        events_rx,
+        cancel_rx,
+        crossbeam_channel::never(),
+    );
+}
+
+pub fn run_task_loop_with_finish(
+    ctx: &FlowCtx,
+    git: &GitClient,
+    task_id: &str,
+    agent: AgentKind,
+    handle: Arc<dyn AgentHandle>,
+    events_rx: Receiver<RuntimeEvent>,
+    cancel_rx: Receiver<()>,
+    finish_rx: Receiver<()>,
+) {
     enum Ending {
         Done { outcome: String, summary: String },
         Cancelled { mode: &'static str },
         RuntimeFailed { reason: String },
+        ExplicitFinish,
     }
 
     let ending = loop {
@@ -304,6 +331,11 @@ pub fn run_task_loop(
                     on_verification(ctx, task_id, &status, &detail),
                 Ok(RuntimeEvent::SessionReply { text }) => on_session_reply(ctx, task_id, &text),
                 Ok(RuntimeEvent::TaskDone { outcome, summary }) => {
+                    // OpenCode 受管会话只能由开发者显式结束；任何运行时 TaskDone
+                    // 都是迟到/兼容层信号，不能把 running 或 waiting 误判为正常结束。
+                    if agent == AgentKind::OpenCode {
+                        continue;
+                    }
                     let waiting_for_developer = {
                         let app = lock(&ctx.app);
                         app.task
@@ -354,11 +386,61 @@ pub fn run_task_loop(
                     }
                 };
                 break Ending::Cancelled { mode };
+            },
+            recv(finish_rx) -> msg => {
+                if msg.is_err() {
+                    continue;
+                }
+                let is_waiting = {
+                    let app = lock(&ctx.app);
+                    app.task.as_ref().is_some_and(|task| {
+                        task.task_id == task_id
+                            && task.state == TaskState::WaitingDeveloper
+                            && task.finish_requested
+                            && !task.cancellation_requested
+                    })
+                };
+                if !is_waiting {
+                    continue;
+                }
+                if let Err(error) = handle.finish_session() {
+                    break Ending::RuntimeFailed {
+                        reason: format!("显式结束受管会话失败：{error}"),
+                    };
+                }
+                break Ending::ExplicitFinish;
             }
         }
     };
 
     match ending {
+        Ending::ExplicitFinish => {
+            apply_event(ctx, task_id, &TaskEvent::FinishRequested);
+            {
+                let mut app = lock(&ctx.app);
+                if let Some(task) = app.task.as_mut().filter(|task| task.task_id == task_id) {
+                    task.session_messages.clear();
+                    task.action_requests.clear();
+                }
+            }
+            match append_evidence(
+                ctx,
+                git,
+                task_id,
+                "finished",
+                "",
+            ) {
+                Ok(version) => {
+                    apply_event(ctx, task_id, &TaskEvent::EvidenceReady);
+                    ctx.bus.emit(
+                        Some(task_id),
+                        "task.finished",
+                        json!({"outcome": "finished", "evidence_version": version}),
+                    );
+                }
+                Err(()) => mark_evidence_persistence_failure(ctx, task_id),
+            }
+        }
         Ending::Done { outcome, summary } => {
             if outcome == "finished" {
                 apply_event(ctx, task_id, &TaskEvent::Finishing);
@@ -710,8 +792,6 @@ fn append_evidence(
             summary = sanitize(&format!("{summary}\n【取证失败】无法读取任务关联变更：{e}"));
         }
     }
-    let (summary, _) = cap(&summary, limits::VERSION_TOTAL_MAX);
-
     let (attribution, reasons, verification) = {
         let app = lock(&ctx.app);
         match app.task.as_ref().filter(|t| t.task_id == task_id) {
@@ -735,6 +815,15 @@ fn append_evidence(
             None => return Err(()),
         }
     };
+
+    if summary.trim().is_empty() {
+        summary = format!(
+            "开发者已显式结束受管会话；任务基线后关联变更共 {} 个文件；验证结论：{}",
+            files.len(),
+            verification_status_core_to_str(verification.status)
+        );
+    }
+    let (summary, _) = cap(&sanitize(&summary), limits::VERSION_TOTAL_MAX);
 
     let draft = halo_store::EvidenceDraft {
         outcome: outcome.to_string(),
@@ -845,6 +934,10 @@ pub fn request_cancel(cancel_tx: &Sender<()>) -> bool {
     cancel_tx.try_send(()).is_ok()
 }
 
+pub fn request_finish(finish_tx: &Sender<()>) -> bool {
+    finish_tx.try_send(()).is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -893,6 +986,9 @@ mod tests {
                     summary: "已原生停止".to_string(),
                 });
             }
+        }
+        fn finish_session(&self) -> Result<(), RuntimeError> {
+            Ok(())
         }
         fn stop(&self, _grace: Duration) -> StopOutcome {
             self.force_stops.fetch_add(1, Ordering::SeqCst);
@@ -1061,7 +1157,9 @@ mod tests {
             session_messages: vec![],
             action_requests: Default::default(),
             cancellation_requested: false,
+            finish_requested: false,
             cancel_tx: None,
+            finish_tx: None,
         };
         f.ctx.store.put_task(&task.to_record()).unwrap();
         lock(&f.ctx.app).task = Some(task);
@@ -1294,6 +1392,66 @@ mod tests {
             assert!(e.seq > prev);
             prev = e.seq;
         }
+    }
+
+    #[test]
+    fn explicit_finish_from_waiting_uses_baseline_and_clears_session_record() {
+        let f = fixture();
+        install_running_task(&f, "task-explicit-finish");
+        fs::write(f.repo.join("follow-up.txt"), "harmless change\n").unwrap();
+        {
+            let mut app = lock(&f.ctx.app);
+            let task = app.task.as_mut().unwrap();
+            task.state = TaskState::WaitingDeveloper;
+            task.finish_requested = true;
+            task.session_messages.push(ActiveTask::session_message(
+                halo_protocol::methods::task::TaskSessionMessageRole::User,
+                "这段追问不能进入证据",
+            ));
+        }
+        let (_event_tx, event_rx) = unbounded::<RuntimeEvent>();
+        let (_cancel_tx, cancel_rx) = bounded::<()>(1);
+        let (finish_tx, finish_rx) = bounded::<()>(1);
+        finish_tx.send(()).unwrap();
+
+        run_task_loop_with_finish(
+            &f.ctx,
+            &GitClient::new(&f.repo),
+            "task-explicit-finish",
+            AgentKind::OpenCode,
+            Arc::new(FakeHandle::inert()),
+            event_rx,
+            cancel_rx,
+            finish_rx,
+        );
+
+        assert_eq!(task_state(&f), TaskState::ReviewReady);
+        let evidence = f
+            .ctx
+            .store
+            .latest_evidence("task-explicit-finish")
+            .unwrap()
+            .unwrap();
+        assert!(evidence.files.iter().any(|file| file.path == "follow-up.txt"));
+        assert!(evidence.summary.contains("关联变更共 1 个文件"));
+        assert!(evidence.summary.contains("验证结论：not_run"));
+        let rendered = format!(
+            "{} {}",
+            evidence.summary,
+            evidence
+                .files
+                .iter()
+                .map(|file| file.diff.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        assert!(!rendered.contains("这段追问不能进入证据"));
+        assert!(lock(&f.ctx.app)
+            .task
+            .as_ref()
+            .unwrap()
+            .session_messages
+            .is_empty());
     }
 
     #[test]

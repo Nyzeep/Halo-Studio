@@ -444,6 +444,17 @@ fn begin_prompt(
 }
 
 fn emit_round(state: Arc<Mutex<FakeState>>, mode: String, session_id: String, prompt: String) {
+    let round = {
+        let state = lock_state(&state);
+        state
+            .sessions
+            .get(&session_id)
+            .map(|session| session.messages.len() / 2 + 1)
+            .unwrap_or(1)
+    };
+    if round == 1 && prompt.contains("写入 hello_from_agent.txt") {
+        let _ = std::fs::write("hello_from_agent.txt", "created by fake opencode\n");
+    }
     let missing_busy_eof = mode == "missing_busy_eof";
     if !missing_busy_eof {
         emit_event(
@@ -480,33 +491,40 @@ fn emit_round(state: Arc<Mutex<FakeState>>, mode: String, session_id: String, pr
         );
         std::thread::sleep(Duration::from_millis(100));
     }
+    let assistant_id = format!("msg_fake_{round}");
+    let user_id = format!("msg_fake_user_{round}");
+    let reply_text = if round == 1 {
+        "fake-opencode 已完成首轮回复。".to_string()
+    } else {
+        format!("fake-opencode 已完成第{round}轮回复。")
+    };
     let message = if mode == "message_error" {
         json!({
-            "info": {"id": "msg_fake_1", "sessionID": session_id.as_str(), "role": "assistant",
-                "time": {"created": 1, "completed": 2}, "error": {"name": "APIError"}},
+            "info": {"id": assistant_id, "sessionID": session_id.as_str(), "role": "assistant",
+                "time": {"created": round * 2 - 1, "completed": round * 2}, "error": {"name": "APIError"}},
             "parts": []
         })
     } else {
         json!({
-            "info": {"id": "msg_fake_1", "sessionID": session_id.as_str(), "role": "assistant",
-                "time": {"created": 1, "completed": 2}},
+            "info": {"id": assistant_id, "sessionID": session_id.as_str(), "role": "assistant",
+                "time": {"created": round * 2 - 1, "completed": round * 2}},
             "parts": [
                 {"type": "reasoning", "text": "不会作为活动会话回复"},
                 {"type": "tool", "tool": "write", "state": {"status": "completed"}, "output": "原始工具输出"},
-                {"type": "text", "text": "fake-opencode 已完成首轮回复。"}
+                {"type": "text", "text": reply_text}
             ]
         })
     };
     let user_message = json!({
-        "info": {"id": "msg_fake_user_1", "sessionID": session_id.as_str(), "role": "user",
-            "time": {"created": 0}},
+        "info": {"id": user_id, "sessionID": session_id.as_str(), "role": "user",
+            "time": {"created": round * 2 - 2}},
         "parts": [{"type": "text", "text": prompt}]
     });
     {
         let mut state = lock_state(&state);
         if let Some(session) = state.sessions.get_mut(&session_id) {
             session.status = "idle";
-            session.messages = vec![user_message, message];
+            session.messages.extend([user_message, message]);
         } else {
             return;
         }

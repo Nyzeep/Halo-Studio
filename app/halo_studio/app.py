@@ -174,6 +174,8 @@ def assemble(engine) -> AppContext:
     for prop_name, _ in VIEWMODEL_SPECS:
         root_context.setContextProperty(prop_name, viewmodels[prop_name])
 
+    viewmodels["reviewVM"].reviewReady.connect(viewmodels["shellVM"].showReview)
+
     try:
         from halo_studio.editor import create_editor_service
 

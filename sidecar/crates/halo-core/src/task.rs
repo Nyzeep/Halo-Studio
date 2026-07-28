@@ -27,9 +27,11 @@ pub enum TaskState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TaskEvent {
     Started,
+    FollowUpSent,
     RoundCompleted,
     ActionRequested,
     ActionResolved,
+    FinishRequested,
     Finishing,
     EvidenceReady,
     Accept,
@@ -110,8 +112,10 @@ impl TaskState {
         let next = match (self, ev) {
             (S::Created, E::Started) => Some(S::Running),
             (S::Running, E::RoundCompleted) => Some(S::WaitingDeveloper),
+            (S::WaitingDeveloper, E::FollowUpSent) => Some(S::Running),
             (S::Running, E::ActionRequested) => Some(S::AwaitingAction),
             (S::AwaitingAction, E::ActionResolved) => Some(S::Running),
+            (S::WaitingDeveloper, E::FinishRequested) => Some(S::Finishing),
             (S::Running, E::Finishing) => Some(S::Finishing),
             (S::Finishing, E::EvidenceReady) => Some(S::ReviewReady),
             (S::ReviewReady, E::Accept) => Some(S::Accepted),
@@ -138,9 +142,11 @@ impl TaskEvent {
     pub fn name(&self) -> &'static str {
         match self {
             TaskEvent::Started => "started",
+            TaskEvent::FollowUpSent => "follow_up_sent",
             TaskEvent::RoundCompleted => "round_completed",
             TaskEvent::ActionRequested => "action_requested",
             TaskEvent::ActionResolved => "action_resolved",
+            TaskEvent::FinishRequested => "finish_requested",
             TaskEvent::Finishing => "finishing",
             TaskEvent::EvidenceReady => "evidence_ready",
             TaskEvent::Accept => "accept",
@@ -160,9 +166,11 @@ mod tests {
     fn all_events() -> Vec<TaskEvent> {
         vec![
             TaskEvent::Started,
+            TaskEvent::FollowUpSent,
             TaskEvent::RoundCompleted,
             TaskEvent::ActionRequested,
             TaskEvent::ActionResolved,
+            TaskEvent::FinishRequested,
             TaskEvent::Finishing,
             TaskEvent::EvidenceReady,
             TaskEvent::Accept,
@@ -179,11 +187,17 @@ mod tests {
         use TaskState as S;
         match ev {
             TaskEvent::Started => (from == S::Created).then_some(S::Running),
+            TaskEvent::FollowUpSent => {
+                (from == S::WaitingDeveloper).then_some(S::Running)
+            }
             TaskEvent::RoundCompleted => {
                 (from == S::Running).then_some(S::WaitingDeveloper)
             }
             TaskEvent::ActionRequested => (from == S::Running).then_some(S::AwaitingAction),
             TaskEvent::ActionResolved => (from == S::AwaitingAction).then_some(S::Running),
+            TaskEvent::FinishRequested => {
+                (from == S::WaitingDeveloper).then_some(S::Finishing)
+            }
             TaskEvent::Finishing => (from == S::Running).then_some(S::Finishing),
             TaskEvent::EvidenceReady => (from == S::Finishing).then_some(S::ReviewReady),
             TaskEvent::Accept => (from == S::ReviewReady).then_some(S::Accepted),
@@ -221,7 +235,10 @@ mod tests {
         let mut s = TaskState::Created;
         for ev in [
             TaskEvent::Started,
-            TaskEvent::Finishing,
+            TaskEvent::RoundCompleted,
+            TaskEvent::FollowUpSent,
+            TaskEvent::RoundCompleted,
+            TaskEvent::FinishRequested,
             TaskEvent::EvidenceReady,
             TaskEvent::Accept,
         ] {
@@ -260,6 +277,22 @@ mod tests {
         let s = TaskState::AwaitingAction;
         assert!(s.apply(&TaskEvent::Finishing).is_err());
         assert!(s.apply(&TaskEvent::EvidenceReady).is_err());
+    }
+
+    #[test]
+    fn only_waiting_developer_can_send_follow_up_or_finish() {
+        for state in TaskState::ALL {
+            assert_eq!(
+                state.apply(&TaskEvent::FollowUpSent).is_ok(),
+                state == TaskState::WaitingDeveloper,
+                "{state} 的追问权限不正确"
+            );
+            assert_eq!(
+                state.apply(&TaskEvent::FinishRequested).is_ok(),
+                state == TaskState::WaitingDeveloper,
+                "{state} 的显式结束权限不正确"
+            );
+        }
     }
 
     #[test]

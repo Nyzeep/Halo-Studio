@@ -120,6 +120,8 @@ JSON Schema 副本见 `protocol/v1/`。
 | 方法 | params | result |
 | --- | --- | --- |
 | `task.create` | `TaskSpec` | `{"task": TaskStatus}` |
+| `task.send_message` | `{"task_id": …, "message": "…"}` | `{"accepted": true}`；仅 `waiting_developer`，空消息拒绝 |
+| `task.finish` | `{"task_id": …}` | `{"accepted": true}`；仅安全的 `waiting_developer` 轮次边界 |
 | `task.cancel` | `{"task_id": …}` | `{"accepted": true}`（结果经事件） |
 | `task.resolve_action` | `{"task_id": …, "request_id": …, "decision": "allow_once"\|"reject"\|"answer", "answer": "…"\|null}` | `{"accepted": true}`（仅表示决议已送达；任务状态仍等待真实 Agent 反馈） |
 | `task.mark_manual_edit` | `{"task_id": …, "note": "…"}` | `{"attribution": "mixed"}` |
@@ -127,7 +129,7 @@ JSON Schema 副本见 `protocol/v1/`。
 | `task.status` | `{"task_id": …}` 或 `{}`（当前任务） | `{"task": TaskStatus \| null}` |
 | `task.snapshot` | `{"after_seq": 40}` | `{"task": TaskStatus\|null, "last_seq": 42, "events": [Event...], "session_messages": [TaskSessionMessage...], "action_requests": [TaskActionRequest...]}`；缓冲不足覆盖 after_seq 时返回错误 `EVENT_GAP`，UI 应整体重建视图 |
 
-OpenCode 创建任务时以 `instructions` 建立一个私有的真实 OpenCode 会话、发送首条消息并消费该会话的事件流。首轮整理后的 Agent 回复以 `task.session_message` 追加，任务转为 `waiting_developer`；它不会生成交付证据、进入审查或发送 `task.finished`。端口、认证信息和 OpenCode 会话标识保持在 Sidecar 私有运行时中。后续消息和显式结束会话动作属于下一张票，当前契约不暴露这些 API；不得向旧假设任务端点发送请求或伪造任务成功。
+OpenCode 创建任务时以 `instructions` 建立一个私有的真实 OpenCode 会话、发送首条消息并消费该会话的事件流。整理后的 Agent 回复以 `task.session_message` 追加，任务转为 `waiting_developer`；一次回复不会生成交付证据、进入审查或发送 `task.finished`。`task.send_message` 只在该状态向同一私有 session 开始下一轮，并形成 `waiting_developer -> running -> waiting_developer`；旧回复标识由运行时私有游标排除，端口、认证信息和远端 session/message 标识不越过运行时边界。`task.finish` 与取消独立，只在安全轮次边界进入 `finishing`，复用任务创建时的 Git 基线生成 Diff、摘要与验证证据，成功后进入 `review_ready`；活动会话文本随即清空且不进入证据或历史。
 
 操作请求会把任务置为 `awaiting_action`，并经 `task.action_request` 事件和 `task.snapshot.action_requests` 供当前活动会话呈现。权限只接受 `allow_once` 或 `reject`；澄清只接受带非空 `answer` 的 `answer` 或 `reject`。`accepted: true` 只表示 Sidecar 已将精确匹配的单次决议提交给 Agent，不能提前把任务转为 `running`；只有匹配请求的真实 Agent 反馈才可发出 `task.action_resolved`、移除该卡片，并经后续 `task.state` 推进任务阶段。`ACTION_REQUEST_NOT_FOUND`、`ACTION_REQUEST_ALREADY_RESOLVED` 与 `ACTION_REQUEST_NOT_PENDING` 分别覆盖不匹配、重复和取消/非等待状态；任何路径都不创建会话级或永久放行规则。
 
@@ -180,6 +182,7 @@ OpenCode 创建任务时以 `instructions` 建立一个私有的真实 OpenCode 
 - 当前任务处于 `created` / `running` / `waiting_developer` / `awaiting_action` / `finishing` 时，成功的 `fs.write`、`fs.create_file`、`fs.create_dir`、`fs.rename` 会自动发出 `task.manual_edit`（`source: "fs_write"`）。每次成功写入都推送事件；持久化归因原因与 `manual_edit_paths` 按（任务、路径）去重。`review_ready` 及之后的写入不再改变该任务归因。
 - 自动归因的持久化或事件发送失败不影响文件操作本身的成功响应；归因只负责诚实标记，绝不充当保存门禁。
 - 取消流程：先经原生通道请求停止 → 超时（默认 10s，可测试注入）→ 强制终止；事件 `task.cancelled` 的 payload 带 `{"mode": "native"|"forced"}`。
+- 显式结束不是取消：不得调用 OpenCode abort，也不得把运行中的 Agent 当成正常结束；接受/拒绝仍只记录结论，不执行任何 Git 或文件写操作。
 - Sidecar 重启后发现非终态任务 → 标记 `interrupted`，不自动恢复或重放。
 
 ### 3.5 交付审查（review.* / delivery.*）

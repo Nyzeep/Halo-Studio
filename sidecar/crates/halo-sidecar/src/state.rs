@@ -17,6 +17,8 @@ use halo_runtime::{
 use crate::mapping::runtime_state_payload;
 use crate::server::EventBus;
 
+const ACTIVE_SESSION_MESSAGES_MAX: usize = 128;
+
 /// Mutex 中毒时继续使用内部值：状态为普通数据，恢复使用不破坏不变量。
 pub fn lock<'a, T>(m: &'a Mutex<T>) -> MutexGuard<'a, T> {
     match m.lock() {
@@ -37,6 +39,16 @@ pub trait AgentHandle: Send + Sync {
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::CapabilityUnavailable(
             "当前受管应用不支持通过 Halo 解决操作请求".to_string(),
+        ))
+    }
+    fn send_message(&self, _message: &str) -> Result<(), RuntimeError> {
+        Err(RuntimeError::CapabilityUnavailable(
+            "当前受管应用不支持后续消息".to_string(),
+        ))
+    }
+    fn finish_session(&self) -> Result<(), RuntimeError> {
+        Err(RuntimeError::CapabilityUnavailable(
+            "当前受管应用不支持显式结束会话".to_string(),
         ))
     }
     /// 在 Sidecar 接受取消后同步建立运行时屏障；只有 OpenCode 需要与操作决议线性化。
@@ -71,6 +83,12 @@ impl AgentHandle for OpenCodeHandle {
         decision: ActionDecision,
     ) -> Result<(), RuntimeError> {
         OpenCodeHandle::resolve_action(self, request_id, decision)
+    }
+    fn send_message(&self, message: &str) -> Result<(), RuntimeError> {
+        OpenCodeHandle::send_message(self, message)
+    }
+    fn finish_session(&self) -> Result<(), RuntimeError> {
+        OpenCodeHandle::finish_session(self)
     }
     fn begin_cancel(&self) {
         OpenCodeHandle::begin_cancel(self)
@@ -167,8 +185,11 @@ pub struct ActiveTask {
     >,
     /// 发出取消后不得再把任何操作请求提交给 Agent。
     pub cancellation_requested: bool,
+    pub finish_requested: bool,
     /// 取消请求通道（发往任务编排线程）。
     pub cancel_tx: Option<Sender<()>>,
+    /// 仅安全轮次边界可发送；与取消保持独立通道和语义。
+    pub finish_tx: Option<Sender<()>>,
 }
 
 impl ActiveTask {
@@ -193,6 +214,9 @@ impl ActiveTask {
         text: &str,
     ) -> halo_protocol::methods::task::TaskSessionMessage {
         let message = Self::session_message(role, text);
+        if self.session_messages.len() >= ACTIVE_SESSION_MESSAGES_MAX {
+            self.session_messages.remove(0);
+        }
         self.session_messages.push(message.clone());
         message
     }
@@ -537,7 +561,9 @@ mod tests {
             session_messages: vec![],
             action_requests: Default::default(),
             cancellation_requested: false,
+            finish_requested: false,
             cancel_tx: None,
+            finish_tx: None,
         };
         lock(&app).task = Some(task);
 

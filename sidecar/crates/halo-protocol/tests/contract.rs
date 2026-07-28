@@ -825,6 +825,37 @@ fn task_snapshot_keeps_active_session_messages_outside_task_status() {
 }
 
 #[test]
+fn task_follow_up_and_explicit_finish_shapes_are_stable() {
+    use halo_protocol::methods::task::{
+        FinishTaskParams, FinishTaskResult, SendTaskMessageParams, SendTaskMessageResult,
+    };
+
+    assert_eq!(
+        serde_json::to_value(SendTaskMessageParams {
+            task_id: "task-1".to_string(),
+            message: "请补充测试".to_string(),
+        })
+        .unwrap(),
+        json!({"task_id": "task-1", "message": "请补充测试"})
+    );
+    assert_eq!(
+        serde_json::to_value(SendTaskMessageResult { accepted: true }).unwrap(),
+        json!({"accepted": true})
+    );
+    assert_eq!(
+        serde_json::to_value(FinishTaskParams {
+            task_id: "task-1".to_string(),
+        })
+        .unwrap(),
+        json!({"task_id": "task-1"})
+    );
+    assert_eq!(
+        serde_json::to_value(FinishTaskResult { accepted: true }).unwrap(),
+        json!({"accepted": true})
+    );
+}
+
+#[test]
 fn task_resolve_action_is_one_time_and_snapshot_keeps_only_displayable_request_data() {
     let allow_once = ResolveActionParams {
         task_id: "task-1".to_string(),

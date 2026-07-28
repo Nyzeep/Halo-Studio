@@ -159,6 +159,8 @@ pub enum RuntimeError {
     ActionRequestAlreadyResolved,
     #[error("无法确认本次操作请求的决定是否已送达；任务已停止以避免重复决议")]
     ActionRequestDeliveryUncertain,
+    #[error("当前受管会话不接受后续消息")]
+    SessionNotWaiting,
 }
 
 /// Mutex 中毒时继续使用内部值：本 crate 的共享状态均为简单标量/映射，恢复使用不破坏不变量，

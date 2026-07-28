@@ -446,6 +446,8 @@ struct OcShared {
     pending_actions: Mutex<PendingRemoteActions>,
     cancellation_requested: Mutex<bool>,
     round_gate: Mutex<SessionRoundGate>,
+    // 仅用于拒绝 stale idle 读到的上一轮回复；远端消息标识不越过运行时边界。
+    last_reply_key: Mutex<Option<String>>,
     child: Mutex<Option<Box<dyn ChildProcess>>>,
     runtime_dir: Mutex<Option<TempDir>>,
 }
@@ -463,9 +465,12 @@ impl OcShared {
         });
     }
 
-    fn begin_initial_round_submission(&self) -> bool {
+    fn begin_round_submission(&self) -> bool {
         let mut gate = lock(&self.round_gate);
-        if gate.phase != SessionRoundPhase::Inactive {
+        if !matches!(
+            gate.phase,
+            SessionRoundPhase::Inactive | SessionRoundPhase::Completed
+        ) {
             return false;
         }
         *gate = SessionRoundGate {
@@ -475,11 +480,11 @@ impl OcShared {
         true
     }
 
-    fn reset_initial_round(&self) {
+    fn reset_round(&self) {
         *lock(&self.round_gate) = SessionRoundGate::default();
     }
 
-    fn mark_initial_prompt_accepted(&self) -> bool {
+    fn mark_prompt_accepted(&self) -> bool {
         let mut gate = lock(&self.round_gate);
         if gate.phase != SessionRoundPhase::PromptSubmitting {
             return false;
@@ -749,6 +754,7 @@ fn connect_after_ready_line(
         pending_actions: Mutex::new(PendingRemoteActions::default()),
         cancellation_requested: Mutex::new(false),
         round_gate: Mutex::new(SessionRoundGate::default()),
+        last_reply_key: Mutex::new(None),
         child: Mutex::new(child),
         runtime_dir: Mutex::new(runtime_dir),
     });
@@ -1138,7 +1144,9 @@ fn next_sse_event(reader: &mut dyn BufRead) -> Result<Option<Value>, RuntimeErro
     }
 }
 
-fn completed_assistant_reply(messages: &Value) -> Result<Option<String>, RuntimeError> {
+fn completed_assistant_reply_with_key(
+    messages: &Value,
+) -> Result<Option<(String, String)>, RuntimeError> {
     let entries = messages
         .as_array()
         .or_else(|| messages.get("messages").and_then(Value::as_array))
@@ -1178,9 +1186,28 @@ fn completed_assistant_reply(messages: &Value) -> Result<Option<String>, Runtime
             .filter_map(|part| part.get("text").and_then(Value::as_str))
             .collect::<Vec<_>>()
             .join("\n");
-        return Ok((!text.trim().is_empty()).then_some(text));
+        if text.trim().is_empty() {
+            return Ok(None);
+        }
+        let key = info
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                format!(
+                    "{}:{text}",
+                    info.pointer("/time/completed")
+                        .map(Value::to_string)
+                        .unwrap_or_default()
+                )
+            });
+        return Ok(Some((key, text)));
     }
     Ok(None)
+}
+
+fn completed_assistant_reply(messages: &Value) -> Result<Option<String>, RuntimeError> {
+    completed_assistant_reply_with_key(messages).map(|reply| reply.map(|(_, text)| text))
 }
 
 fn handle_event(
@@ -1330,17 +1357,18 @@ fn session_is_idle(shared: &OcShared, session_id: &str) -> Result<bool, RuntimeE
 fn fetch_completed_assistant_reply_once(
     shared: &OcShared,
     session_id: &str,
-) -> Result<Option<String>, RuntimeError> {
+) -> Result<Option<(String, String)>, RuntimeError> {
     let path = shared.instance_path(&format!("/session/{session_id}/message?limit=20"));
     let messages = shared.request("GET", &path, Duration::from_secs(5))?;
-    completed_assistant_reply(&messages)
+    let reply = completed_assistant_reply_with_key(&messages)?;
+    Ok(reply.filter(|(key, _)| lock(&shared.last_reply_key).as_ref() != Some(key)))
 }
 
 fn fetch_completed_assistant_reply(
     shared: &OcShared,
     session_id: &str,
     attempts: usize,
-) -> Result<Option<String>, RuntimeError> {
+) -> Result<Option<(String, String)>, RuntimeError> {
     for attempt in 0..attempts {
         if let Some(reply) = fetch_completed_assistant_reply_once(shared, session_id)? {
             return Ok(Some(reply));
@@ -1376,7 +1404,7 @@ fn try_complete_round(
         });
     }
 
-    let result: Result<Option<String>, RuntimeError> = (|| {
+    let result: Result<Option<(String, String)>, RuntimeError> = (|| {
         if shared.has_pending_actions() {
             return Ok(None);
         }
@@ -1386,8 +1414,9 @@ fn try_complete_round(
         fetch_completed_assistant_reply(shared, session_id, message_attempts)
     })();
     match result {
-        Ok(Some(text)) => {
+        Ok(Some((key, text))) => {
             if shared.finish_completion_check(true) {
+                *lock(&shared.last_reply_key) = Some(key);
                 let _ = shared.tx.send(RuntimeEvent::SessionReply { text });
                 Ok(CompletionAttempt::Completed)
             } else {
@@ -1543,7 +1572,17 @@ impl OpenCodeHandle {
             .map(|_| ())
     }
 
-    fn confirm_initial_round_started(&self, session_id: &str) -> Result<(), RuntimeError> {
+    fn submit_follow_up(&self, session_id: &str, message: &str) -> Result<(), RuntimeError> {
+        let path = self
+            .shared
+            .instance_path(&format!("/session/{session_id}/prompt_async"));
+        let body = json!({"parts": [{"type": "text", "text": message}]});
+        self.shared
+            .request_json("POST", &path, Some(&body), Duration::from_secs(5))
+            .map(|_| ())
+    }
+
+    fn confirm_round_started(&self, session_id: &str) -> Result<(), RuntimeError> {
         for attempt in 0..6 {
             if self.shared.round_is_completed() || self.shared.has_pending_actions() {
                 return Ok(());
@@ -1563,7 +1602,7 @@ impl OpenCodeHandle {
             if !session_is_idle(&self.shared, session_id)? {
                 if self.shared.event_stream_ended() {
                     return Err(RuntimeError::CapabilityUnavailable(
-                        "OpenCode 真实事件流在首轮开始前意外结束".to_string(),
+                            "OpenCode 真实事件流在本轮开始前意外结束".to_string(),
                     ));
                 }
                 return Ok(());
@@ -1597,6 +1636,7 @@ impl OpenCodeHandle {
         }
         *lock(&self.shared.cancellation_requested) = false;
         lock(&self.shared.pending_actions).reset_for_session();
+        *lock(&self.shared.last_reply_key) = None;
 
         let session_id = match self.create_session() {
             Ok(session_id) => session_id,
@@ -1605,31 +1645,80 @@ impl OpenCodeHandle {
                 return Err(error);
             }
         };
-        if !self.shared.begin_initial_round_submission() {
+        if !self.shared.begin_round_submission() {
             *lock(&self.shared.session_id) = None;
             return Err(RuntimeError::InvalidState);
         }
         if let Err(error) = self.start_event_listener(session_id.clone()) {
-            self.shared.reset_initial_round();
+            self.shared.reset_round();
             *lock(&self.shared.session_id) = None;
             return Err(error);
         }
         *lock(&self.shared.session_id) = Some(session_id.clone());
         if let Err(error) = self.submit_initial_prompt(&session_id, spec) {
-            self.shared.reset_initial_round();
+            self.shared.reset_round();
             *lock(&self.shared.session_id) = None;
             return Err(error);
         }
-        if !self.shared.mark_initial_prompt_accepted() {
-            self.shared.reset_initial_round();
+        if !self.shared.mark_prompt_accepted() {
+            self.shared.reset_round();
             *lock(&self.shared.session_id) = None;
             return Err(RuntimeError::InvalidState);
         }
-        if let Err(error) = self.confirm_initial_round_started(&session_id) {
-            self.shared.reset_initial_round();
+        if let Err(error) = self.confirm_round_started(&session_id) {
+            self.shared.reset_round();
             *lock(&self.shared.session_id) = None;
             return Err(error);
         }
+        Ok(())
+    }
+
+    /// 在同一私有 OpenCode session 上提交下一轮消息。调用方已在 Sidecar 状态机中
+    /// 独占 waiting_developer 边界；运行时仍用轮次闸门防止并发和重复提交。
+    pub fn send_message(&self, message: &str) -> Result<(), RuntimeError> {
+        let message = message.trim();
+        if message.is_empty() || *lock(&self.shared.state) != RuntimeState::Ready {
+            return Err(RuntimeError::InvalidState);
+        }
+        let session_id = lock(&self.shared.session_id)
+            .clone()
+            .filter(|value| !value.is_empty())
+            .ok_or(RuntimeError::SessionNotWaiting)?;
+        if self.shared.has_pending_actions() || !self.shared.begin_round_submission() {
+            return Err(RuntimeError::SessionNotWaiting);
+        }
+        if let Err(error) = self.start_event_listener(session_id.clone()) {
+            *lock(&self.shared.round_gate) = SessionRoundGate {
+                phase: SessionRoundPhase::Completed,
+                event_stream_ended: false,
+            };
+            return Err(error);
+        }
+        if let Err(error) = self.submit_follow_up(&session_id, message) {
+            self.shared.set_failed(
+                "无法确认后续消息是否已送达",
+                "请勿重试本条消息；请重新启动运行时并创建新任务",
+            );
+            return Err(error);
+        }
+        if !self.shared.mark_prompt_accepted() {
+            return Err(RuntimeError::SessionNotWaiting);
+        }
+        self.confirm_round_started(&session_id)
+    }
+
+    /// 显式结束只释放 Halo 持有的远端会话句柄；它不是 abort/cancel。
+    pub fn finish_session(&self) -> Result<(), RuntimeError> {
+        let mut gate = lock(&self.shared.round_gate);
+        if gate.phase != SessionRoundPhase::Completed || self.shared.has_pending_actions() {
+            return Err(RuntimeError::SessionNotWaiting);
+        }
+        let mut session = lock(&self.shared.session_id);
+        if session.as_deref().is_none_or(str::is_empty) {
+            return Err(RuntimeError::SessionNotWaiting);
+        }
+        *session = None;
+        *gate = SessionRoundGate::default();
         Ok(())
     }
 
@@ -1884,6 +1973,7 @@ mod tests {
                 phase: SessionRoundPhase::AwaitingCompletion,
                 event_stream_ended: false,
             }),
+            last_reply_key: Mutex::new(None),
             child: Mutex::new(None),
             runtime_dir: Mutex::new(None),
         }
@@ -1912,7 +2002,7 @@ mod tests {
             shared: Arc::new(shared),
         };
         handle
-            .confirm_initial_round_started("ses_private")
+            .confirm_round_started("ses_private")
             .expect("待决请求应作为首轮合法暂停");
         assert!(
             server.seen.lock().unwrap().is_empty(),

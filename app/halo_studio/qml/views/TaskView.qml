@@ -179,7 +179,7 @@ RowLayout {
         SectionCard {
             Layout.fillWidth: true
             Layout.minimumHeight: 180
-            Layout.preferredHeight: actionRequestList.count > 0 ? 390 : 220
+            Layout.preferredHeight: actionRequestList.count > 0 ? 430 : 290
             Layout.maximumHeight: 480
             title: "活动会话"
 
@@ -369,6 +369,38 @@ RowLayout {
                 text: "暂无会话记录"
                 color: Theme.textDim
                 font.pixelSize: 12
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                TextField {
+                    id: followUpInput
+                    Layout.fillWidth: true
+                    placeholderText: "向当前任务发送追问"
+                    enabled: taskPage.tVM !== null
+                        && taskPage.tVM.state === "waiting_developer"
+                        && !taskPage.tVM.conversationActionPending
+                    onAccepted: {
+                        if (enabled && text.trim().length > 0 && taskPage.tVM.sendMessage)
+                            taskPage.tVM.sendMessage(text)
+                    }
+                }
+                Button {
+                    text: "发送追问"
+                    enabled: followUpInput.enabled && followUpInput.text.trim().length > 0
+                    onClicked: if (taskPage.tVM !== null && taskPage.tVM.sendMessage)
+                        taskPage.tVM.sendMessage(followUpInput.text)
+                }
+                Button {
+                    text: "结束并审查"
+                    enabled: taskPage.tVM !== null
+                        && taskPage.tVM.state === "waiting_developer"
+                        && !taskPage.tVM.conversationActionPending
+                    onClicked: if (taskPage.tVM !== null && taskPage.tVM.finishSession)
+                        taskPage.tVM.finishSession()
+                }
             }
         }
 

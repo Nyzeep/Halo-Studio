@@ -31,7 +31,7 @@ fn opencode_1x_starts_with_fresh_basic_authentication_and_keeps_pi_unprobed() {
         &fake_opencode_exe(),
         &[
             "--mode",
-            "initial_busy_then_idle",
+            "stale_idle",
             "--password-digest-file",
             &digest_arg,
             "--require-credential-env",
@@ -139,11 +139,64 @@ fn opencode_1x_starts_with_fresh_basic_authentication_and_keeps_pi_unprobed() {
     );
     drop(traces);
 
-    let cancelled = sc.ok("task.cancel", json!({"task_id": task_id}));
-    assert_eq!(cancelled["accepted"], true);
-    sc.wait_event("取消等待中的 OpenCode 任务", |event| {
-        event["event"] == "task.cancelled" && event["task_id"] == task_id
+    let follow_up = sc.ok(
+        "task.send_message",
+        json!({"task_id": task_id, "message": "请确认文件改动并给出第二轮回复"}),
+    );
+    assert_eq!(follow_up["accepted"], true);
+    sc.wait_event("追问用户消息", |event| {
+        event["event"] == "task.session_message"
+            && event["task_id"] == task_id
+            && event["payload"]["role"] == "user"
+            && event["payload"]["text"] == "请确认文件改动并给出第二轮回复"
     });
+    sc.wait_event("第二轮 Agent 回复", |event| {
+        event["event"] == "task.session_message"
+            && event["task_id"] == task_id
+            && event["payload"]["role"] == "agent"
+            && event["payload"]["text"] == "fake-opencode 已完成第2轮回复。"
+    });
+    sc.wait_event("追问后再次等待开发者", |event| {
+        event["event"] == "task.state"
+            && event["task_id"] == task_id
+            && event["payload"]["state"] == "waiting_developer"
+    });
+
+    let finish = sc.ok("task.finish", json!({"task_id": task_id}));
+    assert_eq!(finish["accepted"], true);
+    let finished = sc.wait_event("显式结束生成可审查交付", |event| {
+        event["event"] == "task.finished"
+            && event["task_id"] == task_id
+            && event["payload"]["outcome"] == "finished"
+    });
+    let version = finished["payload"]["evidence_version"]
+        .as_u64()
+        .expect("显式结束必须生成证据版本");
+    let review = sc.ok(
+        "review.get",
+        json!({"task_id": task_id, "version": version}),
+    );
+    assert_eq!(review["outcome"], "finished");
+    assert!(review["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|file| file["path"] == "hello_from_agent.txt"
+            && file["diff"].as_str().unwrap_or_default().contains("created by fake opencode")));
+    let final_snapshot = sc.ok("task.snapshot", json!({"after_seq": 0}));
+    assert_eq!(final_snapshot["task"]["state"], "review_ready");
+    assert_eq!(final_snapshot["session_messages"], json!([]));
+    assert!(final_snapshot["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|event| event["event"] != "task.session_message"));
+    assert!(!final_snapshot
+        .to_string()
+        .contains("请确认文件改动并给出第二轮回复"));
+    assert!(!sc.events.lock().unwrap().iter().any(|event| {
+        event["event"] == "task.cancelled" && event["task_id"] == task_id
+    }));
 
     let stopped = sc.ok("runtime.stop", json!({"agent": "opencode"}));
     assert_eq!(stopped["state"], "stopped");
