@@ -20,13 +20,18 @@ fn opencode_1x_starts_with_fresh_basic_authentication_and_keeps_pi_unprobed() {
     let digest_file = digest_dir.path().join("password 摘要.txt");
     let digest_arg = digest_file.to_string_lossy().to_string();
 
-    let mut sc = Sidecar::start(&[("HALO_SHUTDOWN_GRACE_MS", "200")]);
+    let mut sc = Sidecar::start(&[
+        ("HALO_SHUTDOWN_GRACE_MS", "200"),
+        ("HALO_CANCEL_GRACE_MS", "200"),
+    ]);
     sc.hello();
     sc.open_and_trust(&repo.path_str());
     let config_id = sc.save_config(
         "opencode",
         &fake_opencode_exe(),
         &[
+            "--mode",
+            "initial_busy_then_idle",
             "--password-digest-file",
             &digest_arg,
             "--require-credential-env",
@@ -57,19 +62,88 @@ fn opencode_1x_starts_with_fresh_basic_authentication_and_keeps_pi_unprobed() {
         assert_eq!(keys, ["reason", "recovery_hint", "state", "version"]);
     }
 
-    // 受管会话属于下一张票。当前应明确拒绝，而非调用旧 `/task` 伪造在线完成。
-    let error = sc.err(
+    let created = sc.ok(
         "task.create",
         json!({
-            "agent": "opencode", "config_id": config_id, "title": "不应伪造任务",
-            "instructions": "不能调用旧协议"
+            "agent": "opencode", "config_id": config_id, "title": "真实首轮会话",
+            "instructions": "在工作区写入 hello_from_agent.txt"
         }),
-        "RUNTIME_CAPABILITY_UNAVAILABLE",
     );
-    assert!(error["message"]
+    let task_id = created["task"]["task_id"]
         .as_str()
-        .unwrap_or_default()
-        .contains("真实会话尚未接入"));
+        .expect("task.create 必须返回任务标识")
+        .to_string();
+    assert_eq!(created["task"]["state"], "running");
+
+    let user_message = sc.wait_event("首条用户会话消息", |event| {
+        event["event"] == "task.session_message"
+            && event["task_id"] == task_id
+            && event["payload"]["role"] == "user"
+    });
+    assert_eq!(
+        user_message["payload"]["text"],
+        "在工作区写入 hello_from_agent.txt"
+    );
+    let agent_message = sc.wait_event("首条 Agent 会话回复", |event| {
+        event["event"] == "task.session_message"
+            && event["task_id"] == task_id
+            && event["payload"]["role"] == "agent"
+    });
+    assert_eq!(
+        agent_message["payload"]["text"],
+        "fake-opencode 已完成首轮回复。"
+    );
+    assert!(!agent_message["payload"]
+        .to_string()
+        .contains("原始工具输出"));
+    assert!(!agent_message["payload"]
+        .to_string()
+        .contains("不会作为活动会话回复"));
+
+    let waiting = sc.wait_event("等待开发者状态", |event| {
+        event["event"] == "task.state"
+            && event["task_id"] == task_id
+            && event["payload"]["state"] == "waiting_developer"
+    });
+    assert_eq!(waiting["payload"]["task"]["state"], "waiting_developer");
+
+    let snapshot = sc.ok("task.snapshot", json!({"after_seq": 0}));
+    assert_eq!(snapshot["task"]["state"], "waiting_developer");
+    assert_eq!(
+        snapshot["session_messages"],
+        json!([
+            {"role": "user", "text": "在工作区写入 hello_from_agent.txt", "truncated": false},
+            {"role": "agent", "text": "fake-opencode 已完成首轮回复。", "truncated": false}
+        ])
+    );
+    assert!(snapshot["task"].get("session_messages").is_none());
+    let status = sc.ok("task.status", json!({"task_id": task_id}));
+    assert_eq!(status["task"]["state"], "waiting_developer");
+    assert!(status["task"].get("session_messages").is_none());
+    let traces = sc.events.lock().unwrap();
+    assert!(traces.iter().any(|event| {
+        event["event"] == "trace.item"
+            && event["task_id"] == task_id
+            && event["payload"]["kind"] == "agent_note"
+    }));
+    assert!(traces.iter().any(|event| {
+        event["event"] == "trace.item"
+            && event["task_id"] == task_id
+            && event["payload"]["kind"] == "file_hint"
+    }));
+    assert!(
+        !traces
+            .iter()
+            .any(|event| event["event"] == "task.finished" && event["task_id"] == task_id),
+        "首轮回复不得自动生成交付终态"
+    );
+    drop(traces);
+
+    let cancelled = sc.ok("task.cancel", json!({"task_id": task_id}));
+    assert_eq!(cancelled["accepted"], true);
+    sc.wait_event("取消等待中的 OpenCode 任务", |event| {
+        event["event"] == "task.cancelled" && event["task_id"] == task_id
+    });
 
     let stopped = sc.ok("runtime.stop", json!({"agent": "opencode"}));
     assert_eq!(stopped["state"], "stopped");
@@ -152,5 +226,155 @@ fn opencode_stop_forces_process_exit_after_global_dispose_variants() {
         );
     }
 
+    assert!(sc.shutdown().success());
+}
+
+#[test]
+fn opencode_missing_busy_event_uses_status_snapshot_to_complete_the_round() {
+    let credential = require_test_credential();
+    let repo = TestRepo::new();
+    let mut sc = Sidecar::start(&[("HALO_SHUTDOWN_GRACE_MS", "200")]);
+    sc.hello();
+    sc.open_and_trust(&repo.path_str());
+    let config_id = sc.save_config(
+        "opencode",
+        &fake_opencode_exe(),
+        &[
+            "--mode",
+            "missing_busy_eof",
+            "--require-credential-env",
+            "OPENAI_API_KEY",
+            "--require-isolated-state",
+        ],
+        Some(credential.reference()),
+    );
+    sc.start_runtime("opencode", &config_id);
+    sc.wait_event("runtime.state ready", |event| {
+        event["event"] == "runtime.state"
+            && event["payload"]["agent"] == "opencode"
+            && event["payload"]["state"] == "ready"
+    });
+
+    let created = sc.ok(
+        "task.create",
+        json!({
+            "agent": "opencode", "config_id": config_id, "title": "缺失 busy 的会话",
+            "instructions": "验证受管状态快照回退"
+        }),
+    );
+    let task_id = created["task"]["task_id"]
+        .as_str()
+        .expect("task.create 必须返回任务标识")
+        .to_string();
+    let agent_message = sc.wait_event("缺失 busy 后仍取得首轮回复", |event| {
+        event["event"] == "task.session_message"
+            && event["task_id"] == task_id
+            && event["payload"]["role"] == "agent"
+    });
+    assert_eq!(
+        agent_message["payload"]["text"],
+        "fake-opencode 已完成首轮回复。"
+    );
+    let waiting = sc.wait_event("缺失 busy 后进入等待开发者", |event| {
+        event["event"] == "task.state"
+            && event["task_id"] == task_id
+            && event["payload"]["state"] == "waiting_developer"
+    });
+    assert_eq!(waiting["payload"]["task"]["state"], "waiting_developer");
+    assert!(
+        !sc.events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| { event["event"] == "task.finished" && event["task_id"] == task_id }),
+        "状态快照回退不得把首轮自动送进交付终态"
+    );
+    let cancelled = sc.ok("task.cancel", json!({"task_id": task_id}));
+    assert_eq!(cancelled["accepted"], true);
+    sc.wait_event("取消回退后的等待任务", |event| {
+        event["event"] == "task.cancelled" && event["task_id"] == task_id
+    });
+    assert!(sc.shutdown().success());
+}
+
+#[test]
+fn opencode_fast_initial_round_reaches_waiting_developer_after_sse_closes() {
+    let credential = require_test_credential();
+    let repo = TestRepo::new();
+    let mut sc = Sidecar::start(&[("HALO_SHUTDOWN_GRACE_MS", "200")]);
+    sc.hello();
+    sc.open_and_trust(&repo.path_str());
+    let config_id = sc.save_config(
+        "opencode",
+        &fake_opencode_exe(),
+        &[
+            "--mode",
+            "fast_initial_round",
+            "--require-credential-env",
+            "OPENAI_API_KEY",
+            "--require-isolated-state",
+        ],
+        Some(credential.reference()),
+    );
+    sc.start_runtime("opencode", &config_id);
+    sc.wait_event("runtime.state ready", |event| {
+        event["event"] == "runtime.state"
+            && event["payload"]["agent"] == "opencode"
+            && event["payload"]["state"] == "ready"
+    });
+
+    let created = sc.ok(
+        "task.create",
+        json!({
+            "agent": "opencode", "config_id": config_id, "title": "极速完成的首轮会话",
+            "instructions": "验证首轮极速完成后仍等待开发者"
+        }),
+    );
+    let task_id = created["task"]["task_id"]
+        .as_str()
+        .expect("task.create 必须返回任务标识")
+        .to_string();
+    let agent_message = sc.wait_event("极速完成后仍取得首轮回复", |event| {
+        event["event"] == "task.session_message"
+            && event["task_id"] == task_id
+            && event["payload"]["role"] == "agent"
+    });
+    assert_eq!(
+        agent_message["payload"]["text"],
+        "fake-opencode 已完成首轮回复。"
+    );
+    let waiting = sc.wait_event("极速完成后进入等待开发者", |event| {
+        event["event"] == "task.state"
+            && event["task_id"] == task_id
+            && event["payload"]["state"] == "waiting_developer"
+    });
+    assert_eq!(waiting["payload"]["task"]["state"], "waiting_developer");
+
+    let events = sc.events.lock().unwrap();
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| {
+                event["event"] == "task.session_message"
+                    && event["task_id"] == task_id
+                    && event["payload"]["role"] == "agent"
+            })
+            .count(),
+        1,
+        "重复 idle 与 EOF 不得重复追加 Agent 回复"
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event["event"] == "task.finished" && event["task_id"] == task_id),
+        "极速首轮也不得自动产生交付终态"
+    );
+    drop(events);
+
+    let cancelled = sc.ok("task.cancel", json!({"task_id": task_id}));
+    assert_eq!(cancelled["accepted"], true);
+    sc.wait_event("取消极速完成后的等待任务", |event| {
+        event["event"] == "task.cancelled" && event["task_id"] == task_id
+    });
     assert!(sc.shutdown().success());
 }

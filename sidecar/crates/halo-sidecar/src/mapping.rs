@@ -100,6 +100,7 @@ pub fn task_state_core_to_dto(s: halo_core::TaskState) -> TaskStateDto {
     match s {
         halo_core::TaskState::Created => TaskStateDto::Created,
         halo_core::TaskState::Running => TaskStateDto::Running,
+        halo_core::TaskState::WaitingDeveloper => TaskStateDto::WaitingDeveloper,
         halo_core::TaskState::AwaitingAction => TaskStateDto::AwaitingAction,
         halo_core::TaskState::Finishing => TaskStateDto::Finishing,
         halo_core::TaskState::ReviewReady => TaskStateDto::ReviewReady,
@@ -115,6 +116,7 @@ pub fn task_state_from_str(s: &str) -> halo_core::TaskState {
     match s {
         "created" => halo_core::TaskState::Created,
         "running" => halo_core::TaskState::Running,
+        "waiting_developer" => halo_core::TaskState::WaitingDeveloper,
         "awaiting_action" => halo_core::TaskState::AwaitingAction,
         "finishing" => halo_core::TaskState::Finishing,
         "review_ready" => halo_core::TaskState::ReviewReady,

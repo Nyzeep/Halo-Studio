@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use crossbeam_channel::{Receiver, Sender};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use halo_config::AgentKind;
 use halo_runtime::{
@@ -135,11 +135,38 @@ pub struct ActiveTask {
     pub verification_agent: Option<halo_core::Verification>,
     /// 用户显式标记的"未执行"结论；证据落库时优先级高于 Agent 缺省。
     pub verification_user: Option<halo_core::Verification>,
+    /// 仅存于当前 Sidecar 进程的活动会话记录。它不会进入任务记录、证据或历史。
+    pub session_messages: Vec<halo_protocol::methods::task::TaskSessionMessage>,
     /// 取消请求通道（发往任务编排线程）。
     pub cancel_tx: Option<Sender<()>>,
 }
 
 impl ActiveTask {
+    pub fn session_message(
+        role: halo_protocol::methods::task::TaskSessionMessageRole,
+        text: &str,
+    ) -> halo_protocol::methods::task::TaskSessionMessage {
+        let (text, truncated) = halo_core::cap(
+            &halo_core::sanitize(text),
+            halo_core::limits::TRACE_TEXT_MAX,
+        );
+        halo_protocol::methods::task::TaskSessionMessage {
+            role,
+            text,
+            truncated,
+        }
+    }
+
+    pub fn append_session_message(
+        &mut self,
+        role: halo_protocol::methods::task::TaskSessionMessageRole,
+        text: &str,
+    ) -> halo_protocol::methods::task::TaskSessionMessage {
+        let message = Self::session_message(role, text);
+        self.session_messages.push(message.clone());
+        message
+    }
+
     pub fn to_record(&self) -> halo_store::TaskRecord {
         let (goal, _) = halo_core::cap(
             &halo_core::sanitize(&self.instructions),
@@ -181,6 +208,36 @@ impl ActiveTask {
             latest_evidence_version: self.latest_evidence_version,
         }
     }
+}
+
+/// 将一条已规范化的会话消息加入当前任务的进程内记录，并追加 IPC 事件。
+/// 调用者不持有任务锁时使用；未知或已终态任务不会生成可观察消息。
+pub fn append_active_session_message(
+    app: &Arc<Mutex<AppState>>,
+    bus: &Arc<EventBus>,
+    task_id: &str,
+    role: halo_protocol::methods::task::TaskSessionMessageRole,
+    text: &str,
+) -> Option<halo_protocol::methods::task::TaskSessionMessage> {
+    let message = {
+        let mut app = lock(app);
+        let task = app
+            .task
+            .as_mut()
+            .filter(|task| task.task_id == task_id && !task.state.is_terminal())?;
+        let message = task.append_session_message(role, text);
+        bus.emit(
+            Some(task_id),
+            "task.session_message",
+            json!({
+                "role": message.role,
+                "text": &message.text,
+                "truncated": message.truncated,
+            }),
+        );
+        message
+    };
+    Some(message)
 }
 
 pub struct AppState {
@@ -307,6 +364,7 @@ pub fn stop_slot(
 mod tests {
     use super::*;
     use crossbeam_channel::unbounded;
+    use halo_protocol::methods::task::TaskSessionMessageRole;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     struct StoppableHandle {
@@ -416,5 +474,67 @@ mod tests {
         assert_eq!(event.payload["agent"], "opencode");
         assert_eq!(event.payload["state"], "stopped");
         assert_eq!(event.payload["version"], "1.18.5");
+    }
+
+    #[test]
+    fn active_session_message_is_redacted_and_capped_before_it_is_stored_or_emitted() {
+        let app = Arc::new(Mutex::new(AppState::new()));
+        let (outbound_tx, outbound_rx) = unbounded();
+        let bus = Arc::new(EventBus::new(outbound_tx));
+        let long = "x".repeat(halo_core::limits::TRACE_TEXT_MAX + 64);
+        let raw = format!("password=do-not-leak {long}");
+
+        let task = ActiveTask {
+            task_id: "task-session".to_string(),
+            agent: AgentKind::OpenCode,
+            title: "活动会话".to_string(),
+            instructions: "首条任务说明".to_string(),
+            state: halo_core::TaskState::Running,
+            attribution: halo_core::Attribution::AgentOnly,
+            manual_edit_paths: Default::default(),
+            baseline: halo_core::Baseline {
+                head: None,
+                tree: "tree".to_string(),
+                dirty_files: vec![],
+                captured_at: "2026-07-28T00:00:00Z".to_string(),
+            },
+            created_at: "2026-07-28T00:00:00Z".to_string(),
+            ended_at: None,
+            cancel_mode: None,
+            latest_evidence_version: 0,
+            verification_agent: None,
+            verification_user: None,
+            session_messages: vec![],
+            cancel_tx: None,
+        };
+        lock(&app).task = Some(task);
+
+        let message = append_active_session_message(
+            &app,
+            &bus,
+            "task-session",
+            TaskSessionMessageRole::Agent,
+            &raw,
+        )
+        .expect("活动任务应接收会话消息");
+
+        assert_eq!(message.role, TaskSessionMessageRole::Agent);
+        assert!(message.truncated);
+        assert!(message.text.len() <= halo_core::limits::TRACE_TEXT_MAX);
+        assert!(!message.text.contains("do-not-leak"));
+        assert!(message.text.contains("[REDACTED]"));
+        assert_eq!(
+            lock(&app).task.as_ref().unwrap().session_messages,
+            vec![message.clone()]
+        );
+
+        let crate::server::Outbound::Event(event) = outbound_rx.recv().unwrap() else {
+            panic!("会话消息必须生成 IPC 事件");
+        };
+        assert_eq!(event.task_id.as_deref(), Some("task-session"));
+        assert_eq!(event.event, "task.session_message");
+        assert_eq!(event.payload["role"], "agent");
+        assert_eq!(event.payload["truncated"], true);
+        assert!(!event.payload.to_string().contains("do-not-leak"));
     }
 }

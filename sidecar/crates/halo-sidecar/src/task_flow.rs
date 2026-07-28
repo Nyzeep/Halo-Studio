@@ -23,7 +23,7 @@ use crate::mapping::{
     verification_status_core_to_str,
 };
 use crate::server::EventBus;
-use crate::state::{lock, ActiveTask, AgentHandle, AppState};
+use crate::state::{append_active_session_message, lock, ActiveTask, AgentHandle, AppState};
 
 /// 与 fs.read/fs.write 的哈希口径一致；更大的文件只保留文件级证据，不做行级断言。
 const END_HASH_MAX_BYTES: usize = 8 * 1024 * 1024;
@@ -86,6 +86,7 @@ pub fn start_task(
         latest_evidence_version: 0,
         verification_agent: None,
         verification_user: None,
+        session_messages: vec![],
         cancel_tx: Some(cancel_tx),
     };
 
@@ -97,8 +98,19 @@ pub fn start_task(
     }
     persist_current(ctx, &task_id);
     emit_task_state(ctx, &task_id, &created_status);
+    append_active_session_message(
+        &ctx.app,
+        &ctx.bus,
+        &task_id,
+        halo_protocol::methods::task::TaskSessionMessageRole::User,
+        &args.instructions,
+    );
 
-    // 2. 组 RunTaskSpec 交给运行时
+    // 2. 先进入 Running 再交给运行时。run_task 可能立即从异步事件流送回首轮回复；
+    // 若仍停在 Created，RoundCompleted 会被状态机拒绝而丢失等待开发者的转换。
+    apply_event(ctx, &task_id, &TaskEvent::Started);
+
+    // 3. 组 RunTaskSpec 交给运行时
     let spec = RunTaskSpec {
         instructions: args.instructions,
         files: args.files,
@@ -114,9 +126,6 @@ pub fn start_task(
         clear_route(ctx, args.agent);
         return Err(SidecarError::from(e));
     }
-
-    // 3. Created → Running
-    apply_event(ctx, &task_id, &TaskEvent::Started);
 
     // 4. 编排线程接管事件流
     let thread_ctx = ctx.clone();
@@ -169,8 +178,21 @@ pub fn run_task_loop(
                     on_action_request(ctx, task_id, &request_id, &kind, &prompt),
                 Ok(RuntimeEvent::Verification { status, detail }) =>
                     on_verification(ctx, task_id, &status, &detail),
-                Ok(RuntimeEvent::TaskDone { outcome, summary }) =>
-                    break Ending::Done { outcome, summary },
+                Ok(RuntimeEvent::SessionReply { text }) => on_session_reply(ctx, task_id, &text),
+                Ok(RuntimeEvent::TaskDone { outcome, summary }) => {
+                    let waiting_for_developer = {
+                        let app = lock(&ctx.app);
+                        app.task
+                            .as_ref()
+                            .is_some_and(|task| task.task_id == task_id && task.state == TaskState::WaitingDeveloper)
+                    };
+                    // OpenCode 的首轮回合以 SessionReply 结束。即使服务端或旧适配层随后
+                    // 迟到一个 TaskDone，也不能把开发者尚未结束的会话自动送进交付审查。
+                    if waiting_for_developer {
+                        continue;
+                    }
+                    break Ending::Done { outcome, summary };
+                }
             },
             recv(cancel_rx) -> msg => {
                 if msg.is_err() {
@@ -307,6 +329,31 @@ fn on_trace(ctx: &FlowCtx, task_id: &str, item: &halo_runtime::RuntimeTraceItem)
     }
 }
 
+/// 首轮 OpenCode 回复只追加活动会话记录，并把任务留在等待开发者。
+/// 它绝不触发取证、审查或 task.finished；这些属于后续显式结束会话动作。
+fn on_session_reply(ctx: &FlowCtx, task_id: &str, text: &str) {
+    let is_running = {
+        let app = lock(&ctx.app);
+        app.task
+            .as_ref()
+            .is_some_and(|task| task.task_id == task_id && task.state == TaskState::Running)
+    };
+    if !is_running {
+        return;
+    }
+    if append_active_session_message(
+        &ctx.app,
+        &ctx.bus,
+        task_id,
+        halo_protocol::methods::task::TaskSessionMessageRole::Agent,
+        text,
+    )
+    .is_some()
+    {
+        apply_event(ctx, task_id, &TaskEvent::RoundCompleted);
+    }
+}
+
 /// Agent 操作请求：Running → AwaitingAction，等待用户经其原生通道决定。
 fn on_action_request(ctx: &FlowCtx, task_id: &str, request_id: &str, kind: &str, prompt: &str) {
     apply_event(ctx, task_id, &TaskEvent::ActionRequested);
@@ -380,6 +427,9 @@ pub fn apply_event(ctx: &FlowCtx, task_id: &str, ev: &TaskEvent) -> Option<TaskS
                 task.state = next;
                 if next.is_terminal() && task.ended_at.is_none() {
                     task.ended_at = Some(now_ts());
+                }
+                if next.is_terminal() {
+                    task.session_messages.clear();
                 }
                 match ev {
                     TaskEvent::CancelledNative => task.cancel_mode = Some("native".to_string()),
@@ -729,6 +779,7 @@ mod tests {
             latest_evidence_version: 0,
             verification_agent: None,
             verification_user: None,
+            session_messages: vec![],
             cancel_tx: None,
         };
         f.ctx.store.put_task(&task.to_record()).unwrap();
@@ -751,6 +802,133 @@ mod tests {
             .as_ref()
             .map(|t| t.state)
             .expect("任务应存在")
+    }
+
+    #[test]
+    fn first_session_reply_waits_for_developer_without_delivery_evidence() {
+        let f = fixture();
+        install_running_task(&f, "task-first-reply");
+        crate::state::append_active_session_message(
+            &f.ctx.app,
+            &f.ctx.bus,
+            "task-first-reply",
+            halo_protocol::methods::task::TaskSessionMessageRole::User,
+            "请完成这项受管任务",
+        )
+        .expect("首条用户消息应进入活动会话记录");
+
+        let (event_tx, event_rx) = unbounded();
+        let (cancel_tx, cancel_rx) = bounded::<()>(1);
+        let handle: Arc<dyn AgentHandle> = Arc::new(FakeHandle {
+            cancels: AtomicUsize::new(0),
+            force_stops: AtomicUsize::new(0),
+            done_on_cancel: Some(event_tx.clone()),
+        });
+        let ctx = f.ctx.clone();
+        let repo = f.repo.clone();
+        let join = std::thread::spawn(move || {
+            run_task_loop(
+                &ctx,
+                &GitClient::new(repo),
+                "task-first-reply",
+                AgentKind::OpenCode,
+                handle,
+                event_rx,
+                cancel_rx,
+            );
+        });
+
+        event_tx
+            .send(RuntimeEvent::SessionReply {
+                text: format!(
+                    "已完成首轮回复，password=do-not-leak {}",
+                    "x".repeat(limits::TRACE_TEXT_MAX + 16)
+                ),
+            })
+            .unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if task_state(&f) == TaskState::WaitingDeveloper {
+                break;
+            }
+            assert!(Instant::now() < deadline, "首轮回复后应进入等待开发者");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+
+        assert!(
+            f.ctx
+                .store
+                .latest_evidence("task-first-reply")
+                .unwrap()
+                .is_none(),
+            "等待开发者不得自动生成交付证据"
+        );
+        let active = lock(&f.ctx.app).task.as_ref().unwrap().session_messages.clone();
+        assert_eq!(active.len(), 2);
+        assert_eq!(
+            active[1].role,
+            halo_protocol::methods::task::TaskSessionMessageRole::Agent
+        );
+        assert!(active[1].truncated);
+        assert!(!active[1].text.contains("do-not-leak"));
+        assert!(active[1].text.contains("[REDACTED]"));
+
+        // 迟到或重复的同轮回复不能在 waiting_developer 中形成第二条消息，
+        // 也不能把状态机从等待开发者错误地推向其他状态。
+        event_tx
+            .send(RuntimeEvent::SessionReply {
+                text: "重复的迟到回复".to_string(),
+            })
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(25));
+        assert_eq!(task_state(&f), TaskState::WaitingDeveloper);
+        assert_eq!(
+            lock(&f.ctx.app)
+                .task
+                .as_ref()
+                .unwrap()
+                .session_messages
+                .len(),
+            2,
+            "waiting_developer 不得追加重复会话回复"
+        );
+
+        event_tx
+            .send(RuntimeEvent::TaskDone {
+                outcome: "finished".to_string(),
+                summary: "迟到的旧式完成事件".to_string(),
+            })
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(25));
+        assert_eq!(task_state(&f), TaskState::WaitingDeveloper);
+        assert!(
+            f.ctx
+                .store
+                .latest_evidence("task-first-reply")
+                .unwrap()
+                .is_none(),
+            "迟到 TaskDone 不得让等待开发者自动产生交付证据"
+        );
+
+        let events = drain_events(&f.events);
+        assert!(events.iter().any(|event| {
+            event.event == "task.session_message"
+                && event.payload["role"] == "user"
+                && event.payload["text"] == "请完成这项受管任务"
+        }));
+        assert!(events.iter().any(|event| {
+            event.event == "task.session_message"
+                && event.payload["role"] == "agent"
+                && event.payload["truncated"] == true
+        }));
+        assert!(events.iter().any(|event| {
+            event.event == "task.state" && event.payload["state"] == "waiting_developer"
+        }));
+        assert!(!events.iter().any(|event| event.event == "task.finished"));
+
+        cancel_tx.send(()).unwrap();
+        join.join().unwrap();
     }
 
     #[test]

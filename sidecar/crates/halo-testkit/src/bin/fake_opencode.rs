@@ -1,19 +1,21 @@
 //! fake-opencode：仅用于 Sidecar 集成测试的 OpenCode 1.x Server 替身。
 //!
 //! 它严格模拟本票的公开 Server 边界：`serve --hostname 127.0.0.1 --port <n>`、
-//! `OPENCODE_SERVER_PASSWORD` Basic 认证、`GET /global/health`、
+//! `OPENCODE_SERVER_PASSWORD` Basic 认证、真实 session/message/SSE event 端点和
 //! `POST /global/dispose`。不存在旧 `/task`、`/events`、`/cancel` 或 `/shutdown`。
 
+use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
-use std::io::Write as _;
+use std::io::{Cursor, Read, Write as _};
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use tiny_http::{Header, Method, Request, Response, Server};
+use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 #[derive(Default)]
 struct ServeArgs {
@@ -24,6 +26,39 @@ struct ServeArgs {
     require_isolated_state: bool,
     lock_file: Option<String>,
     dispose_marker_file: Option<String>,
+}
+
+#[derive(Default)]
+struct FakeState {
+    next_session: u64,
+    sessions: BTreeMap<String, FakeSession>,
+    event_clients: Vec<mpsc::Sender<Vec<u8>>>,
+}
+
+struct FakeSession {
+    status: &'static str,
+    messages: Vec<Value>,
+}
+
+/// 让 tiny-http 在独立请求线程中维持一个真实的、可晚到数据的 SSE body。
+struct SseReader {
+    receiver: mpsc::Receiver<Vec<u8>>,
+    current: Cursor<Vec<u8>>,
+}
+
+impl Read for SseReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        loop {
+            let read = self.current.read(buffer)?;
+            if read != 0 {
+                return Ok(read);
+            }
+            let next = self.receiver.recv().map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "SSE 已关闭")
+            })?;
+            self.current = Cursor::new(next);
+        }
+    }
 }
 
 fn main() {
@@ -82,6 +117,7 @@ fn main() {
             std::process::exit(1);
         }
     };
+    let state = Arc::new(Mutex::new(FakeState::default()));
     emit_listening_line(&mode, serve.port);
 
     if mode == "exit_early" {
@@ -92,12 +128,19 @@ fn main() {
     }
 
     for request in server.incoming_requests() {
-        handle(
-            request,
-            &mode,
-            expected_auth.as_deref(),
-            serve.dispose_marker_file.as_deref(),
-        );
+        let mode = mode.clone();
+        let expected_auth = expected_auth.clone();
+        let dispose_marker_file = serve.dispose_marker_file.clone();
+        let state = Arc::clone(&state);
+        std::thread::spawn(move || {
+            handle(
+                request,
+                &mode,
+                expected_auth.as_deref(),
+                dispose_marker_file.as_deref(),
+                state,
+            );
+        });
     }
 }
 
@@ -237,11 +280,250 @@ fn open_exclusive_lock(path: &str) -> std::io::Result<File> {
     options.open(path)
 }
 
+fn lock_state(state: &Mutex<FakeState>) -> std::sync::MutexGuard<'_, FakeState> {
+    match state.lock() {
+        Ok(state) => state,
+        Err(poisoned) => poisoned.into_inner(),
+    }
+}
+
+fn emit_event(state: &Arc<Mutex<FakeState>>, event: Value) {
+    let data = format!("data: {}\n\n", event);
+    let bytes = data.into_bytes();
+    let mut state = lock_state(state);
+    state
+        .event_clients
+        .retain(|client| client.send(bytes.clone()).is_ok());
+}
+
+fn respond_sse(request: Request, state: Arc<Mutex<FakeState>>, mode: &str) {
+    let (sender, receiver) = mpsc::channel();
+    let initial_session = {
+        let mut state = lock_state(&state);
+        state.event_clients.push(sender.clone());
+        matches!(mode, "initial_idle" | "initial_busy_then_idle")
+            .then(|| state.sessions.keys().next().cloned())
+            .flatten()
+    };
+    let _ = sender.send(
+        b"data: {\"id\":\"evt_connected\",\"type\":\"server.connected\",\"properties\":{}}\n\n"
+            .to_vec(),
+    );
+    if let Some(session_id) = initial_session {
+        let statuses: &[&str] = match mode {
+            "initial_idle" => &["idle"],
+            "initial_busy_then_idle" => &["busy", "idle"],
+            _ => &[],
+        };
+        for (index, status) in statuses.iter().enumerate() {
+            let event = json!({"id": format!("evt_initial_{index}"), "type": "session.status", "properties": {
+                "sessionID": session_id.as_str(), "status": {"type": status}
+            }});
+            let _ = sender.send(format!("data: {event}\n\n").into_bytes());
+        }
+    }
+    // 后续生命周期只由 event_clients 中的克隆控制；测试模式清空该列表时能真正 EOF。
+    drop(sender);
+    let header = Header::from_bytes(&b"Content-Type"[..], &b"text/event-stream"[..])
+        .expect("SSE content type 应有效");
+    let response = Response::new(
+        StatusCode(200),
+        vec![header],
+        SseReader {
+            receiver,
+            current: Cursor::new(Vec::new()),
+        },
+        None,
+        None,
+    );
+    let _ = request.respond(response);
+}
+
+fn respond_session_created(request: Request, state: &Arc<Mutex<FakeState>>) {
+    let id = {
+        let mut state = lock_state(state);
+        state.next_session += 1;
+        let id = format!("ses_fake_{}", state.next_session);
+        state.sessions.insert(
+            id.clone(),
+            FakeSession {
+                status: "idle",
+                messages: Vec::new(),
+            },
+        );
+        id
+    };
+    respond_json(request, 200, &json!({"id": id}));
+}
+
+fn respond_session_status(request: Request, state: &Arc<Mutex<FakeState>>) {
+    let sessions = {
+        let state = lock_state(state);
+        state
+            .sessions
+            .iter()
+            .map(|(id, session)| (id.clone(), json!({"type": session.status})))
+            .collect::<serde_json::Map<String, Value>>()
+    };
+    respond_json(request, 200, &Value::Object(sessions));
+}
+
+fn respond_session_messages(request: Request, state: &Arc<Mutex<FakeState>>, session_id: &str) {
+    let messages = {
+        let state = lock_state(state);
+        state
+            .sessions
+            .get(session_id)
+            .map(|session| session.messages.clone())
+    };
+    match messages {
+        Some(messages) => respond_json(request, 200, &Value::Array(messages)),
+        None => respond_json(request, 404, &json!({"error": "session_not_found"})),
+    }
+}
+
+fn begin_prompt(
+    mut request: Request,
+    mode: String,
+    state: Arc<Mutex<FakeState>>,
+    session_id: String,
+) {
+    let mut body = String::new();
+    let prompt = request
+        .as_reader()
+        .read_to_string(&mut body)
+        .ok()
+        .and_then(|_| serde_json::from_str::<Value>(&body).ok())
+        .and_then(|body| {
+            body.get("parts")
+                .and_then(Value::as_array)
+                .and_then(|parts| parts.first())
+                .and_then(|part| part.get("text"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        });
+    let Some(prompt) = prompt else {
+        respond_json(request, 400, &json!({"error": "invalid_prompt"}));
+        return;
+    };
+    {
+        let mut state = lock_state(&state);
+        let Some(session) = state.sessions.get_mut(&session_id) else {
+            respond_json(request, 404, &json!({"error": "session_not_found"}));
+            return;
+        };
+        session.status = "busy";
+    }
+    if mode == "fast_initial_round" {
+        // 此模式让服务端在 `prompt_async` 取得 204 前已经完成一轮：适配器不能
+        // 把首个状态快照中的 idle 或抢先抵达的 SSE 当成未开始。
+        emit_round(state, mode, session_id, prompt);
+        respond_json(request, 204, &json!({}));
+    } else {
+        respond_json(request, 204, &json!({}));
+        std::thread::spawn(move || emit_round(state, mode, session_id, prompt));
+    }
+}
+
+fn emit_round(state: Arc<Mutex<FakeState>>, mode: String, session_id: String, prompt: String) {
+    let missing_busy_eof = mode == "missing_busy_eof";
+    if !missing_busy_eof {
+        emit_event(
+            &state,
+            json!({"id": "evt_busy", "type": "session.status", "properties": {
+                "sessionID": session_id.as_str(), "status": {"type": "busy"}
+            }}),
+        );
+        emit_event(
+            &state,
+            json!({"id": "evt_text", "type": "message.part.updated", "properties": {
+                "sessionID": session_id.as_str(),
+                "part": {"type": "text", "text": "fake-opencode 内部流式文本"}
+            }}),
+        );
+        emit_event(
+            &state,
+            json!({"id": "evt_file", "type": "file.edited", "properties": {
+                "sessionID": session_id.as_str(), "file": "src/fake.rs"
+            }}),
+        );
+        emit_event(
+            &state,
+            json!({"id": "evt_unknown", "type": "future.unknown", "properties": {}}),
+        );
+    }
+
+    if mode == "stale_idle" {
+        emit_event(
+            &state,
+            json!({"id": "evt_stale_idle", "type": "session.status", "properties": {
+                "sessionID": session_id.as_str(), "status": {"type": "idle"}
+            }}),
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let message = if mode == "message_error" {
+        json!({
+            "info": {"id": "msg_fake_1", "sessionID": session_id.as_str(), "role": "assistant",
+                "time": {"created": 1, "completed": 2}, "error": {"name": "APIError"}},
+            "parts": []
+        })
+    } else {
+        json!({
+            "info": {"id": "msg_fake_1", "sessionID": session_id.as_str(), "role": "assistant",
+                "time": {"created": 1, "completed": 2}},
+            "parts": [
+                {"type": "reasoning", "text": "不会作为活动会话回复"},
+                {"type": "tool", "tool": "write", "state": {"status": "completed"}, "output": "原始工具输出"},
+                {"type": "text", "text": "fake-opencode 已完成首轮回复。"}
+            ]
+        })
+    };
+    let user_message = json!({
+        "info": {"id": "msg_fake_user_1", "sessionID": session_id.as_str(), "role": "user",
+            "time": {"created": 0}},
+        "parts": [{"type": "text", "text": prompt}]
+    });
+    {
+        let mut state = lock_state(&state);
+        if let Some(session) = state.sessions.get_mut(&session_id) {
+            session.status = "idle";
+            session.messages = vec![user_message, message];
+        } else {
+            return;
+        }
+        if missing_busy_eof {
+            state.event_clients.clear();
+            return;
+        }
+    }
+    emit_event(
+        &state,
+        json!({"id": "evt_idle", "type": "session.status", "properties": {
+            "sessionID": session_id.as_str(), "status": {"type": "idle"}
+        }}),
+    );
+    if mode == "fast_initial_round" {
+        emit_event(
+            &state,
+            json!({"id": "evt_idle_duplicate", "type": "session.status", "properties": {
+                "sessionID": session_id.as_str(), "status": {"type": "idle"}
+            }}),
+        );
+        lock_state(&state).event_clients.clear();
+    }
+}
+
+fn session_id_from_path(path: &str, suffix: &str) -> Option<&str> {
+    path.strip_prefix("/session/")?.strip_suffix(suffix)
+}
+
 fn handle(
-    request: Request,
+    mut request: Request,
     mode: &str,
     expected_auth: Option<&str>,
     dispose_marker_file: Option<&str>,
+    state: Arc<Mutex<FakeState>>,
 ) {
     let authorized = expected_auth.is_some_and(|expected| {
         request
@@ -254,8 +536,34 @@ fn handle(
         return;
     }
 
-    let path = request.url().to_string();
-    match (request.method().clone(), path.as_str()) {
+    let url = request.url().to_string();
+    let path = url.split('?').next().unwrap_or_default();
+    if request.method() == &Method::Get && path == "/event" {
+        respond_sse(request, state, mode);
+        return;
+    }
+    if request.method() == &Method::Post && path == "/session" {
+        respond_session_created(request, &state);
+        return;
+    }
+    if request.method() == &Method::Get && path == "/session/status" {
+        respond_session_status(request, &state);
+        return;
+    }
+    if request.method() == &Method::Get {
+        if let Some(session_id) = session_id_from_path(path, "/message") {
+            respond_session_messages(request, &state, session_id);
+            return;
+        }
+    }
+    if request.method() == &Method::Post {
+        if let Some(session_id) = session_id_from_path(path, "/prompt_async") {
+            begin_prompt(request, mode.to_string(), state, session_id.to_string());
+            return;
+        }
+    }
+
+    match (request.method().clone(), path) {
         (Method::Get, "/global/health") => match mode {
             "unhealthy" => respond_json(request, 200, &json!({"healthy": false})),
             "missing_health_version" => respond_json(request, 200, &json!({"healthy": true})),
@@ -276,7 +584,13 @@ fn handle(
                     respond_json(request, 500, &json!({"error": "dispose_failed"}))
                 }
                 "hang_on_dispose" => std::thread::sleep(Duration::from_secs(30)),
-                _ => respond_json(request, 200, &json!({})),
+                _ => {
+                    emit_event(
+                        &state,
+                        json!({"id": "evt_disposed", "type": "server.instance.disposed", "properties": {}}),
+                    );
+                    respond_json(request, 200, &json!({}))
+                }
             }
         }
         _ => respond_json(request, 404, &json!({"error": "not_found"})),

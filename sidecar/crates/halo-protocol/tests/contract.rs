@@ -22,8 +22,8 @@ use halo_protocol::methods::review::{
 };
 use halo_protocol::methods::runtime::{RuntimeState, RuntimeStateInfo, RuntimeStatusResult};
 use halo_protocol::methods::task::{
-    CancelMode, CreateTaskResult, TaskBaseline, TaskSpec, TaskState, TaskStatus,
-    TaskStatusParams,
+    CancelMode, CreateTaskResult, TaskBaseline, TaskSessionMessage, TaskSessionMessageRole,
+    TaskSnapshotResult, TaskSpec, TaskState, TaskStatus, TaskStatusParams,
 };
 use halo_protocol::methods::workspace::{
     TrustDecision, TrustState, TrustWorkspaceParams, WorkspaceStatus, WorkspaceStatusResult,
@@ -348,6 +348,10 @@ fn method_enum_values_are_lowercase_snake() {
         (serde_json::to_value(ThinkingLevel::Medium).unwrap(), "medium"),
         (serde_json::to_value(RuntimeState::NotProbed).unwrap(), "not_probed"),
         (serde_json::to_value(TaskState::AwaitingAction).unwrap(), "awaiting_action"),
+        (
+            serde_json::to_value(TaskState::WaitingDeveloper).unwrap(),
+            "waiting_developer",
+        ),
         (serde_json::to_value(TaskState::ReviewReady).unwrap(), "review_ready"),
         (serde_json::to_value(CancelMode::Forced).unwrap(), "forced"),
         (serde_json::to_value(ReviewOutcome::Interrupted).unwrap(), "interrupted"),
@@ -740,6 +744,43 @@ fn task_status_params_allows_empty_object() {
 
     let back: TaskStatusParams = serde_json::from_value(json!({"task_id": "task-1"})).unwrap();
     assert_eq!(back.task_id.as_deref(), Some("task-1"));
+}
+
+#[test]
+fn task_snapshot_keeps_active_session_messages_outside_task_status() {
+    let result = TaskSnapshotResult {
+        task: None,
+        last_seq: 42,
+        events: vec![],
+        session_messages: vec![
+            TaskSessionMessage {
+                role: TaskSessionMessageRole::User,
+                text: "请修复登录超时".to_string(),
+                truncated: false,
+            },
+            TaskSessionMessage {
+                role: TaskSessionMessageRole::Agent,
+                text: "已定位到重试策略。".to_string(),
+                truncated: true,
+            },
+        ],
+    };
+
+    let value = serde_json::to_value(&result).unwrap();
+    assert_eq!(
+        value,
+        json!({
+            "task": null,
+            "last_seq": 42,
+            "events": [],
+            "session_messages": [
+                {"role": "user", "text": "请修复登录超时", "truncated": false},
+                {"role": "agent", "text": "已定位到重试策略。", "truncated": true}
+            ]
+        })
+    );
+    let back: TaskSnapshotResult = serde_json::from_value(value).unwrap();
+    assert_eq!(back, result);
 }
 
 // ---------- review.get 形状快照 ----------

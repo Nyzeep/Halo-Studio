@@ -35,7 +35,8 @@ _ERROR_CODES = frozenset({
 })
 _EVENT_NAMES = frozenset({
     "sidecar.state", "workspace.changed", "runtime.state", "task.state", "task.phase", "trace.item",
-    "task.action_request", "task.verification", "task.manual_edit", "task.cancelled", "task.finished",
+    "task.session_message", "task.action_request", "task.verification", "task.manual_edit", "task.cancelled",
+    "task.finished",
 })
 
 _DEFAULT_SIDECAR_RELATIVE = Path("sidecar") / "target" / "debug" / "halo-sidecar.exe"

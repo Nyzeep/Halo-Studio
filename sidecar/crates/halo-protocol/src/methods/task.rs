@@ -33,6 +33,7 @@ pub struct TaskSpec {
 pub enum TaskState {
     Created,
     Running,
+    WaitingDeveloper,
     AwaitingAction,
     Finishing,
     ReviewReady,
@@ -140,6 +141,24 @@ pub struct TaskStatusResult {
     pub task: Option<TaskStatus>,
 }
 
+/// 活动受管任务会话中可展示的一条文本消息。
+/// 该记录只在 Sidecar 内存中保存；不会进入任务历史、证据或审查包。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskSessionMessageRole {
+    User,
+    Agent,
+}
+
+/// 经过脱敏和长度限制的活动会话消息。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TaskSessionMessage {
+    pub role: TaskSessionMessageRole,
+    pub text: String,
+    pub truncated: bool,
+}
+
 /// task.snapshot params
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -154,4 +173,6 @@ pub struct TaskSnapshotResult {
     pub task: Option<TaskStatus>,
     pub last_seq: u64,
     pub events: Vec<Event>,
+    /// 当前活动任务的内存会话记录；历史任务始终返回空数组。
+    pub session_messages: Vec<TaskSessionMessage>,
 }

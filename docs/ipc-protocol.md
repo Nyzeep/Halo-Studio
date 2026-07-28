@@ -124,9 +124,9 @@ JSON Schema 副本见 `protocol/v1/`。
 | `task.mark_manual_edit` | `{"task_id": …, "note": "…"}` | `{"attribution": "mixed"}` |
 | `task.mark_verification` | `{"task_id": …, "status": "not_run", "note": "…"}` | `{"ok": true}`（用户显式标记未执行） |
 | `task.status` | `{"task_id": …}` 或 `{}`（当前任务） | `{"task": TaskStatus \| null}` |
-| `task.snapshot` | `{"after_seq": 40}` | `{"task": TaskStatus\|null, "last_seq": 42, "events": [Event...]}`；缓冲不足覆盖 after_seq 时返回错误 `EVENT_GAP`，UI 应整体重建视图 |
+| `task.snapshot` | `{"after_seq": 40}` | `{"task": TaskStatus\|null, "last_seq": 42, "events": [Event...], "session_messages": [TaskSessionMessage...]}`；缓冲不足覆盖 after_seq 时返回错误 `EVENT_GAP`，UI 应整体重建视图 |
 
-本票只交付 OpenCode 的真实受管启动闭环，尚未接入真实 session/message/event 协议。因此 OpenCode 运行时已经 `ready` 时，`task.create` 返回 `RUNTIME_CAPABILITY_UNAVAILABLE`，并给出等待受管会话票实现的中文恢复建议；不得向旧假设任务端点发送请求或伪造任务成功。Pi 任务行为不受此限制。
+OpenCode 创建任务时以 `instructions` 建立一个私有的真实 OpenCode 会话、发送首条消息并消费该会话的事件流。首轮整理后的 Agent 回复以 `task.session_message` 追加，任务转为 `waiting_developer`；它不会生成交付证据、进入审查或发送 `task.finished`。端口、认证信息和 OpenCode 会话标识保持在 Sidecar 私有运行时中。后续消息和显式结束会话动作属于下一张票，当前契约不暴露这些 API；不得向旧假设任务端点发送请求或伪造任务成功。
 
 ```jsonc
 // TaskSpec — 任务只携带用户显式提供的内容，绝不自动附带完整工作区或历史
@@ -146,12 +146,19 @@ JSON Schema 副本见 `protocol/v1/`。
   "task_id": "task-…",
   "agent": "pi",
   "title": "…",
-  "state": "created"|"running"|"awaiting_action"|"finishing"|"review_ready"|"accepted"|"rejected"|"cancelled"|"failed"|"interrupted",
+  "state": "created"|"running"|"waiting_developer"|"awaiting_action"|"finishing"|"review_ready"|"accepted"|"rejected"|"cancelled"|"failed"|"interrupted",
   "attribution": "agent_only" | "mixed",
   "baseline": {"head": "…|null", "captured_at": "…"},
   "created_at": "…", "ended_at": "…|null",
   "cancel_mode": "native"|"forced"|null,
   "latest_evidence_version": 2
+}
+
+// TaskSessionMessage — 仅当前活动任务的进程内会话记录；绝不进入 TaskStatus、历史或证据
+{
+  "role": "user"|"agent",
+  "text": "…",                         // 脱敏、限长
+  "truncated": false
 }
 ```
 
@@ -159,7 +166,7 @@ JSON Schema 副本见 `protocol/v1/`。
 - 一个活动工作区同一时刻只允许一个非终态任务；违反返回 `TASK_ALREADY_RUNNING`。
 - 前置条件：工作区 trusted、目标运行时 ready，否则 `WORKSPACE_NOT_TRUSTED` / `RUNTIME_NOT_READY`。
 - 任务创建时 Sidecar 记录 Git 基线（HEAD、临时索引 write-tree 的树对象、脏文件清单）；基线前已有修改永不归因给 Agent。
-- 当前任务处于 `created` / `running` / `awaiting_action` / `finishing` 时，成功的 `fs.write`、`fs.create_file`、`fs.create_dir`、`fs.rename` 会自动发出 `task.manual_edit`（`source: "fs_write"`）。每次成功写入都推送事件；持久化归因原因与 `manual_edit_paths` 按（任务、路径）去重。`review_ready` 及之后的写入不再改变该任务归因。
+- 当前任务处于 `created` / `running` / `waiting_developer` / `awaiting_action` / `finishing` 时，成功的 `fs.write`、`fs.create_file`、`fs.create_dir`、`fs.rename` 会自动发出 `task.manual_edit`（`source: "fs_write"`）。每次成功写入都推送事件；持久化归因原因与 `manual_edit_paths` 按（任务、路径）去重。`review_ready` 及之后的写入不再改变该任务归因。
 - 自动归因的持久化或事件发送失败不影响文件操作本身的成功响应；归因只负责诚实标记，绝不充当保存门禁。
 - 取消流程：先经原生通道请求停止 → 超时（默认 10s，可测试注入）→ 强制终止；事件 `task.cancelled` 的 payload 带 `{"mode": "native"|"forced"}`。
 - Sidecar 重启后发现非终态任务 → 标记 `interrupted`，不自动恢复或重放。
@@ -242,6 +249,7 @@ JSON Schema 副本见 `protocol/v1/`。
 | `runtime.state` | `{"agent": …} ∪ RuntimeStateInfo` | 每个受管应用独立推送 |
 | `task.state` | `{"state": …, "task": TaskStatus}` | 任务状态机迁移 |
 | `task.phase` | `{"phase": "planning"\|"editing"\|"verifying"\|"summarizing", "detail": "…"}` | 结构化阶段（来自 Agent 原生输出的规范化） |
+| `task.session_message` | `{"role": "user"\|"agent", "text": "…", "truncated": false}` | 当前活动会话中的脱敏限长用户消息或整理后的 Agent 回复；任务标识位于事件封包 `task_id`，不持久化到历史或证据 |
 | `trace.item` | `TraceItem` | 结构化运行轨迹条目 |
 | `task.action_request` | `{"request_id": …, "kind": "permission"\|"clarification", "prompt": "…", "channel": "native"}` | Agent 暂停等待用户经其原生通道决定；Halo 不提供通用批准对话框或决议 API。Agent 经原生通道获得决定并恢复输出后，适配器再把任务带回 `running`。 |
 | `task.verification` | `{"status": "passed"\|"failed"\|"not_run", "detail": "…", "source": "agent"\|"user_marked"}` | |

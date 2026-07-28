@@ -52,6 +52,11 @@ pub enum RuntimeEvent {
         status: String,
         detail: String,
     },
+    /// OpenCode 已确认一轮完成后整理出的助手文本。文本仍是不可信的原生输出；
+    /// Sidecar 在进入 IPC 与活动会话记录前负责脱敏与限长。
+    SessionReply {
+        text: String,
+    },
     TaskDone {
         outcome: String,
         summary: String,

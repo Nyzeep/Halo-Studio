@@ -379,6 +379,11 @@ TASK_STATUS = {
     "latest_evidence_version": 0,
 }
 
+SESSION_MESSAGES = [
+    {"role": "user", "text": "排查并修复登录超时", "truncated": False},
+    {"role": "agent", "text": "已完成首轮排查，敏感内容已隐藏。", "truncated": True},
+]
+
 
 class TestTaskViewModel:
     def _make_vm(self, client):
@@ -480,6 +485,171 @@ class TestTaskViewModel:
         assert vm.state == ""
         assert vm.attribution == ""
         assert vm.latestEvidenceVersion == 0
+
+    def test_snapshot_rebuilds_managed_session_and_waits_for_developer(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "waiting_developer"}})
+
+        snapshot_request = client.last()
+        assert snapshot_request.method == "task.snapshot"
+        assert snapshot_request.params == {"after_seq": 0}
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "waiting_developer"},
+                "last_seq": 40,
+                "events": [],
+                "session_messages": SESSION_MESSAGES,
+            }
+        )
+
+        assert vm.state == "waiting_developer"
+        assert vm.sessionMessages == SESSION_MESSAGES
+        assert [request.method for request in client.requests] == ["task.create", "task.snapshot"]
+
+    def test_session_message_events_are_ordered_deduped_and_isolated_from_trace(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": TASK_STATUS})
+        client.ok(
+            {
+                "task": TASK_STATUS,
+                "last_seq": 10,
+                "events": [],
+                "session_messages": SESSION_MESSAGES,
+            }
+        )
+
+        client.emit_event(
+            "task.session_message",
+            {"role": "agent", "text": "第二条回复", "truncated": False},
+            seq=12,
+            task_id="task-1",
+        )
+        client.emit_event(
+            "task.session_message",
+            {"role": "user", "text": "补充说明", "truncated": False},
+            seq=11,
+            task_id="task-1",
+        )
+        # 已由快照覆盖的旧事件、重复 seq、非会话角色和其他任务不得改变活动会话记录。
+        client.emit_event(
+            "task.session_message",
+            {"role": "agent", "text": "旧回复", "truncated": False},
+            seq=10,
+            task_id="task-1",
+        )
+        client.emit_event(
+            "task.session_message",
+            {"role": "agent", "text": "重复 seq", "truncated": False},
+            seq=11,
+            task_id="task-1",
+        )
+        client.emit_event(
+            "task.session_message",
+            {"role": "tool", "text": "原始工具输出", "truncated": False},
+            seq=13,
+            task_id="task-1",
+        )
+        client.emit_event(
+            "task.session_message",
+            {"role": "agent", "text": "其他任务", "truncated": False},
+            seq=14,
+            task_id="task-other",
+        )
+
+        assert vm.sessionMessages == [
+            *SESSION_MESSAGES,
+            {"role": "user", "text": "补充说明", "truncated": False},
+            {"role": "agent", "text": "第二条回复", "truncated": False},
+        ]
+
+    def test_snapshot_coalesces_an_already_queued_session_event(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": TASK_STATUS})
+        client.ok({"task": TASK_STATUS, "last_seq": 0, "events": [], "session_messages": []})
+
+        reply = {"role": "agent", "text": "已脱敏回复", "truncated": False}
+        client.emit_event("task.session_message", reply, seq=11, task_id="task-1")
+        # task.snapshot 读取事件缓冲后再复制活动会话记录时，可能带上这个尚未覆盖的事件。
+        vm.applySnapshot(
+            {
+                "task": TASK_STATUS,
+                "last_seq": 10,
+                "events": [],
+                "session_messages": [reply],
+            }
+        )
+
+        assert vm.sessionMessages == [reply]
+
+    def test_task_state_event_preserves_session_until_a_new_snapshot_replaces_it(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": TASK_STATUS})
+        client.ok(
+            {
+                "task": TASK_STATUS,
+                "last_seq": 2,
+                "events": [],
+                "session_messages": SESSION_MESSAGES,
+            }
+        )
+
+        client.emit_event(
+            "task.state",
+            {"state": "waiting_developer", "task": {**TASK_STATUS, "state": "waiting_developer"}},
+            task_id="task-1",
+        )
+
+        assert vm.state == "waiting_developer"
+        assert vm.sessionMessages == SESSION_MESSAGES
+
+    def test_terminal_task_state_clears_active_session_record(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": TASK_STATUS})
+        client.ok(
+            {
+                "task": TASK_STATUS,
+                "last_seq": 2,
+                "events": [],
+                "session_messages": SESSION_MESSAGES,
+            }
+        )
+
+        client.emit_event(
+            "task.state",
+            {"state": "cancelled", "task": {**TASK_STATUS, "state": "cancelled"}},
+            task_id="task-1",
+        )
+
+        assert vm.state == "cancelled"
+        assert vm.sessionMessages == []
+
+    def test_late_snapshot_does_not_regress_a_newer_task_state_event(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": TASK_STATUS})
+        client.ok({"task": TASK_STATUS, "last_seq": 0, "events": [], "session_messages": []})
+
+        client.emit_event(
+            "task.state",
+            {"state": "waiting_developer", "task": {**TASK_STATUS, "state": "waiting_developer"}},
+            task_id="task-1",
+        )
+        vm.applySnapshot(
+            {
+                "task": TASK_STATUS,
+                "last_seq": 1,
+                "events": [],
+                "session_messages": SESSION_MESSAGES,
+            }
+        )
+
+        assert vm.state == "waiting_developer"
+        assert vm.sessionMessages == SESSION_MESSAGES
 
     def test_mark_verification_not_run_params(self, core_app, client):
         vm = self._make_vm(client)

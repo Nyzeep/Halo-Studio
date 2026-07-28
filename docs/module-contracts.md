@@ -154,13 +154,13 @@ impl Store {
 **适配器协议（本项目的权威定义，halo-testkit 假进程按此实现）**：
 
 - Pi：`<exe> --rpc` 后 stdio JSONL。探测 `<exe> --version` → 首行 semver。就绪：发 `{"id":1,"method":"get_state"}` 期待 `{"id":1,"result":{"state":"idle"}}`（超时默认 10s，可注入）。任务：`{"id":N,"method":"run_task","params":{instructions,files,base_diff,notes}}`；Pi 以 `{"method":"event","params":{TraceItem 同构}}` 流式通知，`kind` 含 phase/agent_note/file_hint/action_request/verification，最后 `{"id":N,"result":{"outcome":"finished"|"failed","summary":…}}`。取消：`{"id":M,"method":"cancel"}` → Pi 应结束 run_task。EOF/坏帧 → Failed{reason}。
-- OpenCode：兼容性档案为 `OPENCODE_COMPATIBILITY_PROFILE = "opencode-server-1.x"`，只接受稳定 `>= 1.18.5, < 2.0.0`；未知主版本、预发布或畸形版本均失败关闭。模型以受支持的 `provider/model` 形式选择，Sidecar 用内置白名单映射把凭据引用短暂注入相应的真实 Provider 环境变量；不接受任意变量名，未知 Provider 失败关闭。启动 `<exe> serve --hostname 127.0.0.1 --port <p>`，`p` 由 Sidecar 选空闲端口。每次启动生成私有随机密码，仅以 `OPENCODE_SERVER_PASSWORD` 注入受管进程；全部 HTTP 请求以用户名 `opencode` 使用 Basic 认证。就绪请求为 `GET /global/health`，必须返回 `{"healthy":true,"version":"…"}`，并由该响应的版本验证兼容档案；认证失败、非健康响应、缺少版本、版本不兼容或就绪后 server 进程退出均记录为 `Failed { reason, recovery_hint }`，不得伪造在线状态。OpenCode 的真实 session/message/event 协议尚不属于本票：`OpenCodeHandle::run_task` 返回 `CapabilityUnavailable`，生产路径不得保留或调用旧的任务、事件、取消端点。停止先请求 `POST /global/dispose`；dispose 仅释放实例资源，Sidecar 仍显式结束 server 子进程。请求成功返回 `Graceful`，请求失败或超时返回 `Forced`。端口、认证用户名、密码与 Authorization 值只存于私有句柄，绝不进入 Debug、错误、事件、IPC、日志或存储。
+- OpenCode：兼容性档案为 `OPENCODE_COMPATIBILITY_PROFILE = "opencode-server-1.x"`，只接受稳定 `>= 1.18.5, < 2.0.0`；未知主版本、预发布或畸形版本均失败关闭。模型以受支持的 `provider/model` 形式选择，Sidecar 用内置白名单映射把凭据引用短暂注入相应的真实 Provider 环境变量；不接受任意变量名，未知 Provider 失败关闭。启动 `<exe> serve --hostname 127.0.0.1 --port <p>`，`p` 由 Sidecar 选空闲端口。每次启动生成私有随机密码，仅以 `OPENCODE_SERVER_PASSWORD` 注入受管进程；全部 HTTP 请求以用户名 `opencode` 使用 Basic 认证。就绪请求为 `GET /global/health`，必须返回 `{"healthy":true,"version":"…"}`，并由该响应的版本验证兼容档案；认证失败、非健康响应、缺少版本、版本不兼容或就绪后 server 进程退出均记录为 `Failed { reason, recovery_hint }`，不得伪造在线状态。首轮任务先建立私有 `POST /session`，再建立已认证的 `GET /event` 流，随后向 `POST /session/{id}/prompt_async` 发送由显式 TaskSpec 组成的首条消息；当前会话 `idle` 后以 `GET /session/status` 和 `GET /session/{id}/message` 读取完成的 assistant text 分段，并只发出 `SessionReply` 与规范化轨迹。远程会话标识不离开私有句柄，缺失 session/message/event 能力失败关闭，绝不回退到旧任务、事件、取消端点。首轮回复不发 `TaskDone`；后续消息与显式结束会话仍由下一张票定义。停止先请求 `POST /global/dispose`；dispose 仅释放实例资源，Sidecar 仍显式结束 server 子进程。请求成功返回 `Graceful`，请求失败或超时返回 `Forced`。端口、认证用户名、密码与 Authorization 值只存于私有句柄，绝不进入 Debug、错误、事件、IPC、日志或存储。
 - OpenCode 运行隔离：运行时在私有临时目录中创建配置、数据、缓存和状态根，并以 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_CACHE_HOME`、`XDG_STATE_HOME` 注入每次启动；这些目录由私有运行时句柄持有，不会复用用户全局 OpenCode 状态。
 
 ```rust
 pub enum RuntimeState { NotProbed, Probing, Starting, Ready, Failed { reason: String, recovery_hint: String }, Stopping, Stopped }
 pub struct RuntimeTraceItem { pub kind: String, pub text: String, pub detail: serde_json::Value }   // runtime 自有类型；sidecar 映射为契约 TraceItem
-pub enum RuntimeEvent { State(RuntimeState), Trace(RuntimeTraceItem), ActionRequest { request_id: String, kind: String, prompt: String }, Verification { status: String, detail: String }, TaskDone { outcome: String, summary: String } }
+pub enum RuntimeEvent { State(RuntimeState), Trace(RuntimeTraceItem), ActionRequest { request_id: String, kind: String, prompt: String }, Verification { status: String, detail: String }, SessionReply { text: String }, TaskDone { outcome: String, summary: String } }
 pub struct LaunchCmd { pub exe: String, pub env: HashMap<String,String>, pub cwd: String } // env 已由 halo-config 构好
 
 pub struct RunTaskSpec { pub instructions: String, pub files: Vec<String>, pub base_diff: Option<String>, pub notes: Option<String> }  // runtime 自有类型
@@ -171,7 +171,7 @@ pub enum StopOutcome { Graceful, Forced }
 pub struct Timeouts { pub ready: Duration, pub cancel_grace: Duration, pub shutdown_grace: Duration } // Default 10s/10s/5s
 ```
 
-**测试**：Pi 的不 spawn 真进程单元测试用 transport trait 注入内存管道（分帧、乱序 id 响应、EOF、坏 JSON）；OpenCode 用临时 HTTP 服务覆盖 Basic 认证、`/global/health`、版本不兼容、缺少版本与认证失败，并断言认证信息不泄漏。真实子进程集成测试放 `sidecar/tests/`（用 halo-testkit 的 bin）；还必须覆盖 OpenCode 的 `task.create` 返回能力不可用，确认不存在旧协议回退。
+**测试**：Pi 的不 spawn 真进程单元测试用 transport trait 注入内存管道（分帧、乱序 id 响应、EOF、坏 JSON）；OpenCode 用临时 HTTP 服务覆盖 Basic 认证、`/global/health`、版本不兼容、缺少版本与认证失败，以及 session/SSE/idle/message 回路与认证信息不泄漏。真实子进程集成测试放 `sidecar/tests/`（用 halo-testkit 的 bin），覆盖 OpenCode `task.create` 的首轮真实会话、规范化回复、`waiting_developer` 和无旧协议回退。
 
 ## 6. sidecar/crates/halo-sidecar —— 可执行入口
 
@@ -197,7 +197,7 @@ Git 基线/关联变更算法（锁定）：
 
 bins：`fake-pi`、`fake-opencode`，严格实现第 5 节适配器协议。行为经环境变量脚本化：
 `FAKE_PI_MODE` = `happy` | `not_ready`(get_state 永不回) | `garbage`(输出坏帧) | `crash_mid_task` | `hang_on_cancel`(忽略 cancel，验证强杀) | `action_request`(中途发权限请求) | `verify_fail`；`FAKE_PI_VERSION` 覆盖版本输出。
-`FAKE_OC_MODE` = `happy` | `unhealthy` | `old_version` | `wrong_version` | `major_version` | `malformed_version` | `pre_release_version` | `missing_health_version` | `bad_auth`(401) | `wrong_ready_address` | `missing_ready_line` | `exit_early` | `dispose_failure` | `hang_on_dispose`；假服务必须只绑定 `127.0.0.1`，校验 `OPENCODE_SERVER_PASSWORD` 对应的 Basic 认证，并实现 `GET /global/health` 与 `POST /global/dispose`。本票的 happy 仅证明 OpenCode 真实启动、认证、健康与停止闭环；不提供旧任务、事件或取消端点，也不伪造任务完成。
+`FAKE_OC_MODE` = `happy` | `initial_idle` | `initial_busy_then_idle` | `stale_idle` | `missing_busy_eof` | `fast_initial_round` | `message_error` | `unhealthy` | `old_version` | `wrong_version` | `major_version` | `malformed_version` | `pre_release_version` | `missing_health_version` | `bad_auth`(401) | `wrong_ready_address` | `missing_ready_line` | `exit_early` | `dispose_failure` | `hang_on_dispose`。`initial_*` 模拟 prompt 前的状态事件；`missing_busy_eof` 在持久化回复后不发送 busy 并关闭事件流；`fast_initial_round` 在 `prompt_async` 返回 204 前持久化回复、发送重复 idle 并关闭事件流。假服务必须只绑定 `127.0.0.1`，校验 `OPENCODE_SERVER_PASSWORD` 对应的 Basic 认证，并实现 `GET /global/health`、`POST /session`、`GET /event`、`POST /session/{id}/prompt_async`、`GET /session/status`、`GET /session/{id}/message` 与 `POST /global/dispose`。happy 覆盖首轮真实会话；不提供旧任务、事件或取消端点，也不伪造交付完成。
 
 ## 8. app/halo_studio —— PySide6/QML
 

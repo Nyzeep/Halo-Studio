@@ -25,7 +25,8 @@
             "task.create", "task.cancel", "task.mark_manual_edit", "task.mark_verification", "task.status", "task.snapshot",
             "review.get", "delivery.accept", "delivery.reject",
             "handoff.preview", "handoff.create",
-            "history.list", "history.evidence"
+            "history.list", "history.evidence",
+            "fs.list", "fs.read", "fs.write", "fs.create_file", "fs.create_dir", "fs.rename", "fs.stat", "fs.search"
           ]
         },
         "params": { "type": "object" }
@@ -71,7 +72,7 @@
           "type": "string",
           "enum": [
             "sidecar.state", "workspace.changed", "runtime.state",
-            "task.state", "task.phase", "trace.item", "task.action_request",
+            "task.state", "task.phase", "task.session_message", "trace.item", "task.action_request",
             "task.verification", "task.manual_edit", "task.cancelled", "task.finished"
           ]
         },
@@ -92,7 +93,8 @@
             "CREDENTIAL_STORE_UNAVAILABLE", "CREDENTIAL_NOT_FOUND", "ENV_NOT_WHITELISTED", "CONFIG_NOT_FOUND", "CONFIG_CONFLICT",
             "RUNTIME_NOT_READY", "RUNTIME_PROBE_FAILED", "RUNTIME_VERSION_MISMATCH", "RUNTIME_ALREADY_RUNNING", "RUNTIME_CAPABILITY_UNAVAILABLE",
             "TASK_ALREADY_RUNNING", "TASK_RUNNING", "TASK_NOT_FOUND", "TASK_STILL_RUNNING", "TASK_NOT_REVIEWABLE",
-            "EVIDENCE_NOT_FOUND", "EVIDENCE_NOT_LATEST", "EVENT_GAP", "HANDOFF_NOT_FOUND", "LINE_TOO_LONG", "PARSE_ERROR"
+            "EVIDENCE_NOT_FOUND", "EVIDENCE_NOT_LATEST", "EVENT_GAP", "HANDOFF_NOT_FOUND", "LINE_TOO_LONG", "PARSE_ERROR",
+            "FS_PATH_OUTSIDE_WORKSPACE", "FS_TOO_LARGE", "FS_BINARY", "FS_CONFLICT", "FS_NOT_FOUND", "FS_ALREADY_EXISTS", "FS_GIT_PROTECTED"
           ]
         },
         "message": { "type": "string" },

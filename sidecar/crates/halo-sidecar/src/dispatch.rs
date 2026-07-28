@@ -559,6 +559,7 @@ impl Dispatcher {
                     task.state,
                     halo_core::TaskState::Created
                         | halo_core::TaskState::Running
+                        | halo_core::TaskState::WaitingDeveloper
                         | halo_core::TaskState::AwaitingAction
                         | halo_core::TaskState::Finishing
                 )
@@ -1013,13 +1014,6 @@ impl Dispatcher {
             ));
         }
 
-        if agent == AgentKind::OpenCode {
-            return Err(SidecarError::new(
-                ErrorCode::RuntimeCapabilityUnavailable,
-                "OpenCode 真实会话尚未接入；当前版本仅支持受管启动、认证和健康检查。请改用 Pi 完成任务，或等待受管 OpenCode 会话功能上线",
-            ));
-        }
-
         // 交接接续：校验交接包存在，并把有限上下文并入任务输入
         let mut notes = spec.notes.clone();
         let mut base_diff = spec.base_diff.clone();
@@ -1189,6 +1183,13 @@ impl Dispatcher {
             task,
             last_seq,
             events,
+            session_messages: {
+                let app = lock(&self.ctx.app);
+                app.task
+                    .as_ref()
+                    .map(|task| task.session_messages.clone())
+                    .unwrap_or_default()
+            },
         })
     }
 
@@ -2474,7 +2475,11 @@ mod tests {
     fn fs_manual_edits_emit_each_time_but_persist_each_path_once() {
         let mut f = fixture();
         hello(&mut f);
-        install_active_task(&f.d.ctx, "task-fs", halo_core::TaskState::AwaitingAction);
+        install_active_task(
+            &f.d.ctx,
+            "task-fs",
+            halo_core::TaskState::WaitingDeveloper,
+        );
 
         f.d.record_fs_manual_edit(ManualEditOp::Write, "src/auth.rs", None);
         f.d.record_fs_manual_edit(ManualEditOp::Write, "src/auth.rs", None);
@@ -2570,6 +2575,43 @@ mod tests {
         let result = resp.result.unwrap();
         assert_eq!(result["last_seq"], last);
         assert_eq!(result["events"].as_array().unwrap().len(), 3);
+        assert_eq!(result["session_messages"], json!([]));
+    }
+
+    #[test]
+    fn task_snapshot_rebuilds_the_redacted_active_session_record() {
+        let mut f = fixture();
+        hello(&mut f);
+        install_active_task(&f.d.ctx, "task-session", halo_core::TaskState::WaitingDeveloper);
+
+        let long = "z".repeat(halo_core::limits::TRACE_TEXT_MAX + 32);
+        let message = crate::state::append_active_session_message(
+            &f.d.ctx.app,
+            &f.d.ctx.bus,
+            "task-session",
+            methods::task::TaskSessionMessageRole::Agent,
+            &format!("Bearer secrettoken12345678 {long}"),
+        )
+        .expect("waiting_developer 是活动任务，应保留回复");
+        assert!(message.truncated);
+
+        let snapshot = f
+            .d
+            .dispatch(req("task.snapshot", json!({"after_seq": 0})));
+        assert!(snapshot.ok, "{snapshot:?}");
+        let result = snapshot.result.unwrap();
+        assert_eq!(result["task"]["state"], "waiting_developer");
+        let messages = result["session_messages"].as_array().unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0]["role"], "agent");
+        assert_eq!(messages[0]["truncated"], true);
+        let text = messages[0]["text"].as_str().unwrap();
+        assert!(!text.contains("secrettoken12345678"));
+        assert!(text.contains("[REDACTED]"));
+
+        let status = f.d.dispatch(req("task.status", json!({})));
+        assert!(status.ok, "{status:?}");
+        assert!(status.result.unwrap()["task"].get("session_messages").is_none());
     }
 
     // ---------- review / delivery / handoff / history ----------
@@ -2638,6 +2680,7 @@ mod tests {
             latest_evidence_version: 0,
             verification_agent: None,
             verification_user: None,
+            session_messages: vec![],
             cancel_tx: None,
         };
         ctx.store.put_task(&task.to_record()).unwrap();

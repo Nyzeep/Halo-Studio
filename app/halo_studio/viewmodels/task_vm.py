@@ -10,10 +10,16 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 from .base import BaseViewModel
 
 
+_TERMINAL_TASK_STATES = frozenset(
+    {"accepted", "rejected", "cancelled", "failed", "interrupted"}
+)
+
+
 class TaskViewModel(BaseViewModel):
     formChanged = Signal()
     taskChanged = Signal()
     taskCreated = Signal()
+    sessionChanged = Signal()
 
     def __init__(self, client, parent: QObject | None = None) -> None:
         super().__init__(client, parent)
@@ -26,9 +32,15 @@ class TaskViewModel(BaseViewModel):
         self._base_diff = ""
         self._notes = ""
         self._handoff_id = ""
+        # 活动会话记录仅来自 task.snapshot / task.session_message；不复用运行轨迹。
+        self._session_messages: list[dict] = []
+        self._snapshot_session_messages: list[dict] = []
+        self._session_events: dict[int, dict] = {}
+        self._session_snapshot_seq = 0
         # 当前 TaskStatus
         self._reset_task_fields()
         client.subscribe("task.state", self._on_task_state)
+        client.subscribe("task.session_message", self._on_session_message)
         client.subscribe("task.cancelled", self._on_task_cancelled)
         client.subscribe("task.manual_edit", self._on_manual_edit)
         client.subscribe("workspace.changed", self._on_workspace_changed)
@@ -44,6 +56,16 @@ class TaskViewModel(BaseViewModel):
         self._baseline_head = ""
         self._created_at = ""
         self._ended_at = ""
+        self._reset_session_messages()
+
+    def _reset_session_messages(self) -> None:
+        had_messages = bool(self._session_messages)
+        self._session_messages = []
+        self._snapshot_session_messages = []
+        self._session_events = {}
+        self._session_snapshot_seq = 0
+        if had_messages:
+            self.sessionChanged.emit()
 
     # ---- 命令 ----
 
@@ -102,6 +124,8 @@ class TaskViewModel(BaseViewModel):
         task = result.get("task")
         if isinstance(task, dict):
             self._apply_task(task)
+            if self._task_id:
+                self._request_session_snapshot(self._task_id)
         elif self._task_id:
             self._reset_task_fields()
             self.taskChanged.emit()
@@ -120,6 +144,20 @@ class TaskViewModel(BaseViewModel):
         if self._task_id and task.get("task_id") != self._task_id:
             return
         self._apply_task(task)
+
+    def _on_session_message(self, envelope: dict) -> None:
+        payload = envelope.get("payload") or {}
+        event_task_id = str(envelope.get("task_id") or payload.get("task_id") or "")
+        if not self._task_id or event_task_id != self._task_id:
+            return
+        seq = envelope.get("seq")
+        if not isinstance(seq, int) or seq <= self._session_snapshot_seq or seq in self._session_events:
+            return
+        message = self._normalize_session_message(payload)
+        if message is None:
+            return
+        self._session_events[seq] = message
+        self._sync_session_messages()
 
     def _on_task_cancelled(self, envelope: dict) -> None:
         event_task_id = str(envelope.get("task_id") or self._task_id)
@@ -145,6 +183,33 @@ class TaskViewModel(BaseViewModel):
         self._reset_task_fields()
         self.taskChanged.emit()
 
+    def _request_session_snapshot(self, expected_task_id: str, after_seq: int = 0) -> None:
+        self._client.request(
+            "task.snapshot",
+            {"after_seq": after_seq},
+            lambda snapshot: self._on_session_snapshot(snapshot, expected_task_id),
+            lambda error: self._on_session_snapshot_error(error, expected_task_id, after_seq),
+        )
+
+    def _on_session_snapshot(self, snapshot: dict, expected_task_id: str) -> None:
+        task = (snapshot or {}).get("task")
+        if not isinstance(task, dict) or str(task.get("task_id") or "") != expected_task_id:
+            return
+        self.applySnapshot(snapshot)
+
+    def _on_session_snapshot_error(self, error: dict, expected_task_id: str, after_seq: int) -> None:
+        details = error.get("details") or {}
+        oldest = details.get("oldest_available_seq") if isinstance(details, dict) else None
+        if (
+            error.get("code") == "EVENT_GAP"
+            and isinstance(oldest, int)
+            and oldest > 0
+            and after_seq < oldest
+        ):
+            self._request_session_snapshot(expected_task_id, oldest - 1)
+            return
+        self._set_error(error)
+
     def _refresh_terminal_task(self, task_id: str) -> None:
         def on_ok(result: dict) -> None:
             task = (result or {}).get("task")
@@ -156,6 +221,97 @@ class TaskViewModel(BaseViewModel):
                 self._apply_task(task)
 
         self._client.request("task.status", {"task_id": task_id}, on_ok)
+
+    @Slot("QVariantMap")
+    def applySnapshot(self, snapshot: dict) -> None:  # noqa: N802
+        """由 task.snapshot 重建活动会话记录，事件仅补充快照之后的记录。"""
+        snapshot = snapshot or {}
+        task = snapshot.get("task")
+        if not isinstance(task, dict):
+            if self._task_id:
+                self._reset_task_fields()
+                self.taskChanged.emit()
+            return
+        snapshot_task_id = str(task.get("task_id") or "")
+        if self._task_id and snapshot_task_id != self._task_id:
+            return
+
+        last_seq = snapshot.get("last_seq")
+        if not isinstance(last_seq, int):
+            last_seq = 0
+        # 迟到快照不能覆盖已经消费到的较新会话事件。
+        if last_seq < self._session_snapshot_seq:
+            return
+
+        messages = snapshot.get("session_messages")
+        if not isinstance(messages, list):
+            return
+
+        # task.status / task.state 是任务状态事实来源；快照只负责恢复会话记录，
+        # 因而不得用迟到快照回退已显示的生命周期状态。
+        if not self._task_id:
+            self._apply_task(task)
+        snapshot_messages = []
+        if str(task.get("state") or "") not in _TERMINAL_TASK_STATES:
+            snapshot_messages = [
+                normalized
+                for item in messages
+                if (normalized := self._normalize_session_message(item)) is not None
+            ]
+        covered_event_seqs = self._session_events_covered_by_snapshot(snapshot_messages, last_seq)
+        self._snapshot_session_messages = snapshot_messages
+        self._session_snapshot_seq = last_seq
+        self._session_events = {
+            seq: message
+            for seq, message in self._session_events.items()
+            if seq not in covered_event_seqs
+        }
+        self._sync_session_messages()
+
+    def _normalize_session_message(self, value: object) -> dict | None:
+        if not isinstance(value, dict):
+            return None
+        role = str(value.get("role") or "")
+        # IPC 现用 agent；兼容已发布的 assistant 名称但统一成界面角色。
+        if role == "assistant":
+            role = "agent"
+        if role not in {"user", "agent"}:
+            return None
+        text = value.get("text")
+        if not isinstance(text, str) or not text:
+            return None
+        return {
+            "role": role,
+            "text": text,
+            "truncated": value.get("truncated") is True,
+        }
+
+    def _session_events_covered_by_snapshot(self, messages: list[dict], last_seq: int) -> set[int]:
+        """识别快照已包含的在途事件，避免事件和快照交错时重复显示。"""
+        covered = {seq for seq in self._session_events if seq <= last_seq}
+        previous = self._snapshot_session_messages
+        if messages[:len(previous)] != previous:
+            return covered
+
+        appended = messages[len(previous):]
+        appended_index = 0
+        for seq, message in sorted(self._session_events.items()):
+            if appended_index >= len(appended):
+                break
+            if message == appended[appended_index]:
+                covered.add(seq)
+                appended_index += 1
+        return covered
+
+    def _sync_session_messages(self) -> None:
+        messages = [
+            *self._snapshot_session_messages,
+            *(message for _, message in sorted(self._session_events.items())),
+        ]
+        if messages == self._session_messages:
+            return
+        self._session_messages = messages
+        self.sessionChanged.emit()
 
     def _apply_task(self, task: dict) -> None:
         self._task_id = str(task.get("task_id") or "")
@@ -169,6 +325,8 @@ class TaskViewModel(BaseViewModel):
         self._baseline_head = str(baseline.get("head") or "")
         self._created_at = str(task.get("created_at") or "")
         self._ended_at = str(task.get("ended_at") or "")
+        if self._state in _TERMINAL_TASK_STATES:
+            self._reset_session_messages()
         self.taskChanged.emit()
 
     # ---- 表单属性（可读写）----
@@ -279,6 +437,9 @@ class TaskViewModel(BaseViewModel):
     def _get_ended_at(self) -> str:
         return self._ended_at
 
+    def _get_session_messages(self) -> list:
+        return [dict(message) for message in self._session_messages]
+
     taskId = Property(str, _get_task_id, notify=taskChanged)
     taskAgent = Property(str, _get_task_agent, notify=taskChanged)
     taskTitle = Property(str, _get_task_title, notify=taskChanged)
@@ -289,3 +450,4 @@ class TaskViewModel(BaseViewModel):
     baselineHead = Property(str, _get_baseline_head, notify=taskChanged)
     createdAt = Property(str, _get_created_at, notify=taskChanged)
     endedAt = Property(str, _get_ended_at, notify=taskChanged)
+    sessionMessages = Property("QVariantList", _get_session_messages, notify=sessionChanged)

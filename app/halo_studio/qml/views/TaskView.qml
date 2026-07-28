@@ -167,94 +167,167 @@ RowLayout {
         Item { Layout.fillHeight: true }
     }
 
-    SectionCard {
+    ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        title: "运行轨迹"
+        spacing: 10
 
-        RowLayout {
+        SectionCard {
             Layout.fillWidth: true
-            spacing: 8
-            StatusBadge {
-                label: taskPage.tVM !== null ? Util.taskStateLabel(taskPage.tVM.state) : "无任务"
-                tone: taskPage.tVM !== null ? Util.taskStateTone(taskPage.tVM.state, Theme) : Theme.neutral
-            }
-            Text {
+            Layout.minimumHeight: 160
+            Layout.preferredHeight: 220
+            Layout.maximumHeight: 280
+            title: "活动会话"
+
+            ListView {
+                id: sessionList
                 Layout.fillWidth: true
-                text: taskPage.tVM !== null ? Util.textOr(taskPage.tVM.taskTitle, "") : ""
-                color: Theme.text
-                elide: Text.ElideRight
-                font.pixelSize: 13
-            }
-            Button {
-                text: "取消任务"
-                enabled: taskPage.tVM !== null && Util.taskIsActive(taskPage.tVM.state)
-                onClicked: if (taskPage.tVM !== null && taskPage.tVM.cancel) taskPage.tVM.cancel()
-            }
-        }
-        Text {
-            visible: taskPage.tVM !== null && Util.hasText(taskPage.tVM.cancelMode)
-            text: "最终取消方式：" + Util.cancelModeLabel(taskPage.tVM !== null ? taskPage.tVM.cancelMode : "")
-            color: Theme.warn
-            font.pixelSize: 12
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 6
-            TextField {
-                id: manualNoteInput
-                Layout.fillWidth: true
-                placeholderText: "人工介入说明（选填）"
-            }
-            Button {
-                text: "标记人工介入"
-                enabled: taskPage.tVM !== null && Util.hasText(taskPage.tVM.taskId)
-                onClicked: if (taskPage.tVM !== null && taskPage.tVM.markManualEdit) taskPage.tVM.markManualEdit(manualNoteInput.text)
-            }
-        }
-        ListView {
-            id: traceList
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-            spacing: 4
-            model: taskPage.trVM !== null ? taskPage.trVM : null
-            ScrollBar.vertical: ScrollBar {}
-            delegate: Rectangle {
-                width: traceList.width
-                color: Theme.deep
-                radius: Theme.radius
-                implicitHeight: traceRow.implicitHeight + 12
-                RowLayout {
-                    id: traceRow
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    spacing: 8
-                    StatusBadge {
-                        label: Util.traceKindLabel(model.kind)
-                        tone: Util.traceKindTone(model.kind, Theme)
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: Util.textOr(model.text, "")
-                        color: Theme.text
-                        wrapMode: Text.Wrap
-                        font.pixelSize: 12
+                Layout.fillHeight: true
+                Layout.minimumHeight: 100
+                clip: true
+                spacing: 4
+                model: taskPage.tVM !== null ? taskPage.tVM.sessionMessages : []
+                ScrollBar.vertical: ScrollBar {}
+                delegate: Rectangle {
+                    required property var modelData
+
+                    width: sessionList.width
+                    color: Theme.deep
+                    radius: Theme.radius
+                    implicitHeight: sessionRow.implicitHeight + 12
+
+                    RowLayout {
+                        id: sessionRow
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        spacing: 8
+
+                        StatusBadge {
+                            label: Util.sessionRoleLabel(modelData.role)
+                            tone: Util.sessionRoleTone(modelData.role, Theme)
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: Util.textOr(modelData.text, "")
+                                color: Theme.text
+                                wrapMode: Text.Wrap
+                                font.pixelSize: 12
+                            }
+                            Text {
+                                visible: modelData.truncated === true
+                                text: "已截断"
+                                color: Theme.textDim
+                                font.pixelSize: 11
+                            }
+                        }
                     }
                 }
             }
+            Text {
+                Layout.fillWidth: true
+                visible: sessionList.count === 0
+                text: "暂无会话记录"
+                color: Theme.textDim
+                font.pixelSize: 12
+            }
         }
-        ErrorLabel { Layout.fillWidth: true; vm: taskPage.trVM }
-        Text {
-            visible: traceList.count === 0
-            text: "暂无运行轨迹。任务运行时这里按序显示阶段、操作请求与验证状态（非原始终端输出）。"
-            color: Theme.textDim
-            wrapMode: Text.Wrap
+
+        SectionCard {
             Layout.fillWidth: true
-            font.pixelSize: 12
+            Layout.fillHeight: true
+            title: "运行轨迹"
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                StatusBadge {
+                    label: taskPage.tVM !== null ? Util.taskStateLabel(taskPage.tVM.state) : "无任务"
+                    tone: taskPage.tVM !== null ? Util.taskStateTone(taskPage.tVM.state, Theme) : Theme.neutral
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: taskPage.tVM !== null ? Util.textOr(taskPage.tVM.taskTitle, "") : ""
+                    color: Theme.text
+                    elide: Text.ElideRight
+                    font.pixelSize: 13
+                }
+                Button {
+                    text: "取消任务"
+                    enabled: taskPage.tVM !== null && Util.taskIsActive(taskPage.tVM.state)
+                    onClicked: if (taskPage.tVM !== null && taskPage.tVM.cancel) taskPage.tVM.cancel()
+                }
+            }
+            Text {
+                visible: taskPage.tVM !== null && Util.hasText(taskPage.tVM.cancelMode)
+                text: "最终取消方式：" + Util.cancelModeLabel(taskPage.tVM !== null ? taskPage.tVM.cancelMode : "")
+                color: Theme.warn
+                font.pixelSize: 12
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                TextField {
+                    id: manualNoteInput
+                    Layout.fillWidth: true
+                    placeholderText: "人工介入说明（选填）"
+                }
+                Button {
+                    text: "标记人工介入"
+                    enabled: taskPage.tVM !== null && Util.hasText(taskPage.tVM.taskId)
+                    onClicked: if (taskPage.tVM !== null && taskPage.tVM.markManualEdit) taskPage.tVM.markManualEdit(manualNoteInput.text)
+                }
+            }
+            ListView {
+                id: traceList
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 4
+                model: taskPage.trVM !== null ? taskPage.trVM : null
+                ScrollBar.vertical: ScrollBar {}
+                delegate: Rectangle {
+                    width: traceList.width
+                    color: Theme.deep
+                    radius: Theme.radius
+                    implicitHeight: traceRow.implicitHeight + 12
+                    RowLayout {
+                        id: traceRow
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        spacing: 8
+                        StatusBadge {
+                            label: Util.traceKindLabel(model.kind)
+                            tone: Util.traceKindTone(model.kind, Theme)
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: Util.textOr(model.text, "")
+                            color: Theme.text
+                            wrapMode: Text.Wrap
+                            font.pixelSize: 12
+                        }
+                    }
+                }
+            }
+            ErrorLabel { Layout.fillWidth: true; vm: taskPage.trVM }
+            Text {
+                visible: traceList.count === 0
+                text: "暂无运行轨迹。任务运行时这里按序显示阶段、操作请求与验证状态（非原始终端输出）。"
+                color: Theme.textDim
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+                font.pixelSize: 12
+            }
         }
     }
 }

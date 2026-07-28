@@ -279,7 +279,8 @@ def assemble(engine) -> AppContext:
         when_context.set_key("hasActiveEditor", editor_service.activeDocument is not None)
         when_context.set_key(
             "taskRunning",
-            viewmodels["taskVM"].state in {"created", "running", "awaiting_action", "finishing"},
+            viewmodels["taskVM"].state
+            in {"created", "running", "waiting_developer", "awaiting_action", "finishing"},
         )
 
     viewmodels["workspaceVM"].statusChanged.connect(_sync_when_context)
