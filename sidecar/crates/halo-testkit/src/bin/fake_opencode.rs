@@ -31,13 +31,21 @@ struct ServeArgs {
 #[derive(Default)]
 struct FakeState {
     next_session: u64,
+    next_action: u64,
     sessions: BTreeMap<String, FakeSession>,
+    pending_permissions: BTreeMap<String, PendingFakeAction>,
+    pending_questions: BTreeMap<String, PendingFakeAction>,
     event_clients: Vec<mpsc::Sender<Vec<u8>>>,
 }
 
 struct FakeSession {
     status: &'static str,
     messages: Vec<Value>,
+}
+
+struct PendingFakeAction {
+    session_id: String,
+    prompt: String,
 }
 
 /// 让 tiny-http 在独立请求线程中维持一个真实的、可晚到数据的 SSE body。
@@ -414,6 +422,16 @@ fn begin_prompt(
         };
         session.status = "busy";
     }
+    if matches!(mode.as_str(), "permission_once" | "permission_reject") {
+        respond_json(request, 204, &json!({}));
+        std::thread::spawn(move || emit_permission_request(state, session_id, prompt));
+        return;
+    }
+    if matches!(mode.as_str(), "clarification_once" | "clarification_reject") {
+        respond_json(request, 204, &json!({}));
+        std::thread::spawn(move || emit_question_request(state, session_id, prompt));
+        return;
+    }
     if mode == "fast_initial_round" {
         // 此模式让服务端在 `prompt_async` 取得 204 前已经完成一轮：适配器不能
         // 把首个状态快照中的 idle 或抢先抵达的 SSE 当成未开始。
@@ -514,8 +532,222 @@ fn emit_round(state: Arc<Mutex<FakeState>>, mode: String, session_id: String, pr
     }
 }
 
+fn emit_permission_request(state: Arc<Mutex<FakeState>>, session_id: String, prompt: String) {
+    let request_id = {
+        let mut state = lock_state(&state);
+        state.next_action += 1;
+        let request_id = format!("per_fake_{}", state.next_action);
+        state.pending_permissions.insert(
+            request_id.clone(),
+            PendingFakeAction {
+                session_id: session_id.clone(),
+                prompt,
+            },
+        );
+        request_id
+    };
+    emit_event(
+        &state,
+        json!({"id": "evt_permission_busy", "type": "session.status", "properties": {
+            "sessionID": session_id.as_str(), "status": {"type": "busy"}
+        }}),
+    );
+    emit_event(
+        &state,
+        json!({"id": "evt_permission_asked", "type": "permission.asked", "properties": {
+            "id": request_id, "sessionID": session_id.as_str(), "permission": "edit",
+            "patterns": ["src/fake.rs"], "metadata": {}
+        }}),
+    );
+}
+
+fn emit_question_request(state: Arc<Mutex<FakeState>>, session_id: String, prompt: String) {
+    let request_id = {
+        let mut state = lock_state(&state);
+        state.next_action += 1;
+        let request_id = format!("que_fake_{}", state.next_action);
+        state.pending_questions.insert(
+            request_id.clone(),
+            PendingFakeAction {
+                session_id: session_id.clone(),
+                prompt,
+            },
+        );
+        request_id
+    };
+    emit_event(
+        &state,
+        json!({"id": "evt_question_busy", "type": "session.status", "properties": {
+            "sessionID": session_id.as_str(), "status": {"type": "busy"}
+        }}),
+    );
+    emit_event(
+        &state,
+        json!({"id": "evt_question_asked", "type": "question.asked", "properties": {
+            "id": request_id, "sessionID": session_id.as_str(),
+            "questions": [{
+                "question": "请提供继续任务所需的澄清", "header": "澄清",
+                "options": [], "multiple": false, "custom": false
+            }]
+        }}),
+    );
+}
+
+fn emit_action_rejection(state: Arc<Mutex<FakeState>>, session_id: String, prompt: String) {
+    emit_event(
+        &state,
+        json!({"id": "evt_action_error", "type": "session.error", "properties": {
+            "sessionID": session_id.as_str(), "error": {"name": "PermissionRejectedError"}
+        }}),
+    );
+    // 保存原生失败结论，供任何在 session.error 后拉取快照的客户端如实读取。
+    emit_round(state, "message_error".to_string(), session_id, prompt);
+}
+
+fn read_request_json(request: &mut Request) -> Option<Value> {
+    let mut body = String::new();
+    request
+        .as_reader()
+        .read_to_string(&mut body)
+        .ok()
+        .and_then(|_| serde_json::from_str(&body).ok())
+}
+
+fn respond_permission_decision(
+    mut request: Request,
+    state: Arc<Mutex<FakeState>>,
+    request_id: &str,
+) {
+    let reply = read_request_json(&mut request).and_then(|body| {
+        body.get("reply")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    });
+    let Some(reply) = reply.filter(|reply| matches!(reply.as_str(), "once" | "reject")) else {
+        respond_json(request, 400, &json!({"error": "invalid_permission_reply"}));
+        return;
+    };
+    let pending = lock_state(&state).pending_permissions.remove(request_id);
+    let Some(pending) = pending else {
+        respond_json(request, 404, &json!({"error": "permission_not_found"}));
+        return;
+    };
+    respond_json(request, 200, &json!({}));
+    emit_event(
+        &state,
+        json!({"id": "evt_permission_replied", "type": "permission.replied", "properties": {
+            "sessionID": pending.session_id.as_str(), "requestID": request_id, "reply": reply
+        }}),
+    );
+    if reply == "once" {
+        std::thread::spawn(move || {
+            emit_round(
+                state,
+                "happy".to_string(),
+                pending.session_id,
+                pending.prompt,
+            )
+        });
+    } else {
+        std::thread::spawn(move || {
+            emit_action_rejection(state, pending.session_id, pending.prompt)
+        });
+    }
+}
+
+fn scalar_question_answer(body: Option<Value>) -> bool {
+    body.and_then(|body| {
+        body.get("answers")
+            .and_then(Value::as_array)
+            .filter(|answers| answers.len() == 1)
+            .and_then(|answers| answers[0].as_array())
+            .filter(|answer| answer.len() == 1)
+            .and_then(|answer| answer[0].as_str())
+            .map(str::trim)
+            .filter(|answer| !answer.is_empty())
+            .map(str::to_string)
+    })
+    .is_some()
+}
+
+fn respond_question_answer(mut request: Request, state: Arc<Mutex<FakeState>>, request_id: &str) {
+    if !scalar_question_answer(read_request_json(&mut request)) {
+        respond_json(request, 400, &json!({"error": "invalid_question_answer"}));
+        return;
+    }
+    let pending = lock_state(&state).pending_questions.remove(request_id);
+    let Some(pending) = pending else {
+        respond_json(request, 404, &json!({"error": "question_not_found"}));
+        return;
+    };
+    respond_json(request, 200, &json!({}));
+    emit_event(
+        &state,
+        json!({"id": "evt_question_replied", "type": "question.replied", "properties": {
+            "sessionID": pending.session_id.as_str(), "requestID": request_id
+        }}),
+    );
+    std::thread::spawn(move || {
+        emit_round(
+            state,
+            "happy".to_string(),
+            pending.session_id,
+            pending.prompt,
+        )
+    });
+}
+
+fn respond_question_rejection(request: Request, state: Arc<Mutex<FakeState>>, request_id: &str) {
+    let pending = lock_state(&state).pending_questions.remove(request_id);
+    let Some(pending) = pending else {
+        respond_json(request, 404, &json!({"error": "question_not_found"}));
+        return;
+    };
+    respond_json(request, 200, &json!({}));
+    emit_event(
+        &state,
+        json!({"id": "evt_question_rejected", "type": "question.rejected", "properties": {
+            "sessionID": pending.session_id.as_str(), "requestID": request_id
+        }}),
+    );
+    std::thread::spawn(move || emit_action_rejection(state, pending.session_id, pending.prompt));
+}
+
+fn respond_session_abort(request: Request, state: Arc<Mutex<FakeState>>, session_id: &str) {
+    let exists = {
+        let mut state_guard = lock_state(&state);
+        if let Some(session) = state_guard.sessions.get_mut(session_id) {
+            session.status = "idle";
+            state_guard
+                .pending_permissions
+                .retain(|_, pending| pending.session_id != session_id);
+            state_guard
+                .pending_questions
+                .retain(|_, pending| pending.session_id != session_id);
+            true
+        } else {
+            false
+        }
+    };
+    if !exists {
+        respond_json(request, 404, &json!({"error": "session_not_found"}));
+        return;
+    }
+    respond_json(request, 200, &json!(true));
+    emit_event(
+        &state,
+        json!({"id": "evt_abort", "type": "session.error", "properties": {
+            "sessionID": session_id, "error": {"name": "MessageAbortedError"}
+        }}),
+    );
+}
+
 fn session_id_from_path(path: &str, suffix: &str) -> Option<&str> {
     path.strip_prefix("/session/")?.strip_suffix(suffix)
+}
+
+fn action_id_from_path<'a>(path: &'a str, prefix: &str, suffix: &str) -> Option<&'a str> {
+    path.strip_prefix(prefix)?.strip_suffix(suffix)
 }
 
 fn handle(
@@ -559,6 +791,22 @@ fn handle(
     if request.method() == &Method::Post {
         if let Some(session_id) = session_id_from_path(path, "/prompt_async") {
             begin_prompt(request, mode.to_string(), state, session_id.to_string());
+            return;
+        }
+        if let Some(session_id) = session_id_from_path(path, "/abort") {
+            respond_session_abort(request, state, session_id);
+            return;
+        }
+        if let Some(request_id) = action_id_from_path(path, "/permission/", "/reply") {
+            respond_permission_decision(request, state, request_id);
+            return;
+        }
+        if let Some(request_id) = action_id_from_path(path, "/question/", "/reply") {
+            respond_question_answer(request, state, request_id);
+            return;
+        }
+        if let Some(request_id) = action_id_from_path(path, "/question/", "/reject") {
+            respond_question_rejection(request, state, request_id);
             return;
         }
     }

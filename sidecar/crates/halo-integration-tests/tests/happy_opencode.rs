@@ -378,3 +378,141 @@ fn opencode_fast_initial_round_reaches_waiting_developer_after_sse_closes() {
     });
     assert!(sc.shutdown().success());
 }
+
+#[test]
+fn opencode_permission_requires_an_exact_one_time_decision_before_resuming() {
+    let credential = require_test_credential();
+    let repo = TestRepo::new();
+    let mut sc = Sidecar::start(&[
+        ("HALO_SHUTDOWN_GRACE_MS", "200"),
+        ("HALO_CANCEL_GRACE_MS", "200"),
+    ]);
+    sc.hello();
+    sc.open_and_trust(&repo.path_str());
+    let config_id = sc.save_config(
+        "opencode",
+        &fake_opencode_exe(),
+        &[
+            "--mode",
+            "permission_once",
+            "--require-credential-env",
+            "OPENAI_API_KEY",
+            "--require-isolated-state",
+        ],
+        Some(credential.reference()),
+    );
+    sc.start_runtime("opencode", &config_id);
+    sc.wait_event("runtime.state ready", |event| {
+        event["event"] == "runtime.state"
+            && event["payload"]["agent"] == "opencode"
+            && event["payload"]["state"] == "ready"
+    });
+
+    let created = sc.ok(
+        "task.create",
+        json!({
+            "agent": "opencode", "config_id": config_id, "title": "一次性权限",
+            "instructions": "请求一次写入权限后继续"
+        }),
+    );
+    let task_id = created["task"]["task_id"]
+        .as_str()
+        .expect("task.create 必须返回任务标识")
+        .to_string();
+    let action = sc.wait_event("OpenCode 权限请求", |event| {
+        event["event"] == "task.action_request"
+            && event["task_id"] == task_id
+            && event["payload"]["kind"] == "permission"
+    });
+    let request_id = action["payload"]["request_id"]
+        .as_str()
+        .expect("权限请求必须有可决议的标识")
+        .to_string();
+    assert_eq!(action["payload"]["decision_sent"], false);
+
+    let awaiting = sc.wait_event("awaiting_action", |event| {
+        event["event"] == "task.state"
+            && event["task_id"] == task_id
+            && event["payload"]["state"] == "awaiting_action"
+    });
+    assert_eq!(awaiting["payload"]["task"]["state"], "awaiting_action");
+    let snapshot = sc.ok("task.snapshot", json!({"after_seq": 0}));
+    assert_eq!(
+        snapshot["action_requests"],
+        json!([{
+            "request_id": request_id,
+            "kind": "permission",
+            "prompt": "OpenCode 请求本次 edit 权限：src/fake.rs",
+            "decision_sent": false
+        }])
+    );
+
+    sc.err(
+        "task.resolve_action",
+        json!({
+            "task_id": task_id,
+            "request_id": "per_other",
+            "decision": "allow_once",
+            "answer": null
+        }),
+        "ACTION_REQUEST_NOT_FOUND",
+    );
+
+    let accepted = sc.ok(
+        "task.resolve_action",
+        json!({
+            "task_id": task_id,
+            "request_id": request_id,
+            "decision": "allow_once",
+            "answer": null
+        }),
+    );
+    assert_eq!(accepted, json!({"accepted": true}));
+    sc.err(
+        "task.resolve_action",
+        json!({
+            "task_id": task_id,
+            "request_id": request_id,
+            "decision": "allow_once",
+            "answer": null
+        }),
+        "ACTION_REQUEST_ALREADY_RESOLVED",
+    );
+
+    let resolved = sc.wait_event("精确权限回执", |event| {
+        event["event"] == "task.action_resolved" && event["task_id"] == task_id
+    });
+    assert_eq!(resolved["payload"], json!({"request_id": request_id}));
+
+    let action_seq = action["seq"].as_u64().expect("事件应有 seq");
+    sc.wait_event("真实权限反馈后的 running", |event| {
+        event["event"] == "task.state"
+            && event["task_id"] == task_id
+            && event["payload"]["state"] == "running"
+            && event["seq"].as_u64().is_some_and(|seq| seq > action_seq)
+    });
+    sc.wait_event("权限后首轮 Agent 回复", |event| {
+        event["event"] == "task.session_message"
+            && event["task_id"] == task_id
+            && event["payload"]["role"] == "agent"
+    });
+    sc.wait_event("权限后等待开发者", |event| {
+        event["event"] == "task.state"
+            && event["task_id"] == task_id
+            && event["payload"]["state"] == "waiting_developer"
+    });
+
+    let final_snapshot = sc.ok("task.snapshot", json!({"after_seq": 0}));
+    assert_eq!(final_snapshot["action_requests"], json!([]));
+    for line in sc.transcript_snapshot() {
+        assert!(!line.contains("\"always\""), "不得暴露永久放行决议");
+        assert!(!line.contains("ses_fake_"), "远程会话标识不得进入 IPC");
+    }
+
+    let cancelled = sc.ok("task.cancel", json!({"task_id": task_id}));
+    assert_eq!(cancelled["accepted"], true);
+    sc.wait_event("取消等待中的任务", |event| {
+        event["event"] == "task.cancelled" && event["task_id"] == task_id
+    });
+    assert!(sc.shutdown().success());
+}

@@ -22,7 +22,8 @@ use halo_protocol::methods::review::{
 };
 use halo_protocol::methods::runtime::{RuntimeState, RuntimeStateInfo, RuntimeStatusResult};
 use halo_protocol::methods::task::{
-    CancelMode, CreateTaskResult, TaskBaseline, TaskSessionMessage, TaskSessionMessageRole,
+    ActionDecision, CancelMode, CreateTaskResult, ResolveActionParams, ResolveActionResult,
+    TaskActionKind, TaskActionRequest, TaskBaseline, TaskSessionMessage, TaskSessionMessageRole,
     TaskSnapshotResult, TaskSpec, TaskState, TaskStatus, TaskStatusParams,
 };
 use halo_protocol::methods::workspace::{
@@ -159,6 +160,29 @@ fn event_task_id_serializes_as_explicit_null() {
 }
 
 #[test]
+fn action_resolved_event_is_declared_and_exposes_only_the_local_request_id() {
+    let schema: Value = serde_json::from_str(include_str!(
+        "../../../../protocol/v1/envelope.schema.json"
+    ))
+    .expect("v1 schema 应为有效 JSON");
+    let event_names = schema["$defs"]["event"]["properties"]["event"]["enum"]
+        .as_array()
+        .expect("事件名称应是枚举");
+    assert!(event_names.contains(&json!("task.action_resolved")));
+
+    let event = Event {
+        v: PROTOCOL_VERSION,
+        seq: 43,
+        ts: "2026-07-28T08:00:00Z".to_string(),
+        task_id: Some("task-1".to_string()),
+        event: "task.action_resolved".to_string(),
+        payload: json!({"request_id": "per_123"}),
+    };
+    let value = serde_json::to_value(event).expect("事件应可序列化");
+    assert_eq!(value["payload"], json!({"request_id": "per_123"}));
+}
+
+#[test]
 fn envelope_kind_mismatch_rejected_by_serde() {
     let wrong = json!({
         "v": 1, "kind": "response", "id": "r-1", "method": "task.status", "params": {}
@@ -279,7 +303,7 @@ fn read_message_tolerates_trailing_newline() {
 
 #[test]
 fn error_code_strings_are_stable() {
-    // 与 protocol/v1/envelope.schema.json 的枚举一字不差（全部 39 个）。
+    // 与 protocol/v1/envelope.schema.json 的枚举一字不差（全部 42 个）。
     let pairs: &[(ErrorCode, &str)] = &[
         (ErrorCode::HelloRequired, "HELLO_REQUIRED"),
         (ErrorCode::ProtocolVersionUnsupported, "PROTOCOL_VERSION_UNSUPPORTED"),
@@ -310,6 +334,12 @@ fn error_code_strings_are_stable() {
         (ErrorCode::TaskNotFound, "TASK_NOT_FOUND"),
         (ErrorCode::TaskStillRunning, "TASK_STILL_RUNNING"),
         (ErrorCode::TaskNotReviewable, "TASK_NOT_REVIEWABLE"),
+        (ErrorCode::ActionRequestNotFound, "ACTION_REQUEST_NOT_FOUND"),
+        (
+            ErrorCode::ActionRequestAlreadyResolved,
+            "ACTION_REQUEST_ALREADY_RESOLVED",
+        ),
+        (ErrorCode::ActionRequestNotPending, "ACTION_REQUEST_NOT_PENDING"),
         (ErrorCode::EvidenceNotFound, "EVIDENCE_NOT_FOUND"),
         (ErrorCode::EvidenceNotLatest, "EVIDENCE_NOT_LATEST"),
         (ErrorCode::EventGap, "EVENT_GAP"),
@@ -324,7 +354,16 @@ fn error_code_strings_are_stable() {
         (ErrorCode::FsAlreadyExists, "FS_ALREADY_EXISTS"),
         (ErrorCode::FsGitProtected, "FS_GIT_PROTECTED"),
     ];
-    assert_eq!(pairs.len(), 39);
+    assert_eq!(pairs.len(), 42);
+    let schema: Value = serde_json::from_str(include_str!(
+        "../../../../protocol/v1/envelope.schema.json"
+    ))
+    .expect("v1 schema 应为有效 JSON");
+    let schema_codes = schema["$defs"]["error"]["properties"]["code"]["enum"]
+        .as_array()
+        .expect("错误码应是枚举");
+    let declared_codes: Vec<Value> = pairs.iter().map(|(_, code)| json!(code)).collect();
+    assert_eq!(schema_codes, &declared_codes);
     for (code, expected) in pairs {
         assert_eq!(serde_json::to_value(code).unwrap(), json!(expected));
         let back: ErrorCode = serde_json::from_value(json!(expected)).unwrap();
@@ -764,6 +803,7 @@ fn task_snapshot_keeps_active_session_messages_outside_task_status() {
                 truncated: true,
             },
         ],
+        action_requests: vec![],
     };
 
     let value = serde_json::to_value(&result).unwrap();
@@ -776,11 +816,79 @@ fn task_snapshot_keeps_active_session_messages_outside_task_status() {
             "session_messages": [
                 {"role": "user", "text": "请修复登录超时", "truncated": false},
                 {"role": "agent", "text": "已定位到重试策略。", "truncated": true}
-            ]
+            ],
+            "action_requests": []
         })
     );
     let back: TaskSnapshotResult = serde_json::from_value(value).unwrap();
     assert_eq!(back, result);
+}
+
+#[test]
+fn task_resolve_action_is_one_time_and_snapshot_keeps_only_displayable_request_data() {
+    let allow_once = ResolveActionParams {
+        task_id: "task-1".to_string(),
+        request_id: "per_123".to_string(),
+        decision: ActionDecision::AllowOnce,
+        answer: None,
+    };
+    assert_eq!(
+        serde_json::to_value(&allow_once).unwrap(),
+        json!({
+            "task_id": "task-1",
+            "request_id": "per_123",
+            "decision": "allow_once",
+            "answer": null
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(ResolveActionResult { accepted: true }).unwrap(),
+        json!({"accepted": true})
+    );
+
+    let answer = ResolveActionParams {
+        task_id: "task-1".to_string(),
+        request_id: "que_456".to_string(),
+        decision: ActionDecision::Answer,
+        answer: Some("使用本地配置".to_string()),
+    };
+    assert_eq!(
+        serde_json::to_value(&answer).unwrap(),
+        json!({
+            "task_id": "task-1",
+            "request_id": "que_456",
+            "decision": "answer",
+            "answer": "使用本地配置"
+        })
+    );
+
+    let result = TaskSnapshotResult {
+        task: None,
+        last_seq: 42,
+        events: vec![],
+        session_messages: vec![],
+        action_requests: vec![TaskActionRequest {
+            request_id: "per_123".to_string(),
+            kind: TaskActionKind::Permission,
+            prompt: "允许本次写入 src/auth.rs 吗？".to_string(),
+            decision_sent: false,
+        }],
+    };
+    assert_eq!(
+        serde_json::to_value(&result).unwrap(),
+        json!({
+            "task": null,
+            "last_seq": 42,
+            "events": [],
+            "session_messages": [],
+            "action_requests": [{
+                "request_id": "per_123",
+                "kind": "permission",
+                "prompt": "允许本次写入 src/auth.rs 吗？",
+                "decision_sent": false
+            }]
+        })
+    );
 }
 
 // ---------- review.get 形状快照 ----------

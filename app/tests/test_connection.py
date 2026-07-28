@@ -144,6 +144,26 @@ def test_runtime_capability_unavailable_is_request_error_without_disconnect(tmp_
         assert conn.request("workspace.status", timeout=5.0) == {"active": False}
 
 
+@pytest.mark.parametrize("error_code", [
+    "ACTION_REQUEST_NOT_FOUND",
+    "ACTION_REQUEST_ALREADY_RESOLVED",
+    "ACTION_REQUEST_NOT_PENDING",
+])
+def test_action_request_error_is_request_error_without_disconnect(tmp_path, error_code):
+    script = {"responses": {
+        "task.resolve_action": {"error": {
+            "code": error_code,
+            "message": "当前任务没有匹配的操作请求",
+        }},
+    }}
+    with connected(tmp_path, script=script) as conn:
+        with pytest.raises(RequestError) as excinfo:
+            conn.request("task.resolve_action", {"task_id": "task-1", "request_id": "per_1"}, timeout=5.0)
+        assert excinfo.value.code == error_code
+        assert conn.is_connected
+        assert conn.request("workspace.status", timeout=5.0) == {"active": False}
+
+
 def test_request_timeout(tmp_path):
     script = {"responses": {"test.silent": {"no_response": True}}}
     with connected(tmp_path, script=script) as conn:
@@ -202,6 +222,31 @@ def test_session_message_event_is_forwarded(tmp_path):
     message = next(e for e in events if e["event"] == "task.session_message")
     assert message["task_id"] == "task-1"
     assert message["payload"] == {"role": "agent", "text": "已脱敏回复", "truncated": False}
+
+
+def test_action_resolution_event_is_forwarded_without_remote_details(tmp_path):
+    script = {"responses": {"test.push": {
+        "result": {"pushed": True},
+        "events": [{
+            "event": "task.action_resolved",
+            "task_id": "task-1",
+            "payload": {"request_id": "per_1"},
+        }],
+    }}}
+    events: list[dict] = []
+    conn = make_connection(tmp_path, script=script)
+    conn.add_event_callback(events.append)
+    conn.start()
+    try:
+        conn.hello([1])
+        assert conn.request("test.push", timeout=5.0) == {"pushed": True}
+        assert wait_until(lambda: any(e["event"] == "task.action_resolved" for e in events))
+    finally:
+        conn.close()
+
+    resolved = next(e for e in events if e["event"] == "task.action_resolved")
+    assert resolved["task_id"] == "task-1"
+    assert resolved["payload"] == {"request_id": "per_1"}
 
 
 # ---- 断连检测 -------------------------------------------------------------

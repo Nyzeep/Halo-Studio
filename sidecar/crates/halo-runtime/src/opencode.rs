@@ -4,7 +4,7 @@
 //! 新的 Basic 认证密码，并以 OpenCode Server 的 `/global/health` 完成真实就绪检查。
 //! 端口、认证密码和 Authorization 值只保留在私有句柄中，不进入 Debug、错误或事件。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpListener;
 use std::process::{Command, Stdio};
@@ -16,11 +16,12 @@ use crossbeam_channel::{bounded, Receiver, RecvTimeoutError, Sender};
 use rand::RngCore;
 use serde_json::{json, Value};
 use tempfile::TempDir;
+use uuid::Uuid;
 
 use crate::process::{probe_version, ChildProcess, RealChild};
 use crate::{
-    lock, LaunchCmd, RunTaskSpec, RuntimeError, RuntimeEvent, RuntimeState, RuntimeTraceItem,
-    StopOutcome, Timeouts,
+    lock, ActionDecision, LaunchCmd, RunTaskSpec, RuntimeError, RuntimeEvent, RuntimeState,
+    RuntimeTraceItem, StopOutcome, Timeouts,
 };
 
 /// 已验证的 OpenCode Server 兼容性档案标识。新主版本须建立新档案后才能启动。
@@ -312,6 +313,123 @@ impl Default for SessionRoundGate {
     }
 }
 
+/// OpenCode 的远端操作标识仅供本适配器向原生端点回传，不能越过运行时边界；
+/// 因此 RuntimeEvent 使用此处生成的本地标识。
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PendingActionKind {
+    Permission,
+    Clarification,
+}
+
+impl PendingActionKind {
+    fn event_kind(self) -> &'static str {
+        match self {
+            Self::Permission => "permission",
+            Self::Clarification => "clarification",
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PendingActionResolution {
+    PermissionOnce,
+    PermissionRejected,
+    ClarificationAnswered,
+    ClarificationRejected,
+}
+
+struct PendingRemoteAction {
+    remote_id: String,
+    kind: PendingActionKind,
+    resolution: Option<PendingActionResolution>,
+}
+
+#[derive(Default)]
+struct PendingRemoteActions {
+    by_local_id: HashMap<String, PendingRemoteAction>,
+    seen_remote_ids: HashSet<String>,
+}
+
+impl PendingRemoteActions {
+    fn has_pending(&self) -> bool {
+        !self.by_local_id.is_empty()
+    }
+
+    fn register(&mut self, remote_id: &str, kind: PendingActionKind) -> Option<String> {
+        if remote_id.is_empty() || self.seen_remote_ids.contains(remote_id) {
+            return None;
+        }
+
+        self.seen_remote_ids.insert(remote_id.to_string());
+
+        let mut local_id = format!("act-{}", Uuid::new_v4());
+        while self.by_local_id.contains_key(&local_id) {
+            local_id = format!("act-{}", Uuid::new_v4());
+        }
+        self.by_local_id.insert(
+            local_id.clone(),
+            PendingRemoteAction {
+                remote_id: remote_id.to_string(),
+                kind,
+                resolution: None,
+            },
+        );
+        Some(local_id)
+    }
+
+    fn kind(&self, local_id: &str) -> Result<PendingActionKind, RuntimeError> {
+        self.by_local_id
+            .get(local_id)
+            .map(|pending| pending.kind)
+            .ok_or(RuntimeError::ActionRequestNotFound)
+    }
+
+    fn begin_decision(
+        &mut self,
+        local_id: &str,
+        resolution: PendingActionResolution,
+    ) -> Result<String, RuntimeError> {
+        let pending = self
+            .by_local_id
+            .get_mut(local_id)
+            .ok_or(RuntimeError::ActionRequestNotFound)?;
+        if pending.resolution.is_some() {
+            return Err(RuntimeError::ActionRequestAlreadyResolved);
+        }
+        pending.resolution = Some(resolution);
+        Ok(pending.remote_id.clone())
+    }
+
+    fn confirm(
+        &mut self,
+        remote_id: &str,
+        kind: PendingActionKind,
+        resolution: PendingActionResolution,
+    ) -> Option<String> {
+        let local_id = self.by_local_id.iter().find_map(|(local_id, pending)| {
+            (pending.remote_id == remote_id
+                && pending.kind == kind
+                && pending.resolution == Some(resolution))
+            .then(|| local_id.clone())
+        })?;
+        self.by_local_id.remove(&local_id);
+        Some(local_id)
+    }
+
+    fn clear_pending(&mut self) {
+        self.by_local_id.clear();
+    }
+
+    fn reset_for_session(&mut self) {
+        self.clear_pending();
+        self.seen_remote_ids.clear();
+    }
+
+    fn remote_ids(&self) -> Vec<String> {
+        self.seen_remote_ids.iter().cloned().collect()
+    }
+}
+
 struct OcShared {
     state: Mutex<RuntimeState>,
     tx: Sender<RuntimeEvent>,
@@ -323,6 +441,10 @@ struct OcShared {
     workspace_directory: String,
     // OpenCode session id 是远程实现细节，只在本次运行的私有句柄中保存。
     session_id: Mutex<Option<String>>,
+    // 决议提交与取消必须线性化：取消取得此锁后，任何操作请求都不能再送往 OpenCode。
+    decision_gate: Mutex<()>,
+    pending_actions: Mutex<PendingRemoteActions>,
+    cancellation_requested: Mutex<bool>,
     round_gate: Mutex<SessionRoundGate>,
     child: Mutex<Option<Box<dyn ChildProcess>>>,
     runtime_dir: Mutex<Option<TempDir>>,
@@ -368,6 +490,10 @@ impl OcShared {
 
     fn round_is_completed(&self) -> bool {
         lock(&self.round_gate).phase == SessionRoundPhase::Completed
+    }
+
+    fn has_pending_actions(&self) -> bool {
+        lock(&self.pending_actions).has_pending()
     }
 
     fn event_stream_ended(&self) -> bool {
@@ -433,6 +559,7 @@ impl OcShared {
             }
         };
         if changed {
+            lock(&self.pending_actions).clear_pending();
             let _ = self.tx.send(RuntimeEvent::State(failure));
         }
     }
@@ -445,6 +572,52 @@ impl OcShared {
 
     fn cleanup_runtime_dir(&self) {
         drop(lock(&self.runtime_dir).take());
+    }
+
+    fn cancel_pending_actions(&self) {
+        let _decision_gate = lock(&self.decision_gate);
+        *lock(&self.cancellation_requested) = true;
+        lock(&self.pending_actions).reset_for_session();
+    }
+
+    fn accepts_action_requests(&self) -> bool {
+        !*lock(&self.cancellation_requested)
+            && matches!(
+                *lock(&self.state),
+                RuntimeState::Starting | RuntimeState::Ready
+            )
+    }
+
+    /// 操作请求需要把 404/409 映射为稳定的本地错误，但绝不把远端 URL 或标识
+    /// 放进错误文本。
+    fn request_action_json(
+        &self,
+        path: &str,
+        body: Option<&Value>,
+        timeout: Duration,
+    ) -> Result<(), RuntimeError> {
+        let url = format!("http://127.0.0.1:{}{path}", self.port);
+        let request = self
+            .agent
+            .post(&url)
+            .set("Authorization", &basic_authorization(&self.password))
+            .timeout(timeout);
+        let response = match body {
+            Some(body) => request.send_json(body),
+            None => request.call(),
+        };
+        match response {
+            Ok(_) => Ok(()),
+            Err(ureq::Error::Status(401, _)) => Err(RuntimeError::Unauthorized),
+            Err(ureq::Error::Status(404, _)) => Err(RuntimeError::ActionRequestNotFound),
+            Err(ureq::Error::Status(409, _)) => Err(RuntimeError::ActionRequestAlreadyResolved),
+            Err(ureq::Error::Status(_code, _)) => Err(RuntimeError::Io(
+                "OpenCode 未接受本次操作请求决定".to_string(),
+            )),
+            Err(ureq::Error::Transport(_)) => Err(RuntimeError::Io(
+                "与 OpenCode 的本地服务连接失败".to_string(),
+            )),
+        }
     }
 
     /// 统一回环请求入口。错误信息不包含 URL、端口或 Authorization 值。
@@ -572,6 +745,9 @@ fn connect_after_ready_line(
         password,
         workspace_directory,
         session_id: Mutex::new(None),
+        decision_gate: Mutex::new(()),
+        pending_actions: Mutex::new(PendingRemoteActions::default()),
+        cancellation_requested: Mutex::new(false),
         round_gate: Mutex::new(SessionRoundGate::default()),
         child: Mutex::new(child),
         runtime_dir: Mutex::new(runtime_dir),
@@ -751,6 +927,183 @@ fn limit_text(value: &str, maximum: usize) -> String {
     limited
 }
 
+fn asked_action_id(properties: &Value) -> Option<&str> {
+    properties.get("id").and_then(Value::as_str)
+}
+
+fn resolved_action_id(properties: &Value) -> Option<&str> {
+    properties
+        .get("requestID")
+        .or_else(|| properties.get("request_id"))
+        .or_else(|| properties.get("id"))
+        .and_then(Value::as_str)
+}
+
+fn metadata_summary(properties: &Value) -> Option<String> {
+    let metadata = properties.get("metadata")?;
+    for key in ["description", "summary", "title"] {
+        if let Some(value) = metadata.get(key).and_then(Value::as_str) {
+            let value = value.trim();
+            if !value.is_empty() {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn permission_prompt(properties: &Value) -> Result<String, RuntimeError> {
+    let permission = properties
+        .get("permission")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            RuntimeError::CapabilityUnavailable("OpenCode 权限请求缺少可显示的权限类型".to_string())
+        })?;
+    let patterns = properties
+        .get("patterns")
+        .and_then(Value::as_array)
+        .map(|patterns| {
+            patterns
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let mut prompt = format!("OpenCode 请求本次 {permission} 权限");
+    if !patterns.is_empty() {
+        prompt.push('：');
+        prompt.push_str(&patterns.join("、"));
+    }
+    if let Some(summary) = metadata_summary(properties) {
+        prompt.push('（');
+        prompt.push_str(&summary);
+        prompt.push('）');
+    }
+    Ok(prompt)
+}
+
+fn clarification_prompt(properties: &Value) -> Result<String, RuntimeError> {
+    let questions = properties
+        .get("questions")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            RuntimeError::CapabilityUnavailable("OpenCode 澄清请求缺少兼容的问题内容".to_string())
+        })?;
+    if questions.len() != 1
+        || questions[0]
+            .get("multiple")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    {
+        return Err(RuntimeError::CapabilityUnavailable(
+            "OpenCode 澄清请求不属于当前支持的单项回答范围".to_string(),
+        ));
+    }
+    let question = questions[0]
+        .get("question")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            RuntimeError::CapabilityUnavailable("OpenCode 澄清请求缺少可显示的问题".to_string())
+        })?;
+    Ok(format!("OpenCode 请求澄清：{question}"))
+}
+
+/// 操作卡片只能含开发者可读文本。事件载荷可能混入传输句柄，因此离开适配器前必须清除
+/// 当前运行时已知的全部私有值；Sidecar 仍以通用脱敏作为纵深防御。
+fn redact_private_action_text(
+    shared: &OcShared,
+    properties: &Value,
+    remote_id: &str,
+    prompt: String,
+) -> String {
+    let private_port = shared.port.to_string();
+    let mut private_values = vec![
+        remote_id.to_string(),
+        shared.password.clone(),
+        basic_authorization(&shared.password),
+        format!("http://127.0.0.1:{}", shared.port),
+        format!("http://localhost:{}", shared.port),
+    ];
+    private_values.extend(lock(&shared.pending_actions).remote_ids());
+    if let Some(session_id) = event_session_id(properties) {
+        private_values.push(session_id.to_string());
+    }
+    if let Some(session_id) = lock(&shared.session_id).as_deref() {
+        private_values.push(session_id.to_string());
+    }
+    // 服务端可能回显路径形式的句柄，因此也要在结构化字段转为显示文本前清除该表示。
+    let encoded_private_values = private_values
+        .iter()
+        .map(|value| percent_encode(value))
+        .collect::<Vec<_>>();
+    private_values.extend(encoded_private_values);
+
+    // 先替换较长值，避免 URL 中的端口被提前替换后留下部分句柄。
+    private_values
+        .sort_unstable_by(|left, right| right.len().cmp(&left.len()).then_with(|| left.cmp(right)));
+    private_values.dedup();
+    let redacted = private_values
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .fold(prompt, |text, private_value| {
+            text.replace(&private_value, "[REDACTED]")
+        });
+    limit_text(
+        &redacted.replace(&private_port, "[REDACTED]"),
+        MAX_TRACE_TEXT,
+    )
+}
+
+fn emit_action_request(
+    shared: &OcShared,
+    properties: &Value,
+    kind: PendingActionKind,
+) -> Result<(), RuntimeError> {
+    if !shared.accepts_action_requests() {
+        return Ok(());
+    }
+    let remote_id = asked_action_id(properties).ok_or_else(|| {
+        RuntimeError::CapabilityUnavailable("OpenCode 操作请求缺少兼容标识".to_string())
+    })?;
+    let prompt = match kind {
+        PendingActionKind::Permission => permission_prompt(properties),
+        PendingActionKind::Clarification => clarification_prompt(properties),
+    }?;
+    let prompt = redact_private_action_text(shared, properties, remote_id, prompt);
+    let local_id = lock(&shared.pending_actions).register(remote_id, kind);
+    if let Some(request_id) = local_id {
+        let _ = shared.tx.send(RuntimeEvent::ActionRequest {
+            request_id,
+            kind: kind.event_kind().to_string(),
+            prompt,
+        });
+    }
+    Ok(())
+}
+
+fn emit_action_resolved(
+    shared: &OcShared,
+    properties: &Value,
+    kind: PendingActionKind,
+    resolution: PendingActionResolution,
+) {
+    let Some(remote_id) = resolved_action_id(properties) else {
+        return;
+    };
+    let request_id = lock(&shared.pending_actions).confirm(remote_id, kind, resolution);
+    if let Some(request_id) = request_id {
+        let _ = shared.tx.send(RuntimeEvent::ActionResolved { request_id });
+    }
+}
+
 /// 从 SSE 中取一个 data 帧。未知 SSE 字段和空 keepalive 帧均不影响会话。
 fn next_sse_event(reader: &mut dyn BufRead) -> Result<Option<Value>, RuntimeError> {
     let mut data = String::new();
@@ -839,6 +1192,48 @@ fn handle_event(
     let null = Value::Null;
     let properties = event.get("properties").unwrap_or(&null);
     match event_type {
+        Some("permission.asked") if event_is_for_session(properties, session_id) => {
+            emit_action_request(shared, properties, PendingActionKind::Permission)?;
+            Ok(EventDisposition::Continue)
+        }
+        Some("question.asked") if event_is_for_session(properties, session_id) => {
+            emit_action_request(shared, properties, PendingActionKind::Clarification)?;
+            Ok(EventDisposition::Continue)
+        }
+        Some("permission.replied") if event_is_for_session(properties, session_id) => {
+            let resolution = match properties.get("reply").and_then(Value::as_str) {
+                Some("once") => Some(PendingActionResolution::PermissionOnce),
+                Some("reject") => Some(PendingActionResolution::PermissionRejected),
+                _ => None,
+            };
+            if let Some(resolution) = resolution {
+                emit_action_resolved(
+                    shared,
+                    properties,
+                    PendingActionKind::Permission,
+                    resolution,
+                );
+            }
+            Ok(EventDisposition::Continue)
+        }
+        Some("question.replied") if event_is_for_session(properties, session_id) => {
+            emit_action_resolved(
+                shared,
+                properties,
+                PendingActionKind::Clarification,
+                PendingActionResolution::ClarificationAnswered,
+            );
+            Ok(EventDisposition::Continue)
+        }
+        Some("question.rejected") if event_is_for_session(properties, session_id) => {
+            emit_action_resolved(
+                shared,
+                properties,
+                PendingActionKind::Clarification,
+                PendingActionResolution::ClarificationRejected,
+            );
+            Ok(EventDisposition::Continue)
+        }
         Some("session.status") if event_is_for_session(properties, session_id) => {
             match properties.pointer("/status/type").and_then(Value::as_str) {
                 Some("busy") | Some("retry") => {
@@ -909,6 +1304,7 @@ fn handle_event(
             Ok(EventDisposition::Continue)
         }
         Some("session.error") if event_is_for_session(properties, session_id) => {
+            lock(&shared.pending_actions).clear_pending();
             Err(RuntimeError::Io("OpenCode 本轮会话报告失败".to_string()))
         }
         // 心跳、逐字 delta 和将来新增事件都不携带到 Halo 的受控运行轨迹。
@@ -968,6 +1364,10 @@ fn try_complete_round(
     session_id: &str,
     message_attempts: usize,
 ) -> Result<CompletionAttempt, RuntimeError> {
+    // 操作请求会暂停同一原生回合；开发者仍可决议时，不能把并发 idle 快照当成已完成回复。
+    if shared.has_pending_actions() {
+        return Ok(CompletionAttempt::Pending);
+    }
     if !shared.claim_completion_check() {
         return Ok(if shared.round_is_completed() {
             CompletionAttempt::Completed
@@ -977,6 +1377,9 @@ fn try_complete_round(
     }
 
     let result: Result<Option<String>, RuntimeError> = (|| {
+        if shared.has_pending_actions() {
+            return Ok(None);
+        }
         if !session_is_idle(shared, session_id)? {
             return Ok(None);
         }
@@ -1142,7 +1545,7 @@ impl OpenCodeHandle {
 
     fn confirm_initial_round_started(&self, session_id: &str) -> Result<(), RuntimeError> {
         for attempt in 0..6 {
-            if self.shared.round_is_completed() {
+            if self.shared.round_is_completed() || self.shared.has_pending_actions() {
                 return Ok(());
             }
 
@@ -1150,6 +1553,10 @@ impl OpenCodeHandle {
                 try_complete_round(&self.shared, session_id, 1)?,
                 CompletionAttempt::Completed
             ) {
+                return Ok(());
+            }
+
+            if self.shared.has_pending_actions() {
                 return Ok(());
             }
 
@@ -1188,6 +1595,8 @@ impl OpenCodeHandle {
             // 占位防止并发的 task.create 重复建立远程会话。
             *session = Some(String::new());
         }
+        *lock(&self.shared.cancellation_requested) = false;
+        lock(&self.shared.pending_actions).reset_for_session();
 
         let session_id = match self.create_session() {
             Ok(session_id) => session_id,
@@ -1224,8 +1633,97 @@ impl OpenCodeHandle {
         Ok(())
     }
 
-    /// #11 不扩大为取消/显式结束流程；绝不回退到旧的 `/cancel` 协议。
-    pub fn cancel_native(&self) {}
+    /// Sidecar 接受取消时同步建立屏障并失效本会话的操作映射，防止迟到回执推进任务。
+    pub fn begin_cancel(&self) {
+        self.shared.cancel_pending_actions();
+    }
+
+    /// 取消只经 OpenCode 的原生 session abort 端点；绝不回退到旧的 `/cancel` 协议。
+    pub fn cancel_native(&self) {
+        self.begin_cancel();
+        let session_id = lock(&self.shared.session_id)
+            .clone()
+            .filter(|session_id| !session_id.is_empty());
+        let Some(session_id) = session_id else {
+            return;
+        };
+        let path = self
+            .shared
+            .instance_path(&format!("/session/{}/abort", percent_encode(&session_id)));
+        let _ = self.shared.request("POST", &path, Duration::from_secs(5));
+    }
+
+    /// 将当前活动请求的开发者决定送往 OpenCode 的原生端点。HTTP 成功仅表示请求
+    /// 已送达；真正的状态推进仍必须由 matching replied/rejected SSE 事件触发。
+    pub fn resolve_action(
+        &self,
+        request_id: &str,
+        decision: ActionDecision,
+    ) -> Result<(), RuntimeError> {
+        let delivery = {
+            // 原生请求期间持有闸门：并发取消要么先获胜，要么等待本次精确决议离开进程。
+            let _decision_gate = lock(&self.shared.decision_gate);
+            if *lock(&self.shared.state) != RuntimeState::Ready
+                || *lock(&self.shared.cancellation_requested)
+            {
+                return Err(RuntimeError::InvalidState);
+            }
+
+            let kind = lock(&self.shared.pending_actions).kind(request_id)?;
+            let (resolution, group, suffix, body) = match (kind, decision) {
+                (PendingActionKind::Permission, ActionDecision::AllowOnce) => (
+                    PendingActionResolution::PermissionOnce,
+                    "permission",
+                    "reply",
+                    Some(json!({"reply": "once"})),
+                ),
+                (PendingActionKind::Permission, ActionDecision::Reject) => (
+                    PendingActionResolution::PermissionRejected,
+                    "permission",
+                    "reply",
+                    Some(json!({"reply": "reject"})),
+                ),
+                (PendingActionKind::Clarification, ActionDecision::Answer(answer))
+                    if !answer.trim().is_empty() =>
+                {
+                    (
+                        PendingActionResolution::ClarificationAnswered,
+                        "question",
+                        "reply",
+                        Some(json!({"answers": [[answer]]})),
+                    )
+                }
+                (PendingActionKind::Clarification, ActionDecision::Reject) => (
+                    PendingActionResolution::ClarificationRejected,
+                    "question",
+                    "reject",
+                    None,
+                ),
+                _ => return Err(RuntimeError::InvalidState),
+            };
+            let remote_id =
+                lock(&self.shared.pending_actions).begin_decision(request_id, resolution)?;
+            let path = self.shared.instance_path(&format!(
+                "/{group}/{}/{}",
+                percent_encode(&remote_id),
+                suffix
+            ));
+            self.shared
+                .request_action_json(&path, body.as_ref(), Duration::from_secs(5))
+        };
+
+        if delivery.is_ok() {
+            return Ok(());
+        }
+
+        // OpenCode 可能已应用决议后才返回错误；重试可能批准不同状态，因此结束本轮任务。
+        self.shared.set_failed(
+            "无法确认本次操作请求的决定是否已送达",
+            "请勿重试该操作请求；请检查 OpenCode 后重新启动运行时并创建新任务",
+        );
+        self.cancel_native();
+        Err(RuntimeError::ActionRequestDeliveryUncertain)
+    }
 
     /// OpenCode 的 dispose 只释放实例资源，不会退出 server 进程。
     /// 请求成功后主动回收子进程才是该协议下的 Graceful；dispose 失败或超时则 Forced。
@@ -1233,6 +1731,7 @@ impl OpenCodeHandle {
         if matches!(*lock(&self.shared.state), RuntimeState::Stopped) {
             return StopOutcome::Graceful;
         }
+        self.cancel_native();
         self.shared.set_state(RuntimeState::Stopping);
         let dispose_ok = self
             .shared
@@ -1363,6 +1862,402 @@ mod tests {
                 return event;
             }
         }
+    }
+
+    fn event_test_shared(tx: Sender<RuntimeEvent>) -> OcShared {
+        event_test_shared_on_port(tx, 0)
+    }
+
+    fn event_test_shared_on_port(tx: Sender<RuntimeEvent>, port: u16) -> OcShared {
+        OcShared {
+            state: Mutex::new(RuntimeState::Ready),
+            tx,
+            agent: ureq::agent(),
+            port,
+            password: "not-for-output".to_string(),
+            workspace_directory: String::new(),
+            session_id: Mutex::new(Some("ses_private".to_string())),
+            decision_gate: Mutex::new(()),
+            pending_actions: Mutex::new(PendingRemoteActions::default()),
+            cancellation_requested: Mutex::new(false),
+            round_gate: Mutex::new(SessionRoundGate {
+                phase: SessionRoundPhase::AwaitingCompletion,
+                event_stream_ended: false,
+            }),
+            child: Mutex::new(None),
+            runtime_dir: Mutex::new(None),
+        }
+    }
+
+    #[test]
+    fn pending_action_blocks_completion_checks_without_requesting_session_state() {
+        let server = spawn_server("not-for-output", healthy_handler);
+        let (tx, rx) = unbounded();
+        let shared = event_test_shared_on_port(tx, server.port);
+        lock(&shared.pending_actions)
+            .register("per_private_remote_1", PendingActionKind::Permission)
+            .expect("待决权限请求应登记");
+
+        assert!(matches!(
+            try_complete_round(&shared, "ses_private", 1).expect("待决请求不应失败"),
+            CompletionAttempt::Pending
+        ));
+        assert!(rx.try_recv().is_err(), "待决请求不能生成助手回复");
+        assert!(
+            server.seen.lock().unwrap().is_empty(),
+            "待决请求不能触发状态或消息网络请求"
+        );
+
+        let handle = OpenCodeHandle {
+            shared: Arc::new(shared),
+        };
+        handle
+            .confirm_initial_round_started("ses_private")
+            .expect("待决请求应作为首轮合法暂停");
+        assert!(
+            server.seen.lock().unwrap().is_empty(),
+            "首轮确认不能把待决请求后的 idle 当作缺失回复"
+        );
+    }
+
+    #[test]
+    fn permission_action_uses_a_local_id_and_requires_the_exact_native_reply() {
+        let (tx, rx) = unbounded();
+        let shared = event_test_shared(tx);
+        let asked = json!({"type": "permission.asked", "properties": {
+            "id": "per_private_remote_1", "sessionID": "ses_private",
+            "permission": "edit", "patterns": ["src/lib.rs"], "metadata": {}
+        }});
+        handle_event(&shared, "ses_private", &asked).expect("权限请求应兼容");
+        let request_id = match wait_event(
+            &rx,
+            |event| matches!(event, RuntimeEvent::ActionRequest { kind, .. } if kind == "permission"),
+        ) {
+            RuntimeEvent::ActionRequest {
+                request_id, prompt, ..
+            } => {
+                assert_eq!(prompt, "OpenCode 请求本次 edit 权限：src/lib.rs");
+                request_id
+            }
+            _ => unreachable!(),
+        };
+        assert_ne!(request_id, "per_private_remote_1");
+        let uuid = request_id
+            .strip_prefix("act-")
+            .and_then(|value| Uuid::parse_str(value).ok())
+            .expect("本地操作请求标识必须是 act- 前缀的 UUID-v4");
+        assert_eq!(uuid.get_version_num(), 4);
+        lock(&shared.pending_actions)
+            .begin_decision(&request_id, PendingActionResolution::PermissionOnce)
+            .expect("本地请求应可提交一次决定");
+
+        let wrong_reply = json!({"type": "permission.replied", "properties": {
+            "sessionID": "ses_private", "requestID": "per_private_remote_1", "reply": "reject"
+        }});
+        handle_event(&shared, "ses_private", &wrong_reply).expect("不匹配回执应被忽略");
+        assert!(rx.try_recv().is_err());
+
+        let wrong_id = json!({"type": "permission.replied", "properties": {
+            "sessionID": "ses_private", "requestID": "per_other", "reply": "once"
+        }});
+        handle_event(&shared, "ses_private", &wrong_id).expect("其他请求回执应被忽略");
+        assert!(rx.try_recv().is_err());
+
+        let exact_reply = json!({"type": "permission.replied", "properties": {
+            "sessionID": "ses_private", "requestID": "per_private_remote_1", "reply": "once"
+        }});
+        handle_event(&shared, "ses_private", &exact_reply).expect("精确回执应兼容");
+        assert!(matches!(
+            wait_event(&rx, |event| matches!(event, RuntimeEvent::ActionResolved { .. })),
+            RuntimeEvent::ActionResolved { request_id: resolved } if resolved == request_id
+        ));
+
+        handle_event(&shared, "ses_private", &asked).expect("重复权限请求帧应被容忍");
+        assert!(
+            rx.try_recv().is_err(),
+            "已确认的远端操作请求不能因重复 asked 帧重新生成卡片"
+        );
+    }
+
+    #[test]
+    fn action_prompts_redact_private_runtime_handles_before_emitting_events() {
+        let (tx, rx) = unbounded();
+        let mut shared = event_test_shared_on_port(tx, 43123);
+        shared.password = format!("secret-{}", "p".repeat(256));
+        let remote_id = format!("per-{}", "r".repeat(160));
+        *lock(&shared.session_id) = Some("ses_fake_42".to_string());
+        let authorization = basic_authorization(&shared.password);
+        let permission = json!({"type": "permission.asked", "properties": {
+            "id": remote_id.clone(), "sessionID": "ses_fake_42",
+            "permission": "edit",
+            "patterns": [format!("{authorization}/session/ses_fake_42")],
+            "metadata": {"summary": remote_id.clone()}
+        }});
+        handle_event(&shared, "ses_fake_42", &permission).expect("权限请求应兼容");
+        let permission_prompt = match wait_event(
+            &rx,
+            |event| matches!(event, RuntimeEvent::ActionRequest { kind, .. } if kind == "permission"),
+        ) {
+            RuntimeEvent::ActionRequest { prompt, .. } => prompt,
+            _ => unreachable!(),
+        };
+
+        let clarification = json!({"type": "question.asked", "properties": {
+            "id": "que_fake_2", "sessionID": "ses_fake_42",
+            "questions": [{"question": format!(
+                "确认 que_fake_2 与已有 per_fake_1 是否访问 http://localhost:{}，密码是 {}，{}",
+                shared.port, shared.password, authorization
+            ), "multiple": false, "custom": false}]
+        }});
+        handle_event(&shared, "ses_fake_42", &clarification).expect("澄清请求应兼容");
+        let clarification_prompt = match wait_event(
+            &rx,
+            |event| matches!(event, RuntimeEvent::ActionRequest { kind, .. } if kind == "clarification"),
+        ) {
+            RuntimeEvent::ActionRequest { prompt, .. } => prompt,
+            _ => unreachable!(),
+        };
+
+        for prompt in [&permission_prompt, &clarification_prompt] {
+            for private_value in [
+                "ses_fake_42",
+                remote_id.as_str(),
+                "que_fake_2",
+                &shared.password,
+                authorization.as_str(),
+                "43123",
+            ] {
+                assert!(
+                    !prompt.contains(private_value),
+                    "操作请求提示泄漏运行时私有值 {private_value:?}: {prompt}"
+                );
+            }
+            assert!(prompt.contains("[REDACTED]"));
+        }
+        assert!(
+            !permission_prompt.contains(&remote_id[..96]),
+            "限长前必须完整清除远端请求标识前缀"
+        );
+        assert!(
+            !permission_prompt.contains(&authorization[..96]),
+            "限长前必须完整清除 Basic 认证值前缀"
+        );
+    }
+
+    #[test]
+    fn clarification_rejection_only_resolves_a_matching_submitted_rejection() {
+        let (tx, rx) = unbounded();
+        let shared = event_test_shared(tx);
+        let asked = json!({"type": "question.asked", "properties": {
+            "id": "que_private_remote_1", "sessionID": "ses_private",
+            "questions": [{"question": "选择继续方向", "multiple": false, "custom": false}]
+        }});
+        handle_event(&shared, "ses_private", &asked).expect("澄清请求应兼容");
+        let request_id = match wait_event(
+            &rx,
+            |event| matches!(event, RuntimeEvent::ActionRequest { kind, .. } if kind == "clarification"),
+        ) {
+            RuntimeEvent::ActionRequest { request_id, .. } => request_id,
+            _ => unreachable!(),
+        };
+        lock(&shared.pending_actions)
+            .begin_decision(&request_id, PendingActionResolution::ClarificationAnswered)
+            .expect("本地请求应可提交回答");
+
+        let rejected = json!({"type": "question.rejected", "properties": {
+            "sessionID": "ses_private", "requestID": "que_private_remote_1"
+        }});
+        handle_event(&shared, "ses_private", &rejected).expect("不匹配决定不应失败");
+        assert!(rx.try_recv().is_err());
+
+        let replied = json!({"type": "question.replied", "properties": {
+            "sessionID": "ses_private", "requestID": "que_private_remote_1"
+        }});
+        handle_event(&shared, "ses_private", &replied).expect("精确回答回执应兼容");
+        assert!(matches!(
+            wait_event(&rx, |event| matches!(event, RuntimeEvent::ActionResolved { .. })),
+            RuntimeEvent::ActionResolved { request_id: resolved } if resolved == request_id
+        ));
+    }
+
+    #[test]
+    fn unconfirmed_action_delivery_fails_closed_and_ignores_a_late_ack() {
+        let server = spawn_server("not-for-output", |method, path| {
+            if method == "POST" && path.starts_with("/permission/") {
+                return (500, json!({"error": "temporary_failure"}).to_string());
+            }
+            if method == "POST" && path.starts_with("/session/") && path.ends_with("/abort") {
+                return (200, json!({}).to_string());
+            }
+            (404, json!({"error": "not_found"}).to_string())
+        });
+        let (tx, rx) = unbounded();
+        let shared = Arc::new(event_test_shared_on_port(tx, server.port));
+        let request_id = lock(&shared.pending_actions)
+            .register("per_private_delivery_1", PendingActionKind::Permission)
+            .expect("待决权限请求应登记");
+        let handle = OpenCodeHandle {
+            shared: Arc::clone(&shared),
+        };
+
+        let error = handle
+            .resolve_action(&request_id, ActionDecision::AllowOnce)
+            .expect_err("无法确认送达时必须失败关闭");
+        assert!(matches!(
+            error,
+            RuntimeError::ActionRequestDeliveryUncertain
+        ));
+        assert!(matches!(handle.state(), RuntimeState::Failed { .. }));
+        assert!(!lock(&shared.pending_actions).has_pending());
+        assert!(matches!(
+            wait_event(&rx, |event| matches!(
+                event,
+                RuntimeEvent::State(RuntimeState::Failed { .. })
+            )),
+            RuntimeEvent::State(RuntimeState::Failed { .. })
+        ));
+
+        let late_ack = json!({"type": "permission.replied", "properties": {
+            "sessionID": "ses_private", "requestID": "per_private_delivery_1", "reply": "once"
+        }});
+        handle_event(shared.as_ref(), "ses_private", &late_ack)
+            .expect("迟到 ACK 本身不应破坏事件流");
+        assert!(
+            rx.try_recv().is_err(),
+            "失败关闭后迟到 ACK 不得产生 ActionResolved"
+        );
+        assert!(matches!(handle.state(), RuntimeState::Failed { .. }));
+        let seen = server.seen.lock().unwrap();
+        assert_eq!(
+            seen.iter()
+                .filter(|entry| entry.starts_with("POST /permission/"))
+                .count(),
+            1,
+            "不确定送达不得重试原生决议"
+        );
+    }
+
+    #[test]
+    fn resolve_before_cancel_holds_the_gate_through_one_native_decision() {
+        let (request_started_tx, request_started_rx) = bounded(1);
+        let (release_response_tx, release_response_rx) = bounded(1);
+        let server = spawn_server("not-for-output", move |method, path| {
+            if method == "POST" && path.starts_with("/permission/") {
+                request_started_tx
+                    .send(())
+                    .expect("测试应观察到原生决议请求");
+                release_response_rx
+                    .recv_timeout(Duration::from_secs(2))
+                    .expect("测试应释放原生决议响应");
+                return (200, json!({}).to_string());
+            }
+            if method == "POST" && path.starts_with("/session/") && path.ends_with("/abort") {
+                return (200, json!({}).to_string());
+            }
+            (404, json!({"error": "not_found"}).to_string())
+        });
+        let (tx, _rx) = unbounded();
+        let shared = Arc::new(event_test_shared_on_port(tx, server.port));
+        let request_id = lock(&shared.pending_actions)
+            .register("per_private_race_1", PendingActionKind::Permission)
+            .expect("待决权限请求应登记");
+        let resolving_handle = OpenCodeHandle {
+            shared: Arc::clone(&shared),
+        };
+        let cancelling_handle = OpenCodeHandle {
+            shared: Arc::clone(&shared),
+        };
+        let post_cancel_handle = OpenCodeHandle {
+            shared: Arc::clone(&shared),
+        };
+        let resolving_request_id = request_id.clone();
+        let resolve_thread = std::thread::spawn(move || {
+            resolving_handle.resolve_action(&resolving_request_id, ActionDecision::AllowOnce)
+        });
+
+        request_started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("决议应先取得 gate 并发出一次原生请求");
+        let (cancel_finished_tx, cancel_finished_rx) = bounded(1);
+        let cancel_thread = std::thread::spawn(move || {
+            cancelling_handle.cancel_native();
+            cancel_finished_tx.send(()).expect("取消完成应通知测试");
+        });
+        assert!(
+            cancel_finished_rx
+                .recv_timeout(Duration::from_millis(100))
+                .is_err(),
+            "原生决议仍在进行时取消必须等待同一 gate"
+        );
+
+        release_response_tx
+            .send(())
+            .expect("测试应释放原生决议响应");
+        assert!(
+            resolve_thread.join().expect("决议线程不应恐慌").is_ok(),
+            "先取得 gate 的决议应正常完成"
+        );
+        cancel_finished_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("释放 gate 后取消应完成");
+        cancel_thread.join().expect("取消线程不应恐慌");
+
+        let after_cancel = post_cancel_handle
+            .resolve_action(&request_id, ActionDecision::AllowOnce)
+            .expect_err("取消后的决议必须稳定失败");
+        assert!(matches!(after_cancel, RuntimeError::InvalidState));
+        assert!(
+            *lock(&shared.cancellation_requested),
+            "取消完成后必须保持原生取消屏障"
+        );
+        let seen = server.seen.lock().unwrap();
+        assert_eq!(
+            seen.iter()
+                .filter(|entry| entry.starts_with("POST /permission/"))
+                .count(),
+            1,
+            "并发取消不得额外发出原生权限决议"
+        );
+        assert_eq!(
+            seen.iter()
+                .filter(|entry| entry.starts_with("POST /session/") && entry.ends_with("/abort"))
+                .count(),
+            1,
+            "取消应在决议完成后发送一次原生 abort"
+        );
+    }
+
+    #[test]
+    fn cancel_before_resolve_prevents_any_native_decision() {
+        let server = spawn_server("not-for-output", |method, path| {
+            if method == "POST" && path.starts_with("/session/") && path.ends_with("/abort") {
+                return (200, json!({}).to_string());
+            }
+            (404, json!({"error": "not_found"}).to_string())
+        });
+        let (tx, _rx) = unbounded();
+        let shared = Arc::new(event_test_shared_on_port(tx, server.port));
+        let request_id = lock(&shared.pending_actions)
+            .register("per_private_cancel_1", PendingActionKind::Permission)
+            .expect("待决权限请求应登记");
+        let handle = OpenCodeHandle {
+            shared: Arc::clone(&shared),
+        };
+
+        handle.cancel_native();
+        let error = handle
+            .resolve_action(&request_id, ActionDecision::AllowOnce)
+            .expect_err("取消先取得 gate 时决议必须失败");
+        assert!(matches!(error, RuntimeError::InvalidState));
+        assert!(
+            !server
+                .seen
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|entry| entry.starts_with("POST /permission/")),
+            "取消先发生时不得向原生端点发送权限决议"
+        );
     }
 
     #[test]

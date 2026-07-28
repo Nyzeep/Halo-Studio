@@ -154,6 +154,26 @@ def test_review_diff_component_is_readonly():
     assert "DiffViewer" in review.read_text(encoding="utf-8")
 
 
+def test_task_view_exposes_only_one_time_action_controls():
+    """操作请求卡片只能对当前请求进行本次允许、回答或拒绝，且会在决议送达后锁定。"""
+    task_view = (QML_DIR / "views" / "TaskView.qml").read_text(encoding="utf-8")
+    for required in (
+        "actionRequests",
+        "decision_sent",
+        "actionResolutionBlocked",
+        "allowOnce",
+        "answerClarification",
+        "rejectAction",
+        "\u672c\u6b21\u5141\u8bb8",
+        "\u56de\u7b54",
+        "\u62d2\u7edd",
+        "\u7b49\u5f85 Agent \u7684\u771f\u5b9e\u53cd\u9988",
+    ):
+        assert required in task_view
+    assert "always" not in task_view.lower()
+    assert "\u6c38\u4e45" not in task_view
+
+
 def test_main_qml_exposes_required_context_names():
     """Main.qml 与视图必须只经约定的上下文属性名访问视图模型。"""
     qml_text = "\n".join(

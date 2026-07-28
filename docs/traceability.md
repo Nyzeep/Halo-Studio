@@ -69,4 +69,14 @@
 
 ## 后续对齐项
 
-`halo-config` 的配置事务已有本地模块与单元测试，但尚未成为 IPC/UI 工作流。完整编辑器、文件写入、`task.resolve_action` 和配置写入工作流均不属于本次原始 01–10 任务验收；后续以新的需求确认记录处理。
+`halo-config` 的配置事务已有本地模块与单元测试，但尚未成为 IPC/UI 工作流。完整编辑器、文件写入和配置写入工作流仍不属于本次原始 01–10 任务验收；后续以新的需求确认记录处理。`task.resolve_action` 已由下列 #12 需求确认记录覆盖。
+
+## #12 一次性 Agent 操作请求
+
+| 验收项 | 实现 | 验证 |
+| --- | --- | --- |
+| 权限与澄清在当前活动任务会话内以关联任务的卡片展示；内容只来自脱敏限长 IPC | `halo-protocol/src/methods/task.rs`（`TaskActionRequest`）、`halo-sidecar/src/task_flow.rs`（快照与 `task.action_request`）、`app/halo_studio/viewmodels/task_vm.py`、`app/halo_studio/qml/views/TaskView.qml` | `halo-protocol/tests/contract.rs`、`halo-sidecar/src/dispatch.rs` 测试、`app/tests/test_viewmodels.py::TestTaskViewModel`、`app/tests/test_smoke.py::test_task_view_exposes_only_one_time_action_controls` |
+| 权限只有本次允许或拒绝；澄清只有回答或拒绝；不创建永久放行规则 | `halo-protocol/src/methods/task.rs`（`ActionDecision`）、`halo-sidecar/src/task_flow.rs`（精确 kind/decision 校验）、`TaskView.qml`（仅“本次允许”“回答”“拒绝”） | `halo-protocol/tests/contract.rs`、`halo-sidecar/src/task_flow.rs` 测试、`app/tests/test_viewmodels.py` 的 allow/reject/answer 行为测试与 QML 静态红线 |
+| `awaiting_action` 只在匹配请求的真实 Agent 反馈后转为 `running`、`waiting_developer` 或 `failed`；已确认的精确卡片经 `task.action_resolved` 移除 | `halo-runtime/src/opencode.rs`（asked/replied/rejected 与私有请求映射）、`halo-runtime/src/lib.rs`（`ActionResolved`）、`halo-sidecar/src/task_flow.rs`、`app/halo_studio/viewmodels/task_vm.py` | `halo-runtime/src/opencode.rs` 测试、`halo-sidecar/src/task_flow.rs` 测试、`halo-integration-tests/tests/happy_opencode.rs`、`app/tests/test_viewmodels.py::TestTaskViewModel::test_action_resolved_removes_only_the_matching_submitted_request` |
+| 不匹配、重复、拒绝与取消稳定失败，不会批准其他请求 | `halo-sidecar/src/dispatch.rs`、`halo-sidecar/src/task_flow.rs`、`halo-sidecar/src/state.rs`（fail-closed handle） | `halo-sidecar/src/dispatch.rs` 与 `task_flow.rs` 测试、`halo-integration-tests/tests/happy_opencode.rs`、`app/tests/test_viewmodels.py` |
+| 会话、端口、认证和开发者回答不进入历史、日志或公开卡片状态 | `halo-runtime/src/opencode.rs`、`halo-sidecar/src/task_flow.rs`、`TaskViewModel`（回答仅作单次 IPC 参数） | `halo-runtime/src/opencode.rs` 测试、`halo-integration-tests/tests/happy_opencode.rs`、`app/tests/test_viewmodels.py` |

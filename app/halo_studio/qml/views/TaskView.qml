@@ -12,6 +12,10 @@ RowLayout {
     readonly property var trVM: (typeof traceVM !== "undefined") ? traceVM : null
     readonly property var cfgVM: (typeof configVM !== "undefined") ? configVM : null
     readonly property var rtVM: (typeof runtimeVM !== "undefined") ? runtimeVM : null
+    readonly property var actionRequests: (taskPage.tVM !== null && taskPage.tVM.actionRequests !== undefined)
+        ? taskPage.tVM.actionRequests : []
+    readonly property bool actionResolutionBlocked: taskPage.tVM !== null
+        && taskPage.tVM.actionResolutionBlocked === true
 
     spacing: 10
 
@@ -174,16 +178,145 @@ RowLayout {
 
         SectionCard {
             Layout.fillWidth: true
-            Layout.minimumHeight: 160
-            Layout.preferredHeight: 220
-            Layout.maximumHeight: 280
+            Layout.minimumHeight: 180
+            Layout.preferredHeight: actionRequestList.count > 0 ? 390 : 220
+            Layout.maximumHeight: 480
             title: "活动会话"
+
+            ListView {
+                id: actionRequestList
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? Math.min(contentHeight, 220) : 0
+                Layout.maximumHeight: 220
+                visible: count > 0
+                clip: true
+                spacing: 6
+                model: taskPage.actionRequests
+                ScrollBar.vertical: ScrollBar {}
+                delegate: Rectangle {
+                    required property var modelData
+
+                    width: actionRequestList.width
+                    color: Theme.surfaceAlt
+                    radius: Theme.radius
+                    border.color: Theme.warn
+                    border.width: 1
+                    implicitHeight: actionRequestColumn.implicitHeight + 16
+
+                    ColumnLayout {
+                        id: actionRequestColumn
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 6
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            StatusBadge {
+                                label: modelData.kind === "permission" ? "权限请求" : "澄清请求"
+                                tone: Theme.warn
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "当前任务：" + Util.textOr(taskPage.tVM !== null ? taskPage.tVM.taskTitle : "", "未命名任务")
+                                color: Theme.textDim
+                                elide: Text.ElideRight
+                                font.pixelSize: 12
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: Util.textOr(modelData.prompt, "")
+                            color: Theme.text
+                            wrapMode: Text.Wrap
+                            font.pixelSize: 12
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: modelData.kind === "permission"
+                            spacing: 6
+                            Button {
+                                text: "本次允许"
+                                enabled: modelData.decision_sent !== true
+                                    && !taskPage.actionResolutionBlocked && taskPage.tVM !== null
+                                onClicked: {
+                                    if (taskPage.tVM !== null && taskPage.tVM.allowOnce)
+                                        taskPage.tVM.allowOnce(String(modelData.request_id))
+                                }
+                            }
+                            Button {
+                                text: "拒绝"
+                                enabled: modelData.decision_sent !== true
+                                    && !taskPage.actionResolutionBlocked && taskPage.tVM !== null
+                                onClicked: {
+                                    if (taskPage.tVM !== null && taskPage.tVM.rejectAction)
+                                        taskPage.tVM.rejectAction(String(modelData.request_id))
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            visible: modelData.kind === "clarification"
+                            spacing: 6
+                            TextArea {
+                                id: clarificationAnswer
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 56
+                                enabled: modelData.decision_sent !== true && !taskPage.actionResolutionBlocked
+                                wrapMode: TextArea.Wrap
+                                placeholderText: "输入回答"
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+                                Button {
+                                    text: "回答"
+                                    enabled: modelData.decision_sent !== true
+                                        && clarificationAnswer.text.trim().length > 0
+                                        && !taskPage.actionResolutionBlocked
+                                        && taskPage.tVM !== null
+                                    onClicked: {
+                                        if (taskPage.tVM !== null && taskPage.tVM.answerClarification)
+                                            taskPage.tVM.answerClarification(
+                                                String(modelData.request_id), clarificationAnswer.text)
+                                    }
+                                }
+                                Button {
+                                    text: "拒绝"
+                                    enabled: modelData.decision_sent !== true
+                                        && !taskPage.actionResolutionBlocked && taskPage.tVM !== null
+                                    onClicked: {
+                                        if (taskPage.tVM !== null && taskPage.tVM.rejectAction)
+                                            taskPage.tVM.rejectAction(String(modelData.request_id))
+                                    }
+                                }
+                                Item { Layout.fillWidth: true }
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            visible: modelData.decision_sent === true || taskPage.actionResolutionBlocked
+                            text: modelData.decision_sent === true
+                                ? "决议已提交，正在等待 Agent 的真实反馈"
+                                : "任务正在取消，不能再提交操作请求"
+                            color: Theme.textDim
+                            wrapMode: Text.Wrap
+                            font.pixelSize: 12
+                        }
+                    }
+                }
+            }
 
             ListView {
                 id: sessionList
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.minimumHeight: 100
+                Layout.minimumHeight: actionRequestList.count > 0 ? 80 : 100
                 clip: true
                 spacing: 4
                 model: taskPage.tVM !== null ? taskPage.tVM.sessionMessages : []
@@ -232,7 +365,7 @@ RowLayout {
             }
             Text {
                 Layout.fillWidth: true
-                visible: sessionList.count === 0
+                visible: sessionList.count === 0 && actionRequestList.count === 0
                 text: "暂无会话记录"
                 color: Theme.textDim
                 font.pixelSize: 12

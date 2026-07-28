@@ -274,6 +274,217 @@ fn serves_real_session_prompt_status_message_and_sse_round_trip() {
 }
 
 #[test]
+fn serves_one_time_permission_and_clarification_reply_contracts() {
+    let dir = tempfile::tempdir().expect("创建临时目录失败");
+
+    let mut permission = spawn_oc("permission_once", dir.path());
+    let permission_events = open_event_stream(permission.port);
+    let session = body_of(post_json_with_password(
+        permission.port,
+        "/session?directory=C%3A%5Cfake",
+        PASSWORD,
+        &json!({}),
+    ));
+    let session_id = session["id"]
+        .as_str()
+        .expect("session 必须有 id")
+        .to_string();
+    assert_eq!(
+        status_of(post_json_with_password(
+            permission.port,
+            &format!("/session/{session_id}/prompt_async?directory=C%3A%5Cfake"),
+            PASSWORD,
+            &json!({"parts": [{"type": "text", "text": "请求权限"}]}),
+        )),
+        204
+    );
+    let permission_request = loop {
+        let event = permission_events
+            .recv_timeout(Duration::from_secs(2))
+            .expect("权限模式应发送 permission.asked");
+        if event["type"] == "permission.asked" {
+            break event;
+        }
+    };
+    let permission_id = permission_request["properties"]["id"]
+        .as_str()
+        .expect("权限请求必须有远端 id")
+        .to_string();
+    assert_eq!(
+        status_of(post_json_with_password(
+            permission.port,
+            &format!("/permission/{permission_id}/reply?directory=C%3A%5Cfake"),
+            PASSWORD,
+            &json!({"reply": "always"}),
+        )),
+        400,
+        "测试替身不得接受永久放行"
+    );
+    assert_eq!(
+        status_of(post_json_with_password(
+            permission.port,
+            &format!("/permission/{permission_id}/reply?directory=C%3A%5Cfake"),
+            PASSWORD,
+            &json!({"reply": "once"}),
+        )),
+        200
+    );
+    let mut permission_replied = false;
+    let mut permission_idle = false;
+    while !(permission_replied && permission_idle) {
+        let event = permission_events
+            .recv_timeout(Duration::from_secs(2))
+            .expect("本次允许后应继续当前轮次");
+        permission_replied |= event["type"] == "permission.replied"
+            && event["properties"]["requestID"] == permission_id
+            && event["properties"]["reply"] == "once";
+        permission_idle |= event["type"] == "session.status"
+            && event["properties"]["sessionID"] == session_id
+            && event["properties"]["status"]["type"] == "idle";
+    }
+    permission.kill_now();
+
+    let mut question = spawn_oc("clarification_once", dir.path());
+    let question_events = open_event_stream(question.port);
+    let session = body_of(post_json_with_password(
+        question.port,
+        "/session?directory=C%3A%5Cfake",
+        PASSWORD,
+        &json!({}),
+    ));
+    let session_id = session["id"]
+        .as_str()
+        .expect("session 必须有 id")
+        .to_string();
+    assert_eq!(
+        status_of(post_json_with_password(
+            question.port,
+            &format!("/session/{session_id}/prompt_async?directory=C%3A%5Cfake"),
+            PASSWORD,
+            &json!({"parts": [{"type": "text", "text": "请求澄清"}]}),
+        )),
+        204
+    );
+    let question_request = loop {
+        let event = question_events
+            .recv_timeout(Duration::from_secs(2))
+            .expect("澄清模式应发送 question.asked");
+        if event["type"] == "question.asked" {
+            break event;
+        }
+    };
+    let question_id = question_request["properties"]["id"]
+        .as_str()
+        .expect("澄清请求必须有远端 id")
+        .to_string();
+    assert_eq!(
+        status_of(post_json_with_password(
+            question.port,
+            &format!("/question/{question_id}/reply?directory=C%3A%5Cfake"),
+            PASSWORD,
+            &json!({"answers": [["继续"], ["多余答案"]]}),
+        )),
+        400,
+        "替身仅接受本票支持的单项回答"
+    );
+    assert_eq!(
+        status_of(post_json_with_password(
+            question.port,
+            &format!("/question/{question_id}/reply?directory=C%3A%5Cfake"),
+            PASSWORD,
+            &json!({"answers": [["继续"]]}),
+        )),
+        200
+    );
+    let mut question_replied = false;
+    let mut question_idle = false;
+    while !(question_replied && question_idle) {
+        let event = question_events
+            .recv_timeout(Duration::from_secs(2))
+            .expect("回答澄清后应继续当前轮次");
+        question_replied |=
+            event["type"] == "question.replied" && event["properties"]["requestID"] == question_id;
+        question_idle |= event["type"] == "session.status"
+            && event["properties"]["sessionID"] == session_id
+            && event["properties"]["status"]["type"] == "idle";
+    }
+    question.kill_now();
+}
+
+#[test]
+fn serves_permission_and_clarification_rejections_as_native_events() {
+    let dir = tempfile::tempdir().expect("创建临时目录失败");
+    for (mode, event_kind, endpoint_suffix, body) in [
+        (
+            "permission_reject",
+            "permission.asked",
+            "reply",
+            Some(json!({"reply": "reject"})),
+        ),
+        ("clarification_reject", "question.asked", "reject", None),
+    ] {
+        let mut oc = spawn_oc(mode, dir.path());
+        let events = open_event_stream(oc.port);
+        let session = body_of(post_json_with_password(
+            oc.port,
+            "/session?directory=C%3A%5Cfake",
+            PASSWORD,
+            &json!({}),
+        ));
+        let session_id = session["id"]
+            .as_str()
+            .expect("session 必须有 id")
+            .to_string();
+        assert_eq!(
+            status_of(post_json_with_password(
+                oc.port,
+                &format!("/session/{session_id}/prompt_async?directory=C%3A%5Cfake"),
+                PASSWORD,
+                &json!({"parts": [{"type": "text", "text": "拒绝请求"}]}),
+            )),
+            204
+        );
+        let asked = loop {
+            let event = events
+                .recv_timeout(Duration::from_secs(2))
+                .expect("应收到操作请求");
+            if event["type"] == event_kind {
+                break event;
+            }
+        };
+        let request_id = asked["properties"]["id"]
+            .as_str()
+            .expect("操作请求必须有 id");
+        let path = match event_kind {
+            "permission.asked" => format!("/permission/{request_id}/{endpoint_suffix}"),
+            _ => format!("/question/{request_id}/{endpoint_suffix}"),
+        };
+        let result = match body.as_ref() {
+            Some(body) => post_json_with_password(oc.port, &path, PASSWORD, body),
+            None => post_with_password(oc.port, &path, PASSWORD),
+        };
+        assert_eq!(status_of(result), 200);
+
+        let expected_resolution = if event_kind == "permission.asked" {
+            "permission.replied"
+        } else {
+            "question.rejected"
+        };
+        let mut resolved = false;
+        let mut failed = false;
+        while !(resolved && failed) {
+            let event = events
+                .recv_timeout(Duration::from_secs(2))
+                .expect("拒绝后应收到原生回执和失败事件");
+            resolved |= event["type"] == expected_resolution;
+            failed |=
+                event["type"] == "session.error" && event["properties"]["sessionID"] == session_id;
+        }
+        oc.kill_now();
+    }
+}
+
+#[test]
 fn initial_busy_then_idle_mode_announces_a_created_session_before_the_prompt() {
     let dir = tempfile::tempdir().expect("创建临时目录失败");
     let mut oc = spawn_oc("initial_busy_then_idle", dir.path());

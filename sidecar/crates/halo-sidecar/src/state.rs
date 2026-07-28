@@ -10,7 +10,8 @@ use serde_json::{json, Value};
 
 use halo_config::AgentKind;
 use halo_runtime::{
-    OpenCodeHandle, PiHandle, RunTaskSpec, RuntimeError, RuntimeEvent, RuntimeState, StopOutcome,
+    ActionDecision, OpenCodeHandle, PiHandle, RunTaskSpec, RuntimeError, RuntimeEvent,
+    RuntimeState, StopOutcome,
 };
 
 use crate::mapping::runtime_state_payload;
@@ -28,6 +29,18 @@ pub fn lock<'a, T>(m: &'a Mutex<T>) -> MutexGuard<'a, T> {
 /// 测试替身只允许出现在 #[cfg(test)]。
 pub trait AgentHandle: Send + Sync {
     fn run_task(&self, spec: &RunTaskSpec) -> Result<(), RuntimeError>;
+    /// 仅 OpenCode 真实会话支持一次性操作决议；Pi 保持失败关闭，避免伪造统一语义。
+    fn resolve_action(
+        &self,
+        _request_id: &str,
+        _decision: ActionDecision,
+    ) -> Result<(), RuntimeError> {
+        Err(RuntimeError::CapabilityUnavailable(
+            "当前受管应用不支持通过 Halo 解决操作请求".to_string(),
+        ))
+    }
+    /// 在 Sidecar 接受取消后同步建立运行时屏障；只有 OpenCode 需要与操作决议线性化。
+    fn begin_cancel(&self) {}
     fn cancel_native(&self);
     fn stop(&self, grace: Duration) -> StopOutcome;
     fn state(&self) -> RuntimeState;
@@ -51,6 +64,16 @@ impl AgentHandle for PiHandle {
 impl AgentHandle for OpenCodeHandle {
     fn run_task(&self, spec: &RunTaskSpec) -> Result<(), RuntimeError> {
         OpenCodeHandle::run_task(self, spec)
+    }
+    fn resolve_action(
+        &self,
+        request_id: &str,
+        decision: ActionDecision,
+    ) -> Result<(), RuntimeError> {
+        OpenCodeHandle::resolve_action(self, request_id, decision)
+    }
+    fn begin_cancel(&self) {
+        OpenCodeHandle::begin_cancel(self)
     }
     fn cancel_native(&self) {
         OpenCodeHandle::cancel_native(self)
@@ -137,6 +160,13 @@ pub struct ActiveTask {
     pub verification_user: Option<halo_core::Verification>,
     /// 仅存于当前 Sidecar 进程的活动会话记录。它不会进入任务记录、证据或历史。
     pub session_messages: Vec<halo_protocol::methods::task::TaskSessionMessage>,
+    /// 当前等待开发者决定的请求。BTreeMap 让 snapshot 卡片顺序稳定。
+    pub action_requests: std::collections::BTreeMap<
+        String,
+        halo_protocol::methods::task::TaskActionRequest,
+    >,
+    /// 发出取消后不得再把任何操作请求提交给 Agent。
+    pub cancellation_requested: bool,
     /// 取消请求通道（发往任务编排线程）。
     pub cancel_tx: Option<Sender<()>>,
 }
@@ -505,6 +535,8 @@ mod tests {
             verification_agent: None,
             verification_user: None,
             session_messages: vec![],
+            action_requests: Default::default(),
+            cancellation_requested: false,
             cancel_tx: None,
         };
         lock(&app).task = Some(task);

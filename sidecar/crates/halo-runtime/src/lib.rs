@@ -31,6 +31,24 @@ pub enum RuntimeState {
     Stopped,
 }
 
+/// 受管运行时收到的单次操作决定。Answer 的内容可能来自开发者输入，Debug 绝不回显。
+#[derive(Clone, PartialEq, Eq)]
+pub enum ActionDecision {
+    AllowOnce,
+    Reject,
+    Answer(String),
+}
+
+impl fmt::Debug for ActionDecision {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ActionDecision::AllowOnce => f.write_str("AllowOnce"),
+            ActionDecision::Reject => f.write_str("Reject"),
+            ActionDecision::Answer(_) => f.write_str("Answer(<redacted>)"),
+        }
+    }
+}
+
 /// runtime 自有轨迹条目；由 halo-sidecar 映射为契约 TraceItem。
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeTraceItem {
@@ -47,6 +65,10 @@ pub enum RuntimeEvent {
         request_id: String,
         kind: String,
         prompt: String,
+    },
+    /// 只在 OpenCode 已确认匹配请求的决定后发出；Sidecar 据此结束 AwaitingAction。
+    ActionResolved {
+        request_id: String,
     },
     Verification {
         status: String,
@@ -131,6 +153,12 @@ pub enum RuntimeError {
     Unauthorized,
     #[error("当前运行时尚不具备所请求的兼容性能力：{0}")]
     CapabilityUnavailable(String),
+    #[error("当前任务没有匹配的活动操作请求")]
+    ActionRequestNotFound,
+    #[error("该操作请求已经提交过一次决定")]
+    ActionRequestAlreadyResolved,
+    #[error("无法确认本次操作请求的决定是否已送达；任务已停止以避免重复决议")]
+    ActionRequestDeliveryUncertain,
 }
 
 /// Mutex 中毒时继续使用内部值：本 crate 的共享状态均为简单标量/映射，恢复使用不破坏不变量，

@@ -121,12 +121,15 @@ JSON Schema 副本见 `protocol/v1/`。
 | --- | --- | --- |
 | `task.create` | `TaskSpec` | `{"task": TaskStatus}` |
 | `task.cancel` | `{"task_id": …}` | `{"accepted": true}`（结果经事件） |
+| `task.resolve_action` | `{"task_id": …, "request_id": …, "decision": "allow_once"\|"reject"\|"answer", "answer": "…"\|null}` | `{"accepted": true}`（仅表示决议已送达；任务状态仍等待真实 Agent 反馈） |
 | `task.mark_manual_edit` | `{"task_id": …, "note": "…"}` | `{"attribution": "mixed"}` |
 | `task.mark_verification` | `{"task_id": …, "status": "not_run", "note": "…"}` | `{"ok": true}`（用户显式标记未执行） |
 | `task.status` | `{"task_id": …}` 或 `{}`（当前任务） | `{"task": TaskStatus \| null}` |
-| `task.snapshot` | `{"after_seq": 40}` | `{"task": TaskStatus\|null, "last_seq": 42, "events": [Event...], "session_messages": [TaskSessionMessage...]}`；缓冲不足覆盖 after_seq 时返回错误 `EVENT_GAP`，UI 应整体重建视图 |
+| `task.snapshot` | `{"after_seq": 40}` | `{"task": TaskStatus\|null, "last_seq": 42, "events": [Event...], "session_messages": [TaskSessionMessage...], "action_requests": [TaskActionRequest...]}`；缓冲不足覆盖 after_seq 时返回错误 `EVENT_GAP`，UI 应整体重建视图 |
 
 OpenCode 创建任务时以 `instructions` 建立一个私有的真实 OpenCode 会话、发送首条消息并消费该会话的事件流。首轮整理后的 Agent 回复以 `task.session_message` 追加，任务转为 `waiting_developer`；它不会生成交付证据、进入审查或发送 `task.finished`。端口、认证信息和 OpenCode 会话标识保持在 Sidecar 私有运行时中。后续消息和显式结束会话动作属于下一张票，当前契约不暴露这些 API；不得向旧假设任务端点发送请求或伪造任务成功。
+
+操作请求会把任务置为 `awaiting_action`，并经 `task.action_request` 事件和 `task.snapshot.action_requests` 供当前活动会话呈现。权限只接受 `allow_once` 或 `reject`；澄清只接受带非空 `answer` 的 `answer` 或 `reject`。`accepted: true` 只表示 Sidecar 已将精确匹配的单次决议提交给 Agent，不能提前把任务转为 `running`；只有匹配请求的真实 Agent 反馈才可发出 `task.action_resolved`、移除该卡片，并经后续 `task.state` 推进任务阶段。`ACTION_REQUEST_NOT_FOUND`、`ACTION_REQUEST_ALREADY_RESOLVED` 与 `ACTION_REQUEST_NOT_PENDING` 分别覆盖不匹配、重复和取消/非等待状态；任何路径都不创建会话级或永久放行规则。
 
 ```jsonc
 // TaskSpec — 任务只携带用户显式提供的内容，绝不自动附带完整工作区或历史
@@ -159,6 +162,14 @@ OpenCode 创建任务时以 `instructions` 建立一个私有的真实 OpenCode 
   "role": "user"|"agent",
   "text": "…",                         // 脱敏、限长
   "truncated": false
+}
+
+// TaskActionRequest — 仅当前活动任务的进程内等待决议记录；不含远程会话、端口或认证信息
+{
+  "request_id": "…",
+  "kind": "permission"|"clarification",
+  "prompt": "…",                       // 脱敏、限长
+  "decision_sent": false                 // true 时 UI 保持卡片可见但禁用重复决议
 }
 ```
 
@@ -251,7 +262,8 @@ OpenCode 创建任务时以 `instructions` 建立一个私有的真实 OpenCode 
 | `task.phase` | `{"phase": "planning"\|"editing"\|"verifying"\|"summarizing", "detail": "…"}` | 结构化阶段（来自 Agent 原生输出的规范化） |
 | `task.session_message` | `{"role": "user"\|"agent", "text": "…", "truncated": false}` | 当前活动会话中的脱敏限长用户消息或整理后的 Agent 回复；任务标识位于事件封包 `task_id`，不持久化到历史或证据 |
 | `trace.item` | `TraceItem` | 结构化运行轨迹条目 |
-| `task.action_request` | `{"request_id": …, "kind": "permission"\|"clarification", "prompt": "…", "channel": "native"}` | Agent 暂停等待用户经其原生通道决定；Halo 不提供通用批准对话框或决议 API。Agent 经原生通道获得决定并恢复输出后，适配器再把任务带回 `running`。 |
+| `task.action_request` | `{"request_id": …, "kind": "permission"\|"clarification", "prompt": "…", "decision_sent": false}` | Agent 暂停并将当前任务置为 `awaiting_action`；UI 在活动会话内呈现一次性权限或澄清卡片，并通过 `task.resolve_action` 决议。`prompt` 已脱敏限长，且不含远程会话、端口或认证信息。 |
+| `task.action_resolved` | `{"request_id": …}` | 同一请求已收到真实 Agent 回执；只移除 UI 中已提交决议的精确卡片。该事件不自行推进任务状态，全部未决请求完成后由 `task.state` 如实转为 `running`，后续仍可转为 `waiting_developer` 或 `failed`。 |
 | `task.verification` | `{"status": "passed"\|"failed"\|"not_run", "detail": "…", "source": "agent"\|"user_marked"}` | |
 | `task.manual_edit` | `{"note": "…", "source": "user_marked"\|"fs_write", "path": null\|"src/auth.rs"}` | 显式标记使用 `user_marked` 与 `path: null`；任务活跃期成功的文件系统写入自动使用 `fs_write` 与非空工作区相对路径。 |
 | `task.cancelled` | `{"mode": "native"\|"forced"}` | |
@@ -275,6 +287,7 @@ OpenCode 创建任务时以 `instructions` 建立一个私有的真实 OpenCode 
 `CREDENTIAL_STORE_UNAVAILABLE` · `CREDENTIAL_NOT_FOUND` · `ENV_NOT_WHITELISTED` · `CONFIG_NOT_FOUND` · `CONFIG_CONFLICT` ·
 `RUNTIME_NOT_READY` · `RUNTIME_PROBE_FAILED` · `RUNTIME_VERSION_MISMATCH` · `RUNTIME_ALREADY_RUNNING` · `RUNTIME_CAPABILITY_UNAVAILABLE` ·
 `TASK_ALREADY_RUNNING` · `TASK_RUNNING`（阻止工作区切换/关闭） · `TASK_NOT_FOUND` · `TASK_STILL_RUNNING` · `TASK_NOT_REVIEWABLE` ·
+`ACTION_REQUEST_NOT_FOUND` · `ACTION_REQUEST_ALREADY_RESOLVED` · `ACTION_REQUEST_NOT_PENDING` ·
 `EVIDENCE_NOT_FOUND` · `EVIDENCE_NOT_LATEST` · `EVENT_GAP` · `HANDOFF_NOT_FOUND` · `LINE_TOO_LONG` · `PARSE_ERROR`
 
 ## 6. 契约纪律

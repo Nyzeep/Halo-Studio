@@ -159,6 +159,9 @@ impl From<halo_runtime::RuntimeError> for SidecarError {
             RE::NotReady(_) | RE::InvalidState | RE::Unauthorized => ErrorCode::RuntimeNotReady,
             RE::VersionMismatch(_) => ErrorCode::RuntimeVersionMismatch,
             RE::CapabilityUnavailable(_) => ErrorCode::RuntimeCapabilityUnavailable,
+            RE::ActionRequestNotFound => ErrorCode::ActionRequestNotFound,
+            RE::ActionRequestAlreadyResolved => ErrorCode::ActionRequestAlreadyResolved,
+            RE::ActionRequestDeliveryUncertain => ErrorCode::ActionRequestNotPending,
             RE::Io(_) => ErrorCode::Internal,
         };
         SidecarError::new(code, e.to_string())
@@ -244,6 +247,7 @@ impl Dispatcher {
             "runtime.status" => self.runtime_status(params),
             "task.create" => self.task_create(params),
             "task.cancel" => self.task_cancel(params),
+            "task.resolve_action" => self.task_resolve_action(params),
             "task.mark_manual_edit" => self.task_mark_manual_edit(params),
             "task.mark_verification" => self.task_mark_verification(params),
             "task.status" => self.task_status(params),
@@ -1074,23 +1078,66 @@ impl Dispatcher {
 
     fn task_cancel(&mut self, params: Value) -> Result<Value, SidecarError> {
         let p: methods::task::CancelTaskParams = parse(params)?;
-        let app = lock(&self.ctx.app);
-        let task = app
-            .task
-            .as_ref()
-            .filter(|t| t.task_id == p.task_id)
-            .ok_or_else(|| {
-                SidecarError::new(ErrorCode::TaskNotFound, format!("任务不存在：{}", p.task_id))
-            })?;
-        if task.state.is_terminal() {
-            return ok(&methods::task::CancelTaskResult { accepted: false });
+        let (handle, cancel_tx) = {
+            let mut app = lock(&self.ctx.app);
+            let task = app
+                .task
+                .as_mut()
+                .filter(|t| t.task_id == p.task_id)
+                .ok_or_else(|| {
+                    SidecarError::new(
+                        ErrorCode::TaskNotFound,
+                        format!("任务不存在：{}", p.task_id),
+                    )
+                })?;
+            if task.state.is_terminal() || task.cancellation_requested {
+                return ok(&methods::task::CancelTaskResult { accepted: false });
+            }
+            // 先建立取消屏障再取得运行时闸门；在此之后不能再有本次决议离开进程。
+            task.cancellation_requested = true;
+            task.action_requests.clear();
+            let agent = task.agent;
+            let cancel_tx = task.cancel_tx.clone();
+            let handle = app.slot(agent).handle.clone();
+            (handle, cancel_tx)
+        };
+        if let Some(handle) = handle {
+            handle.begin_cancel();
         }
-        let accepted = task
-            .cancel_tx
+        let accepted = cancel_tx
             .as_ref()
             .map(task_flow::request_cancel)
             .unwrap_or(false);
         ok(&methods::task::CancelTaskResult { accepted })
+    }
+
+    fn task_resolve_action(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::task::ResolveActionParams = parse(params)?;
+        let agent = {
+            let app = lock(&self.ctx.app);
+            app.task
+                .as_ref()
+                .filter(|task| task.task_id == p.task_id)
+                .map(|task| task.agent)
+                .ok_or_else(|| {
+                    SidecarError::new(
+                        ErrorCode::ActionRequestNotFound,
+                        "当前任务没有匹配的操作请求",
+                    )
+                })?
+        };
+        let handle = {
+            let app = lock(&self.ctx.app);
+            app.slot(agent).handle.clone().ok_or_else(|| {
+                SidecarError::new(
+                    ErrorCode::RuntimeNotReady,
+                    "受管应用尚未就绪，无法提交操作决定",
+                )
+            })?
+        };
+
+        task_flow::resolve_action(&self.flow_ctx(), &p, handle)?;
+        ok(&methods::task::ResolveActionResult { accepted: true })
     }
 
     fn task_mark_manual_edit(&mut self, params: Value) -> Result<Value, SidecarError> {
@@ -1175,21 +1222,23 @@ impl Dispatcher {
     fn task_snapshot(&mut self, params: Value) -> Result<Value, SidecarError> {
         let p: methods::task::TaskSnapshotParams = parse(params)?;
         let (last_seq, events) = self.ctx.bus.events_after(p.after_seq)?;
-        let task = {
+        let (task, session_messages, action_requests) = {
             let app = lock(&self.ctx.app);
-            app.task.as_ref().map(|t| t.to_status())
+            match app.task.as_ref() {
+                Some(task) => (
+                    Some(task.to_status()),
+                    task.session_messages.clone(),
+                    task.action_requests.values().cloned().collect(),
+                ),
+                None => (None, vec![], vec![]),
+            }
         };
         ok(&methods::task::TaskSnapshotResult {
             task,
             last_seq,
             events,
-            session_messages: {
-                let app = lock(&self.ctx.app);
-                app.task
-                    .as_ref()
-                    .map(|task| task.session_messages.clone())
-                    .unwrap_or_default()
-            },
+            session_messages,
+            action_requests,
         })
     }
 
@@ -1593,6 +1642,7 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     // ---- 测试替身：内存凭据存储（仅 #[cfg(test)]）----
 
@@ -1651,6 +1701,55 @@ mod tests {
             _spec: &halo_runtime::RunTaskSpec,
         ) -> Result<(), halo_runtime::RuntimeError> {
             Ok(())
+        }
+
+        fn cancel_native(&self) {}
+
+        fn stop(&self, _grace: std::time::Duration) -> halo_runtime::StopOutcome {
+            halo_runtime::StopOutcome::Graceful
+        }
+
+        fn state(&self) -> RuntimeState {
+            RuntimeState::Ready
+        }
+    }
+
+    struct ActionHandle {
+        decisions: Mutex<Vec<(String, halo_runtime::ActionDecision)>>,
+        cancel_begins: AtomicUsize,
+    }
+
+    impl ActionHandle {
+        fn new() -> Self {
+            Self {
+                decisions: Mutex::new(vec![]),
+                cancel_begins: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    impl AgentHandle for ActionHandle {
+        fn run_task(
+            &self,
+            _spec: &halo_runtime::RunTaskSpec,
+        ) -> Result<(), halo_runtime::RuntimeError> {
+            Ok(())
+        }
+
+        fn resolve_action(
+            &self,
+            request_id: &str,
+            decision: halo_runtime::ActionDecision,
+        ) -> Result<(), halo_runtime::RuntimeError> {
+            self.decisions
+                .lock()
+                .expect("测试决议记录锁不应中毒")
+                .push((request_id.to_string(), decision));
+            Ok(())
+        }
+
+        fn begin_cancel(&self) {
+            self.cancel_begins.fetch_add(1, Ordering::SeqCst);
         }
 
         fn cancel_native(&self) {}
@@ -2431,8 +2530,194 @@ mod tests {
     fn task_cancel_unknown_task_is_not_found() {
         let mut f = fixture();
         hello(&mut f);
-        let resp = f.d.dispatch(req("task.cancel", json!({"task_id": "task-none"})));
+        let resp =
+            f.d.dispatch(req("task.cancel", json!({"task_id": "task-none"})));
         assert_eq!(err_code(&resp), ErrorCode::TaskNotFound);
+    }
+
+    #[test]
+    fn task_resolve_action_exposes_only_the_matching_pending_card_and_prevents_duplicates() {
+        let mut f = fixture();
+        hello(&mut f);
+        install_active_task(
+            &f.d.ctx,
+            "task-action",
+            halo_core::TaskState::AwaitingAction,
+        );
+        let handle = Arc::new(ActionHandle::new());
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let task = app.task.as_mut().expect("活动任务应存在");
+            task.agent = AgentKind::OpenCode;
+            task.action_requests.insert(
+                "per-1".to_string(),
+                methods::task::TaskActionRequest {
+                    request_id: "per-1".to_string(),
+                    kind: methods::task::TaskActionKind::Permission,
+                    prompt: "允许本次写入 src/auth.rs 吗？".to_string(),
+                    decision_sent: false,
+                },
+            );
+            app.slot_mut(AgentKind::OpenCode).handle = Some(handle.clone());
+        }
+
+        let snapshot = f.d.dispatch(req("task.snapshot", json!({"after_seq": 0})));
+        assert!(snapshot.ok, "{snapshot:?}");
+        assert_eq!(
+            snapshot.result.unwrap()["action_requests"],
+            json!([{
+                "request_id": "per-1",
+                "kind": "permission",
+                "prompt": "允许本次写入 src/auth.rs 吗？",
+                "decision_sent": false
+            }])
+        );
+
+        let mismatch = f.d.dispatch(req(
+            "task.resolve_action",
+            json!({
+                "task_id": "task-action",
+                "request_id": "per-other",
+                "decision": "allow_once",
+                "answer": null
+            }),
+        ));
+        assert_eq!(err_code(&mismatch), ErrorCode::ActionRequestNotFound);
+        assert!(handle
+            .decisions
+            .lock()
+            .expect("测试决议记录锁不应中毒")
+            .is_empty());
+
+        let invalid = f.d.dispatch(req(
+            "task.resolve_action",
+            json!({
+                "task_id": "task-action",
+                "request_id": "per-1",
+                "decision": "answer",
+                "answer": "不应接受"
+            }),
+        ));
+        assert_eq!(err_code(&invalid), ErrorCode::InvalidParams);
+
+        let accepted = f.d.dispatch(req(
+            "task.resolve_action",
+            json!({
+                "task_id": "task-action",
+                "request_id": "per-1",
+                "decision": "allow_once",
+                "answer": null
+            }),
+        ));
+        assert!(accepted.ok, "{accepted:?}");
+        assert_eq!(accepted.result.unwrap()["accepted"], true);
+        assert_eq!(
+            *handle.decisions.lock().expect("测试决议记录锁不应中毒"),
+            vec![("per-1".to_string(), halo_runtime::ActionDecision::AllowOnce)]
+        );
+        assert_eq!(
+            lock(&f.d.ctx.app)
+                .task
+                .as_ref()
+                .expect("活动任务应存在")
+                .state,
+            halo_core::TaskState::AwaitingAction,
+            "提交决议不能伪造 Agent 已确认"
+        );
+
+        let duplicate = f.d.dispatch(req(
+            "task.resolve_action",
+            json!({
+                "task_id": "task-action",
+                "request_id": "per-1",
+                "decision": "allow_once",
+                "answer": null
+            }),
+        ));
+        assert_eq!(
+            err_code(&duplicate),
+            ErrorCode::ActionRequestAlreadyResolved
+        );
+        assert_eq!(
+            handle
+                .decisions
+                .lock()
+                .expect("测试决议记录锁不应中毒")
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn task_cancel_clears_pending_action_cards_before_notifying_the_task_loop() {
+        let mut f = fixture();
+        hello(&mut f);
+        install_active_task(
+            &f.d.ctx,
+            "task-cancel-action",
+            halo_core::TaskState::AwaitingAction,
+        );
+        let handle = Arc::new(ActionHandle::new());
+        let (cancel_tx, cancel_rx) = crossbeam_channel::bounded(1);
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let task = app.task.as_mut().expect("活动任务应存在");
+            task.agent = AgentKind::OpenCode;
+            task.cancel_tx = Some(cancel_tx);
+            task.action_requests.insert(
+                "per-cancel".to_string(),
+                methods::task::TaskActionRequest {
+                    request_id: "per-cancel".to_string(),
+                    kind: methods::task::TaskActionKind::Permission,
+                    prompt: "允许本次写入 src/a.rs 吗？".to_string(),
+                    decision_sent: false,
+                },
+            );
+            app.slot_mut(AgentKind::OpenCode).handle = Some(handle.clone());
+        }
+
+        let cancelled =
+            f.d.dispatch(req("task.cancel", json!({"task_id": "task-cancel-action"})));
+        assert!(cancelled.ok, "{cancelled:?}");
+        assert_eq!(cancelled.result.unwrap()["accepted"], true);
+        assert_eq!(
+            handle.cancel_begins.load(Ordering::SeqCst),
+            1,
+            "取消必须先取得运行时决议闸门，才能向编排线程发送取消信号"
+        );
+        cancel_rx
+            .try_recv()
+            .expect("取消屏障建立后才应通知编排线程");
+
+        let task = lock(&f.d.ctx.app)
+            .task
+            .as_ref()
+            .expect("任务在编排线程收尾前仍活动");
+        assert!(task.cancellation_requested);
+        assert!(task.action_requests.is_empty());
+
+        let late_resolution = f.d.dispatch(req(
+            "task.resolve_action",
+            json!({
+                "task_id": "task-cancel-action",
+                "request_id": "per-cancel",
+                "decision": "allow_once",
+                "answer": null
+            }),
+        ));
+        assert_eq!(
+            err_code(&late_resolution),
+            ErrorCode::ActionRequestNotPending
+        );
+        assert!(handle
+            .decisions
+            .lock()
+            .expect("测试决议记录锁不应中毒")
+            .is_empty());
+
+        let snapshot = f.d.dispatch(req("task.snapshot", json!({"after_seq": 0})));
+        assert!(snapshot.ok, "{snapshot:?}");
+        assert_eq!(snapshot.result.unwrap()["action_requests"], json!([]));
     }
 
     #[test]
@@ -2681,6 +2966,8 @@ mod tests {
             verification_agent: None,
             verification_user: None,
             session_messages: vec![],
+            action_requests: Default::default(),
+            cancellation_requested: false,
             cancel_tx: None,
         };
         ctx.store.put_task(&task.to_record()).unwrap();

@@ -21,18 +21,17 @@ fn cancel_native_when_agent_stops_in_grace() {
     let cfg = sc.save_config(
         "pi",
         &fake_pi_exe(),
-        &["--mode", "action_request", "--step-delay-ms", "150"],
+        &["--mode", "happy", "--step-delay-ms", "150"],
         None,
     );
     sc.start_runtime("pi", &cfg);
     let task_id = sc.create_task("pi", &cfg, "中途原生取消");
 
-    // Agent 操作请求：任务暂停等待用户经原生通道决定
-    let action = sc.wait_event("task.action_request", |e| {
-        e["event"] == "task.action_request" && e["task_id"] == task_id.as_str()
+    sc.wait_event("task.phase planning", |e| {
+        e["event"] == "task.phase"
+            && e["task_id"] == task_id.as_str()
+            && e["payload"]["phase"] == "planning"
     });
-    assert_eq!(action["payload"]["kind"], "permission");
-    assert_eq!(action["payload"]["channel"], "native");
 
     let result = sc.ok_with_timeout(
         "task.cancel",
