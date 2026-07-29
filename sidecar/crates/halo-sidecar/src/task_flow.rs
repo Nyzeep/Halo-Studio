@@ -335,11 +335,6 @@ pub fn run_task_loop_with_finish(
                         on_verification(ctx, task_id, &status, &detail),
                     Ok(RuntimeEvent::SessionReply { text }) => on_session_reply(ctx, task_id, &text),
                     Ok(RuntimeEvent::TaskDone { outcome, summary }) => {
-                        // OpenCode 受管会话只能由开发者显式结束；任何运行时 TaskDone
-                        // 都是迟到/兼容层信号，不能把 running 或 waiting 误判为正常结束。
-                        if agent == AgentKind::OpenCode {
-                            continue;
-                        }
                         let waiting_for_developer = {
                             let app = lock(&ctx.app);
                             app.task
@@ -358,11 +353,17 @@ pub fn run_task_loop_with_finish(
                                     && task.state == TaskState::AwaitingAction
                                     && !task.action_requests.is_empty()
                             })
-                        };
+                            };
                         if awaiting_action {
                             break Ending::RuntimeFailed {
                                 reason: "受管 Agent 在操作请求尚未得到确认前结束".to_string(),
                             };
+                        }
+                        // OpenCode 受管会话只能由开发者显式结束；未处于等待决议时，
+                        // 任何运行时 TaskDone 都是迟到/兼容层信号，不能把 running 或
+                        // waiting 误判为正常结束。
+                        if agent == AgentKind::OpenCode {
+                            continue;
                         }
                         break Ending::Done { outcome, summary };
                     }
@@ -1922,12 +1923,15 @@ mod tests {
             error.code,
             halo_protocol::ErrorCode::ActionRequestNotPending
         );
-        let request = lock(&f.ctx.app)
-            .task
-            .as_ref()
-            .and_then(|task| task.action_requests.get("per-uncertain"))
-            .expect("送达不确定前的精确请求仍须保留到失败事件处理");
-        assert!(request.decision_sent);
+        let decision_sent = {
+            let app = lock(&f.ctx.app);
+            app.task
+                .as_ref()
+                .and_then(|task| task.action_requests.get("per-uncertain"))
+                .map(|request| request.decision_sent)
+                .expect("送达不确定前的精确请求仍须保留到失败事件处理")
+        };
+        assert!(decision_sent);
 
         let duplicate =
             resolve_action(&f.ctx, &params, Arc::new(UncertainActionHandle)).unwrap_err();

@@ -2902,12 +2902,16 @@ mod tests {
             .try_recv()
             .expect("取消屏障建立后才应通知编排线程");
 
-        let task = lock(&f.d.ctx.app)
-            .task
-            .as_ref()
-            .expect("任务在编排线程收尾前仍活动");
-        assert!(task.cancellation_requested);
-        assert!(task.action_requests.is_empty());
+        let (cancellation_requested, action_requests_empty) = {
+            let app = lock(&f.d.ctx.app);
+            let task = app
+                .task
+                .as_ref()
+                .expect("任务在编排线程收尾前仍活动");
+            (task.cancellation_requested, task.action_requests.is_empty())
+        };
+        assert!(cancellation_requested);
+        assert!(action_requests_empty);
 
         let late_resolution = f.d.dispatch(req(
             "task.resolve_action",

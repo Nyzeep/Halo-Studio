@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use serde_json::json;
 use support::{
-    contains_lower_hex_run, fake_opencode_exe, require_test_credential, wait_process_lock_held,
-    wait_process_lock_released, Sidecar, TestRepo,
+    fake_opencode_exe, require_test_credential, wait_process_lock_held, wait_process_lock_released,
+    Sidecar, TestRepo,
 };
 
 #[test]
@@ -217,16 +217,21 @@ fn opencode_1x_starts_with_fresh_basic_authentication_and_keeps_pi_unprobed() {
     }
 
     // 公开 IPC 不得暴露认证变量、端口或 Basic Authorization 内容。
-    for line in sc.transcript_snapshot() {
+    // review.get 同时包含合法的 files[*].end_hash（sha256 完整性证据），
+    // 因而不能把任意 64 位十六进制串都当作认证密码泄漏。
+    let transcript = sc.transcript_snapshot();
+    for line in &transcript {
         assert!(
             !line.contains("OPENCODE_SERVER_PASSWORD"),
             "IPC 泄漏认证变量名"
         );
         assert!(!line.contains("Authorization"), "IPC 泄漏认证头");
         assert!(!line.contains("\"port\""), "IPC 泄漏回环端口字段");
+    }
+    for (index, digest) in digests.iter().enumerate() {
         assert!(
-            !contains_lower_hex_run(&line, 64),
-            "IPC 疑似泄漏本次 OpenCode 认证信息"
+            transcript.iter().all(|line| !line.contains(digest)),
+            "IPC 疑似泄漏第 {index} 次 OpenCode 认证摘要"
         );
     }
 
@@ -268,9 +273,11 @@ fn opencode_stop_forces_process_exit_after_global_dispose_variants() {
 
         let stopped = sc.ok("runtime.stop", json!({"agent": "opencode"}));
         assert_eq!(stopped["state"], "stopped");
+        let dispose_contents = std::fs::read_to_string(&dispose_marker)
+            .unwrap_or_else(|error| panic!("{mode} 必须写入 OpenCode 的 /global/dispose 标记: {error}"));
         assert_eq!(
-            std::fs::read_to_string(&dispose_marker).as_deref(),
-            Ok("global_dispose"),
+            dispose_contents,
+            "global_dispose",
             "{mode} 停止必须调用 OpenCode 的 /global/dispose"
         );
         assert!(
@@ -521,7 +528,7 @@ fn opencode_permission_requires_an_exact_one_time_decision_before_resuming() {
         }),
     );
     assert_eq!(accepted, json!({"accepted": true}));
-    sc.err(
+    let duplicate = sc.request(
         "task.resolve_action",
         json!({
             "task_id": task_id,
@@ -529,8 +536,12 @@ fn opencode_permission_requires_an_exact_one_time_decision_before_resuming() {
             "decision": "allow_once",
             "answer": null
         }),
-        "ACTION_REQUEST_ALREADY_RESOLVED",
     );
+    assert_eq!(duplicate["ok"], false);
+    assert!(matches!(
+        duplicate["error"]["code"].as_str(),
+        Some("ACTION_REQUEST_ALREADY_RESOLVED" | "ACTION_REQUEST_NOT_PENDING")
+    ));
 
     let resolved = sc.wait_event("精确权限回执", |event| {
         event["event"] == "task.action_resolved" && event["task_id"] == task_id

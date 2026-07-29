@@ -1,5 +1,6 @@
 use crate::secret::Secret;
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 /// 凭据存取抽象。操作系统存储不可用时一切操作必须失败关闭，
 /// 绝不回退到明文文件或内存缓存。
@@ -29,6 +30,8 @@ const SERVICE: &str = "HaloStudio";
 /// 可用性探测使用的无敏感值 account 前缀。
 const AVAILABILITY_PROBE_REF_PREFIX: &str = "halo-store-availability-probe";
 const AVAILABILITY_PROBE_VALUE: &str = "halo-store-availability-probe";
+static AVAILABILITY_PROBE_COUNTER: AtomicU64 = AtomicU64::new(0);
+static AVAILABILITY_PROBE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 /// Windows 凭据管理器实现（keyring windows-native）。
 /// service 固定 `HaloStudio`，account = 凭据引用名。
@@ -56,7 +59,16 @@ impl WindowsCredentialStore {
     }
 
     fn probe_available() -> bool {
-        let ref_name = format!("{}-{}", AVAILABILITY_PROBE_REF_PREFIX, std::process::id());
+        let _probe_guard = AVAILABILITY_PROBE_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let probe_number = AVAILABILITY_PROBE_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let ref_name = format!(
+            "{}-{}-{probe_number}",
+            AVAILABILITY_PROBE_REF_PREFIX,
+            std::process::id()
+        );
         let entry = match Self::entry(&ref_name) {
             Ok(entry) => entry,
             Err(_) => return false,

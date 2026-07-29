@@ -20,11 +20,60 @@ use sha2::{Digest, Sha256};
 
 /// 单次等待（响应/事件/进程退出）的统一上限。
 pub const WAIT: Duration = Duration::from_secs(30);
+const CREDENTIAL_MANAGER_TEST_LOCK_TIMEOUT: Duration = Duration::from_secs(300);
+
+const CREDENTIAL_MANAGER_TEST_LOCK_FILE: &str = "halo-studio-credential-manager-integration.lock";
+
+/// Cargo runs integration-test binaries concurrently, while Windows Credential Manager
+/// does not guarantee ordering for near-simultaneous mutations. Keep the real store
+/// scenarios serialized across processes without changing the production adapter.
+pub struct CredentialManagerTestGuard {
+    lock_file: Option<std::fs::File>,
+    path: PathBuf,
+}
+
+pub fn lock_credential_manager_for_test() -> CredentialManagerTestGuard {
+    let path = std::env::temp_dir().join(CREDENTIAL_MANAGER_TEST_LOCK_FILE);
+    let deadline = Instant::now() + CREDENTIAL_MANAGER_TEST_LOCK_TIMEOUT;
+    loop {
+        let mut options = OpenOptions::new();
+        options.create(true).read(true).write(true);
+        #[cfg(windows)]
+        options.share_mode(0);
+
+        match options.open(&path) {
+            Ok(lock_file) => {
+                return CredentialManagerTestGuard {
+                    lock_file: Some(lock_file),
+                    path,
+                };
+            }
+            Err(error)
+                if error.kind() == std::io::ErrorKind::PermissionDenied
+                    || matches!(error.raw_os_error(), Some(32) | Some(33)) =>
+            {
+                if Instant::now() >= deadline {
+                    panic!("等待 Windows 凭据集成测试锁超时");
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(_) => panic!("无法建立 Windows 凭据集成测试锁"),
+        }
+    }
+}
+
+impl Drop for CredentialManagerTestGuard {
+    fn drop(&mut self) {
+        drop(self.lock_file.take());
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
 
 /// 安装仅供当前集成测试使用的凭据引用。真实 Windows 凭据库不可用时返回 None，
 /// 调用方应跳过必须经过正向凭据注入的场景，而不是建立生产回退。
 pub struct TestCredentialGuard {
     reference: String,
+    _credential_manager_guard: CredentialManagerTestGuard,
 }
 
 impl TestCredentialGuard {
@@ -44,6 +93,7 @@ impl Drop for TestCredentialGuard {
 pub fn install_test_credential() -> Option<TestCredentialGuard> {
     use halo_config::{CredentialStore, Secret, WindowsCredentialStore};
 
+    let credential_manager_guard = lock_credential_manager_for_test();
     let store = WindowsCredentialStore::new();
     if !store.available() {
         return None;
@@ -61,7 +111,10 @@ pub fn install_test_credential() -> Option<TestCredentialGuard> {
     store
         .set(&reference, &secret)
         .expect("可用的系统凭据库应能写入集成测试引用");
-    Some(TestCredentialGuard { reference })
+    Some(TestCredentialGuard {
+        reference,
+        _credential_manager_guard: credential_manager_guard,
+    })
 }
 
 /// OpenCode 正向集成覆盖必须经过真实 Windows 凭据库。不可用不是通过条件，
@@ -441,8 +494,7 @@ impl Sidecar {
     /// 直接强杀（中断恢复场景：模拟应用崩溃）。
     pub fn kill(&mut self) {
         if let Some(child) = self.child.as_mut() {
-            let _ = child.kill();
-            let _ = child.wait();
+            terminate_process_tree(child);
         }
     }
 
@@ -557,6 +609,19 @@ fn response_summary(response: &Value) -> String {
     format!("ok={ok:?}, has_error={has_error}")
 }
 
+fn terminate_process_tree(child: &mut Child) {
+    #[cfg(windows)]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 impl Drop for Sidecar {
     fn drop(&mut self) {
         // 用例失败也不泄漏子进程
@@ -568,8 +633,7 @@ impl Drop for Sidecar {
                     return;
                 }
                 if Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    terminate_process_tree(child);
                     return;
                 }
                 std::thread::sleep(Duration::from_millis(20));
