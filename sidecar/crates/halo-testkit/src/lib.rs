@@ -5,8 +5,8 @@
 use serde_json::{json, Value};
 
 pub const DEFAULT_PI_VERSION: &str = "1.4.0";
-pub const OPENCODE_VERSION: &str = "0.4.2";
-pub const OPENCODE_WRONG_VERSION: &str = "9.9.9";
+pub const OPENCODE_VERSION: &str = "1.18.5";
+pub const OPENCODE_WRONG_VERSION: &str = "2.0.0";
 pub const AGENT_FILE_NAME: &str = "hello_from_agent.txt";
 pub const AGENT_FILE_CONTENT: &str = "hello from agent";
 pub const HAPPY_SUMMARY: &str = "已在工作区写入 hello_from_agent.txt";
@@ -24,6 +24,19 @@ pub fn trace_item(kind: &str, text: &str, detail: Value) -> Value {
 
 pub fn write_agent_file() -> std::io::Result<()> {
     std::fs::write(AGENT_FILE_NAME, AGENT_FILE_CONTENT)
+}
+
+/// 集成测试为受控 fake 生成同名 `.args.json` 旁路文件。它只属于测试二进制，
+/// 不经过 LaunchConfig、IPC 或受管子进程参数，避免测试脚本成为生产注入通道。
+pub fn test_harness_args() -> Vec<String> {
+    let Ok(executable) = std::env::current_exe() else {
+        return Vec::new();
+    };
+    let args_path = executable.with_extension("args.json");
+    let Ok(bytes) = std::fs::read(args_path) else {
+        return Vec::new();
+    };
+    serde_json::from_slice(&bytes).unwrap_or_default()
 }
 
 /// happy 固定脚本：phase planning→editing→verifying、agent_note、真实写文件、

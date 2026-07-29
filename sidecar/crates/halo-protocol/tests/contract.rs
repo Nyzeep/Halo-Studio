@@ -6,6 +6,11 @@ use serde_json::{json, Value};
 use halo_protocol::methods::config::{
     CredentialCheckResult, LaunchConfig, LaunchConfigInput, ThinkingLevel,
 };
+use halo_protocol::methods::fs::{
+    FsCreateFileParams, FsEncoding, FsEntry, FsEntryKind, FsLineEnding, FsListParams,
+    FsListResult, FsReadResult, FsSearchItem, FsSearchParams, FsSearchResult,
+    FsWriteEncoding, FsWriteParams, FsWriteResult,
+};
 use halo_protocol::methods::handoff::{
     HandoffCreateParams, HandoffPackage, HandoffPreviewParams, HandoffPreviewResult,
     HandoffVerification, SelectedChange,
@@ -17,8 +22,9 @@ use halo_protocol::methods::review::{
 };
 use halo_protocol::methods::runtime::{RuntimeState, RuntimeStateInfo, RuntimeStatusResult};
 use halo_protocol::methods::task::{
-    CancelMode, CreateTaskResult, TaskBaseline, TaskSpec, TaskState, TaskStatus,
-    TaskStatusParams,
+    ActionDecision, CancelMode, CreateTaskResult, ResolveActionParams, ResolveActionResult,
+    TaskActionKind, TaskActionRequest, TaskBaseline, TaskSessionMessage, TaskSessionMessageRole,
+    TaskSnapshotResult, TaskSpec, TaskState, TaskStatus, TaskStatusParams,
 };
 use halo_protocol::methods::workspace::{
     TrustDecision, TrustState, TrustWorkspaceParams, WorkspaceStatus, WorkspaceStatusResult,
@@ -154,6 +160,29 @@ fn event_task_id_serializes_as_explicit_null() {
 }
 
 #[test]
+fn action_resolved_event_is_declared_and_exposes_only_the_local_request_id() {
+    let schema: Value = serde_json::from_str(include_str!(
+        "../../../../protocol/v1/envelope.schema.json"
+    ))
+    .expect("v1 schema 应为有效 JSON");
+    let event_names = schema["$defs"]["event"]["properties"]["event"]["enum"]
+        .as_array()
+        .expect("事件名称应是枚举");
+    assert!(event_names.contains(&json!("task.action_resolved")));
+
+    let event = Event {
+        v: PROTOCOL_VERSION,
+        seq: 43,
+        ts: "2026-07-28T08:00:00Z".to_string(),
+        task_id: Some("task-1".to_string()),
+        event: "task.action_resolved".to_string(),
+        payload: json!({"request_id": "per_123"}),
+    };
+    let value = serde_json::to_value(event).expect("事件应可序列化");
+    assert_eq!(value["payload"], json!({"request_id": "per_123"}));
+}
+
+#[test]
 fn envelope_kind_mismatch_rejected_by_serde() {
     let wrong = json!({
         "v": 1, "kind": "response", "id": "r-1", "method": "task.status", "params": {}
@@ -274,7 +303,7 @@ fn read_message_tolerates_trailing_newline() {
 
 #[test]
 fn error_code_strings_are_stable() {
-    // 与 protocol/v1/envelope.schema.json 的枚举一字不差（全部 31 个）。
+    // 与 protocol/v1/envelope.schema.json 的枚举一字不差（全部 42 个）。
     let pairs: &[(ErrorCode, &str)] = &[
         (ErrorCode::HelloRequired, "HELLO_REQUIRED"),
         (ErrorCode::ProtocolVersionUnsupported, "PROTOCOL_VERSION_UNSUPPORTED"),
@@ -296,19 +325,45 @@ fn error_code_strings_are_stable() {
         (ErrorCode::RuntimeProbeFailed, "RUNTIME_PROBE_FAILED"),
         (ErrorCode::RuntimeVersionMismatch, "RUNTIME_VERSION_MISMATCH"),
         (ErrorCode::RuntimeAlreadyRunning, "RUNTIME_ALREADY_RUNNING"),
+        (
+            ErrorCode::RuntimeCapabilityUnavailable,
+            "RUNTIME_CAPABILITY_UNAVAILABLE",
+        ),
         (ErrorCode::TaskAlreadyRunning, "TASK_ALREADY_RUNNING"),
         (ErrorCode::TaskRunning, "TASK_RUNNING"),
         (ErrorCode::TaskNotFound, "TASK_NOT_FOUND"),
         (ErrorCode::TaskStillRunning, "TASK_STILL_RUNNING"),
         (ErrorCode::TaskNotReviewable, "TASK_NOT_REVIEWABLE"),
+        (ErrorCode::ActionRequestNotFound, "ACTION_REQUEST_NOT_FOUND"),
+        (
+            ErrorCode::ActionRequestAlreadyResolved,
+            "ACTION_REQUEST_ALREADY_RESOLVED",
+        ),
+        (ErrorCode::ActionRequestNotPending, "ACTION_REQUEST_NOT_PENDING"),
         (ErrorCode::EvidenceNotFound, "EVIDENCE_NOT_FOUND"),
         (ErrorCode::EvidenceNotLatest, "EVIDENCE_NOT_LATEST"),
         (ErrorCode::EventGap, "EVENT_GAP"),
         (ErrorCode::HandoffNotFound, "HANDOFF_NOT_FOUND"),
         (ErrorCode::LineTooLong, "LINE_TOO_LONG"),
         (ErrorCode::ParseError, "PARSE_ERROR"),
+        (ErrorCode::FsPathOutsideWorkspace, "FS_PATH_OUTSIDE_WORKSPACE"),
+        (ErrorCode::FsTooLarge, "FS_TOO_LARGE"),
+        (ErrorCode::FsBinary, "FS_BINARY"),
+        (ErrorCode::FsConflict, "FS_CONFLICT"),
+        (ErrorCode::FsNotFound, "FS_NOT_FOUND"),
+        (ErrorCode::FsAlreadyExists, "FS_ALREADY_EXISTS"),
+        (ErrorCode::FsGitProtected, "FS_GIT_PROTECTED"),
     ];
-    assert_eq!(pairs.len(), 31);
+    assert_eq!(pairs.len(), 42);
+    let schema: Value = serde_json::from_str(include_str!(
+        "../../../../protocol/v1/envelope.schema.json"
+    ))
+    .expect("v1 schema 应为有效 JSON");
+    let schema_codes = schema["$defs"]["error"]["properties"]["code"]["enum"]
+        .as_array()
+        .expect("错误码应是枚举");
+    let declared_codes: Vec<Value> = pairs.iter().map(|(_, code)| json!(code)).collect();
+    assert_eq!(schema_codes, &declared_codes);
     for (code, expected) in pairs {
         assert_eq!(serde_json::to_value(code).unwrap(), json!(expected));
         let back: ErrorCode = serde_json::from_value(json!(expected)).unwrap();
@@ -332,6 +387,10 @@ fn method_enum_values_are_lowercase_snake() {
         (serde_json::to_value(ThinkingLevel::Medium).unwrap(), "medium"),
         (serde_json::to_value(RuntimeState::NotProbed).unwrap(), "not_probed"),
         (serde_json::to_value(TaskState::AwaitingAction).unwrap(), "awaiting_action"),
+        (
+            serde_json::to_value(TaskState::WaitingDeveloper).unwrap(),
+            "waiting_developer",
+        ),
         (serde_json::to_value(TaskState::ReviewReady).unwrap(), "review_ready"),
         (serde_json::to_value(CancelMode::Forced).unwrap(), "forced"),
         (serde_json::to_value(ReviewOutcome::Interrupted).unwrap(), "interrupted"),
@@ -360,7 +419,7 @@ fn hello_roundtrip_and_shape() {
         protocol_version: 1,
         sidecar_version: "0.1.0".to_string(),
         capabilities: vec![
-            "workspace", "config", "pi", "opencode", "task", "review", "handoff", "history",
+            "workspace", "config", "pi", "opencode", "task", "review", "handoff", "history", "fs",
         ]
         .into_iter()
         .map(String::from)
@@ -372,11 +431,111 @@ fn hello_roundtrip_and_shape() {
         json!({
             "protocol_version": 1,
             "sidecar_version": "0.1.0",
-            "capabilities": ["workspace","config","pi","opencode","task","review","handoff","history"]
+            "capabilities": ["workspace","config","pi","opencode","task","review","handoff","history","fs"]
         })
     );
     let back: HelloResult = serde_json::from_value(value).unwrap();
     assert_eq!(back, result);
+}
+
+// ---------- fs.* ----------
+
+#[test]
+fn fs_types_roundtrip_and_shape() {
+    let list = FsListParams {
+        path: "src".to_string(),
+        depth: 2,
+    };
+    assert_eq!(serde_json::to_value(&list).unwrap(), json!({"path": "src", "depth": 2}));
+    let default_list: FsListParams = serde_json::from_value(json!({"path": ""})).unwrap();
+    assert_eq!(default_list.depth, 1);
+
+    let entry = FsEntry {
+        name: "main.rs".to_string(),
+        path: "src/main.rs".to_string(),
+        kind: FsEntryKind::File,
+        size: 1234,
+        mtime: "2026-07-27T08:00:00Z".to_string(),
+        readonly: false,
+    };
+    let list_result = FsListResult {
+        path: "src".to_string(),
+        entries: vec![entry.clone()],
+        truncated: false,
+    };
+    assert_eq!(
+        serde_json::to_value(&list_result).unwrap(),
+        json!({
+            "path": "src",
+            "entries": [{
+                "name": "main.rs", "path": "src/main.rs", "kind": "file", "size": 1234,
+                "mtime": "2026-07-27T08:00:00Z", "readonly": false
+            }],
+            "truncated": false
+        })
+    );
+
+    let read = FsReadResult {
+        path: "src/main.rs".to_string(),
+        content: "fn main() {}\n".to_string(),
+        encoding: FsEncoding::Utf8Bom,
+        lossy: false,
+        line_ending: FsLineEnding::Crlf,
+        hash: "sha256:abc".to_string(),
+        size: 12,
+        mtime: "2026-07-27T08:00:00Z".to_string(),
+        readonly: false,
+    };
+    assert_eq!(
+        serde_json::to_value(&read).unwrap(),
+        json!({
+            "path": "src/main.rs", "content": "fn main() {}\n", "encoding": "utf-8-bom",
+            "lossy": false, "line_ending": "crlf", "hash": "sha256:abc", "size": 12,
+            "mtime": "2026-07-27T08:00:00Z", "readonly": false
+        })
+    );
+
+    let write: FsWriteParams = serde_json::from_value(json!({
+        "path": "src/main.rs", "content": "updated", "expected_hash": "sha256:old"
+    }))
+    .unwrap();
+    assert_eq!(write.encoding, FsWriteEncoding::Utf8);
+    assert_eq!(
+        serde_json::to_value(&FsWriteResult {
+            path: "src/main.rs".to_string(),
+            hash: "sha256:new".to_string(),
+            size: 7,
+            mtime: "2026-07-27T08:01:00Z".to_string(),
+        })
+        .unwrap(),
+        json!({"path": "src/main.rs", "hash": "sha256:new", "size": 7, "mtime": "2026-07-27T08:01:00Z"})
+    );
+
+    let create: FsCreateFileParams = serde_json::from_value(json!({"path": "src/new.rs"})).unwrap();
+    assert_eq!(create.content, "");
+
+    let search: FsSearchParams = serde_json::from_value(json!({})).unwrap();
+    assert_eq!(search.max_results, 500);
+    assert!(!search.case_sensitive);
+    let search_result = FsSearchResult {
+        items: vec![FsSearchItem {
+            path: "src/main.rs".to_string(),
+            line: Some(12),
+            column: Some(5),
+            preview: Some("fn main() {".to_string()),
+            preview_truncated: Some(false),
+        }],
+        truncated: false,
+        scanned_files: 23,
+    };
+    assert_eq!(
+        serde_json::to_value(&search_result).unwrap(),
+        json!({
+            "items": [{"path": "src/main.rs", "line": 12, "column": 5, "preview": "fn main() {", "preview_truncated": false}],
+            "truncated": false,
+            "scanned_files": 23
+        })
+    );
 }
 
 // ---------- workspace ----------
@@ -434,8 +593,6 @@ fn launch_config_shape_snapshot() {
         model: "gpt-5".to_string(),
         thinking_level: ThinkingLevel::High,
         credential_ref: Some("halo/pi/openai".to_string()),
-        extra_args: vec![],
-        env_overrides: Default::default(),
     };
     assert_eq!(
         serde_json::to_value(&input).unwrap(),
@@ -445,9 +602,7 @@ fn launch_config_shape_snapshot() {
             "executable_path": "C:\\tools\\pi\\pi.exe",
             "model": "gpt-5",
             "thinking_level": "high",
-            "credential_ref": "halo/pi/openai",
-            "extra_args": [],
-            "env_overrides": {}
+            "credential_ref": "halo/pi/openai"
         })
     );
 
@@ -459,8 +614,6 @@ fn launch_config_shape_snapshot() {
         model: input.model.clone(),
         thinking_level: input.thinking_level,
         credential_ref: input.credential_ref.clone(),
-        extra_args: input.extra_args.clone(),
-        env_overrides: input.env_overrides.clone(),
         created_at: "2026-07-26T08:00:00Z".to_string(),
         updated_at: "2026-07-26T08:00:00Z".to_string(),
     };
@@ -477,6 +630,28 @@ fn launch_config_shape_snapshot() {
         serde_json::to_value(&check).unwrap(),
         json!({"exists": true, "store_available": true})
     );
+}
+
+#[test]
+fn launch_config_input_rejects_arbitrary_launch_arguments_and_environment_overrides() {
+    for forbidden in [
+        json!({"extra_args": ["--unsafe"]}),
+        json!({"env_overrides": {"PATH": "C:\\override"}}),
+    ] {
+        let mut value = json!({
+            "name": "OpenCode",
+            "agent": "opencode",
+            "executable_path": "C:\\tools\\opencode.exe",
+            "model": "gpt-5",
+            "thinking_level": "off",
+            "credential_ref": "halo/opencode/provider"
+        });
+        value.as_object_mut().unwrap().extend(forbidden.as_object().unwrap().clone());
+        assert!(
+            serde_json::from_value::<LaunchConfigInput>(value).is_err(),
+            "受管启动配置不得接受任意命令或环境注入"
+        );
+    }
 }
 
 // ---------- runtime ----------
@@ -610,6 +785,143 @@ fn task_status_params_allows_empty_object() {
     assert_eq!(back.task_id.as_deref(), Some("task-1"));
 }
 
+#[test]
+fn task_snapshot_keeps_active_session_messages_outside_task_status() {
+    let result = TaskSnapshotResult {
+        task: None,
+        last_seq: 42,
+        events: vec![],
+        session_messages: vec![
+            TaskSessionMessage {
+                role: TaskSessionMessageRole::User,
+                text: "请修复登录超时".to_string(),
+                truncated: false,
+            },
+            TaskSessionMessage {
+                role: TaskSessionMessageRole::Agent,
+                text: "已定位到重试策略。".to_string(),
+                truncated: true,
+            },
+        ],
+        action_requests: vec![],
+    };
+
+    let value = serde_json::to_value(&result).unwrap();
+    assert_eq!(
+        value,
+        json!({
+            "task": null,
+            "last_seq": 42,
+            "events": [],
+            "session_messages": [
+                {"role": "user", "text": "请修复登录超时", "truncated": false},
+                {"role": "agent", "text": "已定位到重试策略。", "truncated": true}
+            ],
+            "action_requests": []
+        })
+    );
+    let back: TaskSnapshotResult = serde_json::from_value(value).unwrap();
+    assert_eq!(back, result);
+}
+
+#[test]
+fn task_follow_up_and_explicit_finish_shapes_are_stable() {
+    use halo_protocol::methods::task::{
+        FinishTaskParams, FinishTaskResult, SendTaskMessageParams, SendTaskMessageResult,
+    };
+
+    assert_eq!(
+        serde_json::to_value(SendTaskMessageParams {
+            task_id: "task-1".to_string(),
+            message: "请补充测试".to_string(),
+        })
+        .unwrap(),
+        json!({"task_id": "task-1", "message": "请补充测试"})
+    );
+    assert_eq!(
+        serde_json::to_value(SendTaskMessageResult { accepted: true }).unwrap(),
+        json!({"accepted": true})
+    );
+    assert_eq!(
+        serde_json::to_value(FinishTaskParams {
+            task_id: "task-1".to_string(),
+        })
+        .unwrap(),
+        json!({"task_id": "task-1"})
+    );
+    assert_eq!(
+        serde_json::to_value(FinishTaskResult { accepted: true }).unwrap(),
+        json!({"accepted": true})
+    );
+}
+
+#[test]
+fn task_resolve_action_is_one_time_and_snapshot_keeps_only_displayable_request_data() {
+    let allow_once = ResolveActionParams {
+        task_id: "task-1".to_string(),
+        request_id: "per_123".to_string(),
+        decision: ActionDecision::AllowOnce,
+        answer: None,
+    };
+    assert_eq!(
+        serde_json::to_value(&allow_once).unwrap(),
+        json!({
+            "task_id": "task-1",
+            "request_id": "per_123",
+            "decision": "allow_once",
+            "answer": null
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(ResolveActionResult { accepted: true }).unwrap(),
+        json!({"accepted": true})
+    );
+
+    let answer = ResolveActionParams {
+        task_id: "task-1".to_string(),
+        request_id: "que_456".to_string(),
+        decision: ActionDecision::Answer,
+        answer: Some("使用本地配置".to_string()),
+    };
+    assert_eq!(
+        serde_json::to_value(&answer).unwrap(),
+        json!({
+            "task_id": "task-1",
+            "request_id": "que_456",
+            "decision": "answer",
+            "answer": "使用本地配置"
+        })
+    );
+
+    let result = TaskSnapshotResult {
+        task: None,
+        last_seq: 42,
+        events: vec![],
+        session_messages: vec![],
+        action_requests: vec![TaskActionRequest {
+            request_id: "per_123".to_string(),
+            kind: TaskActionKind::Permission,
+            prompt: "允许本次写入 src/auth.rs 吗？".to_string(),
+            decision_sent: false,
+        }],
+    };
+    assert_eq!(
+        serde_json::to_value(&result).unwrap(),
+        json!({
+            "task": null,
+            "last_seq": 42,
+            "events": [],
+            "session_messages": [],
+            "action_requests": [{
+                "request_id": "per_123",
+                "kind": "permission",
+                "prompt": "允许本次写入 src/auth.rs 吗？",
+                "decision_sent": false
+            }]
+        })
+    );
+}
+
 // ---------- review.get 形状快照 ----------
 
 #[test]
@@ -648,6 +960,7 @@ fn review_bundle_shape_snapshot() {
             change: FileChange::Modified,
             diff: "@@ -1 +1 @@".to_string(),
             truncated: false,
+            end_hash: Some("sha256:abc".to_string()),
         }],
         verification: Verification {
             status: VerificationStatus::Passed,
@@ -655,6 +968,7 @@ fn review_bundle_shape_snapshot() {
             source: VerificationSource::Agent,
         },
         baseline_dirty_files: vec!["docs/x.md".to_string()],
+        manual_edit_paths: vec!["src/auth.rs".to_string()],
     };
     let value = serde_json::to_value(&bundle).unwrap();
     assert_eq!(
@@ -666,12 +980,14 @@ fn review_bundle_shape_snapshot() {
             "outcome": "finished",
             "attribution": "mixed",
             "attribution_reasons": ["用户于 08:12 标记人工编辑"],
+            "manual_edit_paths": ["src/auth.rs"],
             "summary": "修复了登录超时",
             "files": [{
                 "path": "src/auth.rs",
                 "change": "modified",
                 "diff": "@@ -1 +1 @@",
-                "truncated": false
+                "truncated": false,
+                "end_hash": "sha256:abc"
             }],
             "verification": {"status": "passed", "detail": "cargo test 全绿", "source": "agent"},
             "baseline_dirty_files": ["docs/x.md"]

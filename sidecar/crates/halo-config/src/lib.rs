@@ -10,8 +10,8 @@ mod transaction;
 
 pub use credential::{CredentialError, CredentialStore, WindowsCredentialStore};
 pub use launch::{
-    build_child_env, validate_launch_config, AgentKind, ConfigError, LaunchConfig, ThinkingLevel,
-    ENV_WHITELIST,
+    build_child_env, credential_env_var_for, validate_launch_config, AgentKind, ConfigError,
+    LaunchConfig, ThinkingLevel, ENV_WHITELIST, PI_CREDENTIAL_ENV_VAR,
 };
 pub use secret::Secret;
 pub use transaction::{rollback, ConfigTransaction, TxError, TxReceipt};

@@ -1,8 +1,6 @@
 //! config.* 方法（IPC 文档 3.2 节）。
 //! 凭据明文永不出现在本模块任何字段中；只承载凭据引用名。
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 
 use super::AgentKind;
@@ -18,7 +16,7 @@ pub enum ThinkingLevel {
 
 /// config.save params
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct LaunchConfigInput {
     pub name: String,
     pub agent: AgentKind,
@@ -27,9 +25,6 @@ pub struct LaunchConfigInput {
     pub thinking_level: ThinkingLevel,
     /// Windows 凭据管理器条目名（引用名），或 null
     pub credential_ref: Option<String>,
-    pub extra_args: Vec<String>,
-    /// 仅白名单内变量名可出现，违规返回 ENV_NOT_WHITELISTED
-    pub env_overrides: BTreeMap<String, String>,
 }
 
 /// LaunchConfig = LaunchConfigInput + config_id/created_at/updated_at
@@ -43,8 +38,6 @@ pub struct LaunchConfig {
     pub model: String,
     pub thinking_level: ThinkingLevel,
     pub credential_ref: Option<String>,
-    pub extra_args: Vec<String>,
-    pub env_overrides: BTreeMap<String, String>,
     pub created_at: String,
     pub updated_at: String,
 }

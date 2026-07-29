@@ -9,10 +9,14 @@ use std::time::{Duration, Instant};
 
 use crossbeam_channel::{bounded, unbounded, Receiver, RecvTimeoutError, Sender};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use halo_config::AgentKind;
 use halo_core::{cap, limits, sanitize, TaskEvent, TaskState, Verification};
-use halo_runtime::{RunTaskSpec, RuntimeEvent, RuntimeState, Timeouts};
+use halo_runtime::{
+    ActionDecision as RuntimeActionDecision, RunTaskSpec, RuntimeError, RuntimeEvent, RuntimeState,
+    Timeouts,
+};
 use halo_store::Store;
 
 use crate::dispatch::SidecarError;
@@ -22,7 +26,10 @@ use crate::mapping::{
     verification_status_core_to_str,
 };
 use crate::server::EventBus;
-use crate::state::{lock, ActiveTask, AgentHandle, AppState};
+use crate::state::{append_active_session_message, lock, ActiveTask, AgentHandle, AppState};
+
+/// 与 fs.read/fs.write 的哈希口径一致；更大的文件只保留文件级证据，不做行级断言。
+const END_HASH_MAX_BYTES: usize = 8 * 1024 * 1024;
 
 /// 编排上下文：全部为共享句柄，可克隆进任务线程。
 #[derive(Clone)]
@@ -66,6 +73,7 @@ pub fn start_task(
     let task_id = format!("task-{}", uuid::Uuid::new_v4());
     let (task_tx, task_rx) = unbounded::<RuntimeEvent>();
     let (cancel_tx, cancel_rx) = bounded::<()>(4);
+    let (finish_tx, finish_rx) = bounded::<()>(1);
 
     let task = ActiveTask {
         task_id: task_id.clone(),
@@ -74,6 +82,7 @@ pub fn start_task(
         instructions: args.instructions.clone(),
         state: TaskState::Created,
         attribution: halo_core::Attribution::AgentOnly,
+        manual_edit_paths: Default::default(),
         baseline,
         created_at: now_ts(),
         ended_at: None,
@@ -81,7 +90,12 @@ pub fn start_task(
         latest_evidence_version: 0,
         verification_agent: None,
         verification_user: None,
+        session_messages: vec![],
+        action_requests: Default::default(),
+        cancellation_requested: false,
+        finish_requested: false,
         cancel_tx: Some(cancel_tx),
+        finish_tx: Some(finish_tx),
     };
 
     let created_status = task.to_status();
@@ -92,8 +106,19 @@ pub fn start_task(
     }
     persist_current(ctx, &task_id);
     emit_task_state(ctx, &task_id, &created_status);
+    append_active_session_message(
+        &ctx.app,
+        &ctx.bus,
+        &task_id,
+        halo_protocol::methods::task::TaskSessionMessageRole::User,
+        &args.instructions,
+    );
 
-    // 2. 组 RunTaskSpec 交给运行时
+    // 2. 先进入 Running 再交给运行时。run_task 可能立即从异步事件流送回首轮回复；
+    // 若仍停在 Created，RoundCompleted 会被状态机拒绝而丢失等待开发者的转换。
+    apply_event(ctx, &task_id, &TaskEvent::Started);
+
+    // 3. 组 RunTaskSpec 交给运行时
     let spec = RunTaskSpec {
         instructions: args.instructions,
         files: args.files,
@@ -110,15 +135,12 @@ pub fn start_task(
         return Err(SidecarError::from(e));
     }
 
-    // 3. Created → Running
-    apply_event(ctx, &task_id, &TaskEvent::Started);
-
     // 4. 编排线程接管事件流
     let thread_ctx = ctx.clone();
     let thread_git = GitClient::new(PathBuf::from(git_root));
     let thread_task_id = task_id.clone();
     std::thread::spawn(move || {
-        run_task_loop(
+        run_task_loop_with_finish(
             &thread_ctx,
             &thread_git,
             &thread_task_id,
@@ -126,12 +148,124 @@ pub fn start_task(
             handle,
             task_rx,
             cancel_rx,
+            finish_rx,
         );
     });
 
     let status = current_status(ctx, &task_id)
         .ok_or_else(|| SidecarError::internal("任务创建后状态丢失"))?;
     Ok(status)
+}
+
+/// 将当前任务中精确匹配的操作请求以一次性方式提交给原生 Agent。
+/// HTTP 请求成功只表示决议已送达；AwaitingAction 仍须等待 RuntimeEvent::ActionResolved。
+pub fn resolve_action(
+    ctx: &FlowCtx,
+    params: &halo_protocol::methods::task::ResolveActionParams,
+    handle: Arc<dyn AgentHandle>,
+) -> Result<(), SidecarError> {
+    use halo_protocol::methods::task::{ActionDecision, TaskActionKind};
+
+    let decision = {
+        let mut app = lock(&ctx.app);
+        let task = app
+            .task
+            .as_mut()
+            .filter(|task| task.task_id == params.task_id)
+            .ok_or_else(|| {
+                SidecarError::new(
+                    halo_protocol::ErrorCode::ActionRequestNotFound,
+                    "当前任务没有匹配的操作请求",
+                )
+            })?;
+        if task.cancellation_requested || task.state != TaskState::AwaitingAction {
+            return Err(SidecarError::new(
+                halo_protocol::ErrorCode::ActionRequestNotPending,
+                "当前任务没有等待决议的操作请求",
+            ));
+        }
+        let request = task
+            .action_requests
+            .get_mut(&params.request_id)
+            .ok_or_else(|| {
+                SidecarError::new(
+                    halo_protocol::ErrorCode::ActionRequestNotFound,
+                    "当前任务没有匹配的操作请求",
+                )
+            })?;
+        if request.decision_sent {
+            return Err(SidecarError::new(
+                halo_protocol::ErrorCode::ActionRequestAlreadyResolved,
+                "该操作请求已经提交过一次决定",
+            ));
+        }
+
+        let decision = match (request.kind, params.decision) {
+            (TaskActionKind::Permission, ActionDecision::AllowOnce) => {
+                RuntimeActionDecision::AllowOnce
+            }
+            (
+                TaskActionKind::Permission | TaskActionKind::Clarification,
+                ActionDecision::Reject,
+            ) => RuntimeActionDecision::Reject,
+            (TaskActionKind::Clarification, ActionDecision::Answer) => {
+                let answer = params.answer.as_deref().unwrap_or_default().trim();
+                if answer.is_empty() {
+                    return Err(SidecarError::new(
+                        halo_protocol::ErrorCode::InvalidParams,
+                        "澄清回答不能为空",
+                    ));
+                }
+                let (answer, _) = cap(&sanitize(answer), limits::TRACE_TEXT_MAX);
+                RuntimeActionDecision::Answer(answer)
+            }
+            _ => {
+                return Err(SidecarError::new(
+                    halo_protocol::ErrorCode::InvalidParams,
+                    "该操作请求不接受此决定",
+                ))
+            }
+        };
+        if matches!(
+            params.decision,
+            ActionDecision::AllowOnce | ActionDecision::Reject
+        ) && params.answer.is_some()
+        {
+            return Err(SidecarError::new(
+                halo_protocol::ErrorCode::InvalidParams,
+                "本次允许或拒绝不接受回答内容",
+            ));
+        }
+        request.decision_sent = true;
+        decision
+    };
+
+    if let Err(error) = handle.resolve_action(&params.request_id, decision) {
+        // 送达不确定时运行时已失败关闭；重开卡片会允许同一原生操作被重复决议。
+        if !matches!(error, RuntimeError::ActionRequestDeliveryUncertain) {
+            let mut app = lock(&ctx.app);
+            if let Some(request) = app
+                .task
+                .as_mut()
+                .filter(|task| task.task_id == params.task_id)
+                .and_then(|task| task.action_requests.get_mut(&params.request_id))
+            {
+                request.decision_sent = false;
+            }
+        }
+        return Err(match error {
+            RuntimeError::ActionRequestNotFound => SidecarError::new(
+                halo_protocol::ErrorCode::ActionRequestNotFound,
+                "当前任务没有匹配的操作请求",
+            ),
+            RuntimeError::ActionRequestAlreadyResolved => SidecarError::new(
+                halo_protocol::ErrorCode::ActionRequestAlreadyResolved,
+                "该操作请求已经提交过一次决定",
+            ),
+            other => SidecarError::from(other),
+        });
+    }
+    Ok(())
 }
 
 /// 任务事件主循环：规范化运行时事件、驱动状态机、处理取消，直至终局。
@@ -144,28 +278,95 @@ pub fn run_task_loop(
     events_rx: Receiver<RuntimeEvent>,
     cancel_rx: Receiver<()>,
 ) {
+    run_task_loop_with_finish(
+        ctx,
+        git,
+        task_id,
+        agent,
+        handle,
+        events_rx,
+        cancel_rx,
+        crossbeam_channel::never(),
+    );
+}
+
+pub fn run_task_loop_with_finish(
+    ctx: &FlowCtx,
+    git: &GitClient,
+    task_id: &str,
+    agent: AgentKind,
+    handle: Arc<dyn AgentHandle>,
+    events_rx: Receiver<RuntimeEvent>,
+    cancel_rx: Receiver<()>,
+    finish_rx: Receiver<()>,
+) {
     enum Ending {
         Done { outcome: String, summary: String },
         Cancelled { mode: &'static str },
         RuntimeFailed { reason: String },
+        ExplicitFinish,
     }
 
     let ending = loop {
         crossbeam_channel::select! {
-            recv(events_rx) -> msg => match msg {
-                Err(_) => break Ending::RuntimeFailed { reason: "运行时事件通道意外中断".to_string() },
-                Ok(RuntimeEvent::State(RuntimeState::Failed { reason, .. })) =>
-                    break Ending::RuntimeFailed { reason },
-                Ok(RuntimeEvent::State(RuntimeState::Stopped)) =>
-                    break Ending::RuntimeFailed { reason: "受管运行时在任务结束前停止".to_string() },
-                Ok(RuntimeEvent::State(_)) => {}
-                Ok(RuntimeEvent::Trace(item)) => on_trace(ctx, task_id, &item),
-                Ok(RuntimeEvent::ActionRequest { request_id, kind, prompt }) =>
-                    on_action_request(ctx, task_id, &request_id, &kind, &prompt),
-                Ok(RuntimeEvent::Verification { status, detail }) =>
-                    on_verification(ctx, task_id, &status, &detail),
-                Ok(RuntimeEvent::TaskDone { outcome, summary }) =>
-                    break Ending::Done { outcome, summary },
+            recv(events_rx) -> msg => {
+                if lock(&ctx.app).shutting_down {
+                    break Ending::RuntimeFailed { reason: "Sidecar 正在退出".to_string() };
+                }
+                match msg {
+                    Err(_) => break Ending::RuntimeFailed { reason: "运行时事件通道意外中断".to_string() },
+                    Ok(RuntimeEvent::State(RuntimeState::Failed { reason, .. })) =>
+                        break Ending::RuntimeFailed { reason },
+                    Ok(RuntimeEvent::State(RuntimeState::Stopped)) =>
+                        break Ending::RuntimeFailed { reason: "受管运行时在任务结束前停止".to_string() },
+                    Ok(RuntimeEvent::State(_)) => {}
+                    Ok(RuntimeEvent::Trace(item)) => on_trace(ctx, task_id, &item),
+                    Ok(RuntimeEvent::ActionRequest { request_id, kind, prompt }) => {
+                        if agent != AgentKind::OpenCode {
+                            break Ending::RuntimeFailed {
+                                reason: "当前受管执行器不支持一次性操作请求".to_string(),
+                            };
+                        }
+                        on_action_request(ctx, task_id, &request_id, &kind, &prompt);
+                    }
+                    Ok(RuntimeEvent::ActionResolved { request_id }) =>
+                        on_action_resolved(ctx, task_id, &request_id),
+                    Ok(RuntimeEvent::Verification { status, detail }) =>
+                        on_verification(ctx, task_id, &status, &detail),
+                    Ok(RuntimeEvent::SessionReply { text }) => on_session_reply(ctx, task_id, &text),
+                    Ok(RuntimeEvent::TaskDone { outcome, summary }) => {
+                        // OpenCode 受管会话只能由开发者显式结束；任何运行时 TaskDone
+                        // 都是迟到/兼容层信号，不能把 running 或 waiting 误判为正常结束。
+                        if agent == AgentKind::OpenCode {
+                            continue;
+                        }
+                        let waiting_for_developer = {
+                            let app = lock(&ctx.app);
+                            app.task
+                                .as_ref()
+                                .is_some_and(|task| task.task_id == task_id && task.state == TaskState::WaitingDeveloper)
+                        };
+                        // OpenCode 的首轮回合以 SessionReply 结束。即使服务端或旧适配层随后
+                        // 迟到一个 TaskDone，也不能把开发者尚未结束的会话自动送进交付审查。
+                        if waiting_for_developer {
+                            continue;
+                        }
+                        let awaiting_action = {
+                            let app = lock(&ctx.app);
+                            app.task.as_ref().is_some_and(|task| {
+                                task.task_id == task_id
+                                    && task.state == TaskState::AwaitingAction
+                                    && !task.action_requests.is_empty()
+                            })
+                        };
+                        if awaiting_action {
+                            break Ending::RuntimeFailed {
+                                reason: "受管 Agent 在操作请求尚未得到确认前结束".to_string(),
+                            };
+                        }
+                        break Ending::Done { outcome, summary };
+                    }
+                }
             },
             recv(cancel_rx) -> msg => {
                 if msg.is_err() {
@@ -190,14 +391,77 @@ pub fn run_task_loop(
                     }
                 };
                 break Ending::Cancelled { mode };
+            },
+            recv(finish_rx) -> msg => {
+                if msg.is_err() {
+                    continue;
+                }
+                let is_waiting = {
+                    let app = lock(&ctx.app);
+                    app.task.as_ref().is_some_and(|task| {
+                        task.task_id == task_id
+                            && task.state == TaskState::WaitingDeveloper
+                            && task.finish_requested
+                            && !task.cancellation_requested
+                    })
+                };
+                if !is_waiting {
+                    continue;
+                }
+                if let Err(error) = handle.finish_session() {
+                    break Ending::RuntimeFailed {
+                        reason: format!("显式结束受管会话失败：{error}"),
+                    };
+                }
+                break Ending::ExplicitFinish;
             }
         }
     };
 
+    // shutdown 已经切断了活动任务路由；停止受管进程产生的迟到事件不能再
+    // 被解释为失败、取消或新的交付证据。
+    if {
+        let app = lock(&ctx.app);
+        app.shutting_down
+            || !app
+                .task
+                .as_ref()
+                .is_some_and(|task| task.task_id == task_id)
+    } {
+        clear_route(ctx, agent);
+        return;
+    }
+
     match ending {
+        Ending::ExplicitFinish => {
+            apply_event(ctx, task_id, &TaskEvent::FinishRequested);
+            {
+                let mut app = lock(&ctx.app);
+                if let Some(task) = app.task.as_mut().filter(|task| task.task_id == task_id) {
+                    task.session_messages.clear();
+                    task.action_requests.clear();
+                }
+            }
+            match append_evidence(
+                ctx,
+                git,
+                task_id,
+                "finished",
+                "",
+            ) {
+                Ok(version) => {
+                    apply_event(ctx, task_id, &TaskEvent::EvidenceReady);
+                    ctx.bus.emit(
+                        Some(task_id),
+                        "task.finished",
+                        json!({"outcome": "finished", "evidence_version": version}),
+                    );
+                }
+                Err(()) => mark_evidence_persistence_failure(ctx, task_id),
+            }
+        }
         Ending::Done { outcome, summary } => {
             if outcome == "finished" {
-                resolve_pending_action(ctx, task_id);
                 apply_event(ctx, task_id, &TaskEvent::Finishing);
                 match append_evidence(ctx, git, task_id, "finished", &summary) {
                     Ok(version) => {
@@ -279,10 +543,18 @@ pub(crate) fn sanitize_json_strings(value: &Value, max_bytes: usize) -> Value {
 
 /// 结构化轨迹条目：脱敏限长后推送 trace.item；phase 另推 task.phase。
 fn on_trace(ctx: &FlowCtx, task_id: &str, item: &halo_runtime::RuntimeTraceItem) {
-    resolve_pending_action(ctx, task_id);
     let (text, _) = cap(&sanitize(&item.text), limits::TRACE_TEXT_MAX);
     // detail 是 Agent 原生输出的任意 JSON：整树递归脱敏后才允许进入事件 payload
     let detail = sanitize_json_strings(&item.detail, limits::TRACE_TEXT_MAX);
+    let app = lock(&ctx.app);
+    if app.shutting_down
+        || !app
+            .task
+            .as_ref()
+            .is_some_and(|task| task.task_id == task_id && !task.state.is_terminal())
+    {
+        return;
+    }
     ctx.bus.emit(
         Some(task_id),
         "trace.item",
@@ -302,25 +574,136 @@ fn on_trace(ctx: &FlowCtx, task_id: &str, item: &halo_runtime::RuntimeTraceItem)
     }
 }
 
+/// 首轮 OpenCode 回复只追加活动会话记录，并把任务留在等待开发者。
+/// 它绝不触发取证、审查或 task.finished；这些属于后续显式结束会话动作。
+fn on_session_reply(ctx: &FlowCtx, task_id: &str, text: &str) {
+    let is_running = {
+        let app = lock(&ctx.app);
+        app.task
+            .as_ref()
+            .is_some_and(|task| task.task_id == task_id && task.state == TaskState::Running)
+    };
+    if !is_running {
+        return;
+    }
+    if append_active_session_message(
+        &ctx.app,
+        &ctx.bus,
+        task_id,
+        halo_protocol::methods::task::TaskSessionMessageRole::Agent,
+        text,
+    )
+    .is_some()
+    {
+        apply_event(ctx, task_id, &TaskEvent::RoundCompleted);
+    }
+}
+
 /// Agent 操作请求：Running → AwaitingAction，等待用户经其原生通道决定。
 fn on_action_request(ctx: &FlowCtx, task_id: &str, request_id: &str, kind: &str, prompt: &str) {
-    apply_event(ctx, task_id, &TaskEvent::ActionRequested);
+    use halo_protocol::methods::task::{TaskActionKind, TaskActionRequest};
+
+    let kind = match kind {
+        "permission" => TaskActionKind::Permission,
+        "clarification" => TaskActionKind::Clarification,
+        _ => {
+            apply_event(
+                ctx,
+                task_id,
+                &TaskEvent::Fail("OpenCode 返回了不受支持的操作请求类型".to_string()),
+            );
+            return;
+        }
+    };
+    if request_id.is_empty()
+        || request_id.len() > 160
+        || !request_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        apply_event(
+            ctx,
+            task_id,
+            &TaskEvent::Fail("OpenCode 返回了无法安全决议的操作请求".to_string()),
+        );
+        return;
+    }
     let (prompt, _) = cap(&sanitize(prompt), limits::TRACE_TEXT_MAX);
+    let (emit, enter_awaiting) = {
+        let mut app = lock(&ctx.app);
+        let Some(task) = app.task.as_mut().filter(|task| task.task_id == task_id) else {
+            return;
+        };
+        if task.cancellation_requested
+            || !matches!(task.state, TaskState::Running | TaskState::AwaitingAction)
+            || task.action_requests.contains_key(request_id)
+        {
+            return;
+        }
+        let enter_awaiting = task.state == TaskState::Running;
+        task.action_requests.insert(
+            request_id.to_string(),
+            TaskActionRequest {
+                request_id: request_id.to_string(),
+                kind,
+                prompt: prompt.clone(),
+                decision_sent: false,
+            },
+        );
+        (true, enter_awaiting)
+    };
+    if !emit {
+        return;
+    }
+    if enter_awaiting {
+        apply_event(ctx, task_id, &TaskEvent::ActionRequested);
+    }
+    let kind_name = match kind {
+        TaskActionKind::Permission => "permission",
+        TaskActionKind::Clarification => "clarification",
+    };
     ctx.bus.emit(
         Some(task_id),
         "task.action_request",
-        json!({"request_id": request_id, "kind": kind, "prompt": prompt, "channel": "native"}),
+        json!({"request_id": request_id, "kind": kind_name, "prompt": prompt, "decision_sent": false}),
     );
     ctx.bus.emit(
         Some(task_id),
         "trace.item",
-        json!({"kind": "action_request", "text": prompt, "detail": {"request_id": request_id, "kind": kind}}),
+        json!({"kind": "action_request", "text": prompt, "detail": {"request_id": request_id, "kind": kind_name}}),
     );
+}
+
+/// 只有 OpenCode 对同一请求的真实 replied/rejected 事件才能结束 AwaitingAction。
+fn on_action_resolved(ctx: &FlowCtx, task_id: &str, request_id: &str) {
+    let return_to_running = {
+        let mut app = lock(&ctx.app);
+        let Some(task) = app.task.as_mut().filter(|task| task.task_id == task_id) else {
+            return;
+        };
+        let Some(request) = task.action_requests.get(request_id) else {
+            return;
+        };
+        if !request.decision_sent {
+            return;
+        }
+        task.action_requests.remove(request_id);
+        task.state == TaskState::AwaitingAction
+            && task.action_requests.is_empty()
+            && !task.cancellation_requested
+    };
+    ctx.bus.emit(
+        Some(task_id),
+        "task.action_resolved",
+        json!({"request_id": request_id}),
+    );
+    if return_to_running {
+        apply_event(ctx, task_id, &TaskEvent::ActionResolved);
+    }
 }
 
 /// Agent 原生验证结论：记录 + 推送 task.verification（source=agent）。
 fn on_verification(ctx: &FlowCtx, task_id: &str, status: &str, detail: &str) {
-    resolve_pending_action(ctx, task_id);
     let status = match status {
         "passed" => halo_core::VerificationStatus::Passed,
         "failed" => halo_core::VerificationStatus::Failed,
@@ -328,12 +711,18 @@ fn on_verification(ctx: &FlowCtx, task_id: &str, status: &str, detail: &str) {
     };
     let (detail, _) = cap(&sanitize(detail), limits::TRACE_TEXT_MAX);
     let verification = Verification::from_agent(status, detail.clone());
-    {
-        let mut app = lock(&ctx.app);
-        if let Some(task) = app.task.as_mut().filter(|t| t.task_id == task_id) {
-            task.verification_agent = Some(verification.clone());
-        }
+    let mut app = lock(&ctx.app);
+    if app.shutting_down {
+        return;
     }
+    let Some(task) = app
+        .task
+        .as_mut()
+        .filter(|task| task.task_id == task_id && !task.state.is_terminal())
+    else {
+        return;
+    };
+    task.verification_agent = Some(verification.clone());
     ctx.bus.emit(
         Some(task_id),
         "task.verification",
@@ -350,20 +739,6 @@ fn on_verification(ctx: &FlowCtx, task_id: &str, status: &str, detail: &str) {
     );
 }
 
-/// Agent 恢复输出即视为操作请求已在原生通道解决：AwaitingAction → Running。
-fn resolve_pending_action(ctx: &FlowCtx, task_id: &str) {
-    let awaiting = {
-        let app = lock(&ctx.app);
-        app.task
-            .as_ref()
-            .map(|t| t.task_id == task_id && t.state == TaskState::AwaitingAction)
-            .unwrap_or(false)
-    };
-    if awaiting {
-        apply_event(ctx, task_id, &TaskEvent::ActionResolved);
-    }
-}
-
 /// 经 core 状态机驱动一次迁移；成功则持久化并推送 task.state。
 /// 非法迁移（终态竞态等）如实忽略并记 stderr，不得伪造状态。
 pub fn apply_event(ctx: &FlowCtx, task_id: &str, ev: &TaskEvent) -> Option<TaskState> {
@@ -375,6 +750,10 @@ pub fn apply_event(ctx: &FlowCtx, task_id: &str, ev: &TaskEvent) -> Option<TaskS
                 task.state = next;
                 if next.is_terminal() && task.ended_at.is_none() {
                     task.ended_at = Some(now_ts());
+                }
+                if next.is_terminal() {
+                    task.session_messages.clear();
+                    task.action_requests.clear();
                 }
                 match ev {
                     TaskEvent::CancelledNative => task.cancel_mode = Some("native".to_string()),
@@ -424,17 +803,19 @@ fn append_evidence(
 
     let mut summary = sanitize(summary_raw);
     let mut files: Vec<halo_store::FileChangeDraft> = Vec::new();
-    match git
-        .capture_tree()
-        .and_then(|end| git.diff_trees(&baseline.tree, &end))
-    {
-        Ok(diffs) => {
+    match git.capture_tree().and_then(|end| {
+        let diffs = git.diff_trees(&baseline.tree, &end)?;
+        Ok((end, diffs))
+    }) {
+        Ok((end_tree, diffs)) => {
             for d in diffs {
                 let (diff, _) = cap(&sanitize(&d.diff), limits::VERSION_TOTAL_MAX);
+                let end_hash = end_tree_file_hash(git, &end_tree, &d.path, &d.change);
                 files.push(halo_store::FileChangeDraft {
                     path: d.path,
                     change: d.change,
                     diff,
+                    end_hash,
                 });
             }
         }
@@ -445,8 +826,6 @@ fn append_evidence(
             summary = sanitize(&format!("{summary}\n【取证失败】无法读取任务关联变更：{e}"));
         }
     }
-    let (summary, _) = cap(&summary, limits::VERSION_TOTAL_MAX);
-
     let (attribution, reasons, verification) = {
         let app = lock(&ctx.app);
         match app.task.as_ref().filter(|t| t.task_id == task_id) {
@@ -471,6 +850,15 @@ fn append_evidence(
         }
     };
 
+    if summary.trim().is_empty() {
+        summary = format!(
+            "开发者已显式结束受管会话；任务基线后关联变更共 {} 个文件；验证结论：{}",
+            files.len(),
+            verification_status_core_to_str(verification.status)
+        );
+    }
+    let (summary, _) = cap(&sanitize(&summary), limits::VERSION_TOTAL_MAX);
+
     let draft = halo_store::EvidenceDraft {
         outcome: outcome.to_string(),
         attribution,
@@ -484,9 +872,19 @@ fn append_evidence(
         created_at: now_ts(),
     };
 
+    // 与 shutdown 串行化：取得活动任务锁后再追加，关闭流程一旦先取得锁就
+    // 不会留下“中断后才生成”的失败证据。
+    let mut app = lock(&ctx.app);
+    if app.shutting_down
+        || !app
+            .task
+            .as_ref()
+            .is_some_and(|task| task.task_id == task_id)
+    {
+        return Err(());
+    }
     match ctx.store.append_evidence(task_id, &draft) {
         Ok(version) => {
-            let mut app = lock(&ctx.app);
             if let Some(task) = app.task.as_mut().filter(|t| t.task_id == task_id) {
                 task.latest_evidence_version = version;
             }
@@ -498,6 +896,19 @@ fn append_evidence(
             Err(())
         }
     }
+}
+
+fn end_tree_file_hash(git: &GitClient, end_tree: &str, path: &str, change: &str) -> Option<String> {
+    if change == "deleted" {
+        return None;
+    }
+    let size = git.tree_file_size(end_tree, path).ok()?;
+    if size > END_HASH_MAX_BYTES as u64 {
+        return None;
+    }
+    let bytes = git.show_tree_file(end_tree, path).ok()?;
+    let digest = Sha256::digest(bytes);
+    Some(format!("sha256:{digest:x}"))
 }
 
 fn mark_evidence_persistence_failure(ctx: &FlowCtx, task_id: &str) {
@@ -567,17 +978,26 @@ pub fn request_cancel(cancel_tx: &Sender<()>) -> bool {
     cancel_tx.try_send(()).is_ok()
 }
 
+pub fn request_finish(finish_tx: &Sender<()>) -> bool {
+    finish_tx.try_send(()).is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::server::Outbound;
     use crossbeam_channel::unbounded;
-    use halo_runtime::{RuntimeError, RuntimeTraceItem, StopOutcome};
+    use halo_runtime::{
+        ActionDecision as RuntimeActionDecision, RuntimeError, RuntimeTraceItem, StopOutcome,
+    };
     use rusqlite::Connection;
     use std::fs;
     use std::path::Path;
     use std::process::Command;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex,
+    };
 
     // ---- 进程内假运行时（仅测试；生产路径零 mock）----
 
@@ -611,10 +1031,79 @@ mod tests {
                 });
             }
         }
+        fn finish_session(&self) -> Result<(), RuntimeError> {
+            Ok(())
+        }
         fn stop(&self, _grace: Duration) -> StopOutcome {
             self.force_stops.fetch_add(1, Ordering::SeqCst);
             StopOutcome::Forced
         }
+        fn state(&self) -> RuntimeState {
+            RuntimeState::Ready
+        }
+    }
+
+    struct ActionHandle {
+        decisions: Mutex<Vec<(String, RuntimeActionDecision)>>,
+    }
+
+    impl ActionHandle {
+        fn new() -> Self {
+            Self {
+                decisions: Mutex::new(vec![]),
+            }
+        }
+    }
+
+    impl AgentHandle for ActionHandle {
+        fn run_task(&self, _spec: &RunTaskSpec) -> Result<(), RuntimeError> {
+            Ok(())
+        }
+
+        fn resolve_action(
+            &self,
+            request_id: &str,
+            decision: RuntimeActionDecision,
+        ) -> Result<(), RuntimeError> {
+            self.decisions
+                .lock()
+                .expect("测试决议记录锁不应中毒")
+                .push((request_id.to_string(), decision));
+            Ok(())
+        }
+
+        fn cancel_native(&self) {}
+
+        fn stop(&self, _grace: Duration) -> StopOutcome {
+            StopOutcome::Graceful
+        }
+
+        fn state(&self) -> RuntimeState {
+            RuntimeState::Ready
+        }
+    }
+
+    struct UncertainActionHandle;
+
+    impl AgentHandle for UncertainActionHandle {
+        fn run_task(&self, _spec: &RunTaskSpec) -> Result<(), RuntimeError> {
+            Ok(())
+        }
+
+        fn resolve_action(
+            &self,
+            _request_id: &str,
+            _decision: RuntimeActionDecision,
+        ) -> Result<(), RuntimeError> {
+            Err(RuntimeError::ActionRequestDeliveryUncertain)
+        }
+
+        fn cancel_native(&self) {}
+
+        fn stop(&self, _grace: Duration) -> StopOutcome {
+            StopOutcome::Graceful
+        }
+
         fn state(&self) -> RuntimeState {
             RuntimeState::Ready
         }
@@ -701,6 +1190,7 @@ mod tests {
             instructions: "修改仓库文件".to_string(),
             state: TaskState::Running,
             attribution: halo_core::Attribution::AgentOnly,
+            manual_edit_paths: Default::default(),
             baseline,
             created_at: now_ts(),
             ended_at: None,
@@ -708,7 +1198,12 @@ mod tests {
             latest_evidence_version: 0,
             verification_agent: None,
             verification_user: None,
+            session_messages: vec![],
+            action_requests: Default::default(),
+            cancellation_requested: false,
+            finish_requested: false,
             cancel_tx: None,
+            finish_tx: None,
         };
         f.ctx.store.put_task(&task.to_record()).unwrap();
         lock(&f.ctx.app).task = Some(task);
@@ -730,6 +1225,133 @@ mod tests {
             .as_ref()
             .map(|t| t.state)
             .expect("任务应存在")
+    }
+
+    #[test]
+    fn first_session_reply_waits_for_developer_without_delivery_evidence() {
+        let f = fixture();
+        install_running_task(&f, "task-first-reply");
+        crate::state::append_active_session_message(
+            &f.ctx.app,
+            &f.ctx.bus,
+            "task-first-reply",
+            halo_protocol::methods::task::TaskSessionMessageRole::User,
+            "请完成这项受管任务",
+        )
+        .expect("首条用户消息应进入活动会话记录");
+
+        let (event_tx, event_rx) = unbounded();
+        let (cancel_tx, cancel_rx) = bounded::<()>(1);
+        let handle: Arc<dyn AgentHandle> = Arc::new(FakeHandle {
+            cancels: AtomicUsize::new(0),
+            force_stops: AtomicUsize::new(0),
+            done_on_cancel: Some(event_tx.clone()),
+        });
+        let ctx = f.ctx.clone();
+        let repo = f.repo.clone();
+        let join = std::thread::spawn(move || {
+            run_task_loop(
+                &ctx,
+                &GitClient::new(repo),
+                "task-first-reply",
+                AgentKind::OpenCode,
+                handle,
+                event_rx,
+                cancel_rx,
+            );
+        });
+
+        event_tx
+            .send(RuntimeEvent::SessionReply {
+                text: format!(
+                    "已完成首轮回复，password=do-not-leak {}",
+                    "x".repeat(limits::TRACE_TEXT_MAX + 16)
+                ),
+            })
+            .unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if task_state(&f) == TaskState::WaitingDeveloper {
+                break;
+            }
+            assert!(Instant::now() < deadline, "首轮回复后应进入等待开发者");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+
+        assert!(
+            f.ctx
+                .store
+                .latest_evidence("task-first-reply")
+                .unwrap()
+                .is_none(),
+            "等待开发者不得自动生成交付证据"
+        );
+        let active = lock(&f.ctx.app).task.as_ref().unwrap().session_messages.clone();
+        assert_eq!(active.len(), 2);
+        assert_eq!(
+            active[1].role,
+            halo_protocol::methods::task::TaskSessionMessageRole::Agent
+        );
+        assert!(active[1].truncated);
+        assert!(!active[1].text.contains("do-not-leak"));
+        assert!(active[1].text.contains("[REDACTED]"));
+
+        // 迟到或重复的同轮回复不能在 waiting_developer 中形成第二条消息，
+        // 也不能把状态机从等待开发者错误地推向其他状态。
+        event_tx
+            .send(RuntimeEvent::SessionReply {
+                text: "重复的迟到回复".to_string(),
+            })
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(25));
+        assert_eq!(task_state(&f), TaskState::WaitingDeveloper);
+        assert_eq!(
+            lock(&f.ctx.app)
+                .task
+                .as_ref()
+                .unwrap()
+                .session_messages
+                .len(),
+            2,
+            "waiting_developer 不得追加重复会话回复"
+        );
+
+        event_tx
+            .send(RuntimeEvent::TaskDone {
+                outcome: "finished".to_string(),
+                summary: "迟到的旧式完成事件".to_string(),
+            })
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(25));
+        assert_eq!(task_state(&f), TaskState::WaitingDeveloper);
+        assert!(
+            f.ctx
+                .store
+                .latest_evidence("task-first-reply")
+                .unwrap()
+                .is_none(),
+            "迟到 TaskDone 不得让等待开发者自动产生交付证据"
+        );
+
+        let events = drain_events(&f.events);
+        assert!(events.iter().any(|event| {
+            event.event == "task.session_message"
+                && event.payload["role"] == "user"
+                && event.payload["text"] == "请完成这项受管任务"
+        }));
+        assert!(events.iter().any(|event| {
+            event.event == "task.session_message"
+                && event.payload["role"] == "agent"
+                && event.payload["truncated"] == true
+        }));
+        assert!(events.iter().any(|event| {
+            event.event == "task.state" && event.payload["state"] == "waiting_developer"
+        }));
+        assert!(!events.iter().any(|event| event.event == "task.finished"));
+
+        cancel_tx.send(()).unwrap();
+        join.join().unwrap();
     }
 
     #[test]
@@ -814,6 +1436,66 @@ mod tests {
             assert!(e.seq > prev);
             prev = e.seq;
         }
+    }
+
+    #[test]
+    fn explicit_finish_from_waiting_uses_baseline_and_clears_session_record() {
+        let f = fixture();
+        install_running_task(&f, "task-explicit-finish");
+        fs::write(f.repo.join("follow-up.txt"), "harmless change\n").unwrap();
+        {
+            let mut app = lock(&f.ctx.app);
+            let task = app.task.as_mut().unwrap();
+            task.state = TaskState::WaitingDeveloper;
+            task.finish_requested = true;
+            task.session_messages.push(ActiveTask::session_message(
+                halo_protocol::methods::task::TaskSessionMessageRole::User,
+                "这段追问不能进入证据",
+            ));
+        }
+        let (_event_tx, event_rx) = unbounded::<RuntimeEvent>();
+        let (_cancel_tx, cancel_rx) = bounded::<()>(1);
+        let (finish_tx, finish_rx) = bounded::<()>(1);
+        finish_tx.send(()).unwrap();
+
+        run_task_loop_with_finish(
+            &f.ctx,
+            &GitClient::new(&f.repo),
+            "task-explicit-finish",
+            AgentKind::OpenCode,
+            Arc::new(FakeHandle::inert()),
+            event_rx,
+            cancel_rx,
+            finish_rx,
+        );
+
+        assert_eq!(task_state(&f), TaskState::ReviewReady);
+        let evidence = f
+            .ctx
+            .store
+            .latest_evidence("task-explicit-finish")
+            .unwrap()
+            .unwrap();
+        assert!(evidence.files.iter().any(|file| file.path == "follow-up.txt"));
+        assert!(evidence.summary.contains("关联变更共 1 个文件"));
+        assert!(evidence.summary.contains("验证结论：not_run"));
+        let rendered = format!(
+            "{} {}",
+            evidence.summary,
+            evidence
+                .files
+                .iter()
+                .map(|file| file.diff.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        assert!(!rendered.contains("这段追问不能进入证据"));
+        assert!(lock(&f.ctx.app)
+            .task
+            .as_ref()
+            .unwrap()
+            .session_messages
+            .is_empty());
     }
 
     #[test]
@@ -994,7 +1676,7 @@ mod tests {
     }
 
     #[test]
-    fn action_request_pauses_then_resumes_by_next_event() {
+    fn action_request_does_not_resume_from_trace_or_task_done_without_exact_resolution() {
         let f = fixture();
         install_running_task(&f, "task-action");
         let (etx, erx) = unbounded();
@@ -1022,30 +1704,344 @@ mod tests {
             &f.ctx,
             &GitClient::new(&f.repo),
             "task-action",
+            AgentKind::OpenCode,
+            Arc::new(FakeHandle::inert()),
+            erx,
+            crx,
+        );
+
+        assert_eq!(task_state(&f), TaskState::Failed);
+        let events = drain_events(&f.events);
+        let action = events
+            .iter()
+            .find(|e| e.event == "task.action_request")
+            .unwrap();
+        assert_eq!(
+            action.payload,
+            json!({
+                "request_id": "ar-1",
+                "kind": "permission",
+                "prompt": "允许写入 src/a.rs 吗？",
+                "decision_sent": false
+            })
+        );
+        let states: Vec<&str> = events
+            .iter()
+            .filter(|e| e.event == "task.state")
+            .filter_map(|e| e.payload.get("state").and_then(Value::as_str))
+            .collect();
+        assert_eq!(states, vec!["awaiting_action", "failed"], "{states:?}");
+    }
+
+    #[test]
+    fn non_opencode_action_request_fails_closed_without_publishing_a_card() {
+        let f = fixture();
+        install_running_task(&f, "task-pi-action");
+        let (etx, erx) = unbounded();
+        let (_ctx_tx, crx) = bounded::<()>(1);
+
+        etx.send(RuntimeEvent::ActionRequest {
+            request_id: "pi-request-1".to_string(),
+            kind: "permission".to_string(),
+            prompt: "允许本次写入吗？".to_string(),
+        })
+        .unwrap();
+
+        run_task_loop(
+            &f.ctx,
+            &GitClient::new(&f.repo),
+            "task-pi-action",
             AgentKind::Pi,
             Arc::new(FakeHandle::inert()),
             erx,
             crx,
         );
 
-        assert_eq!(task_state(&f), TaskState::ReviewReady);
+        assert_eq!(task_state(&f), TaskState::Failed);
         let events = drain_events(&f.events);
-        let action = events
+        assert!(!events
             .iter()
-            .find(|e| e.event == "task.action_request")
-            .unwrap();
-        assert_eq!(action.payload["request_id"], "ar-1");
-        assert_eq!(action.payload["channel"], "native");
+            .any(|event| event.event == "task.action_request"));
         let states: Vec<&str> = events
             .iter()
-            .filter(|e| e.event == "task.state")
-            .filter_map(|e| e.payload.get("state").and_then(Value::as_str))
+            .filter(|event| event.event == "task.state")
+            .filter_map(|event| event.payload.get("state").and_then(Value::as_str))
             .collect();
-        assert_eq!(
-            states,
-            vec!["awaiting_action", "running", "finishing", "review_ready"],
-            "{states:?}"
+        assert_eq!(states, vec!["failed"], "{states:?}");
+    }
+
+    #[test]
+    fn action_resolution_requires_exact_pending_request_and_real_agent_ack() {
+        use halo_protocol::methods::task::{ActionDecision, ResolveActionParams};
+
+        let f = fixture();
+        install_running_task(&f, "task-action-resolution");
+        on_action_request(
+            &f.ctx,
+            "task-action-resolution",
+            "per-1",
+            "permission",
+            "允许 password=do-not-leak 写入 src/auth.rs 吗？",
         );
+
+        assert_eq!(task_state(&f), TaskState::AwaitingAction);
+        let prompt = lock(&f.ctx.app)
+            .task
+            .as_ref()
+            .and_then(|task| task.action_requests.get("per-1"))
+            .expect("权限请求应保留在活动任务中")
+            .prompt
+            .clone();
+        assert!(!prompt.contains("do-not-leak"));
+        assert!(prompt.contains("[REDACTED]"));
+
+        let handle = Arc::new(ActionHandle::new());
+        let mismatch = ResolveActionParams {
+            task_id: "task-action-resolution".to_string(),
+            request_id: "per-other".to_string(),
+            decision: ActionDecision::AllowOnce,
+            answer: None,
+        };
+        let error = resolve_action(&f.ctx, &mismatch, handle.clone()).unwrap_err();
+        assert_eq!(error.code, halo_protocol::ErrorCode::ActionRequestNotFound);
+        assert!(handle
+            .decisions
+            .lock()
+            .expect("测试决议记录锁不应中毒")
+            .is_empty());
+
+        let allow_once = ResolveActionParams {
+            task_id: "task-action-resolution".to_string(),
+            request_id: "per-1".to_string(),
+            decision: ActionDecision::AllowOnce,
+            answer: None,
+        };
+        resolve_action(&f.ctx, &allow_once, handle.clone()).expect("本次允许应提交给原生 Agent");
+        assert_eq!(task_state(&f), TaskState::AwaitingAction);
+        assert_eq!(
+            *handle.decisions.lock().expect("测试决议记录锁不应中毒"),
+            vec![("per-1".to_string(), RuntimeActionDecision::AllowOnce)]
+        );
+
+        let duplicate = resolve_action(&f.ctx, &allow_once, handle.clone()).unwrap_err();
+        assert_eq!(
+            duplicate.code,
+            halo_protocol::ErrorCode::ActionRequestAlreadyResolved
+        );
+
+        on_trace(
+            &f.ctx,
+            "task-action-resolution",
+            &RuntimeTraceItem {
+                kind: "agent_note".to_string(),
+                text: "继续执行".to_string(),
+                detail: json!({}),
+            },
+        );
+        on_action_resolved(&f.ctx, "task-action-resolution", "per-other");
+        assert_eq!(
+            task_state(&f),
+            TaskState::AwaitingAction,
+            "普通轨迹和不匹配的确认不得结束等待"
+        );
+
+        on_action_resolved(&f.ctx, "task-action-resolution", "per-1");
+        assert_eq!(task_state(&f), TaskState::Running);
+        let resolved = drain_events(&f.events)
+            .into_iter()
+            .find(|event| event.event == "task.action_resolved")
+            .expect("精确的原生回执应通知活动会话");
+        assert_eq!(resolved.task_id.as_deref(), Some("task-action-resolution"));
+        assert_eq!(resolved.payload, json!({"request_id": "per-1"}));
+        assert!(lock(&f.ctx.app)
+            .task
+            .as_ref()
+            .expect("任务仍活动")
+            .action_requests
+            .is_empty());
+
+        on_action_request(
+            &f.ctx,
+            "task-action-resolution",
+            "que-2",
+            "clarification",
+            "请选择要继续的本地配置。",
+        );
+        let invalid_permission_decision = ResolveActionParams {
+            task_id: "task-action-resolution".to_string(),
+            request_id: "que-2".to_string(),
+            decision: ActionDecision::AllowOnce,
+            answer: None,
+        };
+        let error =
+            resolve_action(&f.ctx, &invalid_permission_decision, handle.clone()).unwrap_err();
+        assert_eq!(error.code, halo_protocol::ErrorCode::InvalidParams);
+
+        let answer = ResolveActionParams {
+            task_id: "task-action-resolution".to_string(),
+            request_id: "que-2".to_string(),
+            decision: ActionDecision::Answer,
+            answer: Some("password=do-not-forward".to_string()),
+        };
+        resolve_action(&f.ctx, &answer, handle.clone()).expect("澄清回答应提交给原生 Agent");
+        let decisions = handle.decisions.lock().expect("测试决议记录锁不应中毒");
+        assert!(matches!(
+            decisions.last(),
+            Some((request_id, RuntimeActionDecision::Answer(text)))
+                if request_id == "que-2"
+                    && !text.contains("do-not-forward")
+                    && text.contains("[REDACTED]")
+        ));
+        drop(decisions);
+        on_action_resolved(&f.ctx, "task-action-resolution", "que-2");
+        assert_eq!(task_state(&f), TaskState::Running);
+    }
+
+    #[test]
+    fn uncertain_action_delivery_keeps_the_exact_request_locked_until_failure() {
+        use halo_protocol::methods::task::{ActionDecision, ResolveActionParams};
+
+        let f = fixture();
+        install_running_task(&f, "task-action-uncertain");
+        on_action_request(
+            &f.ctx,
+            "task-action-uncertain",
+            "per-uncertain",
+            "permission",
+            "允许本次写入 src/auth.rs 吗？",
+        );
+        let params = ResolveActionParams {
+            task_id: "task-action-uncertain".to_string(),
+            request_id: "per-uncertain".to_string(),
+            decision: ActionDecision::AllowOnce,
+            answer: None,
+        };
+
+        let error = resolve_action(&f.ctx, &params, Arc::new(UncertainActionHandle)).unwrap_err();
+        assert_eq!(
+            error.code,
+            halo_protocol::ErrorCode::ActionRequestNotPending
+        );
+        let request = lock(&f.ctx.app)
+            .task
+            .as_ref()
+            .and_then(|task| task.action_requests.get("per-uncertain"))
+            .expect("送达不确定前的精确请求仍须保留到失败事件处理");
+        assert!(request.decision_sent);
+
+        let duplicate =
+            resolve_action(&f.ctx, &params, Arc::new(UncertainActionHandle)).unwrap_err();
+        assert_eq!(
+            duplicate.code,
+            halo_protocol::ErrorCode::ActionRequestAlreadyResolved,
+            "送达不确定时不得重新开放同一原生操作"
+        );
+    }
+
+    #[test]
+    fn resolving_one_of_multiple_requests_only_removes_the_exact_card() {
+        use halo_protocol::methods::task::{ActionDecision, ResolveActionParams};
+
+        let f = fixture();
+        install_running_task(&f, "task-multiple-actions");
+        on_action_request(
+            &f.ctx,
+            "task-multiple-actions",
+            "per-1",
+            "permission",
+            "允许本次写入 src/auth.rs 吗？",
+        );
+        on_action_request(
+            &f.ctx,
+            "task-multiple-actions",
+            "que-2",
+            "clarification",
+            "请选择继续任务的配置。",
+        );
+
+        let handle = Arc::new(ActionHandle::new());
+        resolve_action(
+            &f.ctx,
+            &ResolveActionParams {
+                task_id: "task-multiple-actions".to_string(),
+                request_id: "per-1".to_string(),
+                decision: ActionDecision::AllowOnce,
+                answer: None,
+            },
+            handle,
+        )
+        .expect("本次允许应提交给原生 Agent");
+        on_action_resolved(&f.ctx, "task-multiple-actions", "per-1");
+
+        assert_eq!(task_state(&f), TaskState::AwaitingAction);
+        let (permission_removed, clarification_pending) = {
+            let app = lock(&f.ctx.app);
+            let task = app.task.as_ref().expect("任务仍活动");
+            (
+                !task.action_requests.contains_key("per-1"),
+                task.action_requests.contains_key("que-2"),
+            )
+        };
+        assert!(permission_removed);
+        assert!(clarification_pending);
+        let events = drain_events(&f.events);
+        assert!(events
+            .iter()
+            .any(|event| event.event == "task.action_resolved"
+                && event.payload == json!({"request_id": "per-1"})));
+        assert!(!events
+            .iter()
+            .any(|event| { event.event == "task.state" && event.payload["state"] == "running" }));
+    }
+
+    #[test]
+    fn rejected_action_can_only_fail_after_the_agent_acknowledges_it() {
+        use halo_protocol::methods::task::{ActionDecision, ResolveActionParams};
+
+        let f = fixture();
+        install_running_task(&f, "task-action-reject");
+        on_action_request(
+            &f.ctx,
+            "task-action-reject",
+            "que-1",
+            "clarification",
+            "请确认是否继续执行？",
+        );
+        let handle = Arc::new(ActionHandle::new());
+        let reject = ResolveActionParams {
+            task_id: "task-action-reject".to_string(),
+            request_id: "que-1".to_string(),
+            decision: ActionDecision::Reject,
+            answer: None,
+        };
+        resolve_action(&f.ctx, &reject, handle.clone()).expect("拒绝应提交给原生 Agent");
+        assert_eq!(task_state(&f), TaskState::AwaitingAction);
+        assert_eq!(
+            *handle.decisions.lock().expect("测试决议记录锁不应中毒"),
+            vec![("que-1".to_string(), RuntimeActionDecision::Reject)]
+        );
+
+        on_action_resolved(&f.ctx, "task-action-reject", "que-1");
+        assert_eq!(task_state(&f), TaskState::Running);
+
+        let (event_tx, event_rx) = unbounded();
+        let (_cancel_tx, cancel_rx) = bounded::<()>(1);
+        event_tx
+            .send(RuntimeEvent::TaskDone {
+                outcome: "failed".to_string(),
+                summary: "Agent 因开发者拒绝而停止".to_string(),
+            })
+            .expect("测试事件通道应可用");
+        run_task_loop(
+            &f.ctx,
+            &GitClient::new(&f.repo),
+            "task-action-reject",
+            AgentKind::Pi,
+            Arc::new(FakeHandle::inert()),
+            event_rx,
+            cancel_rx,
+        );
+        assert_eq!(task_state(&f), TaskState::Failed);
     }
 
     #[test]
@@ -1171,6 +2167,37 @@ mod tests {
         assert!(
             detail["long"].as_str().expect("long 应仍为字符串").len() <= limits::TRACE_TEXT_MAX
         );
+    }
+
+    #[test]
+    fn shutdown_drops_late_trace_and_verification_events() {
+        let f = fixture();
+        install_running_task(&f, "task-shutdown-events");
+        lock(&f.ctx.app).shutting_down = true;
+
+        on_trace(
+            &f.ctx,
+            "task-shutdown-events",
+            &RuntimeTraceItem {
+                kind: "agent_note".to_string(),
+                text: "迟到轨迹".to_string(),
+                detail: json!({}),
+            },
+        );
+        on_verification(
+            &f.ctx,
+            "task-shutdown-events",
+            "passed",
+            "迟到验证",
+        );
+
+        assert!(drain_events(&f.events).is_empty());
+        assert!(lock(&f.ctx.app)
+            .task
+            .as_ref()
+            .unwrap()
+            .verification_agent
+            .is_none());
     }
 
     #[test]

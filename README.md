@@ -1,69 +1,35 @@
 # Halo Studio
 
-Halo Studio 是面向本地开发者的原生开发工作台：在单一受信任 Git 工作区中受管 **Pi** 与 **OpenCode** 两个编码应用，提供任务基线、结构化运行轨迹、只读交付审查与手动交接的**可验证编码交付**闭环。
+Halo Studio 是面向本地开发者的原生开发工作台。产品正在从已验证的 PySide/QML + Rust Sidecar 能力基线迁移到 Halo 品牌的 BitFun/Tauri 工作台；新功能只能面向目标产品实现，旧运行时仅用于行为等价核对。
 
-- 需求依据：[requirements-alignment/](requirements-alignment/)（01 基础对齐、02 任务拆分）
-- 领域词汇表：[CONTEXT.md](CONTEXT.md)
-- 首发平台：Windows（路径 / 进程 / 凭据 / IPC 边界保持可移植）
+## 当前状态
 
-## 架构总览
+- **当前可运行基线：** `app/` 与 `sidecar/` 仍可用于旧六票的自动化复验，但不是最终产品入口。
+- **唯一目标产品：** 受跟踪的 `product/` 产品树、Tauri 桌面入口和 BitFun Runtime 内的 Halo Workbench Runtime Module。
+- **发布状态：** BitFun/Tauri 迁移尚未完成，真实 OpenCode 原生 UI 验收尚未执行，P0 未放行。
+- **外部上游参考：** `D:\BitFun-main` 只用于获取和检查 BitFun 上游，不是构建依赖或 Halo 提交位置。
 
-```
-┌────────────────────────────┐   stdio JSONL (版本化契约 v1)   ┌─────────────────────────────┐
-│  app/  PySide6 + QML 原生UI │ ◄────────────────────────────► │  sidecar/  Rust Runtime      │
-│  - ipc/        Sidecar客户端│                                │  - halo-protocol  消息契约   │
-│  - viewmodels/ 视图模型     │                                │  - halo-core      领域状态机 │
-│  - qml/        原生界面     │                                │  - halo-config    启动配置/凭据│
-└────────────────────────────┘                                │  - halo-store     SQLite持久化│
-                                                              │  - halo-runtime   Pi/OC 运行时│
-        UI 永不接触凭据明文、                                   │  - halo-sidecar   stdio 入口 │
-        不直接触碰工作区 Git                                    │  - halo-testkit   受控假进程 │
-                                                              └──────────┬──────────────────┘
-                                                                         │ 原生协议受管启动/停止
-                                                              ┌──────────▼──────────────────┐
-                                                              │  Pi (RPC/stdio)  OpenCode(回环)│
-                                                              │  按各自原生权限模型写工作区    │
-                                                              └─────────────────────────────┘
-```
+## 文档入口
 
-详见 [docs/architecture.md](docs/architecture.md)。
+- [文档地图](docs/README.md)
+- [领域词汇](CONTEXT.md)
+- [目标产品架构](docs/architecture/target-product.md)
+- [BitFun/Tauri 迁移规格与工单](docs/requirements/bitfun-tauri-product-migration/README.md)
+- [可迁移能力基线](docs/verification/migratable-capability-baseline/README.md)
+- [历史 PySide/Sidecar 基线](docs/archive/legacy-pyside-sidecar-baseline/README.md)
 
-## 目录结构
+## 基线复验
 
-| 路径 | 说明 |
-| --- | --- |
-| `requirements-alignment/` | 已确认的需求对齐记录（只读，不修改） |
-| `docs/` | 架构、IPC 契约、模块契约、需求追踪 |
-| `protocol/v1/` | JSONL 契约的 JSON Schema（UI 与 Sidecar 共同依据） |
-| `sidecar/` | Rust cargo workspace（全部后台与安全敏感能力） |
-| `app/` | PySide6/QML 原生应用 |
-| `scripts/` | 构建、测试、Windows 烟测脚本 |
-
-## 构建与测试
-
-前置：Rust（MSVC 工具链）、Python 3.13、Git。Python 依赖安装在 `.venv`。
+以下命令只验证迁移输入，不代表目标 Tauri 产品通过验收。Rust 命令必须在 Visual Studio Build Tools 开发环境中运行。
 
 ```powershell
-# Rust：构建 + 全部单元/契约/集成测试
-cd sidecar; cargo build --workspace; cargo test --workspace
+cd sidecar
+cargo check --workspace
+cargo test --workspace
 
-# Python：应用测试（使用符合契约的测试 Sidecar）
+cd ..
 .\.venv\Scripts\python.exe -m pytest app/tests
-
-# 启动应用（先构建 sidecar）
-.\scripts\dev.ps1
-
-# Windows 烟测（验证无 Electron/浏览器依赖、Sidecar 状态可见）
 .\scripts\smoke-windows.ps1
 ```
 
-## 迁移说明
-
-合并历史中可能保留 `apps/`、`packages/` 和旧 Node/Electron 辅助文件，作为只读历史参考。它们不构成当前产品的开发、构建、测试或发布入口；当前可执行入口仅以本仓库的 Rust、Python 与 PowerShell 脚本为准。
-
-## 安全与边界（不可回退项）
-
-- 凭据明文只在 Sidecar 启动受管应用时短暂读取；不进入 UI、IPC、日志、Diff、备份或 SQLite。凭据录入走 `halo-sidecar cred set <ref>`（stdin），UI 只处理凭据引用。
-- 生产路径无 Mock Agent、无模拟在线状态、无 Electron/WebView 入口；测试替身只存在于 `halo-testkit` 与 `app/tests/`。
-- 接受/拒绝交付只记录结论：不提交、不推送、不建分支、不回滚、不删除文件。
-- Halo Studio 不自行执行任意验证命令；验证结果只来自受管应用原生运行时或用户显式标记“未执行”。
+目标产品的构建和启动命令将在迁移工单建立正式 Tauri 入口后加入。不得把旧 `scripts/dev.ps1` 启动结果作为目标 UI 验收。

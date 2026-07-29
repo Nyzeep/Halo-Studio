@@ -1,6 +1,7 @@
 //! 方法路由：hello 门禁、typed params 解析、统一错误映射（契约错误码 + 中文文案）。
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crossbeam_channel::unbounded;
@@ -8,25 +9,24 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use halo_config::{AgentKind, CredentialStore};
+use halo_config::{credential_env_var_for, AgentKind, CredentialStore};
+use halo_core::{manual_edit_note, Attribution, ManualEditOp};
 use halo_protocol::methods::{self, AgentKind as AgentKindDto};
 use halo_protocol::{ErrorBody, ErrorCode, RequestEnvelope, Response, PROTOCOL_VERSION};
-use halo_runtime::{OpenCodeRuntime, PiRuntime, RuntimeState, Timeouts, OPENCODE_LOCKED_VERSION};
+use halo_runtime::{OpenCodeRuntime, PiRuntime, RuntimeEvent, RuntimeState, Timeouts};
 use halo_store::Store;
 
 use crate::git::{GitClient, GitError};
+use crate::fs::{self, FsError};
 use crate::mapping::{self, now_ts};
 use crate::server::{EventBus, EventGapError};
 use crate::state::{lock, ActiveWorkspace, AgentHandle, AppState};
 use crate::task_flow::{self, FlowCtx};
 
-/// 凭据注入的固定环境变量名：受管应用从该变量读取 Provider 密钥；
-/// 值只在启动瞬间存在于子进程环境，绝不落日志或 IPC。
-pub const CREDENTIAL_ENV_VAR: &str = "HALO_PROVIDER_API_KEY";
-
 const CAPABILITIES: &[&str] = &[
-    "workspace", "config", "pi", "opencode", "task", "review", "handoff", "history",
+    "workspace", "config", "pi", "opencode", "task", "review", "handoff", "history", "fs",
 ];
+const MANUAL_EDIT_OVERFLOW_NOTE: &str = "此后仍有更多文件发生人工编辑（逐条记录已省略）";
 
 /// 统一错误载体：code 为契约错误码，message 为中文用户可读文案。
 #[derive(Debug)]
@@ -78,6 +78,53 @@ impl From<GitError> for SidecarError {
     }
 }
 
+impl From<FsError> for SidecarError {
+    fn from(error: FsError) -> Self {
+        match error {
+            FsError::OutsideWorkspace(path) => SidecarError::with_details(
+                ErrorCode::FsPathOutsideWorkspace,
+                format!("路径超出工作区范围：{path}"),
+                json!({"path": path}),
+            ),
+            FsError::NotFound(path) => SidecarError::with_details(
+                ErrorCode::FsNotFound,
+                format!("路径不存在：{path}"),
+                json!({"path": path}),
+            ),
+            FsError::AlreadyExists(path) => SidecarError::with_details(
+                ErrorCode::FsAlreadyExists,
+                format!("目标已存在：{path}"),
+                json!({"path": path}),
+            ),
+            FsError::TooLarge { size } => SidecarError::with_details(
+                ErrorCode::FsTooLarge,
+                "文件内容超过 8 MiB 上限",
+                json!({"size": size, "max": fs::limits::FS_READ_MAX_BYTES}),
+            ),
+            FsError::Binary { size } => SidecarError::with_details(
+                ErrorCode::FsBinary,
+                "二进制文件不支持在编辑器中打开",
+                json!({"size": size}),
+            ),
+            FsError::Conflict {
+                current_hash,
+                mtime,
+            } => SidecarError::with_details(
+                ErrorCode::FsConflict,
+                "文件内容已被外部修改，请重新加载后再保存",
+                json!({"current_hash": current_hash, "mtime": mtime}),
+            ),
+            FsError::GitProtected(path) => SidecarError::with_details(
+                ErrorCode::FsGitProtected,
+                format!(".git 目录受只读保护：{path}"),
+                json!({"path": path}),
+            ),
+            FsError::InvalidName(message) => SidecarError::new(ErrorCode::InvalidParams, message),
+            FsError::Io(message) => SidecarError::internal(message),
+        }
+    }
+}
+
 impl From<halo_store::StoreError> for SidecarError {
     fn from(e: halo_store::StoreError) -> Self {
         SidecarError::internal(format!("本地存储操作失败：{e}"))
@@ -100,13 +147,7 @@ impl From<halo_config::CredentialError> for SidecarError {
 
 impl From<halo_config::ConfigError> for SidecarError {
     fn from(e: halo_config::ConfigError) -> Self {
-        use halo_config::ConfigError as CE;
-        match &e {
-            CE::EnvNotWhitelisted { .. } => {
-                SidecarError::new(ErrorCode::EnvNotWhitelisted, e.to_string())
-            }
-            CE::InvalidField { .. } => SidecarError::new(ErrorCode::InvalidParams, e.to_string()),
-        }
+        SidecarError::new(ErrorCode::InvalidParams, e.to_string())
     }
 }
 
@@ -117,6 +158,11 @@ impl From<halo_runtime::RuntimeError> for SidecarError {
             RE::Spawn(_) | RE::Probe(_) => ErrorCode::RuntimeProbeFailed,
             RE::NotReady(_) | RE::InvalidState | RE::Unauthorized => ErrorCode::RuntimeNotReady,
             RE::VersionMismatch(_) => ErrorCode::RuntimeVersionMismatch,
+            RE::CapabilityUnavailable(_) => ErrorCode::RuntimeCapabilityUnavailable,
+            RE::ActionRequestNotFound => ErrorCode::ActionRequestNotFound,
+            RE::ActionRequestAlreadyResolved => ErrorCode::ActionRequestAlreadyResolved,
+            RE::ActionRequestDeliveryUncertain => ErrorCode::ActionRequestNotPending,
+            RE::SessionNotWaiting => ErrorCode::TaskStillRunning,
             RE::Io(_) => ErrorCode::Internal,
         };
         SidecarError::new(code, e.to_string())
@@ -201,7 +247,10 @@ impl Dispatcher {
             "runtime.stop" => self.runtime_stop(params),
             "runtime.status" => self.runtime_status(params),
             "task.create" => self.task_create(params),
+            "task.send_message" => self.task_send_message(params),
+            "task.finish" => self.task_finish(params),
             "task.cancel" => self.task_cancel(params),
+            "task.resolve_action" => self.task_resolve_action(params),
             "task.mark_manual_edit" => self.task_mark_manual_edit(params),
             "task.mark_verification" => self.task_mark_verification(params),
             "task.status" => self.task_status(params),
@@ -213,6 +262,14 @@ impl Dispatcher {
             "handoff.create" => self.handoff_create(params),
             "history.list" => self.history_list(params),
             "history.evidence" => self.history_evidence(params),
+            "fs.list" => self.fs_list(params),
+            "fs.read" => self.fs_read(params),
+            "fs.write" => self.fs_write(params),
+            "fs.create_file" => self.fs_create_file(params),
+            "fs.create_dir" => self.fs_create_dir(params),
+            "fs.rename" => self.fs_rename(params),
+            "fs.stat" => self.fs_stat(params),
+            "fs.search" => self.fs_search(params),
             other => Err(SidecarError::new(
                 ErrorCode::MethodNotFound,
                 format!("未知方法：{other}"),
@@ -381,6 +438,185 @@ impl Dispatcher {
         }
     }
 
+    // ---------- fs.* ----------
+
+    fn trusted_workspace_root(&self) -> Result<String, SidecarError> {
+        let app = lock(&self.ctx.app);
+        let workspace = app.workspace.as_ref().ok_or_else(|| {
+            SidecarError::new(ErrorCode::WorkspaceNotActive, "当前没有活动工作区")
+        })?;
+        if !workspace.is_trusted() {
+            return Err(SidecarError::new(
+                ErrorCode::WorkspaceNotTrusted,
+                "工作区未确认信任，无法访问工作区文件",
+            ));
+        }
+        Ok(workspace.real_path.clone())
+    }
+
+    fn fs_list(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsListParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        ok(&fs::ops::list(Path::new(&root), &p.path, p.depth)?)
+    }
+
+    fn fs_read(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsReadParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        ok(&fs::ops::read(Path::new(&root), &p.path)?)
+    }
+
+    fn fs_write(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsWriteParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        let result = fs::ops::write(
+            Path::new(&root),
+            &p.path,
+            &p.content,
+            &p.expected_hash,
+            p.encoding,
+        )?;
+        self.record_fs_manual_edit(ManualEditOp::Write, &result.path, None);
+        ok(&result)
+    }
+
+    fn fs_create_file(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsCreateFileParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        let entry = fs::ops::create_file(Path::new(&root), &p.path, &p.content)?;
+        self.record_fs_manual_edit(ManualEditOp::CreateFile, &entry.path, None);
+        ok(&methods::fs::FsEntryResult { entry })
+    }
+
+    fn fs_create_dir(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsCreateDirParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        let entry = fs::ops::create_dir(Path::new(&root), &p.path)?;
+        self.record_fs_manual_edit(ManualEditOp::CreateDir, &entry.path, None);
+        ok(&methods::fs::FsEntryResult { entry })
+    }
+
+    fn fs_rename(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsRenameParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        let entry = fs::ops::rename(Path::new(&root), &p.from, &p.to)?;
+        self.record_fs_manual_edit(ManualEditOp::Rename, &p.from, Some(&entry.path));
+        ok(&methods::fs::FsEntryResult { entry })
+    }
+
+    fn fs_stat(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsStatParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        let entry = fs::ops::stat(Path::new(&root), &p.path)?;
+        ok(&methods::fs::FsEntryResult { entry })
+    }
+
+    fn fs_search(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::fs::FsSearchParams = parse(params)?;
+        let root = self.trusted_workspace_root()?;
+        let git = GitClient::new(&root);
+        ok(&fs::search::search(Path::new(&root), &git, &p)?)
+    }
+
+    /// 保存成功后才尝试记录人工介入；证据存储失败不得反向让文件保存失败。
+    /// 同一路径只进入归因事实一次，但每次成功写入都会推送过程事件。
+    fn record_fs_manual_edit(&self, operation: ManualEditOp, path: &str, to_path: Option<&str>) {
+        let note = manual_edit_note(operation, path, to_path, &local_hhmm());
+        if self
+            .mark_manual_edit_internal(
+                None,
+                note.clone(),
+                note,
+                "fs_write",
+                to_path.or(Some(path)),
+                true,
+            )
+            .is_err()
+        {
+            eprintln!("[halo-sidecar] 人工介入归因未能写入本地历史");
+        }
+    }
+
+    /// 在内存、持久化记录和过程事件之间原子地推进一条人工介入事实。
+    /// `require_active_state` 用于 fs 写入：审查就绪后的保存不再改变已定稿证据。
+    fn mark_manual_edit_internal(
+        &self,
+        expected_task_id: Option<&str>,
+        attribution_note: String,
+        event_note: String,
+        source: &'static str,
+        path: Option<&str>,
+        require_active_state: bool,
+    ) -> Result<bool, SidecarError> {
+        let event = {
+            let mut app = lock(&self.ctx.app);
+            let Some(task) = app.task.as_mut().filter(|task| {
+                expected_task_id.is_none_or(|task_id| task.task_id == task_id)
+            }) else {
+                return match expected_task_id {
+                    Some(_) => Err(SidecarError::new(
+                        ErrorCode::TaskNotFound,
+                        "任务不存在或已结束，无法标记人工介入",
+                    )),
+                    None => Ok(false),
+                };
+            };
+            let state_allowed = if require_active_state {
+                matches!(
+                    task.state,
+                    halo_core::TaskState::Created
+                        | halo_core::TaskState::Running
+                        | halo_core::TaskState::WaitingDeveloper
+                        | halo_core::TaskState::AwaitingAction
+                        | halo_core::TaskState::Finishing
+                )
+            } else {
+                !task.state.is_terminal()
+            };
+            if !state_allowed {
+                return match expected_task_id {
+                    Some(_) => Err(SidecarError::new(
+                        ErrorCode::TaskNotFound,
+                        "任务不存在或已结束，无法标记人工介入",
+                    )),
+                    None => Ok(false),
+                };
+            }
+
+            let event_path = path.map(str::to_owned);
+            let previous_attribution = task.attribution.clone();
+            let previous_paths = task.manual_edit_paths.clone();
+            let is_new_path = event_path
+                .as_ref()
+                .map(|path| task.manual_edit_paths.insert(path.clone()))
+                .unwrap_or(true);
+            task.attribution = if event_path.is_some() {
+                attribution_after_manual_edit(&task.attribution, is_new_path, &attribution_note)
+            } else {
+                task
+                    .attribution
+                    .clone()
+                    .with_manual_edit(attribution_note.clone())
+            };
+            if event_path.is_none() || is_new_path {
+                let record = task.to_record();
+                if let Err(error) = self.ctx.store.put_task(&record) {
+                    task.attribution = previous_attribution;
+                    task.manual_edit_paths = previous_paths;
+                    return Err(error.into());
+                }
+            }
+            (task.task_id.clone(), event_path)
+        };
+        let (task_id, event_path) = event;
+        self.ctx.bus.emit(
+            Some(&task_id),
+            "task.manual_edit",
+            json!({"note": event_note, "source": source, "path": event_path}),
+        );
+        Ok(true)
+    }
+
     // ---------- config.* ----------
 
     fn config_list(&mut self, params: Value) -> Result<Value, SidecarError> {
@@ -414,12 +650,6 @@ impl Dispatcher {
                 methods::config::ThinkingLevel::High => halo_config::ThinkingLevel::High,
             },
             credential_ref: input.credential_ref.clone(),
-            extra_args: input.extra_args.clone(),
-            env_overrides: input
-                .env_overrides
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
             created_at: now.clone(),
             updated_at: now.clone(),
         };
@@ -441,8 +671,6 @@ impl Dispatcher {
             model: input.model,
             thinking_level: mapping::thinking_dto_to_str(input.thinking_level).to_string(),
             credential_ref: input.credential_ref,
-            extra_args: input.extra_args,
-            env_overrides: input.env_overrides,
             created_at: now.clone(),
             updated_at: now,
         };
@@ -491,6 +719,31 @@ impl Dispatcher {
             })
     }
 
+    fn record_runtime_failure(
+        &self,
+        agent: AgentKind,
+        version: Option<String>,
+        reason: impl Into<String>,
+        recovery_hint: impl Into<String>,
+    ) {
+        let state = RuntimeState::Failed {
+            reason: reason.into(),
+            recovery_hint: recovery_hint.into(),
+        };
+        let (payload, changed) = {
+            let mut app = lock(&self.ctx.app);
+            let slot = app.slot_mut(agent);
+            slot.version = version;
+            let changed = slot.last_state != state;
+            slot.last_state = state.clone();
+            let payload = mapping::runtime_state_payload(agent, &state, slot.version.clone());
+            (payload, changed)
+        };
+        if changed {
+            self.ctx.bus.emit(None, "runtime.state", payload);
+        }
+    }
+
     // ---------- runtime.* ----------
 
     fn runtime_probe(&mut self, params: Value) -> Result<Value, SidecarError> {
@@ -510,7 +763,7 @@ impl Dispatcher {
         .map_err(|e| SidecarError::new(ErrorCode::RuntimeProbeFailed, e.to_string()))?;
         let supported = match agent {
             AgentKind::Pi => true,
-            AgentKind::OpenCode => version == OPENCODE_LOCKED_VERSION,
+            AgentKind::OpenCode => OpenCodeRuntime::is_compatible_version(&version),
         };
         lock(&self.ctx.app).slot_mut(agent).version = Some(version.clone());
         ok(&methods::runtime::RuntimeProbeResult {
@@ -531,18 +784,21 @@ impl Dispatcher {
             ));
         }
 
-        let cwd = {
-            let app = lock(&self.ctx.app);
-            let ws = app.workspace.as_ref().ok_or_else(|| {
-                SidecarError::new(ErrorCode::WorkspaceNotActive, "没有活动工作区，无法启动运行时")
-            })?;
-            if !ws.is_trusted() {
-                return Err(SidecarError::new(
-                    ErrorCode::WorkspaceNotTrusted,
-                    "工作区未确认信任，无法启动受管运行时",
-                ));
-            }
-            let slot = app.slot(agent);
+        let (cwd, previous_handle, runtime_generation) = {
+            let mut app = lock(&self.ctx.app);
+            let cwd = {
+                let ws = app.workspace.as_ref().ok_or_else(|| {
+                    SidecarError::new(ErrorCode::WorkspaceNotActive, "没有活动工作区，无法启动运行时")
+                })?;
+                if !ws.is_trusted() {
+                    return Err(SidecarError::new(
+                        ErrorCode::WorkspaceNotTrusted,
+                        "工作区未确认信任，无法启动受管运行时",
+                    ));
+                }
+                ws.real_path.clone()
+            };
+            let slot = app.slot_mut(agent);
             if matches!(
                 slot.effective_state(),
                 RuntimeState::Starting | RuntimeState::Ready
@@ -552,58 +808,130 @@ impl Dispatcher {
                     "该受管应用已在运行",
                 ));
             }
-            ws.real_path.clone()
+            // 失败的运行时可以重试。先脱离其终态句柄，避免第二次失败后 runtime.status 仍报告旧原因。
+            let runtime_generation = slot.advance_generation();
+            (cwd, slot.handle.take(), runtime_generation)
         };
+        drop(previous_handle);
 
-        // 真实探测：版本必须可读；OpenCode 额外要求与锁定版本完全相等
-        let version = match agent {
-            AgentKind::Pi => PiRuntime::probe(&config.executable_path),
-            AgentKind::OpenCode => OpenCodeRuntime::probe(&config.executable_path),
-        }
-        .map_err(|e| SidecarError::new(ErrorCode::RuntimeProbeFailed, e.to_string()))?;
-        if agent == AgentKind::OpenCode && version != OPENCODE_LOCKED_VERSION {
+        if agent == AgentKind::OpenCode && config.credential_ref.is_none() {
+            self.record_runtime_failure(
+                agent,
+                None,
+                "OpenCode 启动配置缺少凭据引用，已失败关闭",
+                "请先在系统凭据存储中录入密钥，并为 OpenCode 配置选择对应的凭据引用后重试",
+            );
             return Err(SidecarError::new(
-                ErrorCode::RuntimeVersionMismatch,
-                format!("OpenCode 版本不匹配：检测到 {version}，要求 {OPENCODE_LOCKED_VERSION}"),
+                ErrorCode::CredentialNotFound,
+                "OpenCode 启动配置缺少凭据引用，无法启动受管运行时",
             ));
         }
 
-        // 子进程环境 = 白名单 + 配置 overrides + 启动瞬间注入的凭据
+        let credential_env_var = match credential_env_var_for(agent, &config.model) {
+            Ok(env_var) => env_var,
+            Err(_) => {
+                if agent == AgentKind::OpenCode {
+                    self.record_runtime_failure(
+                        agent,
+                        None,
+                        "OpenCode 模型的 Provider 凭据映射不受支持，启动已失败关闭",
+                        "请将模型填写为受支持的 provider/model 形式，例如 openai/gpt-5，然后重新启动",
+                    );
+                }
+                return Err(SidecarError::new(
+                    ErrorCode::InvalidParams,
+                    "OpenCode 模型必须使用受支持的 provider/model 形式，无法安全选择凭据环境变量",
+                ));
+            }
+        };
+
+        // 先解析凭据引用，避免在凭据不可用时执行任意配置路径；没有明文回退。
         let host: HashMap<String, String> = std::env::vars().collect();
-        let overrides: HashMap<String, String> = config
-            .env_overrides
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
         let mut injected: Vec<(String, halo_config::Secret)> = Vec::new();
         if let Some(ref_name) = &config.credential_ref {
             if !self.ctx.cred.available() {
+                if agent == AgentKind::OpenCode {
+                    self.record_runtime_failure(
+                        agent,
+                        None,
+                        "操作系统凭据存储不可用，OpenCode 启动已失败关闭",
+                        "请恢复系统凭据存储后重新启动；不会回退到明文凭据",
+                    );
+                }
                 return Err(SidecarError::new(
                     ErrorCode::CredentialStoreUnavailable,
                     "操作系统凭据存储不可用，启动已失败关闭",
                 ));
             }
-            let secret = self.ctx.cred.get(ref_name)?;
-            injected.push((CREDENTIAL_ENV_VAR.to_string(), secret));
+            let secret = match self.ctx.cred.get(ref_name) {
+                Ok(secret) => secret,
+                Err(error) => {
+                    if agent == AgentKind::OpenCode {
+                        self.record_runtime_failure(
+                            agent,
+                            None,
+                            "OpenCode 所需的凭据引用不可用",
+                            "请检查凭据引用是否存在于操作系统凭据存储后重新启动",
+                        );
+                    }
+                    return Err(error.into());
+                }
+            };
+            injected.push((credential_env_var.to_string(), secret));
         }
-        let env = halo_config::build_child_env(&host, &overrides, injected)?;
+
+        // 真实探测：版本必须可读；OpenCode 只允许已知稳定 1.x 兼容性档案。
+        let version = match agent {
+            AgentKind::Pi => PiRuntime::probe(&config.executable_path),
+            AgentKind::OpenCode => OpenCodeRuntime::probe(&config.executable_path),
+        };
+        let version = match version {
+            Ok(version) => version,
+            Err(error) => {
+                if agent == AgentKind::OpenCode {
+                    self.record_runtime_failure(
+                        agent,
+                        None,
+                        "无法探测 OpenCode 版本",
+                        "请确认 OpenCode 可执行文件有效后重新探测或启动",
+                    );
+                }
+                return Err(SidecarError::new(ErrorCode::RuntimeProbeFailed, error.to_string()));
+            }
+        };
+        if agent == AgentKind::OpenCode && !OpenCodeRuntime::is_compatible_version(&version) {
+            self.record_runtime_failure(
+                agent,
+                Some(version),
+                "OpenCode 版本不受兼容性档案支持（RUNTIME_VERSION_MISMATCH）：需要稳定版 1.18.5 或更高的 1.x",
+                "请安装稳定版 OpenCode 1.18.5 或更高的 1.x 版本后重新启动",
+            );
+            return Err(SidecarError::new(
+                ErrorCode::RuntimeVersionMismatch,
+                "OpenCode 版本不受兼容性档案支持：需要稳定版 1.18.5 或更高的 1.x",
+            ));
+        }
+
+        {
+            let mut app = lock(&self.ctx.app);
+            app.slot_mut(agent).version = Some(version.clone());
+        }
+
+        // 子进程环境 = 固定白名单 + 启动瞬间注入的凭据；没有配置层环境覆盖。
+        let env = halo_config::build_child_env(&host, injected);
 
         let cmd = halo_runtime::LaunchCmd {
             exe: config.executable_path.clone(),
-            args: config.extra_args.clone(),
             env,
             cwd,
         };
 
         let (tx, rx) = unbounded();
-        {
-            let mut app = lock(&self.ctx.app);
-            app.slot_mut(agent).version = Some(version.clone());
-        }
         crate::state::spawn_runtime_forwarder(
             Arc::clone(&self.ctx.app),
             Arc::clone(&self.ctx.bus),
             agent,
+            runtime_generation,
             rx,
         );
 
@@ -623,13 +951,13 @@ impl Dispatcher {
             let mut app = lock(&self.ctx.app);
             let slot = app.slot_mut(agent);
             slot.task_tx = None;
+            slot.advance_generation();
             slot.handle.take()
         };
         let state = match handle {
             Some(h) => {
                 h.stop(self.ctx.timeouts.shutdown_grace);
-                let mut app = lock(&self.ctx.app);
-                app.slot_mut(agent).last_state = RuntimeState::Stopped;
+                crate::state::mark_slot_stopped(&self.ctx.app, &self.ctx.bus, agent);
                 RuntimeState::Stopped
             }
             None => lock(&self.ctx.app).slot(agent).effective_state(),
@@ -753,50 +1081,167 @@ impl Dispatcher {
 
     fn task_cancel(&mut self, params: Value) -> Result<Value, SidecarError> {
         let p: methods::task::CancelTaskParams = parse(params)?;
-        let app = lock(&self.ctx.app);
-        let task = app
-            .task
-            .as_ref()
-            .filter(|t| t.task_id == p.task_id)
-            .ok_or_else(|| {
-                SidecarError::new(ErrorCode::TaskNotFound, format!("任务不存在：{}", p.task_id))
-            })?;
-        if task.state.is_terminal() {
-            return ok(&methods::task::CancelTaskResult { accepted: false });
+        let (handle, cancel_tx) = {
+            let mut app = lock(&self.ctx.app);
+            let task = app
+                .task
+                .as_mut()
+                .filter(|t| t.task_id == p.task_id)
+                .ok_or_else(|| {
+                    SidecarError::new(
+                        ErrorCode::TaskNotFound,
+                        format!("任务不存在：{}", p.task_id),
+                    )
+                })?;
+            if task.state.is_terminal() || task.cancellation_requested || task.finish_requested {
+                return ok(&methods::task::CancelTaskResult { accepted: false });
+            }
+            // 先建立取消屏障再取得运行时闸门；在此之后不能再有本次决议离开进程。
+            task.cancellation_requested = true;
+            task.action_requests.clear();
+            let agent = task.agent;
+            let cancel_tx = task.cancel_tx.clone();
+            let handle = app.slot(agent).handle.clone();
+            (handle, cancel_tx)
+        };
+        if let Some(handle) = handle {
+            handle.begin_cancel();
         }
-        let accepted = task
-            .cancel_tx
+        let accepted = cancel_tx
             .as_ref()
             .map(task_flow::request_cancel)
             .unwrap_or(false);
         ok(&methods::task::CancelTaskResult { accepted })
     }
 
-    fn task_mark_manual_edit(&mut self, params: Value) -> Result<Value, SidecarError> {
-        let p: methods::task::MarkManualEditParams = parse(params)?;
-        let note = halo_core::sanitize(&p.note);
-        let record = {
+    fn task_send_message(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::task::SendTaskMessageParams = parse(params)?;
+        let message = p.message.trim();
+        if message.is_empty() {
+            return Err(SidecarError::new(
+                ErrorCode::InvalidParams,
+                "后续消息不能为空",
+            ));
+        }
+        let (handle, task_tx) = {
+            let app = lock(&self.ctx.app);
+            let task = app
+                .task
+                .as_ref()
+                .filter(|task| task.task_id == p.task_id)
+                .ok_or_else(|| {
+                    SidecarError::new(ErrorCode::TaskNotFound, "当前任务不存在")
+                })?;
+            if task.state != halo_core::TaskState::WaitingDeveloper
+                || task.cancellation_requested
+                || task.finish_requested
+            {
+                return Err(SidecarError::new(
+                    ErrorCode::TaskStillRunning,
+                    "只有等待开发者的活动任务可以发送后续消息",
+                ));
+            }
+            let handle = app.slot(task.agent).handle.clone().ok_or_else(|| {
+                SidecarError::new(ErrorCode::RuntimeNotReady, "受管应用尚未就绪")
+            })?;
+            (handle, app.slot(task.agent).task_tx.clone())
+        };
+
+        task_flow::apply_event(&self.flow_ctx(), &p.task_id, &halo_core::TaskEvent::FollowUpSent);
+        crate::state::append_active_session_message(
+            &self.ctx.app,
+            &self.ctx.bus,
+            &p.task_id,
+            methods::task::TaskSessionMessageRole::User,
+            message,
+        );
+        if let Err(error) = handle.send_message(message) {
+            if let Some(task_tx) = task_tx {
+                let _ = task_tx.send(RuntimeEvent::State(RuntimeState::Failed {
+                    reason: "后续消息未能安全提交给受管运行时".to_string(),
+                    recovery_hint: "请重新启动运行时并创建新任务".to_string(),
+                }));
+            }
+            return Err(SidecarError::from(error));
+        }
+        ok(&methods::task::SendTaskMessageResult { accepted: true })
+    }
+
+    fn task_finish(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::task::FinishTaskParams = parse(params)?;
+        let finish_tx = {
             let mut app = lock(&self.ctx.app);
             let task = app
                 .task
                 .as_mut()
-                .filter(|t| t.task_id == p.task_id && !t.state.is_terminal())
+                .filter(|task| task.task_id == p.task_id)
+                .ok_or_else(|| SidecarError::new(ErrorCode::TaskNotFound, "当前任务不存在"))?;
+            if task.state != halo_core::TaskState::WaitingDeveloper
+                || task.cancellation_requested
+                || task.finish_requested
+            {
+                return Err(SidecarError::new(
+                    ErrorCode::TaskStillRunning,
+                    "只有等待开发者的活动任务可以显式结束会话",
+                ));
+            }
+            let finish_tx = task.finish_tx.clone().ok_or_else(|| {
+                SidecarError::internal("任务缺少显式结束控制通道")
+            })?;
+            task.finish_requested = true;
+            finish_tx
+        };
+        let accepted = task_flow::request_finish(&finish_tx);
+        if !accepted {
+            let mut app = lock(&self.ctx.app);
+            if let Some(task) = app.task.as_mut().filter(|task| task.task_id == p.task_id) {
+                task.finish_requested = false;
+            }
+        }
+        ok(&methods::task::FinishTaskResult { accepted })
+    }
+
+    fn task_resolve_action(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::task::ResolveActionParams = parse(params)?;
+        let agent = {
+            let app = lock(&self.ctx.app);
+            app.task
+                .as_ref()
+                .filter(|task| task.task_id == p.task_id)
+                .map(|task| task.agent)
                 .ok_or_else(|| {
                     SidecarError::new(
-                        ErrorCode::TaskNotFound,
-                        "任务不存在或已结束，无法标记人工介入",
+                        ErrorCode::ActionRequestNotFound,
+                        "当前任务没有匹配的操作请求",
                     )
-                })?;
-            task.attribution = task
-                .attribution
-                .clone()
-                .with_manual_edit(format!("{}：{}", now_ts(), note));
-            task.to_record()
+                })?
         };
-        self.ctx.store.put_task(&record)?;
-        self.ctx
-            .bus
-            .emit(Some(&p.task_id), "task.manual_edit", json!({"note": note}));
+        let handle = {
+            let app = lock(&self.ctx.app);
+            app.slot(agent).handle.clone().ok_or_else(|| {
+                SidecarError::new(
+                    ErrorCode::RuntimeNotReady,
+                    "受管应用尚未就绪，无法提交操作决定",
+                )
+            })?
+        };
+
+        task_flow::resolve_action(&self.flow_ctx(), &p, handle)?;
+        ok(&methods::task::ResolveActionResult { accepted: true })
+    }
+
+    fn task_mark_manual_edit(&mut self, params: Value) -> Result<Value, SidecarError> {
+        let p: methods::task::MarkManualEditParams = parse(params)?;
+        let note = halo_core::sanitize(&p.note);
+        let persisted_note = format!("{}：{}", now_ts(), note);
+        self.mark_manual_edit_internal(
+            Some(&p.task_id),
+            persisted_note,
+            note,
+            "user_marked",
+            None,
+            false,
+        )?;
         ok(&methods::task::MarkManualEditResult {
             attribution: methods::Attribution::Mixed,
         })
@@ -866,15 +1311,50 @@ impl Dispatcher {
 
     fn task_snapshot(&mut self, params: Value) -> Result<Value, SidecarError> {
         let p: methods::task::TaskSnapshotParams = parse(params)?;
-        let (last_seq, events) = self.ctx.bus.events_after(p.after_seq)?;
-        let task = {
+        let (last_seq, mut events) = self.ctx.bus.events_after(p.after_seq)?;
+        let (task, session_messages, action_requests, session_is_active) = {
             let app = lock(&self.ctx.app);
-            app.task.as_ref().map(|t| t.to_status())
+            match app.task.as_ref() {
+                Some(task) => {
+                    let session_is_active = matches!(
+                        task.state,
+                        halo_core::TaskState::Created
+                            | halo_core::TaskState::Running
+                            | halo_core::TaskState::WaitingDeveloper
+                            | halo_core::TaskState::AwaitingAction
+                    );
+                    (
+                        Some(task.to_status()),
+                        if session_is_active {
+                            task.session_messages.clone()
+                        } else {
+                            vec![]
+                        },
+                        if session_is_active {
+                            task.action_requests.values().cloned().collect()
+                        } else {
+                            vec![]
+                        },
+                        session_is_active,
+                    )
+                }
+                None => (None, vec![], vec![], false),
+            }
         };
+        if !session_is_active {
+            events.retain(|event| {
+                !matches!(
+                    event.event.as_str(),
+                    "task.session_message" | "task.action_request" | "task.action_resolved"
+                )
+            });
+        }
         ok(&methods::task::TaskSnapshotResult {
             task,
             last_seq,
             events,
+            session_messages,
+            action_requests,
         })
     }
 
@@ -907,6 +1387,7 @@ impl Dispatcher {
         })?;
         ok(&mapping::evidence_record_to_bundle(
             record,
+            &rec.manual_edit_paths,
             record.version == latest_version,
         ))
     }
@@ -1107,6 +1588,69 @@ impl Dispatcher {
     }
 }
 
+fn attribution_after_manual_edit(
+    current: &Attribution,
+    is_new_path: bool,
+    note: &str,
+) -> Attribution {
+    if !is_new_path {
+        return current.clone();
+    }
+    match current {
+        Attribution::AgentOnly => current.clone().with_manual_edit(note),
+        Attribution::Mixed { reasons } if reasons.len() < halo_core::limits::MANUAL_EDIT_REASONS_MAX => {
+            current.clone().with_manual_edit(note)
+        }
+        Attribution::Mixed { reasons } if reasons.len() == halo_core::limits::MANUAL_EDIT_REASONS_MAX => {
+            current.clone().with_manual_edit(MANUAL_EDIT_OVERFLOW_NOTE)
+        }
+        Attribution::Mixed { .. } => current.clone(),
+    }
+}
+
+fn local_hhmm() -> String {
+    local_hhmm_impl()
+}
+
+#[cfg(target_os = "windows")]
+fn local_hhmm_impl() -> String {
+    #[repr(C)]
+    struct SystemTime {
+        year: u16,
+        month: u16,
+        day_of_week: u16,
+        day: u16,
+        hour: u16,
+        minute: u16,
+        second: u16,
+        milliseconds: u16,
+    }
+
+    unsafe extern "system" {
+        fn GetLocalTime(system_time: *mut SystemTime);
+    }
+
+    let mut local = SystemTime {
+        year: 0,
+        month: 0,
+        day_of_week: 0,
+        day: 0,
+        hour: 0,
+        minute: 0,
+        second: 0,
+        milliseconds: 0,
+    };
+    // GetLocalTime 只写入调用方提供的固定大小缓冲区，且没有可报告的失败路径。
+    unsafe { GetLocalTime(&mut local) };
+    format!("{:02}:{:02}", local.hour, local.minute)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn local_hhmm_impl() -> String {
+    let utc = time::OffsetDateTime::now_utc();
+    format!("{:02}:{:02} UTC", utc.hour(), utc.minute())
+}
+
 fn workspace_status_dto(ws: &ActiveWorkspace) -> methods::workspace::WorkspaceStatus {
     methods::workspace::WorkspaceStatus {
         active: true,
@@ -1153,6 +1697,7 @@ fn evidence_record_to_core(rec: &halo_store::EvidenceRecord) -> halo_core::Evide
                 },
                 diff: f.diff.clone(),
                 truncated: f.truncated,
+                end_hash: f.end_hash.clone(),
             })
             .collect(),
         verification: halo_core::Verification {
@@ -1213,6 +1758,7 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     // ---- 测试替身：内存凭据存储（仅 #[cfg(test)]）----
 
@@ -1260,6 +1806,116 @@ mod tests {
         }
         fn available(&self) -> bool {
             self.available
+        }
+    }
+
+    struct ReadyHandle;
+
+    impl AgentHandle for ReadyHandle {
+        fn run_task(
+            &self,
+            _spec: &halo_runtime::RunTaskSpec,
+        ) -> Result<(), halo_runtime::RuntimeError> {
+            Ok(())
+        }
+
+        fn cancel_native(&self) {}
+
+        fn stop(&self, _grace: std::time::Duration) -> halo_runtime::StopOutcome {
+            halo_runtime::StopOutcome::Graceful
+        }
+
+        fn state(&self) -> RuntimeState {
+            RuntimeState::Ready
+        }
+    }
+
+    struct ActionHandle {
+        decisions: Mutex<Vec<(String, halo_runtime::ActionDecision)>>,
+        cancel_begins: AtomicUsize,
+    }
+
+    struct SessionHandle {
+        messages: Mutex<Vec<String>>,
+    }
+
+    impl SessionHandle {
+        fn new() -> Self {
+            Self {
+                messages: Mutex::new(vec![]),
+            }
+        }
+    }
+
+    impl AgentHandle for SessionHandle {
+        fn run_task(
+            &self,
+            _spec: &halo_runtime::RunTaskSpec,
+        ) -> Result<(), halo_runtime::RuntimeError> {
+            Ok(())
+        }
+
+        fn send_message(&self, message: &str) -> Result<(), halo_runtime::RuntimeError> {
+            self.messages.lock().unwrap().push(message.to_string());
+            Ok(())
+        }
+
+        fn finish_session(&self) -> Result<(), halo_runtime::RuntimeError> {
+            Ok(())
+        }
+
+        fn cancel_native(&self) {}
+
+        fn stop(&self, _grace: std::time::Duration) -> halo_runtime::StopOutcome {
+            halo_runtime::StopOutcome::Graceful
+        }
+
+        fn state(&self) -> RuntimeState {
+            RuntimeState::Ready
+        }
+    }
+
+    impl ActionHandle {
+        fn new() -> Self {
+            Self {
+                decisions: Mutex::new(vec![]),
+                cancel_begins: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    impl AgentHandle for ActionHandle {
+        fn run_task(
+            &self,
+            _spec: &halo_runtime::RunTaskSpec,
+        ) -> Result<(), halo_runtime::RuntimeError> {
+            Ok(())
+        }
+
+        fn resolve_action(
+            &self,
+            request_id: &str,
+            decision: halo_runtime::ActionDecision,
+        ) -> Result<(), halo_runtime::RuntimeError> {
+            self.decisions
+                .lock()
+                .expect("测试决议记录锁不应中毒")
+                .push((request_id.to_string(), decision));
+            Ok(())
+        }
+
+        fn begin_cancel(&self) {
+            self.cancel_begins.fetch_add(1, Ordering::SeqCst);
+        }
+
+        fn cancel_native(&self) {}
+
+        fn stop(&self, _grace: std::time::Duration) -> halo_runtime::StopOutcome {
+            halo_runtime::StopOutcome::Graceful
+        }
+
+        fn state(&self) -> RuntimeState {
+            RuntimeState::Ready
         }
     }
 
@@ -1328,6 +1984,111 @@ mod tests {
         repo
     }
 
+    #[test]
+    fn fs_cage_allows_workspace_files_and_rejects_escapes() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("工作区");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/main.rs"), "fn main() {}\n").unwrap();
+        fs::create_dir_all(root.join(".git")).unwrap();
+
+        let resolved = crate::fs::cage::resolve_existing(&root, "src/main.rs").unwrap();
+        assert!(resolved.ends_with("src/main.rs"));
+        assert!(matches!(
+            crate::fs::cage::resolve_existing(&root, "../outside.txt"),
+            Err(crate::fs::FsError::OutsideWorkspace(_))
+        ));
+
+        let git_target = crate::fs::cage::resolve_target(&root, ".git/config").unwrap();
+        assert!(matches!(
+            crate::fs::cage::ensure_not_git_protected(&root, &git_target.abs),
+            Err(crate::fs::FsError::GitProtected(_))
+        ));
+    }
+
+    #[test]
+    fn fs_ops_read_write_and_list_preserve_the_contract_boundary() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("工作区");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join(".git")).unwrap();
+        fs::write(root.join("src/main.rs"), b"\xef\xbb\xbffn main() {}\r\n").unwrap();
+        fs::write(root.join("z.txt"), "z").unwrap();
+
+        let read = crate::fs::ops::read(&root, "src/main.rs").unwrap();
+        assert_eq!(read.encoding, methods::fs::FsEncoding::Utf8Bom);
+        assert_eq!(read.line_ending, methods::fs::FsLineEnding::Crlf);
+        assert_eq!(read.content, "fn main() {}\r\n");
+
+        let write = crate::fs::ops::write(
+            &root,
+            "src/main.rs",
+            "fn main() { println!(\"ok\"); }\n",
+            &read.hash,
+            methods::fs::FsWriteEncoding::Utf8Bom,
+        )
+        .unwrap();
+        assert!(write.hash.starts_with("sha256:"));
+        assert!(fs::read(root.join("src/main.rs")).unwrap().starts_with(b"\xef\xbb\xbf"));
+        assert!(matches!(
+            crate::fs::ops::write(
+                &root,
+                "src/main.rs",
+                "stale",
+                &read.hash,
+                methods::fs::FsWriteEncoding::Utf8,
+            ),
+            Err(crate::fs::FsError::Conflict { .. })
+        ));
+
+        let list = crate::fs::ops::list(&root, "", 1).unwrap();
+        let paths: Vec<_> = list.entries.iter().map(|entry| entry.path.as_str()).collect();
+        assert_eq!(paths, vec!["src", "z.txt"]);
+    }
+
+    #[test]
+    fn fs_search_uses_git_candidates_and_returns_text_locations() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = init_repo(dir.path());
+        fs::create_dir_all(repo.join("src")).unwrap();
+        fs::write(repo.join("src/main.rs"), "fn main() {\n    println!(\"ok\");\n}\n").unwrap();
+        fs::write(repo.join("ignored.txt"), "fn main() {}\n").unwrap();
+        fs::write(repo.join(".gitignore"), "ignored.txt\n").unwrap();
+        let git = GitClient::new(&repo);
+
+        let paths = crate::fs::search::search(
+            &repo,
+            &git,
+            &methods::fs::FsSearchParams {
+                glob: Some("**/*.rs".to_string()),
+                query: None,
+                case_sensitive: false,
+                max_results: 50,
+            },
+        )
+        .unwrap();
+        assert_eq!(paths.items.len(), 1);
+        assert_eq!(paths.items[0].path, "src/main.rs");
+        assert_eq!(paths.items[0].line, None);
+
+        let matches = crate::fs::search::search(
+            &repo,
+            &git,
+            &methods::fs::FsSearchParams {
+                glob: None,
+                query: Some("println".to_string()),
+                case_sensitive: true,
+                max_results: 50,
+            },
+        )
+        .unwrap();
+        assert_eq!(matches.items.len(), 1);
+        assert_eq!(matches.items[0].path, "src/main.rs");
+        assert_eq!(matches.items[0].line, Some(2));
+        assert_eq!(matches.items[0].column, Some(5));
+        assert_eq!(matches.items[0].preview.as_deref(), Some("    println!(\"ok\");"));
+    }
+
     // ---------- hello 门禁 ----------
 
     #[test]
@@ -1353,6 +2114,7 @@ mod tests {
         let caps = result["capabilities"].as_array().unwrap();
         assert!(caps.iter().any(|c| c == "workspace"));
         assert!(caps.iter().any(|c| c == "handoff"));
+        assert!(caps.iter().any(|c| c == "fs"));
         // 握手后方法放行
         let resp = f.d.dispatch(req("workspace.status", json!({})));
         assert!(resp.ok);
@@ -1445,7 +2207,7 @@ mod tests {
             "config.save",
             json!({
                 "name": "Pi", "agent": "pi", "executable_path": "C:\\pi.exe", "model": "m",
-                "thinking_level": "off", "credential_ref": null, "extra_args": [], "env_overrides": {}
+                "thinking_level": "off", "credential_ref": null
             }),
         ));
         assert!(resp.ok, "{resp:?}");
@@ -1481,6 +2243,55 @@ mod tests {
     }
 
     #[test]
+    fn fs_methods_require_trust_and_use_workspace_relative_paths() {
+        let mut f = fixture();
+        hello(&mut f);
+        let no_workspace = f.d.dispatch(req("fs.list", json!({"path": "", "depth": 1})));
+        assert_eq!(err_code(&no_workspace), ErrorCode::WorkspaceNotActive);
+
+        let dir = tempfile::tempdir().unwrap();
+        let repo = init_repo(dir.path());
+        let opened = f.d.dispatch(req(
+            "workspace.open",
+            json!({"path": repo.to_string_lossy()}),
+        ));
+        let workspace_id = opened.result.unwrap()["workspace_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let untrusted = f.d.dispatch(req("fs.read", json!({"path": "a.txt"})));
+        assert_eq!(err_code(&untrusted), ErrorCode::WorkspaceNotTrusted);
+
+        let trusted = f.d.dispatch(req(
+            "workspace.trust",
+            json!({"workspace_id": workspace_id, "decision": "trust"}),
+        ));
+        assert!(trusted.ok);
+        let listed = f.d.dispatch(req("fs.list", json!({"path": "", "depth": 1})));
+        assert!(listed.ok, "{listed:?}");
+        assert_eq!(listed.result.as_ref().unwrap()["entries"][0]["path"], "a.txt");
+
+        let read = f.d.dispatch(req("fs.read", json!({"path": "a.txt"})));
+        let read_result = read.result.unwrap();
+        let write = f.d.dispatch(req(
+            "fs.write",
+            json!({
+                "path": "a.txt", "content": "新内容\n", "expected_hash": read_result["hash"], "encoding": "utf-8"
+            }),
+        ));
+        assert!(write.ok, "{write:?}");
+        assert_eq!(fs::read_to_string(repo.join("a.txt")).unwrap(), "新内容\n");
+
+        let protected = f.d.dispatch(req(
+            "fs.write",
+            json!({"path": ".git/config", "content": "x", "expected_hash": "sha256:any"}),
+        ));
+        assert_eq!(err_code(&protected), ErrorCode::FsGitProtected);
+        let bad_depth = f.d.dispatch(req("fs.list", json!({"path": "", "depth": 9})));
+        assert_eq!(err_code(&bad_depth), ErrorCode::InvalidParams);
+    }
+
+    #[test]
     fn workspace_trust_with_wrong_id_is_rejected() {
         let mut f = fixture();
         hello(&mut f);
@@ -1509,21 +2320,147 @@ mod tests {
         assert_eq!(resp.result.unwrap()["trust"], "trusted");
     }
 
+    struct WorkspaceClosingHandle {
+        stopped: std::sync::atomic::AtomicBool,
+    }
+
+    impl AgentHandle for WorkspaceClosingHandle {
+        fn run_task(
+            &self,
+            _spec: &halo_runtime::RunTaskSpec,
+        ) -> Result<(), halo_runtime::RuntimeError> {
+            Ok(())
+        }
+
+        fn cancel_native(&self) {}
+
+        fn stop(&self, _grace: std::time::Duration) -> halo_runtime::StopOutcome {
+            self.stopped
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            halo_runtime::StopOutcome::Graceful
+        }
+
+        fn state(&self) -> RuntimeState {
+            RuntimeState::Ready
+        }
+    }
+
+    #[test]
+    fn workspace_close_publishes_stopped_before_workspace_changed() {
+        let mut f = fixture();
+        hello(&mut f);
+        let dir = tempfile::tempdir().unwrap();
+        let repo = init_repo(dir.path());
+        let opened = f.d.dispatch(req(
+            "workspace.open",
+            json!({"path": repo.to_string_lossy()}),
+        ));
+        assert!(opened.ok, "{opened:?}");
+
+        // workspace.open 的通知不属于本次关闭的可观察行为。
+        let _: Vec<_> = f.events.try_iter().collect();
+        let handle = Arc::new(WorkspaceClosingHandle {
+            stopped: std::sync::atomic::AtomicBool::new(false),
+        });
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let slot = app.slot_mut(AgentKind::OpenCode);
+            slot.last_state = RuntimeState::Ready;
+            slot.version = Some("1.18.5".to_string());
+            slot.handle = Some(handle.clone());
+        }
+
+        let closed = f.d.dispatch(req("workspace.close", json!({})));
+        assert!(closed.ok, "{closed:?}");
+        assert!(handle.stopped.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(
+            lock(&f.d.ctx.app).slot(AgentKind::OpenCode).last_state,
+            RuntimeState::Stopped
+        );
+
+        let events: Vec<_> = f
+            .events
+            .try_iter()
+            .filter_map(|outbound| match outbound {
+                Outbound::Event(event) => Some(event),
+                Outbound::Response(_) => None,
+            })
+            .collect();
+        assert_eq!(events.len(), 2, "关闭只应广播运行时停止和工作区关闭事件");
+        assert_eq!(events[0].event, "runtime.state");
+        assert_eq!(events[0].payload["agent"], "opencode");
+        assert_eq!(events[0].payload["state"], "stopped");
+        assert_eq!(events[0].payload["version"], "1.18.5");
+        assert_eq!(events[1].event, "workspace.changed");
+        assert_eq!(events[1].payload["active"], false);
+        assert!(events[0].seq < events[1].seq);
+    }
+
+    #[test]
+    fn workspace_switch_publishes_stopped_before_new_workspace_changed() {
+        let mut f = fixture();
+        hello(&mut f);
+        let first_dir = tempfile::tempdir().unwrap();
+        let second_dir = tempfile::tempdir().unwrap();
+        let first_repo = init_repo(first_dir.path());
+        let second_repo = init_repo(second_dir.path());
+        let opened = f.d.dispatch(req(
+            "workspace.open",
+            json!({"path": first_repo.to_string_lossy()}),
+        ));
+        assert!(opened.ok, "{opened:?}");
+
+        let _: Vec<_> = f.events.try_iter().collect();
+        let handle = Arc::new(WorkspaceClosingHandle {
+            stopped: std::sync::atomic::AtomicBool::new(false),
+        });
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let slot = app.slot_mut(AgentKind::OpenCode);
+            slot.last_state = RuntimeState::Ready;
+            slot.version = Some("1.18.5".to_string());
+            slot.handle = Some(handle.clone());
+        }
+
+        let switched = f.d.dispatch(req(
+            "workspace.open",
+            json!({"path": second_repo.to_string_lossy()}),
+        ));
+        assert!(switched.ok, "{switched:?}");
+        assert!(handle.stopped.load(std::sync::atomic::Ordering::SeqCst));
+
+        let events: Vec<_> = f
+            .events
+            .try_iter()
+            .filter_map(|outbound| match outbound {
+                Outbound::Event(event) => Some(event),
+                Outbound::Response(_) => None,
+            })
+            .collect();
+        assert_eq!(events.len(), 2, "切换只应广播运行时停止和新工作区事件");
+        assert_eq!(events[0].event, "runtime.state");
+        assert_eq!(events[0].payload["agent"], "opencode");
+        assert_eq!(events[0].payload["state"], "stopped");
+        assert_eq!(events[1].event, "workspace.changed");
+        assert_eq!(events[1].payload["active"], true);
+        assert!(events[0].seq < events[1].seq);
+    }
+
     // ---------- config 错误映射 ----------
 
     #[test]
-    fn config_save_rejects_env_outside_whitelist() {
+    fn config_save_rejects_arbitrary_launch_injection_fields() {
         let mut f = fixture();
         hello(&mut f);
         let resp = f.d.dispatch(req(
             "config.save",
             json!({
                 "name": "x", "agent": "pi", "executable_path": "C:\\pi.exe", "model": "m",
-                "thinking_level": "low", "credential_ref": null, "extra_args": [],
+                "thinking_level": "low", "credential_ref": null,
                 "env_overrides": {"LD_PRELOAD": "evil.dll"}
             }),
         ));
-        assert_eq!(err_code(&resp), ErrorCode::EnvNotWhitelisted);
+        assert_eq!(err_code(&resp), ErrorCode::InvalidParams);
     }
 
     #[test]
@@ -1534,8 +2471,7 @@ mod tests {
             "config.save",
             json!({
                 "name": "x", "agent": "pi", "executable_path": "C:\\pi.exe", "model": "m",
-                "thinking_level": "low", "credential_ref": "halo/pi/openai", "extra_args": [],
-                "env_overrides": {}
+                "thinking_level": "low", "credential_ref": "halo/pi/openai"
             }),
         ));
         assert_eq!(err_code(&resp), ErrorCode::CredentialStoreUnavailable);
@@ -1544,10 +2480,118 @@ mod tests {
             "config.save",
             json!({
                 "name": "x", "agent": "pi", "executable_path": "C:\\pi.exe", "model": "m",
-                "thinking_level": "low", "credential_ref": null, "extra_args": [], "env_overrides": {}
+                "thinking_level": "low", "credential_ref": null
             }),
         ));
         assert!(resp.ok, "{resp:?}");
+    }
+
+    #[test]
+    fn opencode_start_with_missing_credential_reference_reports_failed_state_and_recovery() {
+        let mut f = fixture();
+        hello(&mut f);
+        let dir = tempfile::tempdir().unwrap();
+        let repo = init_repo(dir.path());
+        let opened = f
+            .d
+            .dispatch(req("workspace.open", json!({"path": repo.to_string_lossy()})));
+        let workspace_id = opened.result.unwrap()["workspace_id"].as_str().unwrap().to_string();
+        let trusted = f.d.dispatch(req(
+            "workspace.trust",
+            json!({"workspace_id": workspace_id, "decision": "trust"}),
+        ));
+        assert!(trusted.ok);
+
+        let saved = f.d.dispatch(req(
+            "config.save",
+            json!({
+                "name": "OpenCode",
+                "agent": "opencode",
+                "executable_path": "C:\\tools\\opencode.exe",
+                "model": "openai/gpt-5",
+                "thinking_level": "off",
+                "credential_ref": "halo/missing/opencode"
+            }),
+        ));
+        assert!(saved.ok, "{saved:?}");
+        let config_id = saved.result.unwrap()["config"]["config_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let start = f.d.dispatch(req(
+            "runtime.start",
+            json!({"agent": "opencode", "config_id": config_id}),
+        ));
+        assert_eq!(err_code(&start), ErrorCode::CredentialNotFound);
+        let status = f
+            .d
+            .dispatch(req("runtime.status", json!({})))
+            .result
+            .unwrap();
+        assert_eq!(status["opencode"]["state"], "failed");
+        assert!(status["opencode"]["reason"].as_str().unwrap_or_default().contains("凭据引用"));
+        assert!(!status["opencode"]["recovery_hint"].as_str().unwrap_or_default().is_empty());
+        assert_eq!(status["pi"]["state"], "not_probed");
+    }
+
+    #[test]
+    fn opencode_start_without_credential_reference_fails_closed_before_launch() {
+        let mut f = fixture();
+        hello(&mut f);
+        let dir = tempfile::tempdir().unwrap();
+        let repo = init_repo(dir.path());
+        let opened = f.d.dispatch(req(
+            "workspace.open",
+            json!({"path": repo.to_string_lossy()}),
+        ));
+        let workspace_id = opened.result.unwrap()["workspace_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let trusted = f.d.dispatch(req(
+            "workspace.trust",
+            json!({"workspace_id": workspace_id, "decision": "trust"}),
+        ));
+        assert!(trusted.ok);
+
+        let saved = f.d.dispatch(req(
+            "config.save",
+            json!({
+                "name": "OpenCode 无凭据引用",
+                "agent": "opencode",
+                "executable_path": "C:\\tools\\opencode.exe",
+                "model": "openai/gpt-5",
+                "thinking_level": "off",
+                "credential_ref": null
+            }),
+        ));
+        assert!(saved.ok, "{saved:?}");
+        let config_id = saved.result.unwrap()["config"]["config_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let start = f.d.dispatch(req(
+            "runtime.start",
+            json!({"agent": "opencode", "config_id": config_id}),
+        ));
+        assert_eq!(err_code(&start), ErrorCode::CredentialNotFound);
+        let status = f
+            .d
+            .dispatch(req("runtime.status", json!({})))
+            .result
+            .unwrap();
+        assert_eq!(status["opencode"]["state"], "failed");
+        assert!(status["opencode"]["version"].is_null());
+        assert!(status["opencode"]["reason"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("缺少凭据引用"));
+        assert!(!status["opencode"]["recovery_hint"]
+            .as_str()
+            .unwrap_or_default()
+            .is_empty());
     }
 
     #[test]
@@ -1598,6 +2642,36 @@ mod tests {
     }
 
     #[test]
+    fn runtime_stop_publishes_stopped_state_after_generation_advance() {
+        let mut f = fixture();
+        hello(&mut f);
+        while f.events.try_recv().is_ok() {}
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let slot = app.slot_mut(AgentKind::OpenCode);
+            slot.last_state = RuntimeState::Ready;
+            slot.version = Some("1.18.5".to_string());
+            slot.handle = Some(std::sync::Arc::new(ReadyHandle));
+        }
+
+        let response = f.d.dispatch(req("runtime.stop", json!({"agent": "opencode"})));
+
+        assert!(response.ok, "{response:?}");
+        assert_eq!(response.result.unwrap()["state"], "stopped");
+        let outbound = f
+            .events
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .expect("runtime.stop 必须广播 runtime.state");
+        let Outbound::Event(event) = outbound else {
+            panic!("runtime.stop 必须产生事件");
+        };
+        assert_eq!(event.event, "runtime.state");
+        assert_eq!(event.payload["agent"], "opencode");
+        assert_eq!(event.payload["state"], "stopped");
+        assert_eq!(event.payload["version"], "1.18.5");
+    }
+
+    #[test]
     fn task_create_without_workspace_is_workspace_not_active() {
         let mut f = fixture();
         hello(&mut f);
@@ -1612,8 +2686,251 @@ mod tests {
     fn task_cancel_unknown_task_is_not_found() {
         let mut f = fixture();
         hello(&mut f);
-        let resp = f.d.dispatch(req("task.cancel", json!({"task_id": "task-none"})));
+        let resp =
+            f.d.dispatch(req("task.cancel", json!({"task_id": "task-none"})));
         assert_eq!(err_code(&resp), ErrorCode::TaskNotFound);
+    }
+
+    #[test]
+    fn follow_up_and_finish_are_waiting_only_and_use_independent_controls() {
+        let mut f = fixture();
+        hello(&mut f);
+        install_active_task(
+            &f.d.ctx,
+            "task-session-control",
+            halo_core::TaskState::WaitingDeveloper,
+        );
+        let handle = Arc::new(SessionHandle::new());
+        let (finish_tx, finish_rx) = crossbeam_channel::bounded(1);
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let task = app.task.as_mut().unwrap();
+            task.agent = AgentKind::OpenCode;
+            task.finish_tx = Some(finish_tx);
+            app.slot_mut(AgentKind::OpenCode).handle = Some(handle.clone());
+        }
+
+        let empty = f.d.dispatch(req(
+            "task.send_message",
+            json!({"task_id": "task-session-control", "message": "   "}),
+        ));
+        assert_eq!(err_code(&empty), ErrorCode::InvalidParams);
+
+        let sent = f.d.dispatch(req(
+            "task.send_message",
+            json!({"task_id": "task-session-control", "message": "  请继续检查  "}),
+        ));
+        assert!(sent.ok, "{sent:?}");
+        assert_eq!(*handle.messages.lock().unwrap(), vec!["请继续检查"]);
+        assert_eq!(
+            lock(&f.d.ctx.app).task.as_ref().unwrap().state,
+            halo_core::TaskState::Running
+        );
+        let running_finish = f.d.dispatch(req(
+            "task.finish",
+            json!({"task_id": "task-session-control"}),
+        ));
+        assert_eq!(err_code(&running_finish), ErrorCode::TaskStillRunning);
+        assert!(finish_rx.try_recv().is_err());
+
+        lock(&f.d.ctx.app).task.as_mut().unwrap().state =
+            halo_core::TaskState::WaitingDeveloper;
+        let finished = f.d.dispatch(req(
+            "task.finish",
+            json!({"task_id": "task-session-control"}),
+        ));
+        assert!(finished.ok, "{finished:?}");
+        finish_rx.try_recv().expect("显式结束应使用独立通道");
+        assert!(!lock(&f.d.ctx.app)
+            .task
+            .as_ref()
+            .unwrap()
+            .cancellation_requested);
+    }
+
+    #[test]
+    fn task_resolve_action_exposes_only_the_matching_pending_card_and_prevents_duplicates() {
+        let mut f = fixture();
+        hello(&mut f);
+        install_active_task(
+            &f.d.ctx,
+            "task-action",
+            halo_core::TaskState::AwaitingAction,
+        );
+        let handle = Arc::new(ActionHandle::new());
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let task = app.task.as_mut().expect("活动任务应存在");
+            task.agent = AgentKind::OpenCode;
+            task.action_requests.insert(
+                "per-1".to_string(),
+                methods::task::TaskActionRequest {
+                    request_id: "per-1".to_string(),
+                    kind: methods::task::TaskActionKind::Permission,
+                    prompt: "允许本次写入 src/auth.rs 吗？".to_string(),
+                    decision_sent: false,
+                },
+            );
+            app.slot_mut(AgentKind::OpenCode).handle = Some(handle.clone());
+        }
+
+        let snapshot = f.d.dispatch(req("task.snapshot", json!({"after_seq": 0})));
+        assert!(snapshot.ok, "{snapshot:?}");
+        assert_eq!(
+            snapshot.result.unwrap()["action_requests"],
+            json!([{
+                "request_id": "per-1",
+                "kind": "permission",
+                "prompt": "允许本次写入 src/auth.rs 吗？",
+                "decision_sent": false
+            }])
+        );
+
+        let mismatch = f.d.dispatch(req(
+            "task.resolve_action",
+            json!({
+                "task_id": "task-action",
+                "request_id": "per-other",
+                "decision": "allow_once",
+                "answer": null
+            }),
+        ));
+        assert_eq!(err_code(&mismatch), ErrorCode::ActionRequestNotFound);
+        assert!(handle
+            .decisions
+            .lock()
+            .expect("测试决议记录锁不应中毒")
+            .is_empty());
+
+        let invalid = f.d.dispatch(req(
+            "task.resolve_action",
+            json!({
+                "task_id": "task-action",
+                "request_id": "per-1",
+                "decision": "answer",
+                "answer": "不应接受"
+            }),
+        ));
+        assert_eq!(err_code(&invalid), ErrorCode::InvalidParams);
+
+        let accepted = f.d.dispatch(req(
+            "task.resolve_action",
+            json!({
+                "task_id": "task-action",
+                "request_id": "per-1",
+                "decision": "allow_once",
+                "answer": null
+            }),
+        ));
+        assert!(accepted.ok, "{accepted:?}");
+        assert_eq!(accepted.result.unwrap()["accepted"], true);
+        assert_eq!(
+            *handle.decisions.lock().expect("测试决议记录锁不应中毒"),
+            vec![("per-1".to_string(), halo_runtime::ActionDecision::AllowOnce)]
+        );
+        assert_eq!(
+            lock(&f.d.ctx.app)
+                .task
+                .as_ref()
+                .expect("活动任务应存在")
+                .state,
+            halo_core::TaskState::AwaitingAction,
+            "提交决议不能伪造 Agent 已确认"
+        );
+
+        let duplicate = f.d.dispatch(req(
+            "task.resolve_action",
+            json!({
+                "task_id": "task-action",
+                "request_id": "per-1",
+                "decision": "allow_once",
+                "answer": null
+            }),
+        ));
+        assert_eq!(
+            err_code(&duplicate),
+            ErrorCode::ActionRequestAlreadyResolved
+        );
+        assert_eq!(
+            handle
+                .decisions
+                .lock()
+                .expect("测试决议记录锁不应中毒")
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn task_cancel_clears_pending_action_cards_before_notifying_the_task_loop() {
+        let mut f = fixture();
+        hello(&mut f);
+        install_active_task(
+            &f.d.ctx,
+            "task-cancel-action",
+            halo_core::TaskState::AwaitingAction,
+        );
+        let handle = Arc::new(ActionHandle::new());
+        let (cancel_tx, cancel_rx) = crossbeam_channel::bounded(1);
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let task = app.task.as_mut().expect("活动任务应存在");
+            task.agent = AgentKind::OpenCode;
+            task.cancel_tx = Some(cancel_tx);
+            task.action_requests.insert(
+                "per-cancel".to_string(),
+                methods::task::TaskActionRequest {
+                    request_id: "per-cancel".to_string(),
+                    kind: methods::task::TaskActionKind::Permission,
+                    prompt: "允许本次写入 src/a.rs 吗？".to_string(),
+                    decision_sent: false,
+                },
+            );
+            app.slot_mut(AgentKind::OpenCode).handle = Some(handle.clone());
+        }
+
+        let cancelled =
+            f.d.dispatch(req("task.cancel", json!({"task_id": "task-cancel-action"})));
+        assert!(cancelled.ok, "{cancelled:?}");
+        assert_eq!(cancelled.result.unwrap()["accepted"], true);
+        assert_eq!(
+            handle.cancel_begins.load(Ordering::SeqCst),
+            1,
+            "取消必须先取得运行时决议闸门，才能向编排线程发送取消信号"
+        );
+        cancel_rx
+            .try_recv()
+            .expect("取消屏障建立后才应通知编排线程");
+
+        let task = lock(&f.d.ctx.app)
+            .task
+            .as_ref()
+            .expect("任务在编排线程收尾前仍活动");
+        assert!(task.cancellation_requested);
+        assert!(task.action_requests.is_empty());
+
+        let late_resolution = f.d.dispatch(req(
+            "task.resolve_action",
+            json!({
+                "task_id": "task-cancel-action",
+                "request_id": "per-cancel",
+                "decision": "allow_once",
+                "answer": null
+            }),
+        ));
+        assert_eq!(
+            err_code(&late_resolution),
+            ErrorCode::ActionRequestNotPending
+        );
+        assert!(handle
+            .decisions
+            .lock()
+            .expect("测试决议记录锁不应中毒")
+            .is_empty());
+
+        let snapshot = f.d.dispatch(req("task.snapshot", json!({"after_seq": 0})));
+        assert!(snapshot.ok, "{snapshot:?}");
+        assert_eq!(snapshot.result.unwrap()["action_requests"], json!([]));
     }
 
     #[test]
@@ -1650,6 +2967,72 @@ mod tests {
             json!({"task_id": "task-1", "note": "x"}),
         ));
         assert_eq!(err_code(&resp), ErrorCode::TaskNotFound);
+    }
+
+    #[test]
+    fn fs_manual_edits_emit_each_time_but_persist_each_path_once() {
+        let mut f = fixture();
+        hello(&mut f);
+        install_active_task(
+            &f.d.ctx,
+            "task-fs",
+            halo_core::TaskState::WaitingDeveloper,
+        );
+
+        f.d.record_fs_manual_edit(ManualEditOp::Write, "src/auth.rs", None);
+        f.d.record_fs_manual_edit(ManualEditOp::Write, "src/auth.rs", None);
+
+        let app = lock(&f.d.ctx.app);
+        let task = app.task.as_ref().unwrap();
+        let paths: Vec<_> = task.manual_edit_paths.iter().map(String::as_str).collect();
+        assert_eq!(paths, vec!["src/auth.rs"]);
+        let reasons = match &task.attribution {
+            Attribution::Mixed { reasons } => reasons,
+            Attribution::AgentOnly => panic!("成功写入必须使归因变为 mixed"),
+        };
+        assert_eq!(reasons.len(), 1, "同一路径重复保存不得扩大归因原因");
+        drop(app);
+
+        let stored = f.d.ctx.store.get_task("task-fs").unwrap().unwrap();
+        assert_eq!(stored.manual_edit_paths, vec!["src/auth.rs"]);
+
+        let events: Vec<_> = std::iter::from_fn(|| f.events.try_recv().ok())
+            .filter_map(|outbound| match outbound {
+                Outbound::Event(event) if event.event == "task.manual_edit" => Some(event),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(events.len(), 2, "每次成功写入都必须产生过程事件");
+        assert!(events.iter().all(|event| event.payload["path"] == "src/auth.rs"));
+
+        lock(&f.d.ctx.app).task.as_mut().unwrap().state = halo_core::TaskState::ReviewReady;
+        f.d.record_fs_manual_edit(ManualEditOp::Write, "src/later.rs", None);
+        let app = lock(&f.d.ctx.app);
+        assert!(
+            !app.task.as_ref().unwrap().manual_edit_paths.contains("src/later.rs"),
+            "review_ready 后的写入不应再改归因"
+        );
+    }
+
+    #[test]
+    fn manual_edit_reason_cap_keeps_one_overflow_summary() {
+        let mut attribution = Attribution::AgentOnly;
+        for index in 0..halo_core::limits::MANUAL_EDIT_REASONS_MAX {
+            attribution = attribution_after_manual_edit(&attribution, true, &format!("path-{index}"));
+        }
+        attribution = attribution_after_manual_edit(&attribution, true, "overflow");
+        attribution = attribution_after_manual_edit(&attribution, true, "overflow-again");
+
+        let reasons = match attribution {
+            Attribution::Mixed { reasons } => reasons,
+            Attribution::AgentOnly => panic!("应保持 mixed"),
+        };
+        assert_eq!(
+            reasons.len(),
+            halo_core::limits::MANUAL_EDIT_REASONS_MAX + 1,
+            "上限后只允许一条汇总说明"
+        );
+        assert_eq!(reasons.last().map(String::as_str), Some(MANUAL_EDIT_OVERFLOW_NOTE));
     }
 
     #[test]
@@ -1690,6 +3073,101 @@ mod tests {
         let result = resp.result.unwrap();
         assert_eq!(result["last_seq"], last);
         assert_eq!(result["events"].as_array().unwrap().len(), 3);
+        assert_eq!(result["session_messages"], json!([]));
+    }
+
+    #[test]
+    fn task_snapshot_rebuilds_the_redacted_active_session_record() {
+        let mut f = fixture();
+        hello(&mut f);
+        install_active_task(&f.d.ctx, "task-session", halo_core::TaskState::WaitingDeveloper);
+
+        let long = "z".repeat(halo_core::limits::TRACE_TEXT_MAX + 32);
+        let message = crate::state::append_active_session_message(
+            &f.d.ctx.app,
+            &f.d.ctx.bus,
+            "task-session",
+            methods::task::TaskSessionMessageRole::Agent,
+            &format!("Bearer secrettoken12345678 {long}"),
+        )
+        .expect("waiting_developer 是活动任务，应保留回复");
+        assert!(message.truncated);
+
+        let snapshot = f
+            .d
+            .dispatch(req("task.snapshot", json!({"after_seq": 0})));
+        assert!(snapshot.ok, "{snapshot:?}");
+        let result = snapshot.result.unwrap();
+        assert_eq!(result["task"]["state"], "waiting_developer");
+        let messages = result["session_messages"].as_array().unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0]["role"], "agent");
+        assert_eq!(messages[0]["truncated"], true);
+        let text = messages[0]["text"].as_str().unwrap();
+        assert!(!text.contains("secrettoken12345678"));
+        assert!(text.contains("[REDACTED]"));
+
+        let status = f.d.dispatch(req("task.status", json!({})));
+        assert!(status.ok, "{status:?}");
+        assert!(status.result.unwrap()["task"].get("session_messages").is_none());
+    }
+
+    #[test]
+    fn task_snapshot_does_not_replay_session_records_after_delivery_review() {
+        let mut f = fixture();
+        hello(&mut f);
+        install_active_task(&f.d.ctx, "task-session", halo_core::TaskState::WaitingDeveloper);
+        crate::state::append_active_session_message(
+            &f.d.ctx.app,
+            &f.d.ctx.bus,
+            "task-session",
+            methods::task::TaskSessionMessageRole::User,
+            "完成后不得重放的追问",
+        )
+        .unwrap();
+        f.d.ctx.bus.emit(
+            Some("task-session"),
+            "task.action_request",
+            json!({"prompt": "完成后不得重放的操作请求"}),
+        );
+        {
+            let mut app = lock(&f.d.ctx.app);
+            let task = app.task.as_mut().unwrap();
+            task.state = halo_core::TaskState::ReviewReady;
+            task.action_requests.insert(
+                "request-after".to_string(),
+                methods::task::TaskActionRequest {
+                    request_id: "request-after".to_string(),
+                    kind: methods::task::TaskActionKind::Permission,
+                    prompt: "stale action".to_string(),
+                    decision_sent: false,
+                },
+            );
+        }
+
+        let snapshot = f
+            .d
+            .dispatch(req("task.snapshot", json!({"after_seq": 0})));
+        assert!(snapshot.ok, "{snapshot:?}");
+        let result = snapshot.result.unwrap();
+        assert_eq!(result["session_messages"], json!([]));
+        assert_eq!(result["action_requests"], json!([]));
+        assert!(result["events"].as_array().unwrap().iter().all(|event| {
+            !matches!(
+                event["event"].as_str(),
+                Some("task.session_message" | "task.action_request" | "task.action_resolved")
+            )
+        }));
+        assert!(!result.to_string().contains("完成后不得重放"));
+
+        lock(&f.d.ctx.app).task.as_mut().unwrap().state = halo_core::TaskState::Finishing;
+        let finishing_snapshot = f
+            .d
+            .dispatch(req("task.snapshot", json!({"after_seq": 0})));
+        assert!(finishing_snapshot.ok, "{finishing_snapshot:?}");
+        let finishing_result = finishing_snapshot.result.unwrap();
+        assert_eq!(finishing_result["session_messages"], json!([]));
+        assert_eq!(finishing_result["action_requests"], json!([]));
     }
 
     // ---------- review / delivery / handoff / history ----------
@@ -1703,6 +3181,7 @@ mod tests {
                 goal: "审查任务的详细目标".to_string(),
                 state: "review_ready".to_string(),
                 attribution: "agent_only".to_string(),
+                manual_edit_paths: vec![],
                 baseline_head: Some("abc".to_string()),
                 baseline_captured_at: now_ts(),
                 created_at: now_ts(),
@@ -1723,6 +3202,7 @@ mod tests {
                             path: "src/auth.rs".to_string(),
                             change: "modified".to_string(),
                             diff: "+line".to_string(),
+                            end_hash: None,
                         }],
                         verification_status: "passed".to_string(),
                         verification_detail: "cargo test 通过".to_string(),
@@ -1743,6 +3223,7 @@ mod tests {
             instructions: "详细目标说明".to_string(),
             state,
             attribution: halo_core::Attribution::AgentOnly,
+            manual_edit_paths: Default::default(),
             baseline: halo_core::Baseline {
                 head: None,
                 tree: "tree".to_string(),
@@ -1755,7 +3236,12 @@ mod tests {
             latest_evidence_version: 0,
             verification_agent: None,
             verification_user: None,
+            session_messages: vec![],
+            action_requests: Default::default(),
+            cancellation_requested: false,
+            finish_requested: false,
             cancel_tx: None,
+            finish_tx: None,
         };
         ctx.store.put_task(&task.to_record()).unwrap();
         lock(&ctx.app).task = Some(task);

@@ -9,3 +9,5 @@ pub const FILE_DIFF_MAX: usize = 256 * 1024;
 pub const VERSION_TOTAL_MAX: usize = 4 * 1024 * 1024;
 /// 单条运行轨迹文本上限：4 KiB。
 pub const TRACE_TEXT_MAX: usize = 4 * 1024;
+/// 任务期间逐文件记录人工介入原因的上限；路径集合仍完整保留。
+pub const MANUAL_EDIT_REASONS_MAX: usize = 64;

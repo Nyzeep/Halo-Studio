@@ -11,6 +11,7 @@ from .base import BaseViewModel
 
 _AGENTS = ("pi", "opencode")
 _INITIAL = {"state": "not_probed", "reason": "", "recovery_hint": "", "version": ""}
+_PROBE_INITIAL = {"status": "not_checked", "message": ""}
 
 
 class RuntimeViewModel(BaseViewModel):
@@ -20,6 +21,7 @@ class RuntimeViewModel(BaseViewModel):
     def __init__(self, client, parent: QObject | None = None) -> None:
         super().__init__(client, parent)
         self._info: dict[str, dict] = {agent: dict(_INITIAL) for agent in _AGENTS}
+        self._probe: dict[str, dict] = {agent: dict(_PROBE_INITIAL) for agent in _AGENTS}
         client.subscribe("runtime.state", self._on_state_event)
 
     # ---- 命令 ----
@@ -30,11 +32,29 @@ class RuntimeViewModel(BaseViewModel):
 
         def on_ok(result: dict, target: str = agent) -> None:
             version = result.get("version")
+            supported = result.get("supported") is True
             if version:
                 self._apply(target, {"version": version})
+            if supported:
+                message = f"兼容性检查通过：{version or '已检测版本'}"
+                status = "supported"
+            else:
+                message = (
+                    f"兼容性检查不通过：{version or '未返回有效版本'}。"
+                    "请安装稳定版 OpenCode 1.18.5 或更高的 1.x 版本后重新检查"
+                )
+                status = "unsupported"
+            self._apply_probe(target, status, message)
+
+        def on_error(error: dict, target: str = agent) -> None:
+            message = str(error.get("message") or "兼容性检查失败")
+            if target == "opencode":
+                message += "。请确认 OpenCode 可执行文件有效后重新检查"
+            self._apply_probe(target, "failed", message)
+            self._set_error(error)
 
         self._client.request(
-            "runtime.probe", {"agent": agent, "config_id": config_id}, on_ok, self._set_error
+            "runtime.probe", {"agent": agent, "config_id": config_id}, on_ok, on_error
         )
 
     @Slot(str, str)
@@ -88,6 +108,13 @@ class RuntimeViewModel(BaseViewModel):
             if key in info:
                 value = info.get(key)
                 slot[key] = "" if value is None else str(value)
+        self._notify_agent_changed(agent)
+
+    def _apply_probe(self, agent: str, status: str, message: str) -> None:
+        self._probe[agent] = {"status": status, "message": message}
+        self._notify_agent_changed(agent)
+
+    def _notify_agent_changed(self, agent: str) -> None:
         if agent == "pi":
             self.piChanged.emit()
         else:
@@ -107,6 +134,12 @@ class RuntimeViewModel(BaseViewModel):
     def _get_pi_version(self) -> str:
         return self._info["pi"]["version"]
 
+    def _get_pi_compatibility(self) -> str:
+        return self._probe["pi"]["status"]
+
+    def _get_pi_probe_message(self) -> str:
+        return self._probe["pi"]["message"]
+
     def _get_oc_state(self) -> str:
         return self._info["opencode"]["state"]
 
@@ -119,11 +152,21 @@ class RuntimeViewModel(BaseViewModel):
     def _get_oc_version(self) -> str:
         return self._info["opencode"]["version"]
 
+    def _get_oc_compatibility(self) -> str:
+        return self._probe["opencode"]["status"]
+
+    def _get_oc_probe_message(self) -> str:
+        return self._probe["opencode"]["message"]
+
     piState = Property(str, _get_pi_state, notify=piChanged)
     piReason = Property(str, _get_pi_reason, notify=piChanged)
     piRecoveryHint = Property(str, _get_pi_recovery_hint, notify=piChanged)
     piVersion = Property(str, _get_pi_version, notify=piChanged)
+    piCompatibility = Property(str, _get_pi_compatibility, notify=piChanged)
+    piProbeMessage = Property(str, _get_pi_probe_message, notify=piChanged)
     opencodeState = Property(str, _get_oc_state, notify=opencodeChanged)
     opencodeReason = Property(str, _get_oc_reason, notify=opencodeChanged)
     opencodeRecoveryHint = Property(str, _get_oc_recovery_hint, notify=opencodeChanged)
     opencodeVersion = Property(str, _get_oc_version, notify=opencodeChanged)
+    opencodeCompatibility = Property(str, _get_oc_compatibility, notify=opencodeChanged)
+    opencodeProbeMessage = Property(str, _get_oc_probe_message, notify=opencodeChanged)

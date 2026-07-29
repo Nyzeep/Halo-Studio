@@ -24,12 +24,14 @@ class ReviewFileListModel(QAbstractListModel):
     ChangeRole = PathRole + 1
     DiffRole = PathRole + 2
     TruncatedRole = PathRole + 3
+    EndHashRole = PathRole + 4
 
     _ROLE_KEYS = {
         PathRole: "path",
         ChangeRole: "change",
         DiffRole: "diff",
         TruncatedRole: "truncated",
+        EndHashRole: "endHash",
     }
 
     def __init__(self, parent: QObject | None = None) -> None:
@@ -54,6 +56,7 @@ class ReviewFileListModel(QAbstractListModel):
             self.ChangeRole: b"change",
             self.DiffRole: b"diff",
             self.TruncatedRole: b"truncated",
+            self.EndHashRole: b"endHash",
         }
 
     @Slot(int, result="QVariantMap")
@@ -70,6 +73,7 @@ class ReviewFileListModel(QAbstractListModel):
                 "change": str(f.get("change") or ""),
                 "diff": str(f.get("diff") or ""),
                 "truncated": bool(f.get("truncated", False)),
+                "endHash": str(f.get("end_hash") or ""),
             }
             for f in files
         ]
@@ -79,6 +83,7 @@ class ReviewFileListModel(QAbstractListModel):
 class ReviewViewModel(BaseViewModel):
     bundleChanged = Signal()
     decisionChanged = Signal()
+    reviewReady = Signal()
 
     def __init__(self, client, parent: QObject | None = None) -> None:
         super().__init__(client, parent)
@@ -87,6 +92,10 @@ class ReviewViewModel(BaseViewModel):
         self._decision_kind = ""
         self._decision_reason = ""
         self._decided_at = ""
+        self._auto_request: tuple[str, int] | None = None
+        client.subscribe("task.finished", self._on_task_finished)
+        client.subscribe("task.state", self._on_task_state)
+        client.subscribe("workspace.changed", self._on_workspace_changed)
 
     def _reset_bundle_fields(self) -> None:
         self._task_id = ""
@@ -95,11 +104,20 @@ class ReviewViewModel(BaseViewModel):
         self._outcome = ""
         self._attribution = ""
         self._attribution_reasons: list = []
+        self._manual_edit_paths: list = []
         self._summary = ""
         self._verification_status = ""
         self._verification_detail = ""
         self._verification_source = ""
         self._baseline_dirty_files: list = []
+
+    def _reset_decision_fields(self) -> None:
+        if not (self._decision_kind or self._decision_reason or self._decided_at):
+            return
+        self._decision_kind = ""
+        self._decision_reason = ""
+        self._decided_at = ""
+        self.decisionChanged.emit()
 
     # ---- 命令 ----
 
@@ -110,6 +128,21 @@ class ReviewViewModel(BaseViewModel):
         if version is not None:
             params["version"] = int(version)
         self._client.request("review.get", params, self._on_bundle_ok, self._set_error)
+
+    def _auto_load(self, task_id: str, version: int) -> None:
+        key = (task_id, version)
+        if not task_id or version <= 0 or self._auto_request == key:
+            return
+        if self._task_id == task_id and self._evidence_version == version:
+            self.reviewReady.emit()
+            return
+        self._auto_request = key
+        self._client.request(
+            "review.get",
+            {"task_id": task_id, "version": version},
+            lambda bundle: self._on_auto_bundle_ok(bundle, key),
+            lambda error: self._on_auto_bundle_error(error, key),
+        )
 
     @Slot()
     def accept(self) -> None:
@@ -139,12 +172,17 @@ class ReviewViewModel(BaseViewModel):
 
     def _on_bundle_ok(self, bundle: dict) -> None:
         bundle = bundle or {}
-        self._task_id = str(bundle.get("task_id") or "")
-        self._evidence_version = int(bundle.get("evidence_version") or 0)
+        next_task_id = str(bundle.get("task_id") or "")
+        next_evidence_version = int(bundle.get("evidence_version") or 0)
+        if (next_task_id, next_evidence_version) != (self._task_id, self._evidence_version):
+            self._reset_decision_fields()
+        self._task_id = next_task_id
+        self._evidence_version = next_evidence_version
         self._is_latest = bool(bundle.get("is_latest", False))
         self._outcome = str(bundle.get("outcome") or "")
         self._attribution = str(bundle.get("attribution") or "")
         self._attribution_reasons = list(bundle.get("attribution_reasons") or [])
+        self._manual_edit_paths = list(bundle.get("manual_edit_paths") or [])
         self._summary = str(bundle.get("summary") or "")
         verification = bundle.get("verification") or {}
         self._verification_status = str(verification.get("status") or "")
@@ -152,6 +190,49 @@ class ReviewViewModel(BaseViewModel):
         self._verification_source = str(verification.get("source") or "")
         self._baseline_dirty_files = list(bundle.get("baseline_dirty_files") or [])
         self._files_model.reset_with(list(bundle.get("files") or []))
+        self.bundleChanged.emit()
+
+    def _on_auto_bundle_ok(self, bundle: dict, key: tuple[str, int]) -> None:
+        if self._auto_request != key:
+            return
+        self._auto_request = None
+        if (
+            str((bundle or {}).get("task_id") or "") != key[0]
+            or int((bundle or {}).get("evidence_version") or 0) != key[1]
+        ):
+            return
+        self._on_bundle_ok(bundle)
+        self.reviewReady.emit()
+
+    def _on_auto_bundle_error(self, error: dict, key: tuple[str, int]) -> None:
+        if self._auto_request != key:
+            return
+        self._auto_request = None
+        self._set_error(error)
+
+    def _on_task_finished(self, envelope: dict) -> None:
+        payload = envelope.get("payload") or {}
+        if payload.get("outcome") != "finished":
+            return
+        task_id = str(envelope.get("task_id") or payload.get("task_id") or "")
+        version = payload.get("evidence_version")
+        if isinstance(version, int):
+            self._auto_load(task_id, version)
+
+    def _on_task_state(self, envelope: dict) -> None:
+        payload = envelope.get("payload") or {}
+        task = payload.get("task") or {}
+        if not isinstance(task, dict) or task.get("state") != "review_ready":
+            return
+        version = task.get("latest_evidence_version")
+        if isinstance(version, int):
+            self._auto_load(str(task.get("task_id") or ""), version)
+
+    def _on_workspace_changed(self, _envelope: dict) -> None:
+        self._auto_request = None
+        self._reset_bundle_fields()
+        self._reset_decision_fields()
+        self._files_model.reset_with([])
         self.bundleChanged.emit()
 
     def _on_decision_ok(self, result: dict) -> None:
@@ -180,6 +261,9 @@ class ReviewViewModel(BaseViewModel):
 
     def _get_attribution_reasons(self) -> list:
         return list(self._attribution_reasons)
+
+    def _get_manual_edit_paths(self) -> list:
+        return list(self._manual_edit_paths)
 
     def _get_summary(self) -> str:
         return self._summary
@@ -214,6 +298,7 @@ class ReviewViewModel(BaseViewModel):
     outcome = Property(str, _get_outcome, notify=bundleChanged)
     attribution = Property(str, _get_attribution, notify=bundleChanged)
     attributionReasons = Property("QVariantList", _get_attribution_reasons, notify=bundleChanged)
+    manualEditPaths = Property("QVariantList", _get_manual_edit_paths, notify=bundleChanged)
     summary = Property(str, _get_summary, notify=bundleChanged)
     files = Property(QObject, _get_files_model, constant=True)
     verificationStatus = Property(str, _get_verification_status, notify=bundleChanged)

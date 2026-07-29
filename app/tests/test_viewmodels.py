@@ -207,8 +207,6 @@ LAUNCH_CONFIG = {
     "model": "gpt-5",
     "thinking_level": "medium",
     "credential_ref": "halo/pi/openai",
-    "extra_args": [],
-    "env_overrides": {},
     "created_at": "2026-07-26T08:00:00Z",
     "updated_at": "2026-07-26T08:00:00Z",
 }
@@ -233,14 +231,13 @@ class TestConfigViewModel:
         secret = "sk-plain-secret-123456"
         vm.save(
             {
+                "config_id": "cfg-existing",
                 "name": "Pi + GPT",
                 "agent": "pi",
                 "executable_path": "C:\\tools\\pi\\pi.exe",
                 "model": "gpt-5",
                 "thinking_level": "low",
                 "credential_ref": "halo/pi/openai",
-                "extra_args": [],
-                "env_overrides": {},
                 # 恶意/误传字段：必须在进入请求前被丢弃
                 "api_key": secret,
                 "credential_plaintext": secret,
@@ -252,6 +249,7 @@ class TestConfigViewModel:
         assert "api_key" not in req.params
         assert "credential_plaintext" not in req.params
         assert "password" not in req.params
+        assert "config_id" not in req.params
         assert secret not in repr(req.params)
         # 服务端返回的配置进入模型后同样不含明文
         client.ok({"config": {**LAUNCH_CONFIG, "api_key": secret}})
@@ -320,10 +318,10 @@ class TestRuntimeViewModel:
 
         client.emit_event(
             "runtime.state",
-            {"agent": "opencode", "state": "ready", "reason": None, "recovery_hint": None, "version": "0.4.2"},
+            {"agent": "opencode", "state": "ready", "reason": None, "recovery_hint": None, "version": "1.18.5"},
         )
         assert vm.opencodeState == "ready"
-        assert vm.opencodeVersion == "0.4.2"
+        assert vm.opencodeVersion == "1.18.5"
         # pi 保持失败态不被覆盖
         assert vm.piState == "failed"
 
@@ -349,6 +347,21 @@ class TestRuntimeViewModel:
         client.err("WORKSPACE_NOT_TRUSTED", message)
         assert vm.errorMessage == message
 
+    def test_probe_surfaces_compatible_and_unsupported_results(self, core_app, client):
+        vm = RuntimeViewModel(client)
+        vm.probe("opencode", "cfg-1")
+        assert client.last().method == "runtime.probe"
+        assert client.last().params == {"agent": "opencode", "config_id": "cfg-1"}
+        client.ok({"agent": "opencode", "version": "1.18.5", "supported": True})
+        assert vm.opencodeCompatibility == "supported"
+        assert "1.18.5" in vm.opencodeProbeMessage
+
+        vm.probe("opencode", "cfg-1")
+        client.ok({"agent": "opencode", "version": "2.0.0", "supported": False})
+        assert vm.opencodeCompatibility == "unsupported"
+        assert "2.0.0" in vm.opencodeProbeMessage
+        assert "安装稳定版 OpenCode 1.18.5 或更高的 1.x" in vm.opencodeProbeMessage
+
 
 # --------------------------------------------------------------- TaskViewModel
 
@@ -365,6 +378,26 @@ TASK_STATUS = {
     "cancel_mode": None,
     "latest_evidence_version": 0,
 }
+
+SESSION_MESSAGES = [
+    {"role": "user", "text": "排查并修复登录超时", "truncated": False},
+    {"role": "agent", "text": "已完成首轮排查，敏感内容已隐藏。", "truncated": True},
+]
+
+ACTION_REQUESTS = [
+    {
+        "request_id": "permission-1",
+        "kind": "permission",
+        "prompt": "允许写入 src/auth.rs 吗？",
+        "decision_sent": False,
+    },
+    {
+        "request_id": "clarification-1",
+        "kind": "clarification",
+        "prompt": "应该使用本地配置还是测试配置？",
+        "decision_sent": False,
+    },
+]
 
 
 class TestTaskViewModel:
@@ -392,6 +425,79 @@ class TestTaskViewModel:
             "notes": None,
             "handoff_id": None,
         }
+
+    def test_follow_up_is_only_sent_from_waiting_developer(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "waiting_developer"}})
+        client.ok({
+            "task": {**TASK_STATUS, "state": "waiting_developer"},
+            "last_seq": 0,
+            "events": [],
+            "session_messages": SESSION_MESSAGES,
+            "action_requests": [],
+        })
+
+        vm.sendMessage("  请再补充一个回归测试  ")
+        request = client.last()
+        assert request.method == "task.send_message"
+        assert request.params == {"task_id": "task-1", "message": "请再补充一个回归测试"}
+        assert vm.state == "waiting_developer"
+
+        client.ok({"accepted": True})
+        assert vm.state == "waiting_developer"
+
+        client.emit_event(
+            "task.state",
+            {"state": "running", "task": {**TASK_STATUS, "state": "running"}},
+            task_id="task-1",
+        )
+        vm.sendMessage("不能并发发送")
+        assert vm.errorCode == "TASK_STILL_RUNNING"
+        assert [r.method for r in client.requests].count("task.send_message") == 1
+
+    def test_empty_follow_up_fails_closed_in_viewmodel(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "waiting_developer"}})
+        client.ok({
+            "task": {**TASK_STATUS, "state": "waiting_developer"},
+            "last_seq": 0,
+            "events": [],
+            "session_messages": SESSION_MESSAGES,
+            "action_requests": [],
+        })
+
+        vm.sendMessage("   ")
+        assert vm.errorCode == "INVALID_PARAMS"
+        assert all(r.method != "task.send_message" for r in client.requests)
+
+    def test_finish_session_is_explicit_and_does_not_reuse_cancel(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "waiting_developer"}})
+        client.ok({
+            "task": {**TASK_STATUS, "state": "waiting_developer"},
+            "last_seq": 0,
+            "events": [],
+            "session_messages": SESSION_MESSAGES,
+            "action_requests": [],
+        })
+
+        vm.finishSession()
+        request = client.last()
+        assert request.method == "task.finish"
+        assert request.params == {"task_id": "task-1"}
+        assert vm.state == "waiting_developer"
+        assert all(r.method != "task.cancel" for r in client.requests)
+
+        client.ok({"accepted": True})
+        client.emit_event(
+            "task.state",
+            {"state": "finishing", "task": {**TASK_STATUS, "state": "finishing"}},
+            task_id="task-1",
+        )
+        assert vm.state == "finishing"
 
     def test_create_ok_applies_status_and_events_drive_transitions(self, core_app, client):
         vm = self._make_vm(client)
@@ -441,6 +547,649 @@ class TestTaskViewModel:
         assert client.last().params == {"task_id": "task-1"}
         client.emit_event("task.cancelled", {"mode": "forced"}, task_id="task-1")
         assert vm.cancelMode == "forced"
+        assert client.last().method == "task.status"
+        assert client.last().params == {"task_id": "task-1"}
+        client.ok(
+            {
+                "task": {
+                    **TASK_STATUS,
+                    "state": "cancelled",
+                    "cancel_mode": "forced",
+                    "latest_evidence_version": 1,
+                }
+            }
+        )
+        assert vm.state == "cancelled"
+        assert vm.latestEvidenceVersion == 1
+
+    def test_workspace_change_clears_the_previous_task(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "attribution": "mixed"}})
+
+        client.emit_event("workspace.changed", {"active": True, "workspace_id": "workspace-2"})
+
+        assert vm.taskId == ""
+        assert vm.state == ""
+        assert vm.attribution == ""
+        assert vm.latestEvidenceVersion == 0
+
+    def test_snapshot_rebuilds_managed_session_and_waits_for_developer(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "waiting_developer"}})
+
+        snapshot_request = client.last()
+        assert snapshot_request.method == "task.snapshot"
+        assert snapshot_request.params == {"after_seq": 0}
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "waiting_developer"},
+                "last_seq": 40,
+                "events": [],
+                "session_messages": SESSION_MESSAGES,
+            }
+        )
+
+        assert vm.state == "waiting_developer"
+        assert vm.sessionMessages == SESSION_MESSAGES
+        assert [request.method for request in client.requests] == ["task.create", "task.snapshot"]
+
+    def test_session_message_events_are_ordered_deduped_and_isolated_from_trace(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": TASK_STATUS})
+        client.ok(
+            {
+                "task": TASK_STATUS,
+                "last_seq": 10,
+                "events": [],
+                "session_messages": SESSION_MESSAGES,
+            }
+        )
+
+        client.emit_event(
+            "task.session_message",
+            {"role": "agent", "text": "第二条回复", "truncated": False},
+            seq=12,
+            task_id="task-1",
+        )
+        client.emit_event(
+            "task.session_message",
+            {"role": "user", "text": "补充说明", "truncated": False},
+            seq=11,
+            task_id="task-1",
+        )
+        # 已由快照覆盖的旧事件、重复 seq、非会话角色和其他任务不得改变活动会话记录。
+        client.emit_event(
+            "task.session_message",
+            {"role": "agent", "text": "旧回复", "truncated": False},
+            seq=10,
+            task_id="task-1",
+        )
+        client.emit_event(
+            "task.session_message",
+            {"role": "agent", "text": "重复 seq", "truncated": False},
+            seq=11,
+            task_id="task-1",
+        )
+        client.emit_event(
+            "task.session_message",
+            {"role": "tool", "text": "原始工具输出", "truncated": False},
+            seq=13,
+            task_id="task-1",
+        )
+        client.emit_event(
+            "task.session_message",
+            {"role": "agent", "text": "其他任务", "truncated": False},
+            seq=14,
+            task_id="task-other",
+        )
+
+        assert vm.sessionMessages == [
+            *SESSION_MESSAGES,
+            {"role": "user", "text": "补充说明", "truncated": False},
+            {"role": "agent", "text": "第二条回复", "truncated": False},
+        ]
+
+    def test_snapshot_coalesces_an_already_queued_session_event(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": TASK_STATUS})
+        client.ok({"task": TASK_STATUS, "last_seq": 0, "events": [], "session_messages": []})
+
+        reply = {"role": "agent", "text": "已脱敏回复", "truncated": False}
+        client.emit_event("task.session_message", reply, seq=11, task_id="task-1")
+        # task.snapshot 读取事件缓冲后再复制活动会话记录时，可能带上这个尚未覆盖的事件。
+        vm.applySnapshot(
+            {
+                "task": TASK_STATUS,
+                "last_seq": 10,
+                "events": [],
+                "session_messages": [reply],
+            }
+        )
+
+        assert vm.sessionMessages == [reply]
+
+    def test_task_state_event_preserves_session_until_a_new_snapshot_replaces_it(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": TASK_STATUS})
+        client.ok(
+            {
+                "task": TASK_STATUS,
+                "last_seq": 2,
+                "events": [],
+                "session_messages": SESSION_MESSAGES,
+            }
+        )
+
+        client.emit_event(
+            "task.state",
+            {"state": "waiting_developer", "task": {**TASK_STATUS, "state": "waiting_developer"}},
+            task_id="task-1",
+        )
+
+        assert vm.state == "waiting_developer"
+        assert vm.sessionMessages == SESSION_MESSAGES
+
+    def test_terminal_task_state_clears_active_session_record(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": TASK_STATUS})
+        client.ok(
+            {
+                "task": TASK_STATUS,
+                "last_seq": 2,
+                "events": [],
+                "session_messages": SESSION_MESSAGES,
+            }
+        )
+
+        client.emit_event(
+            "task.state",
+            {"state": "cancelled", "task": {**TASK_STATUS, "state": "cancelled"}},
+            task_id="task-1",
+        )
+
+        assert vm.state == "cancelled"
+        assert vm.sessionMessages == []
+
+    def test_late_snapshot_does_not_regress_a_newer_task_state_event(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": TASK_STATUS})
+        client.ok({"task": TASK_STATUS, "last_seq": 0, "events": [], "session_messages": []})
+
+        client.emit_event(
+            "task.state",
+            {"state": "waiting_developer", "task": {**TASK_STATUS, "state": "waiting_developer"}},
+            task_id="task-1",
+        )
+        vm.applySnapshot(
+            {
+                "task": TASK_STATUS,
+                "last_seq": 1,
+                "events": [],
+                "session_messages": SESSION_MESSAGES,
+            }
+        )
+
+        assert vm.state == "waiting_developer"
+        assert vm.sessionMessages == SESSION_MESSAGES
+
+    def test_snapshot_restores_only_displayable_action_requests(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 40,
+                "events": [],
+                "session_messages": SESSION_MESSAGES,
+                "action_requests": [
+                    *ACTION_REQUESTS,
+                    {"request_id": "unknown-1", "kind": "always", "prompt": "bad"},
+                    {"request_id": "blank-1", "kind": "permission", "prompt": ""},
+                    {"kind": "permission", "prompt": "missing id"},
+                ],
+            }
+        )
+
+        assert vm.actionRequests == ACTION_REQUESTS
+
+    def test_action_request_events_are_current_task_only_and_keep_submitted_decision_locked(
+        self, core_app, client
+    ):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": TASK_STATUS})
+        client.ok(
+            {
+                "task": TASK_STATUS,
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": [],
+            }
+        )
+
+        client.emit_event(
+            "task.action_request",
+            ACTION_REQUESTS[0],
+            task_id="task-other",
+        )
+        assert vm.actionRequests == []
+
+        client.emit_event("task.action_request", ACTION_REQUESTS[0], task_id="task-1")
+        assert vm.actionRequests == [ACTION_REQUESTS[0]]
+
+        client.emit_event(
+            "task.state",
+            {"state": "awaiting_action", "task": {**TASK_STATUS, "state": "awaiting_action"}},
+            task_id="task-1",
+        )
+        vm.allowOnce("permission-1")
+        client.emit_event("task.action_request", ACTION_REQUESTS[0], task_id="task-1")
+        assert vm.actionRequests == [{**ACTION_REQUESTS[0], "decision_sent": True}]
+
+    def test_permission_allow_once_is_one_time_and_waits_for_real_agent_feedback(
+        self, core_app, client
+    ):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+        client.emit_event(
+            "task.state",
+            {"state": "awaiting_action", "task": {**TASK_STATUS, "state": "awaiting_action"}},
+            task_id="task-1",
+        )
+
+        vm.allowOnce("permission-1")
+        request = client.last()
+        assert request.method == "task.resolve_action"
+        assert request.params == {
+            "task_id": "task-1",
+            "request_id": "permission-1",
+            "decision": "allow_once",
+            "answer": None,
+        }
+        assert vm.actionRequests[0]["decision_sent"] is True
+
+        # accepted 只表示决议已送达，不是任务已恢复。
+        client.ok({"accepted": True})
+        assert vm.state == "awaiting_action"
+        assert vm.actionRequests[0]["decision_sent"] is True
+
+        vm.allowOnce("permission-1")
+        assert [request.method for request in client.requests].count("task.resolve_action") == 1
+        assert vm.errorCode == "ACTION_REQUEST_ALREADY_RESOLVED"
+
+        client.emit_event(
+            "task.state",
+            {"state": "running", "task": {**TASK_STATUS, "state": "running"}},
+            task_id="task-1",
+        )
+        assert vm.state == "running"
+        assert vm.actionRequests == []
+
+    def test_action_resolved_removes_only_the_matching_submitted_request(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        vm.allowOnce("permission-1")
+        client.ok({"accepted": True})
+        assert vm.actionRequests == [
+            {**ACTION_REQUESTS[0], "decision_sent": True},
+            ACTION_REQUESTS[1],
+        ]
+
+        # 只有当前任务的、已提交过决议的精确请求可以被真实 Agent 回执移除。
+        client.emit_event(
+            "task.action_resolved", {"request_id": "permission-1"}, task_id="task-other"
+        )
+        client.emit_event(
+            "task.action_resolved", {"request_id": "permission-other"}, task_id="task-1"
+        )
+        client.emit_event(
+            "task.action_resolved", {"request_id": "clarification-1"}, task_id="task-1"
+        )
+        assert vm.actionRequests == [
+            {**ACTION_REQUESTS[0], "decision_sent": True},
+            ACTION_REQUESTS[1],
+        ]
+        assert vm.state == "awaiting_action"
+
+        client.emit_event(
+            "task.action_resolved", {"request_id": "permission-1"}, task_id="task-1"
+        )
+        assert vm.actionRequests == [ACTION_REQUESTS[1]]
+        # 任务阶段只能由随后 task.state 中的真实 Agent 反馈推进。
+        assert vm.state == "awaiting_action"
+
+    def test_reject_is_available_for_permission_and_clarification_only(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        vm.rejectAction("permission-1")
+        permission_request = client.last()
+        assert permission_request.params == {
+            "task_id": "task-1",
+            "request_id": "permission-1",
+            "decision": "reject",
+            "answer": None,
+        }
+
+        vm.rejectAction("clarification-1")
+        clarification_request = client.last()
+        assert clarification_request.params == {
+            "task_id": "task-1",
+            "request_id": "clarification-1",
+            "decision": "reject",
+            "answer": None,
+        }
+        assert {request.params["decision"] for request in client.requests if request.method == "task.resolve_action"} == {"reject"}
+
+    def test_clarification_answer_is_scoped_to_the_matching_request(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        vm.answerClarification("clarification-1", "")
+        assert vm.errorCode == "INVALID_PARAMS"
+        assert [request.method for request in client.requests].count("task.resolve_action") == 0
+
+        vm.answerClarification("permission-1", "请继续")
+        assert vm.errorCode == "INVALID_PARAMS"
+        assert [request.method for request in client.requests].count("task.resolve_action") == 0
+
+        vm.answerClarification("clarification-1", "使用本地配置")
+        request = client.last()
+        assert request.params == {
+            "task_id": "task-1",
+            "request_id": "clarification-1",
+            "decision": "answer",
+            "answer": "使用本地配置",
+        }
+        assert vm.actionRequests[1]["decision_sent"] is True
+
+    def test_action_decision_error_reenables_only_the_matching_request(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        vm.allowOnce("permission-1")
+        vm.answerClarification("clarification-1", "使用本地配置")
+        client.err("ACTION_REQUEST_NOT_FOUND", "当前任务没有匹配的操作请求", index=-2)
+
+        assert vm.errorCode == "ACTION_REQUEST_NOT_FOUND"
+        assert vm.actionRequests == [
+            ACTION_REQUESTS[0],
+            {**ACTION_REQUESTS[1], "decision_sent": True},
+        ]
+
+    def test_uncertain_action_delivery_keeps_the_matching_card_locked(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        vm.allowOnce("permission-1")
+        client.err("ACTION_REQUEST_NOT_PENDING", "无法确认本次操作请求是否已送达")
+
+        assert vm.errorCode == "ACTION_REQUEST_NOT_PENDING"
+        assert vm.actionRequests == [
+            {**ACTION_REQUESTS[0], "decision_sent": True},
+            ACTION_REQUESTS[1],
+        ]
+        vm.allowOnce("permission-1")
+        assert vm.errorCode == "ACTION_REQUEST_ALREADY_RESOLVED"
+        assert [request.method for request in client.requests].count("task.resolve_action") == 1
+
+    def test_delayed_snapshot_cannot_reenable_a_submitted_matching_request(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        vm.allowOnce("permission-1")
+        vm.applySnapshot(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 3,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        assert vm.actionRequests[0]["decision_sent"] is True
+        assert vm.actionRequests[1]["decision_sent"] is False
+
+    def test_delayed_awaiting_action_snapshot_cannot_restore_cards_after_cancellation(
+        self, core_app, client
+    ):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+        assert vm.actionRequests == ACTION_REQUESTS
+
+        client.emit_event(
+            "task.state",
+            {"state": "cancelled", "task": {**TASK_STATUS, "state": "cancelled"}},
+            task_id="task-1",
+        )
+        assert vm.state == "cancelled"
+        assert vm.actionRequests == []
+
+        vm.applySnapshot(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 3,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        assert vm.state == "cancelled"
+        assert vm.actionRequests == []
+
+    def test_delayed_awaiting_action_snapshot_cannot_restore_cards_during_cancel_barrier(
+        self, core_app, client
+    ):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": [],
+            }
+        )
+
+        vm.cancel()
+        client.ok({"accepted": True})
+        assert vm.actionResolutionBlocked is True
+        assert vm.actionRequests == []
+
+        vm.applySnapshot(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 3,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        assert vm.actionResolutionBlocked is True
+        assert vm.actionRequests == []
+
+    def test_delayed_snapshot_cannot_restore_a_card_removed_by_real_agent_feedback(
+        self, core_app, client
+    ):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        vm.allowOnce("permission-1")
+        client.ok({"accepted": True})
+        client.emit_event(
+            "task.action_resolved", {"request_id": "permission-1"}, task_id="task-1"
+        )
+        assert vm.state == "awaiting_action"
+        assert vm.actionRequests == [ACTION_REQUESTS[1]]
+
+        # 另一张卡仍待处理，任务阶段尚未变化；因此不能只用状态过滤旧快照。
+        vm.applySnapshot(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 3,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        assert vm.actionRequests == [ACTION_REQUESTS[1]]
+
+        client.emit_event("task.action_request", ACTION_REQUESTS[0], task_id="task-1")
+        assert vm.actionRequests == [ACTION_REQUESTS[1]]
+
+    @pytest.mark.parametrize("cancel_outcome", ("not_accepted", "error"))
+    def test_cancellation_failure_keeps_action_cards_blocked(self, core_app, client, cancel_outcome):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        vm.cancel()
+        assert client.last().method == "task.cancel"
+        assert vm.actionResolutionBlocked is True
+
+        if cancel_outcome == "not_accepted":
+            client.ok({"accepted": False})
+        else:
+            client.err("TASK_RUNNING", "取消请求被拒绝")
+        assert vm.actionResolutionBlocked is True
+        assert vm.errorCode == "TASK_RUNNING"
+
+        vm.allowOnce("permission-1")
+        assert vm.errorCode == "ACTION_REQUEST_NOT_PENDING"
+        assert [request.method for request in client.requests].count("task.resolve_action") == 0
+
+    def test_unknown_action_request_never_sends_a_decision(self, core_app, client):
+        vm = self._make_vm(client)
+        vm.create()
+        client.ok({"task": {**TASK_STATUS, "state": "awaiting_action"}})
+        client.ok(
+            {
+                "task": {**TASK_STATUS, "state": "awaiting_action"},
+                "last_seq": 2,
+                "events": [],
+                "session_messages": [],
+                "action_requests": ACTION_REQUESTS,
+            }
+        )
+
+        vm.rejectAction("permission-other")
+        assert vm.errorCode == "ACTION_REQUEST_NOT_FOUND"
+        assert [request.method for request in client.requests].count("task.resolve_action") == 0
 
     def test_mark_verification_not_run_params(self, core_app, client):
         vm = self._make_vm(client)
@@ -525,7 +1274,15 @@ class TestTraceViewModel:
         client.emit_event("task.phase", {"phase": "planning", "detail": "正在规划"}, seq=1)
         client.emit_event(
             "task.action_request",
-            {"request_id": "ar-1", "kind": "permission", "prompt": "允许写入文件？", "channel": "native"},
+            {
+                "request_id": "ar-1",
+                "kind": "permission",
+                "prompt": "允许写入文件？",
+                "decision_sent": False,
+                "channel": "native",
+                "remote_session_id": "ses-private",
+                "port": 4999,
+            },
             seq=2,
         )
         client.emit_event(
@@ -538,7 +1295,12 @@ class TestTraceViewModel:
         assert vm.data(vm.index(1, 0), vm.TextRole) == "允许写入文件？"
         assert vm.data(vm.index(2, 0), vm.TextRole) == "测试通过"
         detail = vm.data(vm.index(1, 0), vm.DetailRole)
-        assert detail["request_id"] == "ar-1" and detail["channel"] == "native"
+        assert detail == {
+            "request_id": "ar-1",
+            "kind": "permission",
+            "prompt": "允许写入文件？",
+            "decision_sent": False,
+        }
 
     def test_ignores_unrelated_events(self, core_app, client):
         vm = TraceViewModel(client)
@@ -583,9 +1345,16 @@ REVIEW_BUNDLE = {
     "outcome": "finished",
     "attribution": "mixed",
     "attribution_reasons": ["用户于 08:12 标记人工编辑"],
+    "manual_edit_paths": ["src/auth.rs"],
     "summary": "修复了登录超时",
     "files": [
-        {"path": "src/auth.rs", "change": "modified", "diff": "--- a\n+++ b", "truncated": False},
+        {
+            "path": "src/auth.rs",
+            "change": "modified",
+            "diff": "--- a\n+++ b",
+            "truncated": False,
+            "end_hash": "sha256:abc",
+        },
         {"path": "src/big.rs", "change": "added", "diff": "…", "truncated": True},
     ],
     "verification": {"status": "passed", "detail": "cargo test 通过", "source": "agent"},
@@ -594,6 +1363,59 @@ REVIEW_BUNDLE = {
 
 
 class TestReviewViewModel:
+    def test_finished_session_auto_loads_exact_evidence_and_announces_review(self, core_app, client):
+        vm = ReviewViewModel(client)
+        ready = []
+        vm.reviewReady.connect(lambda: ready.append(True))
+
+        client.emit_event(
+            "task.finished",
+            {"outcome": "finished", "evidence_version": 2},
+            task_id="task-1",
+        )
+        request = client.last()
+        assert request.method == "review.get"
+        assert request.params == {"task_id": "task-1", "version": 2}
+        client.ok(REVIEW_BUNDLE)
+
+        assert vm.taskId == "task-1"
+        assert vm.evidenceVersion == 2
+        assert ready == [True]
+
+        client.emit_event(
+            "task.finished",
+            {"outcome": "failed", "evidence_version": 3},
+            task_id="task-1",
+        )
+        assert [request.method for request in client.requests].count("review.get") == 1
+
+    def test_new_auto_loaded_review_does_not_keep_previous_task_decision(self, core_app, client):
+        vm = ReviewViewModel(client)
+        vm.load("task-1", 2)
+        client.ok(REVIEW_BUNDLE)
+        vm.accept()
+        client.ok({
+            "decision": {
+                "kind": "accepted",
+                "reason": None,
+                "decided_at": "2025-01-01T00:00:00Z",
+            }
+        })
+        assert vm.decisionKind == "accepted"
+
+        client.emit_event(
+            "task.finished",
+            {"outcome": "finished", "evidence_version": 1},
+            task_id="task-2",
+        )
+        next_bundle = {**REVIEW_BUNDLE, "task_id": "task-2", "evidence_version": 1}
+        client.ok(next_bundle)
+
+        assert vm.taskId == "task-2"
+        assert vm.decisionKind == ""
+        assert vm.decisionReason == ""
+        assert vm.decidedAt == ""
+
     def test_load_populates_bundle_and_files_model(self, core_app, client):
         vm = ReviewViewModel(client)
         vm.load("task-1")
@@ -606,6 +1428,7 @@ class TestReviewViewModel:
         assert vm.outcome == "finished"
         assert vm.attribution == "mixed"
         assert vm.attributionReasons == ["用户于 08:12 标记人工编辑"]
+        assert vm.manualEditPaths == ["src/auth.rs"]
         assert vm.baselineDirtyFiles == ["docs/x.md"]
         assert vm.verificationStatus == "passed"
         assert vm.verificationSource == "agent"
@@ -616,6 +1439,8 @@ class TestReviewViewModel:
         assert model.data(idx, model.ChangeRole) == "modified"
         assert model.data(idx, model.DiffRole) == "--- a\n+++ b"
         assert model.data(idx, model.TruncatedRole) is False
+        assert model.data(idx, model.EndHashRole) == "sha256:abc"
+        assert model.roleNames()[model.EndHashRole] == b"endHash"
         assert model.data(model.index(1, 0), model.TruncatedRole) is True
 
     def test_readonly_no_write_api(self, core_app, client):

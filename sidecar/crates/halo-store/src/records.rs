@@ -2,8 +2,6 @@
 //! 枚举类字段以契约锁定的小写蛇形字符串存储（"pi"、"review_ready"、"agent_only"…），
 //! 由 halo-sidecar 负责与协议 DTO / halo-core 领域类型互转。
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 
 /// 工作区信任记录。键为 canonicalize 后的真实路径；
@@ -29,9 +27,6 @@ pub struct LaunchConfigRecord {
     pub thinking_level: String,
     /// 只存 Windows 凭据管理器条目名（引用名），绝不存任何密钥明文
     pub credential_ref: Option<String>,
-    pub extra_args: Vec<String>,
-    /// 白名单校验由 halo-config 负责，本层只做透明存取
-    pub env_overrides: BTreeMap<String, String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -48,6 +43,9 @@ pub struct TaskRecord {
     pub state: String,
     /// "agent_only" | "mixed"
     pub attribution: String,
+    /// 任务活跃期经工作台发生人工写入的路径集合。旧记录默认空集合。
+    #[serde(default)]
+    pub manual_edit_paths: Vec<String>,
     pub baseline_head: Option<String>,
     pub baseline_captured_at: String,
     pub created_at: String,
@@ -81,6 +79,9 @@ pub struct FileChangeDraft {
     /// modified|added|deleted|renamed
     pub change: String,
     pub diff: String,
+    /// 结束树中该文件字节的 sha256；删除或超过读取上限时为空。
+    #[serde(default)]
+    pub end_hash: Option<String>,
 }
 
 /// 交付证据版本（同构 IPC `ReviewBundle` 的持久化部分；is_latest 由读取时推导）。
@@ -109,6 +110,9 @@ pub struct FileEvidenceRecord {
     pub change: String,
     pub diff: String,
     pub truncated: bool,
+    /// 旧证据文件 JSON 没有该字段时回退为 None。
+    #[serde(default)]
+    pub end_hash: Option<String>,
 }
 
 /// 审查决定记录（同构 IPC `Decision`）。

@@ -4,7 +4,7 @@
 //! hang_on_cancel | action_request | verify_fail。
 //!
 //! Sidecar 以白名单环境启动子进程（宿主 FAKE_* 变量不会传入），因此同名脚本开关
-//! 亦可经命令行参数注入（Sidecar 会把 LaunchConfig.extra_args 原样附加在 `--rpc` 后）：
+//! 集成测试可通过同名 `.args.json` 旁路文件追加脚本参数；它不经过生产 LaunchConfig：
 //! `--mode <m>`（优先于 FAKE_PI_MODE）、`--step-delay-ms <n>`（脚本步进间隔，默认 10）、
 //! `--report-env <VAR>`（happy 类脚本额外产出一条 agent_note，只写该环境变量的**存在性**，
 //! 永不写值——供凭据注入 canary 测试断言注入真实发生）、`--pid-file <path>`（RPC 启动时
@@ -38,7 +38,8 @@ fn arg_value(args: &[String], name: &str) -> Option<String> {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    args.extend(halo_testkit::test_harness_args());
     if args.iter().any(|a| a == "--version") {
         let version = std::env::var("FAKE_PI_VERSION")
             .unwrap_or_else(|_| halo_testkit::DEFAULT_PI_VERSION.to_string());

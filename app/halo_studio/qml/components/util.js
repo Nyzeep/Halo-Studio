@@ -53,6 +53,7 @@ function taskStateLabel(state) {
     switch (String(state)) {
     case "created": return "已创建"
     case "running": return "运行中"
+    case "waiting_developer": return "等待开发者"
     case "awaiting_action": return "等待操作"
     case "finishing": return "收尾中"
     case "review_ready": return "待审查"
@@ -69,6 +70,7 @@ function taskStateTone(state, theme) {
     switch (String(state)) {
     case "running":
     case "finishing": return theme.accent
+    case "waiting_developer":
     case "awaiting_action":
     case "review_ready": return theme.warn
     case "accepted": return theme.ok
@@ -82,6 +84,7 @@ function taskIsActive(state) {
     switch (String(state)) {
     case "created":
     case "running":
+    case "waiting_developer":
     case "awaiting_action":
     case "finishing": return true
     default: return false
@@ -151,6 +154,24 @@ function traceKindTone(kind, theme) {
     case "phase": return theme.accent
     case "action_request": return theme.warn
     case "verification": return theme.ok
+    default: return theme.neutral
+    }
+}
+
+function sessionRoleLabel(role) {
+    switch (String(role)) {
+    case "user": return "开发者"
+    case "agent":
+    case "assistant": return "Agent"
+    default: return "会话"
+    }
+}
+
+function sessionRoleTone(role, theme) {
+    switch (String(role)) {
+    case "user": return theme.accent
+    case "agent":
+    case "assistant": return theme.ok
     default: return theme.neutral
     }
 }

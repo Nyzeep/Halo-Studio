@@ -6,7 +6,10 @@ mod opencode;
 mod pi;
 mod process;
 
-pub use opencode::{OpenCodeHandle, OpenCodeRuntime, OPENCODE_LOCKED_VERSION};
+pub use opencode::{
+    OpenCodeHandle, OpenCodeRuntime, OPENCODE_COMPATIBILITY_PROFILE,
+    OPENCODE_MIN_SUPPORTED_VERSION,
+};
 pub use pi::{PiHandle, PiRuntime};
 
 use std::collections::HashMap;
@@ -28,6 +31,24 @@ pub enum RuntimeState {
     Stopped,
 }
 
+/// 受管运行时收到的单次操作决定。Answer 的内容可能来自开发者输入，Debug 绝不回显。
+#[derive(Clone, PartialEq, Eq)]
+pub enum ActionDecision {
+    AllowOnce,
+    Reject,
+    Answer(String),
+}
+
+impl fmt::Debug for ActionDecision {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ActionDecision::AllowOnce => f.write_str("AllowOnce"),
+            ActionDecision::Reject => f.write_str("Reject"),
+            ActionDecision::Answer(_) => f.write_str("Answer(<redacted>)"),
+        }
+    }
+}
+
 /// runtime 自有轨迹条目；由 halo-sidecar 映射为契约 TraceItem。
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeTraceItem {
@@ -45,9 +66,18 @@ pub enum RuntimeEvent {
         kind: String,
         prompt: String,
     },
+    /// 只在 OpenCode 已确认匹配请求的决定后发出；Sidecar 据此结束 AwaitingAction。
+    ActionResolved {
+        request_id: String,
+    },
     Verification {
         status: String,
         detail: String,
+    },
+    /// OpenCode 已确认一轮完成后整理出的助手文本。文本仍是不可信的原生输出；
+    /// Sidecar 在进入 IPC 与活动会话记录前负责脱敏与限长。
+    SessionReply {
+        text: String,
     },
     TaskDone {
         outcome: String,
@@ -58,7 +88,6 @@ pub enum RuntimeEvent {
 /// 启动命令；env 已由 halo-config 按白名单构好，可能含注入凭据，故 Debug 不输出任何值。
 pub struct LaunchCmd {
     pub exe: String,
-    pub args: Vec<String>,
     pub env: HashMap<String, String>,
     pub cwd: String,
 }
@@ -67,7 +96,6 @@ impl fmt::Debug for LaunchCmd {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LaunchCmd")
             .field("exe", &self.exe)
-            .field("args", &self.args)
             .field("env", &format_args!("<{} 个变量，值已隐藏>", self.env.len()))
             .field("cwd", &self.cwd)
             .finish()
@@ -123,6 +151,16 @@ pub enum RuntimeError {
     VersionMismatch(String),
     #[error("受管应用拒绝了本次认证，请重新启动运行时以生成新的认证信息")]
     Unauthorized,
+    #[error("当前运行时尚不具备所请求的兼容性能力：{0}")]
+    CapabilityUnavailable(String),
+    #[error("当前任务没有匹配的活动操作请求")]
+    ActionRequestNotFound,
+    #[error("该操作请求已经提交过一次决定")]
+    ActionRequestAlreadyResolved,
+    #[error("无法确认本次操作请求的决定是否已送达；任务已停止以避免重复决议")]
+    ActionRequestDeliveryUncertain,
+    #[error("当前受管会话不接受后续消息")]
+    SessionNotWaiting,
 }
 
 /// Mutex 中毒时继续使用内部值：本 crate 的共享状态均为简单标量/映射，恢复使用不破坏不变量，
@@ -192,10 +230,12 @@ mod tests {
     #[test]
     fn launch_cmd_debug_hides_env_values() {
         let mut env = HashMap::new();
-        env.insert("HALO_OC_TOKEN".to_string(), "super-secret-value".to_string());
+        env.insert(
+            "OPENCODE_SERVER_PASSWORD".to_string(),
+            "super-secret-value".to_string(),
+        );
         let cmd = LaunchCmd {
             exe: "pi.exe".into(),
-            args: vec!["--rpc".into()],
             env,
             cwd: "D:\\repo".into(),
         };

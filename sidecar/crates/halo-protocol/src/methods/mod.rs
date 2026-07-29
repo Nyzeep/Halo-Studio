@@ -3,6 +3,7 @@
 //! 本文件承载 `sidecar.hello` 与多个子模块共享的枚举。
 
 pub mod config;
+pub mod fs;
 pub mod handoff;
 pub mod history;
 pub mod review;

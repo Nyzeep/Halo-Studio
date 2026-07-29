@@ -18,20 +18,17 @@ from PySide6.QtCore import (
 
 from .base import BaseViewModel
 
-# LaunchConfigInput 的全部合法字段（config_id 仅更新时出现）；白名单以外的键一律丢弃，
-# 从构造上保证视图模型永不持有、也永不发送“密钥明文”字段。
-_INPUT_FIELDS = (
-    "config_id",
+# `config.save` 只创建新配置，绝不能把列表记录的 config_id 再发送回 IPC。
+# 白名单以外的键一律丢弃，从构造上保证视图模型永不持有、也永不发送“密钥明文”字段。
+_SAVE_FIELDS = (
     "name",
     "agent",
     "executable_path",
     "model",
     "thinking_level",
     "credential_ref",
-    "extra_args",
-    "env_overrides",
 )
-_RECORD_FIELDS = _INPUT_FIELDS + ("created_at", "updated_at")
+_RECORD_FIELDS = ("config_id",) + _SAVE_FIELDS + ("created_at", "updated_at")
 
 
 def _filter_record(config: dict) -> dict:
@@ -46,10 +43,8 @@ class ConfigListModel(QAbstractListModel):
     ModelRole = ConfigIdRole + 4
     ThinkingLevelRole = ConfigIdRole + 5
     CredentialRefRole = ConfigIdRole + 6
-    ExtraArgsRole = ConfigIdRole + 7
-    EnvOverridesRole = ConfigIdRole + 8
-    CreatedAtRole = ConfigIdRole + 9
-    UpdatedAtRole = ConfigIdRole + 10
+    CreatedAtRole = ConfigIdRole + 7
+    UpdatedAtRole = ConfigIdRole + 8
 
     _ROLE_KEYS = {
         ConfigIdRole: "config_id",
@@ -59,8 +54,6 @@ class ConfigListModel(QAbstractListModel):
         ModelRole: "model",
         ThinkingLevelRole: "thinking_level",
         CredentialRefRole: "credential_ref",
-        ExtraArgsRole: "extra_args",
-        EnvOverridesRole: "env_overrides",
         CreatedAtRole: "created_at",
         UpdatedAtRole: "updated_at",
     }
@@ -90,8 +83,6 @@ class ConfigListModel(QAbstractListModel):
             self.ModelRole: b"model",
             self.ThinkingLevelRole: b"thinkingLevel",
             self.CredentialRefRole: b"credentialRef",
-            self.ExtraArgsRole: b"extraArgs",
-            self.EnvOverridesRole: b"envOverrides",
             self.CreatedAtRole: b"createdAt",
             self.UpdatedAtRole: b"updatedAt",
         }
@@ -152,7 +143,7 @@ class ConfigViewModel(BaseViewModel):
     @Slot("QVariantMap")
     def save(self, config: dict) -> None:
         self._clear_error()
-        payload = {k: config[k] for k in _INPUT_FIELDS if k in config}
+        payload = {k: config[k] for k in _SAVE_FIELDS if k in config}
         self._client.request("config.save", payload, self._on_save_ok, self._set_error)
 
     @Slot(str)

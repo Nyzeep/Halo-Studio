@@ -28,13 +28,16 @@ _ERROR_CODES = frozenset({
     "WORKSPACE_NOT_ACTIVE", "WORKSPACE_IDENTITY_CHANGED",
     "CREDENTIAL_STORE_UNAVAILABLE", "CREDENTIAL_NOT_FOUND", "ENV_NOT_WHITELISTED", "CONFIG_NOT_FOUND",
     "CONFIG_CONFLICT", "RUNTIME_NOT_READY", "RUNTIME_PROBE_FAILED", "RUNTIME_VERSION_MISMATCH",
+    "RUNTIME_CAPABILITY_UNAVAILABLE",
     "RUNTIME_ALREADY_RUNNING", "TASK_ALREADY_RUNNING", "TASK_RUNNING", "TASK_NOT_FOUND",
     "TASK_STILL_RUNNING", "TASK_NOT_REVIEWABLE", "EVIDENCE_NOT_FOUND", "EVIDENCE_NOT_LATEST", "EVENT_GAP",
+    "ACTION_REQUEST_NOT_FOUND", "ACTION_REQUEST_ALREADY_RESOLVED", "ACTION_REQUEST_NOT_PENDING",
     "HANDOFF_NOT_FOUND", "LINE_TOO_LONG", "PARSE_ERROR",
 })
 _EVENT_NAMES = frozenset({
     "sidecar.state", "workspace.changed", "runtime.state", "task.state", "task.phase", "trace.item",
-    "task.action_request", "task.verification", "task.manual_edit", "task.cancelled", "task.finished",
+    "task.session_message", "task.action_request", "task.action_resolved", "task.verification", "task.manual_edit", "task.cancelled",
+    "task.finished",
 })
 
 _DEFAULT_SIDECAR_RELATIVE = Path("sidecar") / "target" / "debug" / "halo-sidecar.exe"

@@ -14,8 +14,9 @@ path = "src/bin/fake_opencode.rs"
 [dependencies]
 serde_json = { workspace = true }
 tiny_http = { workspace = true }
-# token 摘要写盘（--token-digest-file）：只写 SHA-256 摘要，不写明文
+# OpenCode 启动密码摘要写盘（--password-digest-file）：只写 SHA-256 摘要，不写明文
 sha2 = { workspace = true }
+base64 = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

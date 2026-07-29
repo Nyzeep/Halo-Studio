@@ -1,11 +1,10 @@
 //! halo-store 公共 API 行为测试（tempfile 目录建库）。
 
-use std::collections::BTreeMap;
-
 use halo_store::{
     DecisionRecord, EvidenceDraft, FileChangeDraft, HandoffRecord, LaunchConfigRecord,
     SelectedChangeRecord, Store, StoreLimits, TaskRecord, TrustRecord,
 };
+use rusqlite::Connection;
 
 fn task(id: &str, state: &str, created_at: &str) -> TaskRecord {
     TaskRecord {
@@ -15,6 +14,7 @@ fn task(id: &str, state: &str, created_at: &str) -> TaskRecord {
         goal: format!("任务 {id} 的详细目标"),
         state: state.to_owned(),
         attribution: "agent_only".to_owned(),
+        manual_edit_paths: vec![],
         baseline_head: Some("abc123".to_owned()),
         baseline_captured_at: "2026-07-26T08:00:00Z".to_owned(),
         created_at: created_at.to_owned(),
@@ -43,6 +43,7 @@ fn file(path: &str, diff: &str) -> FileChangeDraft {
         path: path.to_owned(),
         change: "modified".to_owned(),
         diff: diff.to_owned(),
+        end_hash: None,
     }
 }
 
@@ -52,7 +53,7 @@ fn open_is_idempotent_and_keeps_data() {
     let path = dir.path().join("halo.db");
     {
         let store = Store::open(&path, StoreLimits::default()).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 2);
+        assert_eq!(store.schema_version().unwrap(), 4);
         store
             .put_task(&task("task-1", "running", "2026-07-26T08:00:00Z"))
             .unwrap();
@@ -60,13 +61,13 @@ fn open_is_idempotent_and_keeps_data() {
     }
     // 第二次 open：迁移不得重复执行，数据完整保留
     let store = Store::open(&path, StoreLimits::default()).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 2);
+    assert_eq!(store.schema_version().unwrap(), 4);
     assert_eq!(store.get_task("task-1").unwrap().unwrap().state, "running");
     assert_eq!(store.latest_evidence("task-1").unwrap().unwrap().version, 1);
     drop(store);
     // 第三次仍幂等
     let store = Store::open(&path, StoreLimits::default()).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 2);
+    assert_eq!(store.schema_version().unwrap(), 4);
 }
 
 #[test]
@@ -103,6 +104,7 @@ fn evidence_roundtrip_keeps_all_fields() {
     d.verification_status = "failed".to_owned();
     d.verification_detail = "2 个用例失败".to_owned();
     d.verification_source = "agent".to_owned();
+    d.files[0].end_hash = Some("sha256:abc".to_owned());
 
     store.append_evidence("task-9", &d).unwrap();
     let rec = store.latest_evidence("task-9").unwrap().unwrap();
@@ -117,6 +119,7 @@ fn evidence_roundtrip_keeps_all_fields() {
     assert_eq!(rec.files[0].change, "modified");
     assert_eq!(rec.files[0].diff, "-a\n+b\n");
     assert!(!rec.files[0].truncated);
+    assert_eq!(rec.files[0].end_hash.as_deref(), Some("sha256:abc"));
     assert_eq!(rec.verification_status, "failed");
     assert_eq!(rec.verification_detail, "2 个用例失败");
     assert_eq!(rec.verification_source, "agent");
@@ -415,8 +418,6 @@ fn launch_configs_roundtrip_update_delete() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::open(&dir.path().join("halo.db"), StoreLimits::default()).unwrap();
 
-    let mut env = BTreeMap::new();
-    env.insert("PATH".to_owned(), r"C:\tools".to_owned());
     let cfg = LaunchConfigRecord {
         config_id: "cfg-1".to_owned(),
         name: "Pi + GPT".to_owned(),
@@ -426,8 +427,6 @@ fn launch_configs_roundtrip_update_delete() {
         thinking_level: "medium".to_owned(),
         // 只存凭据引用名，绝无明文
         credential_ref: Some("halo/pi/openai".to_owned()),
-        extra_args: vec!["--verbose".to_owned()],
-        env_overrides: env,
         created_at: "2026-07-26T08:00:00Z".to_owned(),
         updated_at: "2026-07-26T08:00:00Z".to_owned(),
     };
@@ -445,6 +444,95 @@ fn launch_configs_roundtrip_update_delete() {
     assert!(store.delete_config("cfg-1").unwrap());
     assert!(!store.delete_config("cfg-1").unwrap());
     assert!(store.list_configs().unwrap().is_empty());
+}
+
+#[test]
+fn v3_launch_config_migration_preserves_safe_fields_and_removes_legacy_injection_columns() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("halo.db");
+    let legacy_marker = "legacy-config-value-marker-not-a-real-credential";
+    {
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE schema_version (version INTEGER NOT NULL);
+            INSERT INTO schema_version (version) VALUES (3);
+            CREATE TABLE launch_configs (
+                config_id       TEXT PRIMARY KEY,
+                name            TEXT NOT NULL,
+                agent           TEXT NOT NULL,
+                executable_path TEXT NOT NULL,
+                model           TEXT NOT NULL,
+                thinking_level  TEXT NOT NULL,
+                credential_ref  TEXT,
+                extra_args      TEXT NOT NULL,
+                env_overrides   TEXT NOT NULL,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL
+            );
+            INSERT INTO launch_configs (
+                config_id, name, agent, executable_path, model, thinking_level,
+                credential_ref, extra_args, env_overrides, created_at, updated_at
+            ) VALUES (
+                'cfg-v3', '旧 OpenCode 配置', 'opencode', 'C:\\tools\\opencode.exe',
+                'gpt-5', 'high', 'halo/opencode/default', '[\"--unsafe\"]',
+                '{\"PATH\":\"injected\"}', '2026-07-26T08:00:00Z', '2026-07-26T09:00:00Z'
+            );
+            ",
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE launch_configs SET env_overrides = ?1 WHERE config_id = 'cfg-v3'",
+            [legacy_marker],
+        )
+        .unwrap();
+    }
+
+    let store = Store::open(&path, StoreLimits::default()).unwrap();
+    assert_eq!(store.schema_version().unwrap(), 4);
+    assert_eq!(
+        store.list_configs().unwrap(),
+        vec![LaunchConfigRecord {
+            config_id: "cfg-v3".to_owned(),
+            name: "旧 OpenCode 配置".to_owned(),
+            agent: "opencode".to_owned(),
+            executable_path: r"C:\tools\opencode.exe".to_owned(),
+            model: "gpt-5".to_owned(),
+            thinking_level: "high".to_owned(),
+            credential_ref: Some("halo/opencode/default".to_owned()),
+            created_at: "2026-07-26T08:00:00Z".to_owned(),
+            updated_at: "2026-07-26T09:00:00Z".to_owned(),
+        }]
+    );
+    drop(store);
+
+    let conn = Connection::open(&path).unwrap();
+    let columns: Vec<String> = conn
+        .prepare("PRAGMA table_info(launch_configs)")
+        .unwrap()
+        .query_map([], |row| row.get(1))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert!(!columns.iter().any(|column| column == "extra_args"));
+    assert!(!columns.iter().any(|column| column == "env_overrides"));
+    drop(conn);
+
+    for artifact in [
+        path.clone(),
+        path.with_file_name("halo.db-wal"),
+        path.with_file_name("halo.db-shm"),
+    ] {
+        if artifact.exists() {
+            let bytes = std::fs::read(&artifact).unwrap();
+            assert!(
+                !bytes
+                    .windows(legacy_marker.len())
+                    .any(|window| window == legacy_marker.as_bytes()),
+                "迁移后数据库工件不得保留已删除的历史配置值"
+            );
+        }
+    }
 }
 
 #[test]

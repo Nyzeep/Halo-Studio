@@ -80,11 +80,7 @@ fn credential_canary_never_leaks_across_full_chain() {
         .write_all(format!("{canary}\n").as_bytes())
         .expect("写入密钥失败");
     let out = cred_set.wait_with_output().expect("cred set 未退出");
-    assert!(
-        out.status.success(),
-        "cred set 应成功：{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.status.success(), "cred set 应成功");
     let echoed = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -129,7 +125,7 @@ fn credential_canary_never_leaks_across_full_chain() {
             .as_str()
             .unwrap_or_default()
             .ends_with("存在=true"),
-        "凭据环境变量应真实注入：{note}"
+        "凭据环境变量应真实注入"
     );
 
     // 评审 diff 与交接包 JSON 均不含 canary
@@ -145,7 +141,7 @@ fn credential_canary_never_leaks_across_full_chain() {
 
     // 全部 IPC 收发行不含 canary
     for line in sc.transcript_snapshot() {
-        assert!(!line.contains(&canary), "IPC 行泄漏 canary：{line}");
+        assert!(!line.contains(&canary), "IPC 行泄漏 canary");
     }
 
     // 关闭后扫描 HALO_DATA_DIR 全部文件字节（含 SQLite 主库与日志文件）

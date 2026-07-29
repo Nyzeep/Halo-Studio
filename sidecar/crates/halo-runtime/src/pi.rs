@@ -33,7 +33,7 @@ impl PiRuntime {
         opts: Timeouts,
     ) -> Result<PiHandle, RuntimeError> {
         let mut command = Command::new(&cmd.exe);
-        command.arg("--rpc").args(&cmd.args);
+        command.arg("--rpc");
         // 子进程环境 = halo-config 构好的白名单环境，宿主其余变量一律不继承
         command.env_clear();
         command.envs(&cmd.env);

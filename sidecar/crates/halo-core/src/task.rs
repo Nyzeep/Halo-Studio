@@ -13,6 +13,7 @@ use std::fmt;
 pub enum TaskState {
     Created,
     Running,
+    WaitingDeveloper,
     AwaitingAction,
     Finishing,
     ReviewReady,
@@ -26,8 +27,11 @@ pub enum TaskState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TaskEvent {
     Started,
+    FollowUpSent,
+    RoundCompleted,
     ActionRequested,
     ActionResolved,
+    FinishRequested,
     Finishing,
     EvidenceReady,
     Accept,
@@ -47,9 +51,10 @@ pub struct TransitionError {
 }
 
 impl TaskState {
-    pub const ALL: [TaskState; 10] = [
+    pub const ALL: [TaskState; 11] = [
         TaskState::Created,
         TaskState::Running,
+        TaskState::WaitingDeveloper,
         TaskState::AwaitingAction,
         TaskState::Finishing,
         TaskState::ReviewReady,
@@ -64,6 +69,7 @@ impl TaskState {
         match self {
             TaskState::Created => "created",
             TaskState::Running => "running",
+            TaskState::WaitingDeveloper => "waiting_developer",
             TaskState::AwaitingAction => "awaiting_action",
             TaskState::Finishing => "finishing",
             TaskState::ReviewReady => "review_ready",
@@ -105,8 +111,11 @@ impl TaskState {
         use TaskState as S;
         let next = match (self, ev) {
             (S::Created, E::Started) => Some(S::Running),
+            (S::Running, E::RoundCompleted) => Some(S::WaitingDeveloper),
+            (S::WaitingDeveloper, E::FollowUpSent) => Some(S::Running),
             (S::Running, E::ActionRequested) => Some(S::AwaitingAction),
             (S::AwaitingAction, E::ActionResolved) => Some(S::Running),
+            (S::WaitingDeveloper, E::FinishRequested) => Some(S::Finishing),
             (S::Running, E::Finishing) => Some(S::Finishing),
             (S::Finishing, E::EvidenceReady) => Some(S::ReviewReady),
             (S::ReviewReady, E::Accept) => Some(S::Accepted),
@@ -133,8 +142,11 @@ impl TaskEvent {
     pub fn name(&self) -> &'static str {
         match self {
             TaskEvent::Started => "started",
+            TaskEvent::FollowUpSent => "follow_up_sent",
+            TaskEvent::RoundCompleted => "round_completed",
             TaskEvent::ActionRequested => "action_requested",
             TaskEvent::ActionResolved => "action_resolved",
+            TaskEvent::FinishRequested => "finish_requested",
             TaskEvent::Finishing => "finishing",
             TaskEvent::EvidenceReady => "evidence_ready",
             TaskEvent::Accept => "accept",
@@ -154,8 +166,11 @@ mod tests {
     fn all_events() -> Vec<TaskEvent> {
         vec![
             TaskEvent::Started,
+            TaskEvent::FollowUpSent,
+            TaskEvent::RoundCompleted,
             TaskEvent::ActionRequested,
             TaskEvent::ActionResolved,
+            TaskEvent::FinishRequested,
             TaskEvent::Finishing,
             TaskEvent::EvidenceReady,
             TaskEvent::Accept,
@@ -172,8 +187,17 @@ mod tests {
         use TaskState as S;
         match ev {
             TaskEvent::Started => (from == S::Created).then_some(S::Running),
+            TaskEvent::FollowUpSent => {
+                (from == S::WaitingDeveloper).then_some(S::Running)
+            }
+            TaskEvent::RoundCompleted => {
+                (from == S::Running).then_some(S::WaitingDeveloper)
+            }
             TaskEvent::ActionRequested => (from == S::Running).then_some(S::AwaitingAction),
             TaskEvent::ActionResolved => (from == S::AwaitingAction).then_some(S::Running),
+            TaskEvent::FinishRequested => {
+                (from == S::WaitingDeveloper).then_some(S::Finishing)
+            }
             TaskEvent::Finishing => (from == S::Running).then_some(S::Finishing),
             TaskEvent::EvidenceReady => (from == S::Finishing).then_some(S::ReviewReady),
             TaskEvent::Accept => (from == S::ReviewReady).then_some(S::Accepted),
@@ -211,13 +235,25 @@ mod tests {
         let mut s = TaskState::Created;
         for ev in [
             TaskEvent::Started,
-            TaskEvent::Finishing,
+            TaskEvent::RoundCompleted,
+            TaskEvent::FollowUpSent,
+            TaskEvent::RoundCompleted,
+            TaskEvent::FinishRequested,
             TaskEvent::EvidenceReady,
             TaskEvent::Accept,
         ] {
             s = s.apply(&ev).unwrap();
         }
         assert_eq!(s, TaskState::Accepted);
+    }
+
+    #[test]
+    fn completed_round_waits_for_developer_without_becoming_reviewable() {
+        let running = TaskState::Created.apply(&TaskEvent::Started).unwrap();
+        let waiting = running.apply(&TaskEvent::RoundCompleted).unwrap();
+        assert_eq!(waiting, TaskState::WaitingDeveloper);
+        assert!(!waiting.is_terminal());
+        assert!(!waiting.is_reviewable());
     }
 
     #[test]
@@ -241,6 +277,22 @@ mod tests {
         let s = TaskState::AwaitingAction;
         assert!(s.apply(&TaskEvent::Finishing).is_err());
         assert!(s.apply(&TaskEvent::EvidenceReady).is_err());
+    }
+
+    #[test]
+    fn only_waiting_developer_can_send_follow_up_or_finish() {
+        for state in TaskState::ALL {
+            assert_eq!(
+                state.apply(&TaskEvent::FollowUpSent).is_ok(),
+                state == TaskState::WaitingDeveloper,
+                "{state} 的追问权限不正确"
+            );
+            assert_eq!(
+                state.apply(&TaskEvent::FinishRequested).is_ok(),
+                state == TaskState::WaitingDeveloper,
+                "{state} 的显式结束权限不正确"
+            );
+        }
     }
 
     #[test]
@@ -275,7 +327,14 @@ mod tests {
         for s in [Accepted, Rejected, Cancelled, Failed, Interrupted] {
             assert!(s.is_terminal(), "{s} 应为终态");
         }
-        for s in [Created, Running, AwaitingAction, Finishing, ReviewReady] {
+        for s in [
+            Created,
+            Running,
+            WaitingDeveloper,
+            AwaitingAction,
+            Finishing,
+            ReviewReady,
+        ] {
             assert!(!s.is_terminal(), "{s} 不应为终态");
         }
     }
@@ -286,7 +345,7 @@ mod tests {
         for s in [ReviewReady, Accepted, Rejected, Cancelled, Failed, Interrupted] {
             assert!(s.is_reviewable(), "{s} 应开放审查入口");
         }
-        for s in [Created, Running, AwaitingAction, Finishing] {
+        for s in [Created, Running, WaitingDeveloper, AwaitingAction, Finishing] {
             assert!(!s.is_reviewable(), "{s} 不应开放审查入口");
         }
     }

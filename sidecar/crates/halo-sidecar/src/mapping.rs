@@ -89,8 +89,6 @@ pub fn config_record_to_dto(rec: &halo_store::LaunchConfigRecord) -> LaunchConfi
         model: rec.model.clone(),
         thinking_level: thinking_str_to_dto(&rec.thinking_level),
         credential_ref: rec.credential_ref.clone(),
-        extra_args: rec.extra_args.clone(),
-        env_overrides: rec.env_overrides.clone(),
         created_at: rec.created_at.clone(),
         updated_at: rec.updated_at.clone(),
     }
@@ -102,6 +100,7 @@ pub fn task_state_core_to_dto(s: halo_core::TaskState) -> TaskStateDto {
     match s {
         halo_core::TaskState::Created => TaskStateDto::Created,
         halo_core::TaskState::Running => TaskStateDto::Running,
+        halo_core::TaskState::WaitingDeveloper => TaskStateDto::WaitingDeveloper,
         halo_core::TaskState::AwaitingAction => TaskStateDto::AwaitingAction,
         halo_core::TaskState::Finishing => TaskStateDto::Finishing,
         halo_core::TaskState::ReviewReady => TaskStateDto::ReviewReady,
@@ -117,6 +116,7 @@ pub fn task_state_from_str(s: &str) -> halo_core::TaskState {
     match s {
         "created" => halo_core::TaskState::Created,
         "running" => halo_core::TaskState::Running,
+        "waiting_developer" => halo_core::TaskState::WaitingDeveloper,
         "awaiting_action" => halo_core::TaskState::AwaitingAction,
         "finishing" => halo_core::TaskState::Finishing,
         "review_ready" => halo_core::TaskState::ReviewReady,
@@ -243,7 +243,11 @@ pub fn cancel_mode_from_str(s: &str) -> CancelMode {
 
 // ---------- 证据 ----------
 
-pub fn evidence_record_to_bundle(rec: &halo_store::EvidenceRecord, is_latest: bool) -> ReviewBundle {
+pub fn evidence_record_to_bundle(
+    rec: &halo_store::EvidenceRecord,
+    manual_edit_paths: &[String],
+    is_latest: bool,
+) -> ReviewBundle {
     ReviewBundle {
         task_id: rec.task_id.clone(),
         evidence_version: rec.version,
@@ -251,6 +255,7 @@ pub fn evidence_record_to_bundle(rec: &halo_store::EvidenceRecord, is_latest: bo
         outcome: outcome_str_to_dto(&rec.outcome),
         attribution: attribution_str_to_dto(&rec.attribution),
         attribution_reasons: rec.attribution_reasons.clone(),
+        manual_edit_paths: manual_edit_paths.to_vec(),
         summary: rec.summary.clone(),
         files: rec
             .files
@@ -260,6 +265,7 @@ pub fn evidence_record_to_bundle(rec: &halo_store::EvidenceRecord, is_latest: bo
                 change: change_str_to_dto(&f.change),
                 diff: f.diff.clone(),
                 truncated: f.truncated,
+                end_hash: f.end_hash.clone(),
             })
             .collect(),
         verification: VerificationDto {

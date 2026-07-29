@@ -139,7 +139,7 @@ RowLayout {
             Layout.fillWidth: true
             spacing: 8
             Text { text: "模型："; color: Theme.textDim; font.pixelSize: 12 }
-            TextField { id: cfgModelInput; Layout.fillWidth: true; placeholderText: "如：gpt-5" }
+            TextField { id: cfgModelInput; Layout.fillWidth: true; placeholderText: "如：openai/gpt-5" }
         }
         RowLayout {
             Layout.fillWidth: true
@@ -202,7 +202,7 @@ RowLayout {
         RowLayout {
             spacing: 8
             Button {
-                text: configPage.editingConfigId.length > 0 ? "保存修改" : "保存为新配置"
+                text: configPage.editingConfigId.length > 0 ? "根据所选配置另存为新配置" : "保存为新配置"
                 enabled: cfgNameInput.text.trim().length > 0 && cfgExeInput.text.trim().length > 0
                 onClicked: {
                     if (configPage.cVM === null || !configPage.cVM.save)
@@ -214,12 +214,8 @@ RowLayout {
                         "model": cfgModelInput.text.trim(),
                         "thinking_level": (cfgThinkingSelect.currentValue === undefined || cfgThinkingSelect.currentValue === null)
                             ? "off" : String(cfgThinkingSelect.currentValue),
-                        "credential_ref": cfgCredRefInput.text.trim().length > 0 ? cfgCredRefInput.text.trim() : null,
-                        "extra_args": [],
-                        "env_overrides": {}
+                        "credential_ref": cfgCredRefInput.text.trim().length > 0 ? cfgCredRefInput.text.trim() : null
                     }
-                    if (configPage.editingConfigId.length > 0)
-                        payload["config_id"] = configPage.editingConfigId
                     configPage.cVM.save(payload)
                 }
             }

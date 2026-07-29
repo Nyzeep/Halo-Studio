@@ -123,7 +123,14 @@ class TraceViewModel(QAbstractListModel):
         elif event == "task.action_request":
             kind = "action_request"
             text = str(payload.get("prompt") or "")
-            detail = payload
+            # 操作卡片刻意保持为窄 IPC 表面，不能透传未来运行时私有字段，
+            # 例如远端句柄或传输元数据。
+            detail = {
+                "request_id": str(payload.get("request_id") or ""),
+                "kind": str(payload.get("kind") or ""),
+                "prompt": text,
+                "decision_sent": payload.get("decision_sent") is True,
+            }
         else:  # task.verification
             kind = "verification"
             text = str(payload.get("detail") or "")
