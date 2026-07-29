@@ -2503,7 +2503,11 @@ mod tests {
             "/version",
         ] {
             assert!(
-                !seen.iter().any(|entry| entry.contains(legacy_path)),
+                !seen.iter().any(|entry| {
+                    entry
+                        .split_once(' ')
+                        .is_some_and(|(_, path)| path == legacy_path)
+                }),
                 "不得请求旧假设协议端点 {legacy_path}：{seen:?}"
             );
         }

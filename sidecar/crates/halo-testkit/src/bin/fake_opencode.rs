@@ -305,12 +305,24 @@ fn lock_state(state: &Mutex<FakeState>) -> std::sync::MutexGuard<'_, FakeState> 
 }
 
 fn emit_event(state: &Arc<Mutex<FakeState>>, event: Value) {
-    let data = format!("data: {}\n\n", event);
-    let bytes = data.into_bytes();
+    let bytes = sse_frame(format!("data: {}\n\n", event));
     let mut state = lock_state(state);
     state
         .event_clients
         .retain(|client| client.send(bytes.clone()).is_ok());
+}
+
+// tiny-http's chunked encoder does not flush partial chunks. SSE comments are
+// valid padding, so each fake frame is made one full chunk for prompt delivery.
+fn sse_frame(data: String) -> Vec<u8> {
+    const CHUNK_SIZE: usize = 8192;
+    const KEEP_ALIVE: &[u8] = b": halo-testkit keep-alive\n";
+
+    let mut bytes = data.into_bytes();
+    while bytes.len() <= CHUNK_SIZE {
+        bytes.extend_from_slice(KEEP_ALIVE);
+    }
+    bytes
 }
 
 fn respond_sse(request: Request, state: Arc<Mutex<FakeState>>, mode: &str) {
@@ -322,10 +334,10 @@ fn respond_sse(request: Request, state: Arc<Mutex<FakeState>>, mode: &str) {
             .then(|| state.sessions.keys().next().cloned())
             .flatten()
     };
-    let _ = sender.send(
-        b"data: {\"id\":\"evt_connected\",\"type\":\"server.connected\",\"properties\":{}}\n\n"
-            .to_vec(),
-    );
+    let _ = sender.send(sse_frame(
+        "data: {\"id\":\"evt_connected\",\"type\":\"server.connected\",\"properties\":{}}\n\n"
+            .to_string(),
+    ));
     if let Some(session_id) = initial_session {
         let statuses: &[&str] = match mode {
             "initial_idle" => &["idle"],
@@ -336,7 +348,7 @@ fn respond_sse(request: Request, state: Arc<Mutex<FakeState>>, mode: &str) {
             let event = json!({"id": format!("evt_initial_{index}"), "type": "session.status", "properties": {
                 "sessionID": session_id.as_str(), "status": {"type": status}
             }});
-            let _ = sender.send(format!("data: {event}\n\n").into_bytes());
+            let _ = sender.send(sse_frame(format!("data: {event}\n\n")));
         }
     }
     // 后续生命周期只由 event_clients 中的克隆控制；测试模式清空该列表时能真正 EOF。
@@ -482,7 +494,7 @@ fn emit_round(state: Arc<Mutex<FakeState>>, mode: String, session_id: String, pr
             &state,
             json!({"id": "evt_text", "type": "message.part.updated", "properties": {
                 "sessionID": session_id.as_str(),
-                "part": {"type": "text", "text": "fake-opencode 内部流式文本"}
+                "part": {"type": "tool", "tool": "write", "state": {"status": "completed"}}
             }}),
         );
         emit_event(
@@ -775,7 +787,7 @@ fn respond_session_abort(request: Request, state: Arc<Mutex<FakeState>>, session
     );
 }
 
-fn session_id_from_path(path: &str, suffix: &str) -> Option<&str> {
+fn session_id_from_path<'a>(path: &'a str, suffix: &str) -> Option<&'a str> {
     path.strip_prefix("/session/")?.strip_suffix(suffix)
 }
 

@@ -104,7 +104,6 @@ fn opencode_probe_only_accepts_the_known_stable_1x_profile() {
         ("old_version", "1.18.4", false),
         ("pre_release_version", "1.18.5-pre-release", false),
         ("major_version", "2.0.0", false),
-        ("malformed_version", "1.18", false),
     ] {
         let config_id = sc.save_config("opencode", &fake_opencode_exe(), &["--mode", mode], None);
         let result = sc.ok(
@@ -114,6 +113,19 @@ fn opencode_probe_only_accepts_the_known_stable_1x_profile() {
         assert_eq!(result["version"], version, "mode={mode}");
         assert_eq!(result["supported"], supported, "mode={mode}");
     }
+
+    let config_id = sc.save_config(
+        "opencode",
+        &fake_opencode_exe(),
+        &["--mode", "malformed_version"],
+        None,
+    );
+    let error = sc.err(
+        "runtime.probe",
+        json!({"agent": "opencode", "config_id": config_id}),
+        "RUNTIME_PROBE_FAILED",
+    );
+    assert!(error["message"].as_str().unwrap_or_default().contains("版本"));
 }
 
 #[test]

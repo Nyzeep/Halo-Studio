@@ -11,17 +11,19 @@ use std::process::{Command, Stdio};
 
 use halo_config::{CredentialStore, WindowsCredentialStore};
 use serde_json::json;
-use support::{fake_pi_exe, sidecar_exe, walk_files, Sidecar, TestRepo};
-
-const CANARY_REF: &str = "halo/test/canary";
+use support::{
+    fake_pi_exe, lock_credential_manager_for_test, sidecar_exe, walk_files, Sidecar, TestRepo,
+};
 
 /// 测试结束（含失败路径）后清理写入 Windows 凭据管理器的条目。
 /// halo-sidecar CLI 没有删除子命令，故经 keyring 直接删除（service 与生产一致）。
-struct CanaryGuard;
+struct CanaryGuard {
+    reference: String,
+}
 
 impl Drop for CanaryGuard {
     fn drop(&mut self) {
-        if let Ok(entry) = keyring::Entry::new("HaloStudio", CANARY_REF) {
+        if let Ok(entry) = keyring::Entry::new("HaloStudio", &self.reference) {
             let _ = entry.delete_credential();
         }
     }
@@ -30,19 +32,23 @@ impl Drop for CanaryGuard {
 #[test]
 fn credential_canary_never_leaks_across_full_chain() {
     // 随机 canary：值只存在于凭据存储与被注入的子进程环境中
-    let canary = format!(
-        "canary-secret-{:x}-{:x}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("时钟异常")
-            .as_nanos()
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("时钟异常")
+        .as_nanos();
+    let canary_ref = format!(
+        "halo/integration/opencode-canary-{}-{nonce}",
+        std::process::id()
     );
-    let _guard = CanaryGuard;
+    let canary = format!("canary-secret-{:x}-{:x}", std::process::id(), nonce);
+    let _credential_manager_guard = lock_credential_manager_for_test();
+    let _guard = CanaryGuard {
+        reference: canary_ref.clone(),
+    };
 
     if !WindowsCredentialStore::new().available() {
         let mut cred_set = Command::new(sidecar_exe())
-            .args(["cred", "set", CANARY_REF])
+            .args(["cred", "set", canary_ref.as_str()])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -67,7 +73,7 @@ fn credential_canary_never_leaks_across_full_chain() {
 
     // 经 Sidecar CLI 从 stdin 录入（凭据红线：不走命令行参数，不回显内容）
     let mut cred_set = Command::new(sidecar_exe())
-        .args(["cred", "set", CANARY_REF])
+        .args(["cred", "set", canary_ref.as_str()])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -95,7 +101,7 @@ fn credential_canary_never_leaks_across_full_chain() {
 
     let check = sc.ok(
         "config.credential_check",
-        json!({"credential_ref": CANARY_REF}),
+        json!({"credential_ref": canary_ref}),
     );
     assert_eq!(check["exists"], true);
     assert_eq!(check["store_available"], true);
@@ -105,7 +111,7 @@ fn credential_canary_never_leaks_across_full_chain() {
         "pi",
         &fake_pi_exe(),
         &["--report-env", "HALO_PROVIDER_API_KEY"],
-        Some(CANARY_REF),
+        Some(canary_ref.as_str()),
     );
     sc.start_runtime("pi", &cfg);
     let task_id = sc.create_task("pi", &cfg, "凭据注入 canary 任务");

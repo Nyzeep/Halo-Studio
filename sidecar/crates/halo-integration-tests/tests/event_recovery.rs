@@ -18,17 +18,44 @@ fn snapshot_after_seq_semantics_and_event_gap() {
     let task_id = sc.create_task("pi", &cfg, "事件恢复任务");
     sc.wait_task_finished(&task_id);
 
-    // after_seq=0：从 seq 1 起完整返回，seq 连续且与 last_seq 一致
+    // after_seq=0：返回所有可见事件；终态快照会过滤活动会话事件，
+    // 因而可见 seq 严格递增但允许出现被过滤的序号空洞。
     let snap = sc.ok("task.snapshot", json!({"after_seq": 0}));
     let events = snap["events"].as_array().expect("events 应为数组");
     assert!(!events.is_empty());
     let last_seq = snap["last_seq"].as_u64().expect("last_seq 应为数字");
-    let mut expect = 1u64;
-    for e in events {
-        assert_eq!(e["seq"].as_u64(), Some(expect), "seq 必须连续：{e}");
-        expect += 1;
+    let all_events = sc.events_snapshot();
+    let all_last_seq = all_events
+        .last()
+        .and_then(|event| event["seq"].as_u64())
+        .expect("收发行应包含最后一个事件");
+    assert_eq!(last_seq, all_last_seq, "last_seq 应保持全局事件游标");
+
+    let visible_seqs: Vec<u64> = events
+        .iter()
+        .map(|event| event["seq"].as_u64().expect("可见事件应有 seq"))
+        .collect();
+    let mut previous = 0u64;
+    for e in events.iter() {
+        let seq = e["seq"].as_u64().expect("可见事件应有 seq");
+        assert!(seq > previous, "可见 seq 必须严格递增：{e}");
+        previous = seq;
     }
-    assert_eq!(expect - 1, last_seq, "events 应覆盖到 last_seq");
+    assert!(
+        all_events.iter().any(|event| {
+            matches!(
+                event["event"].as_str(),
+                Some("task.session_message" | "task.action_request" | "task.action_resolved")
+            )
+        }),
+        "该终态快照应覆盖至少一个需要过滤的活动会话事件"
+    );
+    assert!(events.iter().all(|event| {
+        !matches!(
+            event["event"].as_str(),
+            Some("task.session_message" | "task.action_request" | "task.action_resolved")
+        )
+    }));
     assert_eq!(events[0]["event"], "sidecar.state");
     assert!(
         events.iter().any(|e| e["event"] == "task.finished"),
@@ -38,11 +65,20 @@ fn snapshot_after_seq_semantics_and_event_gap() {
     assert_eq!(snap["task"]["task_id"], task_id.as_str());
     assert_eq!(snap["task"]["state"], "review_ready");
 
-    // 增量语义：after_seq = last-3 → 恰好尾部 3 条
-    let tail = sc.ok("task.snapshot", json!({"after_seq": last_seq - 3}));
+    // 增量语义：从倒数第三个可见事件的前一个 seq 开始，恰好返回可见尾部 3 条。
+    assert!(visible_seqs.len() >= 3);
+    let tail_after = visible_seqs[visible_seqs.len() - 3] - 1;
+    let tail = sc.ok("task.snapshot", json!({"after_seq": tail_after}));
     let tail_events = tail["events"].as_array().expect("events 应为数组");
     assert_eq!(tail_events.len(), 3);
-    assert_eq!(tail_events[0]["seq"].as_u64(), Some(last_seq - 2));
+    let tail_seqs: Vec<u64> = tail_events
+        .iter()
+        .map(|event| event["seq"].as_u64().expect("尾部事件应有 seq"))
+        .collect();
+    assert_eq!(
+        tail_seqs,
+        visible_seqs[visible_seqs.len() - 3..].to_vec()
+    );
 
     // 尾部语义：after_seq = last → 空增量；越界 after_seq 容忍为空
     let empty = sc.ok("task.snapshot", json!({"after_seq": last_seq}));
