@@ -1,6 +1,6 @@
 {
   "name": "halo-studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Archived source reference. This manifest has no runnable product entry."
+  "description": "Halo Studio 原生可验证交付工作台的归档 Node 参考元数据；不提供可运行产品入口。"
 }
