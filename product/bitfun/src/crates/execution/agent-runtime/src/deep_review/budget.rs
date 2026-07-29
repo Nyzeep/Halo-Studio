@@ -1,0 +1,1491 @@
+//! Deep Review reviewer budget, retry admission, and runtime accounting.
+//!
+//! This tracker is deliberately Deep Review-specific. It combines per-turn
+//! reviewer/judge budgets, retry budgets, active reviewer counts, effective
+//! concurrency learning, capacity diagnostics, and shared-context measurement.
+//! Do not move it wholesale to `subagent_runtime`: only isolated mechanics with
+//! no Deep Review policy, report, or diagnostic semantics should become generic.
+
+use super::concurrency_policy::{
+    DeepReviewEffectiveConcurrencySnapshot, DeepReviewEffectiveConcurrencyState,
+};
+use super::diagnostics::DeepReviewRuntimeDiagnostics;
+use super::execution_policy::{
+    DeepReviewExecutionPolicy, DeepReviewPolicyViolation, DeepReviewSubagentRole,
+};
+use super::queue::DeepReviewCapacityQueueReason;
+use super::shared_context::{
+    normalize_shared_context_file_path, normalize_shared_context_tool_name,
+    shared_context_measurement_snapshot_from_uses, DeepReviewSharedContextKey,
+    DeepReviewSharedContextMeasurementSnapshot, DeepReviewSharedContextUseRecord,
+};
+use dashmap::DashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+const BUDGET_TTL: Duration = Duration::from_secs(60 * 60);
+const PRUNE_INTERVAL: Duration = Duration::from_secs(300);
+pub const REVIEW_DIFF_MAX_CHARS_PER_TURN: usize = 240_000;
+pub const REVIEW_PROVIDER_DIFF_MAX_ACQUISITIONS_PER_TURN: usize = 128;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReviewDiffBudgetAdmission {
+    Accepted { repeated_page: bool },
+    Exhausted,
+}
+
+#[derive(Debug)]
+struct DeepReviewTurnBudget {
+    judge_calls: usize,
+    /// Tracks total optional specialist calls across all roles per turn.
+    /// New strict manifests cap this at one; legacy manifests retain their
+    /// historical policy-derived allowance.
+    reviewer_calls: usize,
+    reviewer_calls_by_subagent: HashMap<String, usize>,
+    retries_used_by_subagent: HashMap<String, usize>,
+    active_reviewers: usize,
+    active_reviewer_launch_batches: BTreeMap<u64, usize>,
+    active_reviewer_packet_ids: HashSet<String>,
+    initial_reviewer_packet_ids: HashSet<String>,
+    focused_question_ids: HashSet<String>,
+    focused_assignment_keys: HashSet<String>,
+    concurrency_cap_rejections: usize,
+    capacity_skips: usize,
+    shared_context_uses: HashMap<DeepReviewSharedContextKey, DeepReviewSharedContextUseRecord>,
+    review_diff_returned_chars: usize,
+    review_diff_returned_pages_by_reviewer: HashMap<String, HashSet<String>>,
+    review_provider_diff_acquisitions: usize,
+    review_diff_exhausted: bool,
+    review_diff_limited: bool,
+    review_target_stale: bool,
+    effective_concurrency: Option<DeepReviewEffectiveConcurrencyState>,
+    runtime_diagnostics: DeepReviewRuntimeDiagnostics,
+    created_at: Instant,
+    updated_at: Instant,
+}
+
+impl DeepReviewTurnBudget {
+    fn new(now: Instant) -> Self {
+        Self {
+            judge_calls: 0,
+            reviewer_calls: 0,
+            reviewer_calls_by_subagent: HashMap::new(),
+            retries_used_by_subagent: HashMap::new(),
+            active_reviewers: 0,
+            active_reviewer_launch_batches: BTreeMap::new(),
+            active_reviewer_packet_ids: HashSet::new(),
+            initial_reviewer_packet_ids: HashSet::new(),
+            focused_question_ids: HashSet::new(),
+            focused_assignment_keys: HashSet::new(),
+            concurrency_cap_rejections: 0,
+            capacity_skips: 0,
+            shared_context_uses: HashMap::new(),
+            review_diff_returned_chars: 0,
+            review_diff_returned_pages_by_reviewer: HashMap::new(),
+            review_provider_diff_acquisitions: 0,
+            review_diff_exhausted: false,
+            review_diff_limited: false,
+            review_target_stale: false,
+            effective_concurrency: None,
+            runtime_diagnostics: DeepReviewRuntimeDiagnostics::default(),
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    fn effective_concurrency_mut(
+        &mut self,
+        configured_max_parallel_instances: usize,
+    ) -> &mut DeepReviewEffectiveConcurrencyState {
+        let state = self.effective_concurrency.get_or_insert_with(|| {
+            DeepReviewEffectiveConcurrencyState::new(configured_max_parallel_instances)
+        });
+        state.rebase_configured_max(configured_max_parallel_instances);
+        state
+    }
+}
+
+pub struct DeepReviewActiveReviewerGuard<'a> {
+    tracker: &'a DeepReviewBudgetTracker,
+    parent_dialog_turn_id: String,
+    launch_batch: Option<u64>,
+    packet_id: Option<String>,
+    released: bool,
+}
+
+impl Drop for DeepReviewActiveReviewerGuard<'_> {
+    fn drop(&mut self) {
+        if !self.released {
+            self.tracker.finish_active_reviewer(
+                &self.parent_dialog_turn_id,
+                self.launch_batch,
+                self.packet_id.as_deref(),
+            );
+            self.released = true;
+        }
+    }
+}
+
+pub struct DeepReviewBudgetTracker {
+    turns: DashMap<String, DeepReviewTurnBudget>,
+    last_pruned_at: Mutex<Instant>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FocusedReviewBudgetClaim<'a> {
+    pub question_id: &'a str,
+    pub scope_paths: &'a [String],
+    pub max_distinct_questions: usize,
+}
+
+impl Default for DeepReviewBudgetTracker {
+    fn default() -> Self {
+        Self {
+            turns: DashMap::new(),
+            last_pruned_at: Mutex::new(Instant::now()),
+        }
+    }
+}
+
+impl DeepReviewBudgetTracker {
+    fn record_reason_count(
+        counts: &mut std::collections::BTreeMap<String, usize>,
+        reason: DeepReviewCapacityQueueReason,
+    ) {
+        *counts
+            .entry(reason.as_snake_case().to_string())
+            .or_insert(0) += 1;
+    }
+
+    pub fn record_review_diff_page(
+        &self,
+        parent_dialog_turn_id: &str,
+        reviewer_id: &str,
+        page_key: &str,
+        returned_chars: usize,
+    ) -> ReviewDiffBudgetAdmission {
+        if parent_dialog_turn_id.trim().is_empty()
+            || reviewer_id.trim().is_empty()
+            || page_key.trim().is_empty()
+        {
+            return ReviewDiffBudgetAdmission::Exhausted;
+        }
+
+        let now = Instant::now();
+        if let Ok(last_pruned) = self.last_pruned_at.lock() {
+            if now.saturating_duration_since(*last_pruned) >= PRUNE_INTERVAL {
+                drop(last_pruned);
+                self.prune_stale(now);
+            }
+        }
+        let mut turn = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        let repeated_page = turn
+            .review_diff_returned_pages_by_reviewer
+            .get(reviewer_id.trim())
+            .is_some_and(|returned_pages| returned_pages.contains(page_key));
+        if repeated_page {
+            return ReviewDiffBudgetAdmission::Accepted {
+                repeated_page: true,
+            };
+        }
+        if turn.review_diff_exhausted
+            || turn
+                .review_diff_returned_chars
+                .saturating_add(returned_chars)
+                > REVIEW_DIFF_MAX_CHARS_PER_TURN
+        {
+            turn.review_diff_exhausted = true;
+            turn.updated_at = now;
+            return ReviewDiffBudgetAdmission::Exhausted;
+        }
+        turn.review_diff_returned_pages_by_reviewer
+            .entry(reviewer_id.trim().to_string())
+            .or_default()
+            .insert(page_key.to_string());
+        turn.review_diff_returned_chars = turn
+            .review_diff_returned_chars
+            .saturating_add(returned_chars);
+        turn.updated_at = now;
+        ReviewDiffBudgetAdmission::Accepted {
+            repeated_page: false,
+        }
+    }
+
+    pub fn review_diff_budget_exhausted(&self, parent_dialog_turn_id: &str) -> bool {
+        self.turns
+            .get(parent_dialog_turn_id)
+            .is_some_and(|turn| turn.review_diff_exhausted)
+    }
+
+    pub fn admit_review_provider_diff_acquisition(&self, parent_dialog_turn_id: &str) -> bool {
+        if parent_dialog_turn_id.trim().is_empty() {
+            return false;
+        }
+        let now = Instant::now();
+        let mut turn = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        if turn.review_provider_diff_acquisitions >= REVIEW_PROVIDER_DIFF_MAX_ACQUISITIONS_PER_TURN
+        {
+            turn.review_diff_limited = true;
+            turn.updated_at = now;
+            return false;
+        }
+        turn.review_provider_diff_acquisitions =
+            turn.review_provider_diff_acquisitions.saturating_add(1);
+        turn.updated_at = now;
+        true
+    }
+
+    pub fn record_review_diff_limitation(&self, parent_dialog_turn_id: &str) {
+        let now = Instant::now();
+        let mut turn = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        turn.review_diff_limited = true;
+        turn.updated_at = now;
+    }
+
+    pub fn review_diff_limited(&self, parent_dialog_turn_id: &str) -> bool {
+        self.turns
+            .get(parent_dialog_turn_id)
+            .is_some_and(|turn| turn.review_diff_limited)
+    }
+
+    pub fn record_review_target_stale(&self, parent_dialog_turn_id: &str) {
+        let now = Instant::now();
+        let mut turn = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        turn.review_target_stale = true;
+        turn.updated_at = now;
+    }
+
+    pub fn review_target_stale(&self, parent_dialog_turn_id: &str) -> bool {
+        self.turns
+            .get(parent_dialog_turn_id)
+            .is_some_and(|turn| turn.review_target_stale)
+    }
+
+    pub fn review_diff_page_was_returned(
+        &self,
+        parent_dialog_turn_id: &str,
+        reviewer_id: &str,
+        page_key: &str,
+    ) -> bool {
+        if parent_dialog_turn_id.trim().is_empty()
+            || reviewer_id.trim().is_empty()
+            || page_key.trim().is_empty()
+        {
+            return false;
+        }
+        self.turns
+            .get(parent_dialog_turn_id)
+            .and_then(|turn| {
+                turn.review_diff_returned_pages_by_reviewer
+                    .get(reviewer_id.trim())
+                    .map(|pages| pages.contains(page_key))
+            })
+            .unwrap_or(false)
+    }
+
+    fn update_runtime_diagnostics(
+        &self,
+        parent_dialog_turn_id: &str,
+        update: impl FnOnce(&mut DeepReviewRuntimeDiagnostics),
+    ) {
+        if parent_dialog_turn_id.trim().is_empty() {
+            return;
+        }
+
+        let now = Instant::now();
+        if let Ok(last_pruned) = self.last_pruned_at.lock() {
+            if now.saturating_duration_since(*last_pruned) >= PRUNE_INTERVAL {
+                drop(last_pruned);
+                self.prune_stale(now);
+            }
+        }
+
+        let mut budget = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        update(&mut budget.runtime_diagnostics);
+        budget.updated_at = now;
+    }
+
+    pub fn record_runtime_queue_wait(&self, parent_dialog_turn_id: &str, queue_elapsed_ms: u64) {
+        if queue_elapsed_ms == 0 {
+            return;
+        }
+        self.update_runtime_diagnostics(parent_dialog_turn_id, |diagnostics| {
+            diagnostics.queue_wait_count = diagnostics.queue_wait_count.saturating_add(1);
+            diagnostics.queue_wait_total_ms = diagnostics
+                .queue_wait_total_ms
+                .saturating_add(queue_elapsed_ms);
+            diagnostics.queue_wait_max_ms = diagnostics.queue_wait_max_ms.max(queue_elapsed_ms);
+        });
+    }
+
+    pub fn record_runtime_provider_capacity_queue(
+        &self,
+        parent_dialog_turn_id: &str,
+        reason: DeepReviewCapacityQueueReason,
+    ) {
+        self.update_runtime_diagnostics(parent_dialog_turn_id, |diagnostics| {
+            diagnostics.provider_capacity_queue_count =
+                diagnostics.provider_capacity_queue_count.saturating_add(1);
+            Self::record_reason_count(
+                &mut diagnostics.provider_capacity_queue_reason_counts,
+                reason,
+            );
+        });
+    }
+
+    pub fn record_runtime_provider_capacity_retry(
+        &self,
+        parent_dialog_turn_id: &str,
+        reason: DeepReviewCapacityQueueReason,
+    ) {
+        self.update_runtime_diagnostics(parent_dialog_turn_id, |diagnostics| {
+            diagnostics.provider_capacity_retry_count =
+                diagnostics.provider_capacity_retry_count.saturating_add(1);
+            Self::record_reason_count(
+                &mut diagnostics.provider_capacity_retry_reason_counts,
+                reason,
+            );
+        });
+    }
+
+    pub fn record_runtime_provider_capacity_retry_success(
+        &self,
+        parent_dialog_turn_id: &str,
+        reason: DeepReviewCapacityQueueReason,
+    ) {
+        self.update_runtime_diagnostics(parent_dialog_turn_id, |diagnostics| {
+            diagnostics.provider_capacity_retry_success_count = diagnostics
+                .provider_capacity_retry_success_count
+                .saturating_add(1);
+            Self::record_reason_count(
+                &mut diagnostics.provider_capacity_retry_success_reason_counts,
+                reason,
+            );
+        });
+    }
+
+    pub fn record_runtime_capacity_skip(
+        &self,
+        parent_dialog_turn_id: &str,
+        reason: DeepReviewCapacityQueueReason,
+    ) {
+        self.update_runtime_diagnostics(parent_dialog_turn_id, |diagnostics| {
+            diagnostics.capacity_skip_count = diagnostics.capacity_skip_count.saturating_add(1);
+            Self::record_reason_count(&mut diagnostics.capacity_skip_reason_counts, reason);
+        });
+    }
+
+    pub fn record_runtime_manual_queue_action(&self, parent_dialog_turn_id: &str) {
+        self.update_runtime_diagnostics(parent_dialog_turn_id, |diagnostics| {
+            diagnostics.manual_queue_action_count =
+                diagnostics.manual_queue_action_count.saturating_add(1);
+        });
+    }
+
+    pub fn record_runtime_manual_retry(&self, parent_dialog_turn_id: &str) {
+        self.update_runtime_diagnostics(parent_dialog_turn_id, |diagnostics| {
+            diagnostics.manual_retry_count = diagnostics.manual_retry_count.saturating_add(1);
+        });
+    }
+
+    pub fn record_runtime_auto_retry(&self, parent_dialog_turn_id: &str) {
+        self.update_runtime_diagnostics(parent_dialog_turn_id, |diagnostics| {
+            diagnostics.auto_retry_count = diagnostics.auto_retry_count.saturating_add(1);
+        });
+    }
+
+    pub fn record_runtime_auto_retry_suppressed(&self, parent_dialog_turn_id: &str, reason: &str) {
+        let reason = reason.trim();
+        if reason.is_empty() {
+            return;
+        }
+        self.update_runtime_diagnostics(parent_dialog_turn_id, |diagnostics| {
+            *diagnostics
+                .auto_retry_suppressed_reason_counts
+                .entry(reason.to_string())
+                .or_insert(0) += 1;
+        });
+    }
+
+    pub fn runtime_diagnostics_snapshot(
+        &self,
+        parent_dialog_turn_id: &str,
+    ) -> Option<DeepReviewRuntimeDiagnostics> {
+        let budget = self.turns.get(parent_dialog_turn_id)?;
+        let mut diagnostics = budget.runtime_diagnostics.clone();
+        let shared_context_snapshot =
+            shared_context_measurement_snapshot_from_uses(&budget.shared_context_uses);
+        diagnostics.merge_shared_context_counts(
+            shared_context_snapshot.total_calls,
+            shared_context_snapshot.duplicate_calls,
+            shared_context_snapshot.duplicate_context_count,
+        );
+        (!diagnostics.is_empty()).then_some(diagnostics)
+    }
+
+    pub fn turn_elapsed_seconds(&self, parent_dialog_turn_id: &str) -> Option<u64> {
+        let budget = self.turns.get(parent_dialog_turn_id)?;
+        Some(
+            Instant::now()
+                .saturating_duration_since(budget.created_at)
+                .as_secs(),
+        )
+    }
+
+    pub fn record_shared_context_tool_use(
+        &self,
+        parent_dialog_turn_id: &str,
+        subagent_type: &str,
+        tool_name: &str,
+        file_path: &str,
+    ) -> DeepReviewSharedContextMeasurementSnapshot {
+        if parent_dialog_turn_id.trim().is_empty() {
+            return DeepReviewSharedContextMeasurementSnapshot::default();
+        }
+        let Some(tool_name) = normalize_shared_context_tool_name(tool_name) else {
+            return self.shared_context_measurement_snapshot(parent_dialog_turn_id);
+        };
+        let Some(file_path) = normalize_shared_context_file_path(file_path) else {
+            return self.shared_context_measurement_snapshot(parent_dialog_turn_id);
+        };
+
+        let now = Instant::now();
+        if let Ok(last_pruned) = self.last_pruned_at.lock() {
+            if now.saturating_duration_since(*last_pruned) >= PRUNE_INTERVAL {
+                drop(last_pruned);
+                self.prune_stale(now);
+            }
+        }
+
+        let mut budget = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        let record = budget
+            .shared_context_uses
+            .entry(DeepReviewSharedContextKey {
+                tool_name: tool_name.to_string(),
+                file_path,
+            })
+            .or_default();
+        record.call_count = record.call_count.saturating_add(1);
+        if !subagent_type.trim().is_empty() {
+            record
+                .reviewer_types
+                .insert(subagent_type.trim().to_string());
+        }
+        budget.updated_at = now;
+
+        shared_context_measurement_snapshot_from_uses(&budget.shared_context_uses)
+    }
+
+    pub fn shared_context_measurement_snapshot(
+        &self,
+        parent_dialog_turn_id: &str,
+    ) -> DeepReviewSharedContextMeasurementSnapshot {
+        self.turns
+            .get(parent_dialog_turn_id)
+            .map(|budget| {
+                shared_context_measurement_snapshot_from_uses(&budget.shared_context_uses)
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn record_task(
+        &self,
+        parent_dialog_turn_id: &str,
+        policy: &DeepReviewExecutionPolicy,
+        role: DeepReviewSubagentRole,
+        subagent_type: &str,
+        is_retry: bool,
+    ) -> Result<(), DeepReviewPolicyViolation> {
+        self.record_task_for_packet(
+            parent_dialog_turn_id,
+            policy,
+            role,
+            subagent_type,
+            is_retry,
+            None,
+        )
+    }
+
+    pub fn record_task_for_packet(
+        &self,
+        parent_dialog_turn_id: &str,
+        policy: &DeepReviewExecutionPolicy,
+        role: DeepReviewSubagentRole,
+        subagent_type: &str,
+        is_retry: bool,
+        packet_id: Option<&str>,
+    ) -> Result<(), DeepReviewPolicyViolation> {
+        self.record_task_for_packet_with_focus(
+            parent_dialog_turn_id,
+            policy,
+            role,
+            subagent_type,
+            is_retry,
+            packet_id,
+            None,
+        )
+    }
+
+    pub fn record_task_for_packet_with_focus(
+        &self,
+        parent_dialog_turn_id: &str,
+        policy: &DeepReviewExecutionPolicy,
+        role: DeepReviewSubagentRole,
+        subagent_type: &str,
+        is_retry: bool,
+        packet_id: Option<&str>,
+        focused_claim: Option<FocusedReviewBudgetClaim<'_>>,
+    ) -> Result<(), DeepReviewPolicyViolation> {
+        let now = Instant::now();
+        if let Ok(last_pruned) = self.last_pruned_at.lock() {
+            if now.saturating_duration_since(*last_pruned) >= PRUNE_INTERVAL {
+                drop(last_pruned);
+                self.prune_stale(now);
+            }
+        }
+
+        let mut budget = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+
+        match role {
+            DeepReviewSubagentRole::Reviewer => {
+                let subagent_type = normalize_budget_subagent_type(subagent_type)?;
+                if is_retry && focused_claim.is_some() {
+                    return Err(DeepReviewPolicyViolation::new(
+                        "focused_review_retry_disallowed",
+                        "Focused Review checks do not retry automatically",
+                    ));
+                }
+                if is_retry {
+                    if policy.max_retries_per_role == 0 {
+                        return Err(DeepReviewPolicyViolation::new(
+                            "deep_review_retry_budget_exhausted",
+                            format!(
+                                "Retry budget is disabled for DeepReview reviewer '{}'",
+                                subagent_type
+                            ),
+                        ));
+                    }
+                    if !budget
+                        .reviewer_calls_by_subagent
+                        .contains_key(subagent_type.as_str())
+                    {
+                        return Err(DeepReviewPolicyViolation::new(
+                            "deep_review_retry_without_initial_attempt",
+                            format!(
+                                "Cannot retry DeepReview reviewer '{}' before an initial attempt in this turn",
+                                subagent_type
+                            ),
+                        ));
+                    }
+                    let retry_count = budget
+                        .retries_used_by_subagent
+                        .entry(subagent_type.clone())
+                        .or_insert(0);
+                    if *retry_count >= policy.max_retries_per_role {
+                        return Err(DeepReviewPolicyViolation::new(
+                            "deep_review_retry_budget_exhausted",
+                            format!(
+                                "Retry budget exhausted for DeepReview reviewer '{}' (max retries: {})",
+                                subagent_type, policy.max_retries_per_role
+                            ),
+                        ));
+                    }
+                    *retry_count += 1;
+                    budget.updated_at = now;
+                    return Ok(());
+                }
+
+                let packet_id = packet_id.map(str::trim).filter(|id| !id.is_empty());
+                let focused_claim = focused_claim
+                    .map(|claim| validate_focused_claim(&budget, claim, packet_id))
+                    .transpose()?;
+                if let Some(packet_id) = packet_id {
+                    if budget.initial_reviewer_packet_ids.contains(packet_id) {
+                        return Err(DeepReviewPolicyViolation::new(
+                            "deep_review_packet_already_launched",
+                            format!(
+                                "DeepReview managed packet '{}' already used its initial attempt in this turn; use retry=true only for an admitted retry",
+                                packet_id
+                            ),
+                        ));
+                    }
+                }
+
+                let max_reviewer_calls = policy.max_reviewer_calls;
+                let used_calls = if policy.shared_spawned_review_budget {
+                    budget.reviewer_calls.saturating_add(budget.judge_calls)
+                } else {
+                    budget.reviewer_calls
+                };
+                if used_calls >= max_reviewer_calls {
+                    return Err(DeepReviewPolicyViolation::new(
+                        if policy.shared_spawned_review_budget {
+                            "deep_review_spawned_budget_exhausted"
+                        } else {
+                            "deep_review_reviewer_budget_exhausted"
+                        },
+                        format!(
+                            "Reviewer launch budget exhausted for this DeepReview turn (max calls: {})",
+                            max_reviewer_calls
+                        ),
+                    ));
+                }
+                if let Some(packet_id) = packet_id {
+                    budget
+                        .initial_reviewer_packet_ids
+                        .insert(packet_id.to_string());
+                }
+                if let Some((question_id, assignment_key)) = focused_claim {
+                    budget.focused_question_ids.insert(question_id);
+                    budget.focused_assignment_keys.insert(assignment_key);
+                }
+                budget.reviewer_calls += 1;
+                *budget
+                    .reviewer_calls_by_subagent
+                    .entry(subagent_type)
+                    .or_insert(0) += 1;
+            }
+            DeepReviewSubagentRole::Judge => {
+                if is_retry {
+                    return Err(DeepReviewPolicyViolation::new(
+                        "deep_review_judge_retry_disallowed",
+                        "ReviewJudge retry is not covered by the reviewer retry budget",
+                    ));
+                }
+                if focused_claim.is_some() {
+                    return Err(DeepReviewPolicyViolation::new(
+                        "focused_review_role_invalid",
+                        "Focused Review assignments may only launch ReviewWorker",
+                    ));
+                }
+                let max_judge_calls = 1;
+                if policy.shared_spawned_review_budget
+                    && budget.reviewer_calls.saturating_add(budget.judge_calls)
+                        >= policy.max_reviewer_calls
+                {
+                    return Err(DeepReviewPolicyViolation::new(
+                        "deep_review_spawned_budget_exhausted",
+                        format!(
+                            "Spawned Review call budget exhausted for this turn (max calls: {})",
+                            policy.max_reviewer_calls
+                        ),
+                    ));
+                }
+                if budget.judge_calls >= max_judge_calls {
+                    return Err(DeepReviewPolicyViolation::new(
+                        "deep_review_judge_budget_exhausted",
+                        format!(
+                            "ReviewJudge launch budget exhausted for this DeepReview turn (max calls: {})",
+                            max_judge_calls
+                        ),
+                    ));
+                }
+
+                budget.judge_calls += 1;
+            }
+        }
+
+        budget.updated_at = now;
+        Ok(())
+    }
+
+    pub fn record_concurrency_cap_rejection(&self, parent_dialog_turn_id: &str) {
+        if parent_dialog_turn_id.trim().is_empty() {
+            return;
+        }
+
+        let now = Instant::now();
+        if let Ok(last_pruned) = self.last_pruned_at.lock() {
+            if now.saturating_duration_since(*last_pruned) >= PRUNE_INTERVAL {
+                drop(last_pruned);
+                self.prune_stale(now);
+            }
+        }
+
+        let mut budget = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        budget.concurrency_cap_rejections += 1;
+        budget.updated_at = now;
+    }
+
+    fn record_capacity_skip_inner(
+        &self,
+        parent_dialog_turn_id: &str,
+        reason: Option<DeepReviewCapacityQueueReason>,
+    ) {
+        if parent_dialog_turn_id.trim().is_empty() {
+            return;
+        }
+
+        let now = Instant::now();
+        if let Ok(last_pruned) = self.last_pruned_at.lock() {
+            if now.saturating_duration_since(*last_pruned) >= PRUNE_INTERVAL {
+                drop(last_pruned);
+                self.prune_stale(now);
+            }
+        }
+
+        let mut budget = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        budget.capacity_skips += 1;
+        budget.runtime_diagnostics.capacity_skip_count = budget
+            .runtime_diagnostics
+            .capacity_skip_count
+            .saturating_add(1);
+        if let Some(reason) = reason {
+            Self::record_reason_count(
+                &mut budget.runtime_diagnostics.capacity_skip_reason_counts,
+                reason,
+            );
+        }
+        budget.updated_at = now;
+    }
+
+    pub fn record_capacity_skip(&self, parent_dialog_turn_id: &str) {
+        self.record_capacity_skip_inner(parent_dialog_turn_id, None);
+    }
+
+    pub fn record_capacity_skip_for_reason(
+        &self,
+        parent_dialog_turn_id: &str,
+        reason: DeepReviewCapacityQueueReason,
+    ) {
+        self.record_capacity_skip_inner(parent_dialog_turn_id, Some(reason));
+    }
+
+    pub fn begin_active_reviewer<'a>(
+        &'a self,
+        parent_dialog_turn_id: &str,
+    ) -> DeepReviewActiveReviewerGuard<'a> {
+        let now = Instant::now();
+        let mut budget = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        budget.active_reviewers = budget.active_reviewers.saturating_add(1);
+        budget.updated_at = now;
+
+        DeepReviewActiveReviewerGuard {
+            tracker: self,
+            parent_dialog_turn_id: parent_dialog_turn_id.to_string(),
+            launch_batch: None,
+            packet_id: None,
+            released: false,
+        }
+    }
+
+    pub fn try_begin_active_reviewer<'a>(
+        &'a self,
+        parent_dialog_turn_id: &str,
+        max_active_reviewers: usize,
+    ) -> Option<DeepReviewActiveReviewerGuard<'a>> {
+        let now = Instant::now();
+        let mut budget = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        if budget.active_reviewers >= max_active_reviewers {
+            return None;
+        }
+
+        budget.active_reviewers = budget.active_reviewers.saturating_add(1);
+        budget.updated_at = now;
+        Some(DeepReviewActiveReviewerGuard {
+            tracker: self,
+            parent_dialog_turn_id: parent_dialog_turn_id.to_string(),
+            launch_batch: None,
+            packet_id: None,
+            released: false,
+        })
+    }
+
+    pub fn try_begin_active_reviewer_for_launch_batch<'a>(
+        &'a self,
+        parent_dialog_turn_id: &str,
+        max_active_reviewers: usize,
+        launch_batch: u64,
+        packet_id: Option<&str>,
+    ) -> Result<Option<DeepReviewActiveReviewerGuard<'a>>, DeepReviewPolicyViolation> {
+        let now = Instant::now();
+        let mut budget = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+
+        let packet_id = packet_id.map(str::trim).filter(|value| !value.is_empty());
+        if let Some(packet_id) = packet_id {
+            if budget.active_reviewer_packet_ids.contains(packet_id) {
+                return Err(DeepReviewPolicyViolation::new(
+                    "deep_review_packet_already_active",
+                    format!(
+                        "DeepReview managed packet '{}' is already active in this turn",
+                        packet_id
+                    ),
+                ));
+            }
+        }
+
+        if budget.active_reviewers >= max_active_reviewers {
+            return Ok(None);
+        }
+
+        budget.active_reviewers = budget.active_reviewers.saturating_add(1);
+        *budget
+            .active_reviewer_launch_batches
+            .entry(launch_batch)
+            .or_insert(0) += 1;
+        if let Some(packet_id) = packet_id {
+            budget
+                .active_reviewer_packet_ids
+                .insert(packet_id.to_string());
+        }
+        budget.updated_at = now;
+        Ok(Some(DeepReviewActiveReviewerGuard {
+            tracker: self,
+            parent_dialog_turn_id: parent_dialog_turn_id.to_string(),
+            launch_batch: Some(launch_batch),
+            packet_id: packet_id.map(str::to_string),
+            released: false,
+        }))
+    }
+
+    fn finish_active_reviewer(
+        &self,
+        parent_dialog_turn_id: &str,
+        launch_batch: Option<u64>,
+        packet_id: Option<&str>,
+    ) {
+        if let Some(mut budget) = self.turns.get_mut(parent_dialog_turn_id) {
+            budget.active_reviewers = budget.active_reviewers.saturating_sub(1);
+            if let Some(launch_batch) = launch_batch {
+                let should_remove_batch = if let Some(count) =
+                    budget.active_reviewer_launch_batches.get_mut(&launch_batch)
+                {
+                    *count = (*count).saturating_sub(1);
+                    *count == 0
+                } else {
+                    false
+                };
+                if should_remove_batch {
+                    budget.active_reviewer_launch_batches.remove(&launch_batch);
+                }
+            }
+            if let Some(packet_id) = packet_id {
+                budget.active_reviewer_packet_ids.remove(packet_id);
+            }
+            budget.updated_at = Instant::now();
+        }
+    }
+
+    fn prune_stale(&self, now: Instant) {
+        self.turns
+            .retain(|_, budget| now.saturating_duration_since(budget.updated_at) <= BUDGET_TTL);
+        if let Ok(mut last_pruned) = self.last_pruned_at.lock() {
+            *last_pruned = now;
+        }
+    }
+
+    /// Explicitly clean up all budget tracking data.
+    /// Call this when the application is shutting down or when the review session ends.
+    pub fn cleanup(&self) {
+        self.turns.clear();
+        if let Ok(mut last_pruned) = self.last_pruned_at.lock() {
+            *last_pruned = Instant::now();
+        }
+    }
+
+    /// Returns the number of reviewer calls recorded for a given turn.
+    /// Used by the concurrency enforcement to check if a new launch is allowed.
+    pub fn active_reviewer_count(&self, parent_dialog_turn_id: &str) -> usize {
+        self.turns
+            .get(parent_dialog_turn_id)
+            .map(|budget| budget.active_reviewers)
+            .unwrap_or(0)
+    }
+
+    /// Returns true if a judge call has been recorded for a given turn.
+    pub fn has_judge_been_launched(&self, parent_dialog_turn_id: &str) -> bool {
+        self.turns
+            .get(parent_dialog_turn_id)
+            .map(|budget| budget.judge_calls > 0)
+            .unwrap_or(false)
+    }
+
+    pub fn concurrency_cap_rejection_count(&self, parent_dialog_turn_id: &str) -> usize {
+        self.turns
+            .get(parent_dialog_turn_id)
+            .map(|budget| budget.concurrency_cap_rejections)
+            .unwrap_or(0)
+    }
+
+    pub fn capacity_skip_count(&self, parent_dialog_turn_id: &str) -> usize {
+        self.turns
+            .get(parent_dialog_turn_id)
+            .map(|budget| budget.capacity_skips)
+            .unwrap_or(0)
+    }
+
+    pub fn retries_used(&self, parent_dialog_turn_id: &str, subagent_type: &str) -> usize {
+        self.turns
+            .get(parent_dialog_turn_id)
+            .map(|budget| {
+                budget
+                    .retries_used_by_subagent
+                    .get(subagent_type)
+                    .copied()
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0)
+    }
+
+    pub fn effective_concurrency_snapshot(
+        &self,
+        parent_dialog_turn_id: &str,
+        configured_max_parallel_instances: usize,
+    ) -> DeepReviewEffectiveConcurrencySnapshot {
+        if parent_dialog_turn_id.trim().is_empty() {
+            return DeepReviewEffectiveConcurrencyState::new(configured_max_parallel_instances)
+                .snapshot(Instant::now());
+        }
+
+        let now = Instant::now();
+        let mut budget = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        budget.updated_at = now;
+        budget
+            .effective_concurrency_mut(configured_max_parallel_instances)
+            .snapshot(now)
+    }
+
+    pub fn effective_parallel_instances(
+        &self,
+        parent_dialog_turn_id: &str,
+        configured_max_parallel_instances: usize,
+    ) -> usize {
+        self.effective_concurrency_snapshot(
+            parent_dialog_turn_id,
+            configured_max_parallel_instances,
+        )
+        .effective_parallel_instances
+    }
+
+    pub fn record_effective_concurrency_capacity_error(
+        &self,
+        parent_dialog_turn_id: &str,
+        configured_max_parallel_instances: usize,
+        reason: DeepReviewCapacityQueueReason,
+        retry_after: Option<Duration>,
+    ) -> DeepReviewEffectiveConcurrencySnapshot {
+        if parent_dialog_turn_id.trim().is_empty() {
+            return DeepReviewEffectiveConcurrencyState::new(configured_max_parallel_instances)
+                .snapshot(Instant::now());
+        }
+
+        let now = Instant::now();
+        let mut budget = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        budget.updated_at = now;
+        let snapshot = {
+            let state = budget.effective_concurrency_mut(configured_max_parallel_instances);
+            state.record_capacity_error(
+                matches!(reason, DeepReviewCapacityQueueReason::RetryAfter),
+                retry_after,
+                now,
+            );
+            state.snapshot(now)
+        };
+        budget
+            .runtime_diagnostics
+            .observe_effective_parallel(snapshot.effective_parallel_instances);
+        snapshot
+    }
+
+    pub fn record_effective_concurrency_success(
+        &self,
+        parent_dialog_turn_id: &str,
+        configured_max_parallel_instances: usize,
+    ) -> DeepReviewEffectiveConcurrencySnapshot {
+        if parent_dialog_turn_id.trim().is_empty() {
+            return DeepReviewEffectiveConcurrencyState::new(configured_max_parallel_instances)
+                .snapshot(Instant::now());
+        }
+
+        let now = Instant::now();
+        let mut budget = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        budget.updated_at = now;
+        let snapshot = {
+            let state = budget.effective_concurrency_mut(configured_max_parallel_instances);
+            state.record_success(now);
+            state.snapshot(now)
+        };
+        budget
+            .runtime_diagnostics
+            .observe_effective_parallel(snapshot.effective_parallel_instances);
+        snapshot
+    }
+
+    pub fn set_effective_concurrency_user_override(
+        &self,
+        parent_dialog_turn_id: &str,
+        configured_max_parallel_instances: usize,
+        user_override_parallel_instances: Option<usize>,
+    ) -> DeepReviewEffectiveConcurrencySnapshot {
+        if parent_dialog_turn_id.trim().is_empty() {
+            return DeepReviewEffectiveConcurrencyState::new(configured_max_parallel_instances)
+                .snapshot(Instant::now());
+        }
+
+        let now = Instant::now();
+        let mut budget = self
+            .turns
+            .entry(parent_dialog_turn_id.to_string())
+            .or_insert_with(|| DeepReviewTurnBudget::new(now));
+        budget.updated_at = now;
+        let snapshot = {
+            let state = budget.effective_concurrency_mut(configured_max_parallel_instances);
+            state.set_user_override(user_override_parallel_instances);
+            state.snapshot(now)
+        };
+        budget
+            .runtime_diagnostics
+            .observe_effective_parallel(snapshot.effective_parallel_instances);
+        snapshot
+    }
+}
+
+fn validate_focused_claim(
+    budget: &DeepReviewTurnBudget,
+    claim: FocusedReviewBudgetClaim<'_>,
+    packet_id: Option<&str>,
+) -> Result<(String, String), DeepReviewPolicyViolation> {
+    let question_id = claim.question_id.trim();
+    if question_id.is_empty() || claim.max_distinct_questions == 0 {
+        return Err(DeepReviewPolicyViolation::new(
+            "focused_review_budget_invalid",
+            "Focused Review budget claims require a question id and a positive question limit",
+        ));
+    }
+    let scope_key = match packet_id {
+        Some(packet_id) => format!("packet:{packet_id}"),
+        None if !claim.scope_paths.is_empty() => {
+            format!("paths:{}", claim.scope_paths.join("\0"))
+        }
+        None => {
+            return Err(DeepReviewPolicyViolation::new(
+                "focused_review_budget_invalid",
+                "Focused Review budget claims require an explicit path or packet scope",
+            ));
+        }
+    };
+    let assignment_key = format!("{question_id}\0{scope_key}");
+    if budget.focused_assignment_keys.contains(&assignment_key) {
+        return Err(DeepReviewPolicyViolation::new(
+            "focused_review_assignment_already_launched",
+            "The same focused Review question has already covered this scope",
+        ));
+    }
+    if !budget.focused_question_ids.contains(question_id)
+        && budget.focused_question_ids.len() >= claim.max_distinct_questions
+    {
+        return Err(DeepReviewPolicyViolation::new(
+            "focused_review_question_budget_exhausted",
+            format!(
+                "Focused Review question budget exhausted for this turn (max distinct questions: {})",
+                claim.max_distinct_questions
+            ),
+        ));
+    }
+    Ok((question_id.to_string(), assignment_key))
+}
+
+fn normalize_budget_subagent_type(
+    subagent_type: &str,
+) -> Result<String, DeepReviewPolicyViolation> {
+    let normalized = subagent_type.trim();
+    if normalized.is_empty() {
+        return Err(DeepReviewPolicyViolation::new(
+            "deep_review_subagent_type_missing",
+            "DeepReview task budget requires a non-empty subagent type",
+        ));
+    }
+
+    Ok(normalized.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn run_manifest_can_cap_on_demand_specialists_to_one_call() {
+        let tracker = DeepReviewBudgetTracker::default();
+        let policy =
+            DeepReviewExecutionPolicy::default().with_run_manifest_execution_policy(&json!({
+                "reviewMode": "deep",
+                "strategyLevel": "deep",
+                "executionPolicy": {
+                    "maxReviewerCalls": 1
+                }
+            }));
+
+        tracker
+            .record_task(
+                "turn-on-demand-specialist",
+                &policy,
+                DeepReviewSubagentRole::Reviewer,
+                "ReviewSecurity",
+                false,
+            )
+            .expect("first specialist should be admitted");
+        let error = tracker
+            .record_task(
+                "turn-on-demand-specialist",
+                &policy,
+                DeepReviewSubagentRole::Reviewer,
+                "ReviewArchitecture",
+                false,
+            )
+            .expect_err("second specialist should exceed the strict-run budget");
+
+        assert_eq!(error.code, "deep_review_reviewer_budget_exhausted");
+    }
+
+    #[test]
+    fn review_diff_budget_does_not_charge_an_identical_page_twice() {
+        let tracker = DeepReviewBudgetTracker::default();
+        assert_eq!(
+            tracker.record_review_diff_page("turn", "reviewer", "page-1", 40_000),
+            ReviewDiffBudgetAdmission::Accepted {
+                repeated_page: false
+            }
+        );
+        assert_eq!(
+            tracker.record_review_diff_page("turn", "reviewer", "page-1", 40_000),
+            ReviewDiffBudgetAdmission::Accepted {
+                repeated_page: true
+            }
+        );
+        assert!(!tracker.review_diff_budget_exhausted("turn"));
+        assert!(tracker.review_diff_page_was_returned("turn", "reviewer", "page-1"));
+        assert!(!tracker.review_diff_page_was_returned("turn", "other", "page-1"));
+    }
+
+    #[test]
+    fn review_diff_budget_charges_the_same_page_for_a_different_reviewer() {
+        let tracker = DeepReviewBudgetTracker::default();
+        assert_eq!(
+            tracker.record_review_diff_page("turn-cross-reviewer", "reviewer-a", "page-1", 120_000),
+            ReviewDiffBudgetAdmission::Accepted {
+                repeated_page: false
+            }
+        );
+        assert_eq!(
+            tracker.record_review_diff_page("turn-cross-reviewer", "reviewer-b", "page-1", 120_000),
+            ReviewDiffBudgetAdmission::Accepted {
+                repeated_page: false
+            }
+        );
+        assert_eq!(
+            tracker.record_review_diff_page("turn-cross-reviewer", "reviewer-c", "page-1", 1),
+            ReviewDiffBudgetAdmission::Exhausted
+        );
+    }
+
+    #[test]
+    fn provider_diff_acquisitions_are_bounded_before_io() {
+        let tracker = DeepReviewBudgetTracker::default();
+        for _ in 0..REVIEW_PROVIDER_DIFF_MAX_ACQUISITIONS_PER_TURN {
+            assert!(tracker.admit_review_provider_diff_acquisition("turn-many-small-files"));
+        }
+        assert!(!tracker.admit_review_provider_diff_acquisition("turn-many-small-files"));
+        assert!(tracker.review_diff_limited("turn-many-small-files"));
+    }
+
+    #[test]
+    fn review_diff_budget_fails_closed_after_the_turn_allowance() {
+        let tracker = DeepReviewBudgetTracker::default();
+        for index in 0..6 {
+            assert!(matches!(
+                tracker.record_review_diff_page(
+                    "turn-exhausted",
+                    "reviewer",
+                    &format!("page-{index}"),
+                    40_000,
+                ),
+                ReviewDiffBudgetAdmission::Accepted { .. }
+            ));
+        }
+        assert_eq!(
+            tracker.record_review_diff_page("turn-exhausted", "reviewer", "page-over", 1,),
+            ReviewDiffBudgetAdmission::Exhausted
+        );
+        assert!(tracker.review_diff_budget_exhausted("turn-exhausted"));
+    }
+
+    #[test]
+    fn review_runtime_limitations_are_tracked_per_turn() {
+        let tracker = DeepReviewBudgetTracker::default();
+
+        tracker.record_review_diff_limitation("turn-limited");
+        tracker.record_review_target_stale("turn-stale");
+
+        assert!(tracker.review_diff_limited("turn-limited"));
+        assert!(!tracker.review_target_stale("turn-limited"));
+        assert!(tracker.review_target_stale("turn-stale"));
+    }
+
+    #[test]
+    fn launch_batch_admission_allows_later_batch_when_reviewer_capacity_is_free() {
+        let tracker = DeepReviewBudgetTracker::default();
+        let turn_id = "turn-launch-batch-fill-free-slot";
+        let _first_batch = tracker
+            .try_begin_active_reviewer_for_launch_batch(turn_id, 2, 1, Some("packet-a"))
+            .expect("batch admission should not fail")
+            .expect("first reviewer should start");
+
+        let second_batch = tracker
+            .try_begin_active_reviewer_for_launch_batch(turn_id, 2, 2, Some("packet-b"))
+            .expect("later batch admission should not fail when reviewer capacity is free");
+
+        assert!(
+            second_batch.is_some(),
+            "later batch should fill a freed reviewer slot instead of waiting for the earlier batch to drain"
+        );
+    }
+
+    #[test]
+    fn launch_batch_admission_rejects_the_same_packet_while_it_is_active() {
+        let tracker = DeepReviewBudgetTracker::default();
+        let turn_id = "turn-duplicate-managed-packet";
+        let first = tracker
+            .try_begin_active_reviewer_for_launch_batch(turn_id, 2, 1, Some("packet-a"))
+            .expect("first packet admission should not fail")
+            .expect("first packet should start");
+
+        let Err(duplicate) =
+            tracker.try_begin_active_reviewer_for_launch_batch(turn_id, 2, 1, Some("packet-a"))
+        else {
+            panic!("an active packet must not launch twice");
+        };
+        assert_eq!(duplicate.code, "deep_review_packet_already_active");
+
+        drop(first);
+        assert!(tracker
+            .try_begin_active_reviewer_for_launch_batch(turn_id, 2, 1, Some("packet-a"))
+            .expect("the packet may be admitted again after the active attempt ends")
+            .is_some());
+    }
+
+    #[test]
+    fn managed_packet_initial_attempt_is_charged_only_once_per_turn() {
+        let tracker = DeepReviewBudgetTracker::default();
+        let policy = DeepReviewExecutionPolicy {
+            max_reviewer_calls: 2,
+            ..DeepReviewExecutionPolicy::default()
+        };
+
+        tracker
+            .record_task_for_packet(
+                "turn-managed-once",
+                &policy,
+                DeepReviewSubagentRole::Reviewer,
+                "ReviewWorker",
+                false,
+                Some("packet-a"),
+            )
+            .expect("the first packet should be charged");
+        let duplicate = tracker
+            .record_task_for_packet(
+                "turn-managed-once",
+                &policy,
+                DeepReviewSubagentRole::Reviewer,
+                "ReviewWorker",
+                false,
+                Some("packet-a"),
+            )
+            .expect_err("the completed packet must not be charged as another initial attempt");
+        assert_eq!(duplicate.code, "deep_review_packet_already_launched");
+        tracker
+            .record_task_for_packet(
+                "turn-managed-once",
+                &policy,
+                DeepReviewSubagentRole::Reviewer,
+                "ReviewWorker",
+                false,
+                Some("packet-b"),
+            )
+            .expect("a different packet should retain its reviewer budget");
+        assert_eq!(
+            tracker
+                .turns
+                .get("turn-managed-once")
+                .expect("the turn budget should exist")
+                .reviewer_calls,
+            2
+        );
+    }
+
+    #[test]
+    fn adaptive_budget_shares_three_spawned_calls_between_workers_and_judge() {
+        let tracker = DeepReviewBudgetTracker::default();
+        let policy = DeepReviewExecutionPolicy {
+            max_reviewer_calls: 3,
+            shared_spawned_review_budget: true,
+            ..DeepReviewExecutionPolicy::default()
+        };
+        let scopes = [
+            vec!["src/one.rs".to_string()],
+            vec!["src/two.rs".to_string()],
+        ];
+        for (question, scope) in ["focus-one", "focus-two"].into_iter().zip(&scopes) {
+            tracker
+                .record_task_for_packet_with_focus(
+                    "turn-adaptive-shared",
+                    &policy,
+                    DeepReviewSubagentRole::Reviewer,
+                    "ReviewWorker",
+                    false,
+                    None,
+                    Some(FocusedReviewBudgetClaim {
+                        question_id: question,
+                        scope_paths: scope,
+                        max_distinct_questions: 3,
+                    }),
+                )
+                .expect("focused worker should fit the shared budget");
+        }
+        tracker
+            .record_task_for_packet_with_focus(
+                "turn-adaptive-shared",
+                &policy,
+                DeepReviewSubagentRole::Judge,
+                "ReviewJudge",
+                false,
+                None,
+                None,
+            )
+            .expect("judge should consume the final shared slot");
+        let third_scope = vec!["src/three.rs".to_string()];
+        let exhausted = tracker
+            .record_task_for_packet_with_focus(
+                "turn-adaptive-shared",
+                &policy,
+                DeepReviewSubagentRole::Reviewer,
+                "ReviewWorker",
+                false,
+                None,
+                Some(FocusedReviewBudgetClaim {
+                    question_id: "focus-three",
+                    scope_paths: &third_scope,
+                    max_distinct_questions: 3,
+                }),
+            )
+            .expect_err("a fourth spawned call must be rejected");
+        assert_eq!(exhausted.code, "deep_review_spawned_budget_exhausted");
+    }
+
+    #[test]
+    fn focused_question_budget_counts_distinct_questions_and_rejects_duplicate_scope() {
+        let tracker = DeepReviewBudgetTracker::default();
+        let policy = DeepReviewExecutionPolicy {
+            max_reviewer_calls: 4,
+            ..DeepReviewExecutionPolicy::default()
+        };
+        for (question, packet) in [("focus-one", "packet-a"), ("focus-one", "packet-b")] {
+            tracker
+                .record_task_for_packet_with_focus(
+                    "turn-focused-questions",
+                    &policy,
+                    DeepReviewSubagentRole::Reviewer,
+                    "ReviewWorker",
+                    false,
+                    Some(packet),
+                    Some(FocusedReviewBudgetClaim {
+                        question_id: question,
+                        scope_paths: &[],
+                        max_distinct_questions: 2,
+                    }),
+                )
+                .expect("one question may cover separate managed packets");
+        }
+        let duplicate = tracker
+            .record_task_for_packet_with_focus(
+                "turn-focused-questions",
+                &policy,
+                DeepReviewSubagentRole::Reviewer,
+                "ReviewWorker",
+                false,
+                Some("packet-a"),
+                Some(FocusedReviewBudgetClaim {
+                    question_id: "focus-one",
+                    scope_paths: &[],
+                    max_distinct_questions: 2,
+                }),
+            )
+            .expect_err("the same question and scope must not be launched twice");
+        assert_eq!(duplicate.code, "focused_review_assignment_already_launched");
+    }
+
+    #[test]
+    fn launch_batch_admission_allows_same_batch_and_next_batch_after_release() {
+        let tracker = DeepReviewBudgetTracker::default();
+        let turn_id = "turn-launch-batch-release";
+        let first = tracker
+            .try_begin_active_reviewer_for_launch_batch(turn_id, 2, 1, Some("packet-a"))
+            .expect("first batch should not violate launch order")
+            .expect("first reviewer should start");
+        let second = tracker
+            .try_begin_active_reviewer_for_launch_batch(turn_id, 2, 1, Some("packet-b"))
+            .expect("same batch should not violate launch order")
+            .expect("second reviewer should start");
+        assert!(
+            tracker
+                .try_begin_active_reviewer_for_launch_batch(turn_id, 2, 1, Some("packet-c"))
+                .expect("same batch should not violate launch order")
+                .is_none(),
+            "same-batch admission should still respect active reviewer capacity"
+        );
+
+        drop(first);
+        drop(second);
+
+        assert!(tracker
+            .try_begin_active_reviewer_for_launch_batch(turn_id, 2, 2, Some("packet-c"))
+            .expect("next batch should start after the previous batch releases")
+            .is_some());
+    }
+}
