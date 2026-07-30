@@ -1,0 +1,35 @@
+[package]
+name = "local-ip-address"
+description = "Retrieve system's local IP address and Network Interfaces/Adapters on Linux, macOS and Windows."
+repository = "https://github.com/LeoBorai/local-ip-address"
+categories = ["web-programming", "network-programming"]
+homepage = "https://github.com/LeoBorai/local-ip-address"
+keywords = ["local", "ip", "address", "web", "network"]
+license = "MIT OR Apache-2.0"
+version = "0.6.13"
+authors = ["Leo Borai <estebanborai@gmail.com>"]
+edition = "2021"
+readme = "README.md"
+
+[dependencies]
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+neli = "0.7.4"
+
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.61.2"
+features = [
+    "Win32_Foundation",
+    "Win32_Networking_WinSock",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Memory",
+]
+
+[[example]]
+name = "example"
+path = "examples/show_ip_and_ifs.rs"

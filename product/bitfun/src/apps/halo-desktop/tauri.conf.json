@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Halo Studio",
+  "version": "0.1.0",
+  "identifier": "com.halostudio.desktop",
+  "build": {
+    "beforeDevCommand": "node ../../scripts/halo-workbench-dev-server.mjs",
+    "devUrl": "http://127.0.0.1:1432",
+    "beforeBuildCommand": "node ../../scripts/halo-workbench-build.mjs",
+    "frontendDist": "../../halo-workbench/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Halo Studio - 编码工作台",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 650,
+        "resizable": true,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+    },
+    "macOSPrivateApi": true,
+    "withGlobalTauri": false
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "Halo Studio 本地编码工作台",
+    "longDescription": "Halo Studio 是面向本地代码工作流的 Tauri 编码工作台。",
+    "icon": [
+      "icons/halo-icon.icns",
+      "icons/halo-icon.ico",
+      "icons/halo-icon.png"
+    ]
+  }
+}

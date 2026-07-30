@@ -1,0 +1,41 @@
+{
+  "pid": 32428,
+  "port": "9337",
+  "target": {
+    "id": "F750E991459CD11A36CB947F6C224B1E",
+    "type": "page",
+    "title": "Halo Studio - 编码工作台",
+    "url": "http://tauri.localhost/"
+  },
+  "before": {
+    "title": "Halo Studio - 编码工作台",
+    "url": "http://tauri.localhost/",
+    "readyState": "complete",
+    "rootScope": "local-coding",
+    "product": "halo-studio",
+    "hasHaloWorkbench": true,
+    "hasThreeColumnWorkbenchText": false,
+    "activeNav": "workspace",
+    "workspaceTopbar": "未打开工作区",
+    "statusStrong": "等待打开",
+    "terminal": "$ 等待本地命令\n选择文件或运行一条命令开始工作。",
+    "bodyExcerpt": "Halo Studio\n本地编码工作台\n未打开工作区\n＋\nH\n导航\n□\n工作区\n编码会话\n⌘\n版本控制\n>_\n终端\n工作区文件\n＋\n▾\nsrc\n•\nmain.rs\n•\nworkspace.rs\n•\nCargo.toml\n•\nREADME.md\n本地模式\nv0.1\n\nHALO WORKBENCH\n\n把注意力留在代码上\n\n从本地工作区开始，编辑、检查并运行你的项目。\n\n打开工作区 →\nmain.rs\n×\n本地编辑器\n1\n2\n3\n4\n5\n6\n7\n8\n9\nfn main() {\n    println!(\"Halo Studio ready\");\n}\n\n⌁\n工作区命令\n▶运行\n终端\n~/workspace\n就绪\n$ 等待本地命令\n选择文件或运行一条命令开始工作。\n工作区状态\n↻\n本地工作区\n等待打开\n\n打开一个项目目录以开始编码。\n\n最近活动\n今天\n✓\n工作台已启动\nHalo 本地工作台已载入\n09:41\n⌁\n编码会话\n保持本地上下文\n09:40\ni\n快速开始\n\n打开工作区后，从左侧文件树选择文件。"
+  },
+  "after": {
+    "rootScope": "local-coding",
+    "product": "halo-studio",
+    "activeNav": "terminal",
+    "workspaceTopbar": "halo-workspace",
+    "statusStrong": "已打开",
+    "terminal": "$ cargo check --locked -p halo-tauri-desktop\n本地命令已加入工作台预览。",
+    "commandCleared": true,
+    "hasCommandPreview": false,
+    "hasOpenedWorkspace": false,
+    "hasTerminalNav": true,
+    "bodyExcerpt": "Halo Studio\n本地编码工作台\nhalo-workspace\n＋\nH\n导航\n□\n工作区\n编码会话\n⌘\n版本控制\n>_\n终端\n工作区文件\n＋\n▾\nsrc\n•\nmain.rs\n•\nworkspace.rs\n•\nCargo.toml\n•\nREADME.md\n本地模式\nv0.1\n\nHALO WORKBENCH\n\n把注意力留在代码上\n\n从本地工作区开始，编辑、检查并运行你的项目。\n\n切换工作区 →\nmain.rs\n×\n本地编辑器\n1\n2\n3\n4\n5\n6\n7\n8\n9\nfn main() {\n    println!(\"Halo Studio ready\");\n}\n\n⌁\n工作区命令\n▶再次运行\n终端\n~/halo-workspace\n已记录\n$ cargo check --locked -p halo-tauri-desktop\n本地命令已加入工作台预览。\n工作区状态\n↻\n本地工作区\n已打开\n\n本地文件、终端和版本控制面板已准备。\n\n最近活动\n刚刚\n✓\n工作台已启动\nHalo 本地工作台已载入\n09:41\n⌁\n编码会话\n保持本地上下文\n09:40\ni\n快速开始\n\n打开工作区后，从左侧文件树选择文件。"
+  },
+  "screenshots": {
+    "cdpBefore": "D:\\Halo Studio\\.worktrees\\issue-03-tauri-workbench\\docs\\requirements\\bitfun-tauri-product-migration\\artifacts\\03-native-smoke-rerun-cdp-before.png",
+    "cdpAfter": "D:\\Halo Studio\\.worktrees\\issue-03-tauri-workbench\\docs\\requirements\\bitfun-tauri-product-migration\\artifacts\\03-native-smoke-rerun-cdp-after.png"
+  }
+}

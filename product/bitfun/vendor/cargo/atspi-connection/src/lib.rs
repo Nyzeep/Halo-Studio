@@ -1,0 +1,466 @@
+//! A connection to AT-SPI.
+//! This connection may receive any [`atspi_common::events::Event`] structures.
+
+#![deny(clippy::all, clippy::pedantic, clippy::cargo, unsafe_code, rustdoc::all, missing_docs)]
+#![allow(clippy::multiple_crate_versions)]
+
+pub use atspi_common as common;
+use common::{
+	error::AtspiError,
+	events::{DBusInterface, DBusMatchRule, DBusMember, MessageConversion, RegistryEventString},
+	EventProperties, Result as AtspiResult,
+};
+
+#[cfg(feature = "wrappers")]
+use atspi_common::events::Event;
+
+#[cfg(feature = "p2p")]
+mod p2p;
+#[cfg(feature = "p2p")]
+pub use p2p::{Peer, P2P};
+
+use atspi_proxies::{
+	accessible::AccessibleProxy,
+	bus::{BusProxy, StatusProxy},
+	registry::RegistryProxy,
+};
+
+#[cfg(feature = "wrappers")]
+use futures_lite::stream::{Stream, StreamExt};
+use std::ops::Deref;
+use zbus::{
+	fdo::DBusProxy,
+	proxy::{CacheProperties, Defaults},
+	Address, MatchRule,
+};
+#[cfg(feature = "wrappers")]
+use zbus::{message::Type as MessageType, MessageStream};
+
+#[cfg(feature = "p2p")]
+use crate::p2p::Peers;
+
+/// A connection to the at-spi bus
+#[derive(Clone, Debug)]
+pub struct AccessibilityConnection {
+	registry: RegistryProxy<'static>,
+	dbus_proxy: DBusProxy<'static>,
+
+	#[cfg(feature = "p2p")]
+	peers: Peers,
+}
+
+impl AccessibilityConnection {
+	/// Open a new connection to the bus
+	/// # Errors
+	/// May error when a bus is not available,
+	/// or when the accessibility bus (AT-SPI) can not be found.
+	#[cfg_attr(feature = "tracing", tracing::instrument)]
+	pub async fn new() -> AtspiResult<Self> {
+		// Grab the a11y bus address from the session bus
+		let a11y_bus_addr = {
+			#[cfg(feature = "tracing")]
+			tracing::debug!("Connecting to session bus");
+			let session_bus = Box::pin(zbus::Connection::session()).await?;
+
+			#[cfg(feature = "tracing")]
+			tracing::debug!(
+				name = session_bus.unique_name().map(|n| n.as_str()),
+				"Connected to session bus"
+			);
+
+			let proxy = BusProxy::new(&session_bus).await?;
+			#[cfg(feature = "tracing")]
+			tracing::debug!("Getting a11y bus address from session bus");
+			proxy.get_address().await?
+		};
+
+		#[cfg(feature = "tracing")]
+		tracing::debug!(address = %a11y_bus_addr, "Got a11y bus address");
+		let addr: Address = a11y_bus_addr.parse()?;
+
+		let accessibility_conn = Self::from_address(addr).await?;
+
+		#[cfg(feature = "p2p")]
+		accessibility_conn
+			.peers
+			.spawn_peer_listener_task(accessibility_conn.connection());
+
+		Ok(accessibility_conn)
+	}
+
+	/// Returns an [`AccessibilityConnection`], a wrapper for the [`RegistryProxy`]; a handle for the registry provider
+	/// on the accessibility bus.
+	///
+	/// You may want to call this if you have the accessibility bus address and want a connection with
+	/// a convenient async event stream provisioning.
+	///
+	/// Without address, you will want to call  `open`, which tries to obtain the accessibility bus' address
+	/// on your behalf.
+	///
+	/// # Errors
+	///
+	/// `RegistryProxy` is configured with invalid path, interface or destination
+	pub async fn from_address(bus_addr: Address) -> AtspiResult<Self> {
+		#[cfg(feature = "tracing")]
+		tracing::info!("Connecting to a11y bus");
+		let bus = Box::pin(zbus::connection::Builder::address(bus_addr)?.build()).await?;
+
+		#[cfg(feature = "tracing")]
+		tracing::info!(name = bus.unique_name().map(|n| n.as_str()), "Connected to a11y bus");
+
+		// The Proxy holds a strong reference to a Connection, so we only need to store the proxy
+		let registry = RegistryProxy::new(&bus).await?;
+		let dbus_proxy = DBusProxy::new(&bus).await?;
+
+		#[cfg(not(feature = "p2p"))]
+		return Ok(Self { registry, dbus_proxy });
+
+		#[cfg(feature = "p2p")]
+		let peers = Peers::initialize_peers(&bus).await?;
+		#[cfg(feature = "p2p")]
+		return Ok(Self { registry, dbus_proxy, peers });
+	}
+
+	/// Stream yielding all `Event` types.
+	///
+	/// Monitor this stream to be notified and receive events on the a11y bus.
+	///
+	/// # Example
+	/// Basic use:
+	///
+	/// ```rust
+	/// use atspi_connection::AccessibilityConnection;
+	/// use enumflags2::BitFlag;
+	/// use atspi_connection::common::events::{ObjectEvents, object::StateChangedEvent};
+	/// use zbus::{fdo::DBusProxy, MatchRule, message::Type as MessageType};
+	/// use atspi_connection::common::events::Event;
+	/// # use futures_lite::StreamExt;
+	/// # use std::error::Error;
+	///
+	/// # fn main() {
+	/// #   assert!(tokio_test::block_on(example()).is_ok());
+	/// # }
+	///
+	/// # async fn example() -> Result<(), Box<dyn Error>> {
+	///     let atspi = AccessibilityConnection::new().await?;
+	///     atspi.register_event::<ObjectEvents>().await?;
+	///
+	///     let mut events = atspi.event_stream();
+	///     std::pin::pin!(&mut events);
+	/// #   let output = std::process::Command::new("busctl")
+	/// #       .arg("--user")
+	/// #       .arg("call")
+	/// #       .arg("org.a11y.Bus")
+	/// #       .arg("/org/a11y/bus")
+	/// #       .arg("org.a11y.Bus")
+	/// #       .arg("GetAddress")
+	/// #       .output()
+	/// #       .unwrap();
+	/// #    let addr_string = String::from_utf8(output.stdout).unwrap();
+	/// #    let addr_str = addr_string
+	/// #        .strip_prefix("s \"")
+	/// #        .unwrap()
+	/// #        .trim()
+	/// #        .strip_suffix('"')
+	/// #        .unwrap();
+	/// #   let mut base_cmd = std::process::Command::new("busctl");
+	/// #   let thing = base_cmd
+	/// #       .arg("--address")
+	/// #       .arg(addr_str)
+	/// #       .arg("emit")
+	/// #       .arg("/org/a11y/atspi/null")
+	/// #       .arg("org.a11y.atspi.Event.Object")
+	/// #       .arg("StateChanged")
+	/// #       .arg("siiva{sv}")
+	/// #       .arg("")
+	/// #       .arg("0")
+	/// #       .arg("0")
+	/// #       .arg("i")
+	/// #       .arg("0")
+	/// #       .arg("0")
+	/// #       .output()
+	/// #       .unwrap();
+	///
+	///     while let Some(Ok(ev)) = events.next().await {
+	///         // Handle Object events
+	///        if let Ok(event) = StateChangedEvent::try_from(ev) {
+	/// #        break;
+	///          // do something else here
+	///        } else { continue }
+	///     }
+	/// #    Ok(())
+	/// # }
+	/// ```
+	#[cfg(feature = "wrappers")]
+	pub fn event_stream(&self) -> impl Stream<Item = Result<Event, AtspiError>> {
+		MessageStream::from(self.registry.inner().connection()).filter_map(|res| {
+			let msg = match res {
+				Ok(m) => m,
+				Err(e) => return Some(Err(e.into())),
+			};
+
+			let msg_header = msg.header();
+			let Some(msg_interface) = msg_header.interface() else {
+				return Some(Err(AtspiError::MissingInterface));
+			};
+
+			// Most events we encounter are sent on an "org.a11y.atspi.Event.*" interface,
+			// but there are exceptions like "org.a11y.atspi.Cache" or "org.a11y.atspi.Registry".
+			// So only signals with a suitable interface name will be parsed.
+			if msg_interface.starts_with("org.a11y.atspi")
+				&& msg.message_type() == MessageType::Signal
+			{
+				Some(Event::try_from(&msg))
+			} else {
+				None
+			}
+		})
+	}
+
+	/// Registers an events as defined in [`atspi_common::events`].\
+	/// This function registers a single event, like so:
+	///
+	/// # Example
+	/// ```rust
+	/// use atspi_connection::common::events::object::StateChangedEvent;
+	/// # tokio_test::block_on(async {
+	/// let connection = atspi_connection::AccessibilityConnection::new().await.unwrap();
+	/// connection.register_event::<StateChangedEvent>().await.unwrap();
+	/// # })
+	/// ```
+	///
+	/// # Errors
+	/// This function may return an error if a [`zbus::Error`] is caused by all the various calls to [`zbus::fdo::DBusProxy`] and [`zbus::MatchRule::try_from`].
+	pub async fn add_match_rule<T: DBusMatchRule>(&self) -> Result<(), AtspiError> {
+		let match_rule = MatchRule::try_from(<T as DBusMatchRule>::MATCH_RULE_STRING)?;
+		self.dbus_proxy.add_match_rule(match_rule).await?;
+		Ok(())
+	}
+
+	/// Deregisters an event as defined in [`atspi_common::events`].\
+	/// This function registers a single event, like so:
+	///
+	/// # Example
+	/// ```rust
+	/// use atspi_connection::common::events::object::StateChangedEvent;
+	/// # tokio_test::block_on(async {
+	/// let connection = atspi_connection::AccessibilityConnection::new().await.unwrap();
+	/// connection.add_match_rule::<StateChangedEvent>().await.unwrap();
+	/// connection.remove_match_rule::<StateChangedEvent>().await.unwrap();
+	/// # })
+	/// ```
+	///
+	/// # Errors
+	/// This function may return an error if a [`zbus::Error`] is caused by all the various calls to [`zbus::fdo::DBusProxy`] and [`zbus::MatchRule::try_from`].
+	pub async fn remove_match_rule<T: DBusMatchRule>(&self) -> Result<(), AtspiError> {
+		let match_rule = MatchRule::try_from(<T as DBusMatchRule>::MATCH_RULE_STRING)?;
+		self.dbus_proxy.add_match_rule(match_rule).await?;
+		Ok(())
+	}
+
+	/// Add a registry event.
+	/// This tells accessible applications which events should be forwarded to the accessibility bus.
+	/// This is called by [`Self::register_event`].
+	///
+	/// # Example
+	/// ```rust
+	/// use atspi_connection::common::events::object::StateChangedEvent;
+	/// # tokio_test::block_on(async {
+	/// let connection = atspi_connection::AccessibilityConnection::new().await.unwrap();
+	/// connection.add_registry_event::<StateChangedEvent>().await.unwrap();
+	/// connection.remove_registry_event::<StateChangedEvent>().await.unwrap();
+	/// # })
+	/// ```
+	///
+	/// # Errors
+	/// May cause an error if the `DBus` method [`atspi_proxies::registry::RegistryProxy::register_event`] fails.
+	pub async fn add_registry_event<T: RegistryEventString>(&self) -> Result<(), AtspiError> {
+		self.registry
+			.register_event(<T as RegistryEventString>::REGISTRY_EVENT_STRING)
+			.await?;
+		Ok(())
+	}
+
+	/// Remove a registry event.
+	/// This tells accessible applications which events should be forwarded to the accessibility bus.
+	/// This is called by [`Self::deregister_event`].
+	/// It may be called like so:
+	///
+	/// # Example
+	/// ```rust
+	/// use atspi_connection::common::events::object::StateChangedEvent;
+	/// # tokio_test::block_on(async {
+	/// let connection = atspi_connection::AccessibilityConnection::new().await.unwrap();
+	/// connection.add_registry_event::<StateChangedEvent>().await.unwrap();
+	/// connection.remove_registry_event::<StateChangedEvent>().await.unwrap();
+	/// # })
+	/// ```
+	///
+	/// # Errors
+	/// May cause an error if the `DBus` method [`RegistryProxy::deregister_event`] fails.
+	pub async fn remove_registry_event<T: RegistryEventString>(&self) -> Result<(), AtspiError> {
+		self.registry
+			.deregister_event(<T as RegistryEventString>::REGISTRY_EVENT_STRING)
+			.await?;
+		Ok(())
+	}
+
+	/// This calls [`Self::add_registry_event`] and [`Self::add_match_rule`], two components necessary to receive accessibility events.
+	/// # Errors
+	/// This will only fail if [`Self::add_registry_event`[ or [`Self::add_match_rule`] fails.
+	pub async fn register_event<T: RegistryEventString + DBusMatchRule>(
+		&self,
+	) -> Result<(), AtspiError> {
+		self.add_registry_event::<T>().await?;
+		self.add_match_rule::<T>().await?;
+		Ok(())
+	}
+
+	/// This calls [`Self::remove_registry_event`] and [`Self::remove_match_rule`], two components necessary to receive accessibility events.
+	/// # Errors
+	/// This will only fail if [`Self::remove_registry_event`] or [`Self::remove_match_rule`] fails.
+	pub async fn deregister_event<T: RegistryEventString + DBusMatchRule>(
+		&self,
+	) -> Result<(), AtspiError> {
+		self.remove_registry_event::<T>().await?;
+		self.remove_match_rule::<T>().await?;
+		Ok(())
+	}
+
+	/// Shorthand for a reference to the underlying [`zbus::Connection`]
+	#[must_use = "The reference to the underlying zbus::Connection must be used"]
+	pub fn connection(&self) -> &zbus::Connection {
+		self.registry.inner().connection()
+	}
+
+	/// Send an event over the accessibility bus.
+	/// This converts the event into a [`zbus::Message`] using the [`DBusMember`] + [`DBusInterface`] trait.
+	///
+	/// # Errors
+	/// This will only fail if:
+	/// 1. [`zbus::Message`] fails at any point, or
+	/// 2. sending the event fails for some reason.
+	///
+	/// Both of these conditions should never happen as long as you have a valid event.
+	pub async fn send_event<'a, T>(&self, event: T) -> Result<(), AtspiError>
+	where
+		T: DBusMember + DBusInterface + EventProperties + MessageConversion<'a>,
+	{
+		let conn = self.connection();
+		let new_message = zbus::Message::signal(
+			event.path(),
+			<T as DBusInterface>::DBUS_INTERFACE,
+			<T as DBusMember>::DBUS_MEMBER,
+		)?
+		.sender(conn.unique_name().ok_or(AtspiError::MissingName)?)?
+		// this re-encodes the entire body; it's not great..., but you can't replace a sender once a message a created.
+		.build(&event.body())?;
+		Ok(conn.send(&new_message).await?)
+	}
+
+	/// Get the root accessible object from the atspi registry;
+	/// This semantically represents the root of the accessibility tree
+	/// and can be used for tree traversals.
+	///
+	/// It may be called like so:
+	///
+	/// # Example
+	/// ```rust
+	/// use atspi_connection::AccessibilityConnection;
+	/// use zbus::proxy::CacheProperties;
+	/// # tokio_test::block_on(async {
+	/// let connection = atspi_connection::AccessibilityConnection::new().await.unwrap();
+	/// let root = connection.root_accessible_on_registry().await.unwrap();
+	/// let children = root.get_children().await;
+	/// assert!(children.is_ok());
+	/// # });
+	/// ```
+	/// # Errors
+	/// This will fail if a dbus connection cannot be established when trying to
+	/// connect to the registry
+	///
+	/// # Panics
+	/// This will panic if the `default_service` is not set on the `RegistryProxy`, which should never happen.
+	pub async fn root_accessible_on_registry(&self) -> Result<AccessibleProxy<'_>, AtspiError> {
+		let registry_well_known_name = RegistryProxy::DESTINATION
+			.as_ref()
+			.expect("Registry default_service is set");
+		let registry = AccessibleProxy::builder(self.connection())
+			.destination(registry_well_known_name)?
+			// registry has an incomplete implementation of the DBus interface
+			// and therefore cannot be cached; thus we always disable caching it
+			.cache_properties(CacheProperties::No)
+			.build()
+			.await?;
+
+		Ok(registry)
+	}
+}
+
+impl Deref for AccessibilityConnection {
+	type Target = RegistryProxy<'static>;
+
+	fn deref(&self) -> &Self::Target {
+		&self.registry
+	}
+}
+
+/// Set the `IsEnabled` property in the session bus.
+///
+/// Assistive Technology provider applications (ATs) should set the accessibility
+/// `IsEnabled` status on the users session bus on startup as applications may monitor this property
+/// to enable their accessibility support dynamically.
+///
+/// See: The [freedesktop - AT-SPI2 wiki](https://www.freedesktop.org/wiki/Accessibility/AT-SPI2/)
+///
+/// # Example
+/// ```rust
+///     let result =  tokio_test::block_on( atspi_connection::set_session_accessibility(true) );
+///     assert!(result.is_ok());
+/// ```
+/// # Errors
+///
+/// 1. when no connection with the session bus can be established,
+/// 2. if creation of a [`atspi_proxies::bus::StatusProxy`] fails
+/// 3. if the `IsEnabled` property cannot be read
+/// 4. the `IsEnabled` property cannot be set.
+pub async fn set_session_accessibility(status: bool) -> std::result::Result<(), AtspiError> {
+	// Get a connection to the session bus.
+	let session = Box::pin(zbus::Connection::session()).await?;
+
+	// Acquire a `StatusProxy` for the session bus.
+	let status_proxy = StatusProxy::new(&session).await?;
+
+	if status_proxy.is_enabled().await? != status {
+		status_proxy.set_is_enabled(status).await?;
+	}
+	Ok(())
+}
+
+/// Read the `IsEnabled` accessibility status property on the session bus.
+///
+/// # Examples
+/// ```rust
+///     # tokio_test::block_on( async {
+///     let status = atspi_connection::read_session_accessibility().await;
+///
+///     // The status is either true or false
+///        assert!(status.is_ok());
+///     # });
+/// ```
+///
+/// # Errors
+///
+/// - If no connection with the session bus could be established.
+/// - If creation of a [`atspi_proxies::bus::StatusProxy`] fails.
+/// - If the `IsEnabled` property cannot be read.
+pub async fn read_session_accessibility() -> AtspiResult<bool> {
+	// Get a connection to the session bus.
+	let session = Box::pin(zbus::Connection::session()).await?;
+
+	// Acquire a `StatusProxy` for the session bus.
+	let status_proxy = StatusProxy::new(&session).await?;
+
+	// Read the `IsEnabled` property.
+	status_proxy.is_enabled().await.map_err(Into::into)
+}

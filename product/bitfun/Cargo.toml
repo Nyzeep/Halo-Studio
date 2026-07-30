@@ -3,6 +3,7 @@ members = [
     "src/apps/cli",
     "src/apps/sdk-host",
     "src/apps/desktop",
+    "src/apps/halo-desktop",
     "src/apps/server",
     "src/apps/relay-server",
     "src/apps/miniapp-market-server",

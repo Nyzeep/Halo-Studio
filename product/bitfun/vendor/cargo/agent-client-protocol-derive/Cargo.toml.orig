@@ -1,0 +1,19 @@
+[package]
+name = "agent-client-protocol-derive"
+version = "0.11.1"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Derive macros for Agent Client Protocol JSON-RPC traits"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote.workspace = true
+syn.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,52 @@
+[package]
+name = "osakit"
+version = "0.3.1"
+edition = "2021"
+authors = ["Marat Dulin <mdevils@gmail.com>"]
+description = "OSAKit macOS Framework adapted for Rust"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["applescript", "javascript", "osa", "osakit", "osascript"]
+repository = "https://github.com/mdevils/rust-osakit"
+homepage = "https://github.com/mdevils/rust-osakit"
+documentation = "https://docs.rs/osakit/"
+categories = [
+    "os::macos-apis",
+    "api-bindings",
+    "accessibility"
+]
+
+[dependencies]
+objc2 = "0.6.0"
+objc2-foundation = { version = "0.3.0", features = ["NSAppleEventDescriptor", "NSArray", "NSDate", "NSDictionary", "NSEnumerator", "NSKeyValueCoding", "NSNull", "NSObject", "NSRange", "NSString", "NSValue"] }
+objc2-osa-kit = { version = "0.3.0", features = ["OSALanguage", "OSALanguageInstance", "OSAScript"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+libtest-mimic-collect = "0.3.1"
+
+[lib]
+test = false
+
+[features]
+stable = []
+unstable = ["declare-script"]
+full = ["stable", "unstable"]
+# Unstable feature, use with caution, may change in future releases.
+declare-script = []
+
+# binaries for cargo-run-bin
+[package.metadata.bin]
+cargo-nextest = { version = "0.9.86-b.3", locked = true }
+cargo-watch = { version = "8.5.2" }
+
+[package.metadata.docs.rs]
+default-target = "x86_64-apple-darwin"
+features = ["full"]
+
+[[test]]
+name = "test"
+harness = false
+path = "src/test.rs"

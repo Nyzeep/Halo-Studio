@@ -1,0 +1,10 @@
+framework = "CoreML"
+crate = "objc2-core-ml"
+required-crates = ["objc2", "objc2-foundation"]
+custom-lib-rs = true
+macos = "10.13"
+maccatalyst = "10.13"
+ios = "11.0"
+tvos = "11.0"
+watchos = "4.0"
+visionos = "1.0"
