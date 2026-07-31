@@ -10,4 +10,4 @@
 *.woff2 binary
 
 # Preserve exact upstream source blobs, including upstream whitespace.
-product/bitfun/** whitespace=-trailing-space
+"product/Halo Studio/**" whitespace=-trailing-space

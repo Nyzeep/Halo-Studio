@@ -3,7 +3,7 @@
 **Status:** ready-for-review
 
 本工单把一个可由上游仓库追溯的 BitFun commit 导入 Halo 自有的
-`product/bitfun/` 源码树。完整的逐文件机器清单位于
+`product/Halo Studio/` 源码树。完整的逐文件机器清单位于
 `bitfun-upstream-manifest.json`，可使用 `npm run bitfun:verify-import` 重复核对。
 
 ## 上游来源
@@ -33,7 +33,7 @@
 
 ## 导入范围
 
-- 目标：`product/bitfun/`
+- 目标：`product/Halo Studio/`
 - 范围：上游 commit 的完整 Git tree，`5254` 个文件、`6241` 个 tree/blob 条目。
 - 组装方式：参考树中与上游 blob 相同的 `4784` 个文件复用本地内容；其余
   `470` 个文件从上游 Git blob 获取；最终 `5254` 个文件全部通过上游 blob SHA 核对。
@@ -50,10 +50,10 @@
 
 ## 许可证和归属
 
-- BitFun MIT 许可证、原版权声明：`product/bitfun/LICENSE`
+- BitFun MIT 许可证、原版权声明：`product/Halo Studio/LICENSE`
 - 上游嵌套许可证和适用归属：`product/THIRD_PARTY_NOTICES.md` 及其中列出的
-  `product/bitfun/**/LICENSE*` 文件。
-- 依赖声明位置：`product/bitfun/package.json`、`pnpm-lock.yaml`、`Cargo.toml`
+  `product/Halo Studio/**/LICENSE*` 文件。
+- 依赖声明位置：`product/Halo Studio/package.json`、`pnpm-lock.yaml`、`Cargo.toml`
   和 `Cargo.lock`。
 
 导入没有改写 BitFun 源文件中的版权或许可证文字；Halo 自有归属索引位于

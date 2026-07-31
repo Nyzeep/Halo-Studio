@@ -143,8 +143,8 @@ async function verify() {
     errors.push("manifest upstream remote verification is not the pinned result");
   }
 
-  if (manifest.import?.scope_root !== "product/bitfun") {
-    errors.push("manifest scope_root must be product/bitfun");
+  if (manifest.import?.scope_root !== "product/Halo Studio") {
+    errors.push("manifest scope_root must be product/Halo Studio");
   }
 
   if (

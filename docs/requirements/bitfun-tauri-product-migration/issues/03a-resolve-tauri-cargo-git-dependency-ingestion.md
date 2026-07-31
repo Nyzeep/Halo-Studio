@@ -10,7 +10,7 @@
 
 **2026-07-30 recommended-path A execution:** In the VS x64 environment, one authorized, process-local Git CLI attempt ran rustc -vV, where link, and cargo metadata --format-version 1 -vv with CARGO_NET_GIT_FETCH_WITH_CLI=true and GIT_TERMINAL_PROMPT=0. The Rust host was x86_64-pc-windows-msvc and the first linker was Visual Studio Hostx64\x64\link.exe. Cargo remained at Updating git repository https://github.com/tauri-apps/tauri.git until the single controlled 900-second limit expired (900.415 s, exit 124). No Cargo.lock diff or halo-tauri-desktop entry was produced, and no cargo or git process remained after cleanup. This is further evidence of the Cargo Git transport/cache-path block; do not repeat the same command. Tickets 03a and 03 remain blocked pending the user's explicit choice of an actually different approved network/proxy context, B, or C.
 
-**2026-07-30 selected-path B planning:** The user selected the audited vendor strategy. Before the external artifacts were returned, this worktree had no `product/bitfun/.cargo/config.toml` and no Cargo vendor directory. A short offline lock-graph probe, `cargo metadata --locked --offline --format-version 1`, exited `1` before validation because the local cache was incomplete (`objc2-core-foundation` missing from the crates.io index). Together with the 900-second online Cargo timeout at `Updating git repository https://github.com/tauri-apps/tauri.git`, this proved the current machine could not generate the missing `Cargo.lock` update or vendor tree through Cargo's normal flow. No artifact was fabricated.
+**2026-07-30 selected-path B planning:** The user selected the audited vendor strategy. Before the external artifacts were returned, this worktree had no `product/Halo Studio/.cargo/config.toml` and no Cargo vendor directory. A short offline lock-graph probe, `cargo metadata --locked --offline --format-version 1`, exited `1` before validation because the local cache was incomplete (`objc2-core-foundation` missing from the crates.io index). Together with the 900-second online Cargo timeout at `Updating git repository https://github.com/tauri-apps/tauri.git`, this proved the current machine could not generate the missing `Cargo.lock` update or vendor tree through Cargo's normal flow. No artifact was fabricated.
 
 **2026-07-30 selected-path B result:** External Cargo-generated artifacts were returned and audited in this worktree: `Cargo.lock`, `.cargo/config.toml`, and `vendor/cargo/`. `Cargo.lock` only adds the local `halo-tauri-desktop v0.2.14` package block; the Tauri and Tao Git pins remain unchanged. `.cargo/config.toml` uses only workspace-local `vendor/cargo` source replacement, with no external absolute path. The vendor tree has 1091 crate directories, 1091 `.cargo-checksum.json` files, 56768 listed files with zero SHA-256 mismatches, and 1777 license/copyright entries by the external audit pattern. Local VS x64 offline locked `metadata`, `tree`, `check`, `build`, and `git diff --check` all pass after adding the required Halo `tauri.conf.json` `app.macOSPrivateApi` declaration to match the shared Tauri feature set. A clean worktree-local temporary `CARGO_HOME` metadata probe also passed and was removed. See [03a Cargo vendor audit](../03a-cargo-vendor-audit.md).
 
@@ -43,7 +43,7 @@ Before any network operation, request one-time authorization that states: public
 Use the VS x64 environment and an approved network/proxy context. Proxy values, if required, must be provided to the child process only and must not be logged. First run the narrow resolver command with a bounded timeout:
 
 ```text
-cmd.exe /d /s /c """D:\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && cd /d "D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\bitfun" && set CARGO_NET_GIT_FETCH_WITH_CLI=true && cargo metadata --format-version 1 -vv"
+cmd.exe /d /s /c """D:\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && cd /d "D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\Halo Studio" && set CARGO_NET_GIT_FETCH_WITH_CLI=true && cargo metadata --format-version 1 -vv"
 ```
 
 If Cargo reaches resolution successfully, inspect `git diff -- Cargo.lock` before any build. The only acceptable changes are `halo-tauri-desktop` and dependencies proved necessary for the existing locked graph; the Git URLs and exact revisions must remain unchanged. Do not use `cargo update` to make the diff appear.
@@ -52,13 +52,13 @@ If Cargo reaches resolution successfully, inspect `git diff -- Cargo.lock` befor
 
 Goal: make Ticket 03's Cargo validation independent of the failing Cargo Git transport/cache path while preserving the current exact Tauri and Tao pins.
 
-Scope: only the `product/bitfun` Cargo workspace. Do not vendor or configure the repository root, `D:\BitFun-main`, the Halo main workspace, global Cargo config, system PATH, registry, or installed software.
+Scope: only the `product/Halo Studio` Cargo workspace. Do not vendor or configure the repository root, `D:\BitFun-main`, the Halo main workspace, global Cargo config, system PATH, registry, or installed software.
 
 Tracked artifacts expected after successful generation:
 
-- `product/bitfun/Cargo.lock`, generated by Cargo and containing the local `halo-tauri-desktop` package entry.
-- `product/bitfun/vendor/cargo/`, generated by `cargo vendor --locked vendor/cargo`.
-- `product/bitfun/.cargo/config.toml`, generated from the `cargo vendor` source-replacement output and scoped to this workspace.
+- `product/Halo Studio/Cargo.lock`, generated by Cargo and containing the local `halo-tauri-desktop` package entry.
+- `product/Halo Studio/vendor/cargo/`, generated by `cargo vendor --locked vendor/cargo`.
+- `product/Halo Studio/.cargo/config.toml`, generated from the `cargo vendor` source-replacement output and scoped to this workspace.
 - `docs/requirements/bitfun-tauri-product-migration/03a-cargo-vendor-audit.md`, recording command provenance, exact Git URLs/revs, toolchain/Cargo versions, lockfile diff review, per-crate checksum source (`.cargo-checksum.json` plus `Cargo.lock` checksums), and license inventory status.
 
 Generation must happen through Cargo in a trusted environment that can resolve the existing pins. Do not manually seed Cargo's Git cache, hand-edit `Cargo.lock`, hand-copy dependency source trees, replace a Git pin, or run a broad `cargo update`.
@@ -66,7 +66,7 @@ Generation must happen through Cargo in a trusted environment that can resolve t
 External generation commands, from a copy of the current worktree that includes the untracked Halo files:
 
 ```text
-Set-Location -LiteralPath "<external-copy>\product\bitfun"
+Set-Location -LiteralPath "<external-copy>\product\Halo Studio"
 cargo metadata --format-version 1
 rg -n "^name = \"halo-tauri-desktop\"$" Cargo.lock
 New-Item -ItemType Directory -Force .cargo

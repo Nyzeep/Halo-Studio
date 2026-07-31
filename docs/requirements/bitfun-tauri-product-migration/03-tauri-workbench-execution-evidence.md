@@ -23,12 +23,12 @@ Halo 正式入口、Halo scope、首屏静态结构、范围外路由裁剪、03
 | `https://github.com/tauri-apps/tao.git` | `c704261c519c58cfdd0bc2d58ba24e06a0b71c92` | `tao 0.35.3`、`tao-macros 0.1.3` | Git DB `C:\Users\Nyzee\.cargo\git\db\tao-acc866d3b4940d67` 的 `git cat-file -e ...^{commit}` 退出码 `0` |
 | `https://github.com/tauri-apps/tauri.git` | `ce3860e84b79af0d5ee628b304399499a87328b1` | `tauri-runtime 2.11.3`、`tauri-runtime-wry 2.11.4`、`tauri-utils 2.9.3` | Git DB `C:\Users\Nyzee\.cargo\git\db\tauri-69fbbe4d0942e697` 的 `git cat-file -e ...^{commit}` 退出码 `1`；对应 checkout `C:\Users\Nyzee\.cargo\git\checkouts\tauri-69fbbe4d0942e697\ce3860e` 不存在 |
 
-锁定来源位置：`product/bitfun/Cargo.toml` 的 workspace dependency 声明，以及 `product/bitfun/Cargo.lock` 的上述 source 行。当前 `Cargo.lock` 没有 `halo-tauri-desktop` 包条目；本轮按约束没有修改或生成锁文件。
+锁定来源位置：`product/Halo Studio/Cargo.toml` 的 workspace dependency 声明，以及 `product/Halo Studio/Cargo.lock` 的上述 source 行。当前 `Cargo.lock` 没有 `halo-tauri-desktop` 包条目；本轮按约束没有修改或生成锁文件。
 
 ## 本轮收口审计（2026-07-29）
 
-- `product/bitfun/Cargo.toml` 的 `workspace.members` 已包含 `src/apps/halo-desktop`；未显式设置 `workspace.default-members`，因此默认成员图同样包含 `halo-tauri-desktop`。该包的 manifest 为 `src/apps/halo-desktop/Cargo.toml`，包名为 `halo-tauri-desktop`。
-- `cargo metadata --locked --no-deps --format-version 1` 退出码 `0`：`workspace_members` 和 `workspace_default_members` 都含有该包，且 manifest path 位于 `product/bitfun/src/apps/halo-desktop/Cargo.toml`。这只验证 workspace 拓扑，不解析完整依赖图。
+- `product/Halo Studio/Cargo.toml` 的 `workspace.members` 已包含 `src/apps/halo-desktop`；未显式设置 `workspace.default-members`，因此默认成员图同样包含 `halo-tauri-desktop`。该包的 manifest 为 `src/apps/halo-desktop/Cargo.toml`，包名为 `halo-tauri-desktop`。
+- `cargo metadata --locked --no-deps --format-version 1` 退出码 `0`：`workspace_members` 和 `workspace_default_members` 都含有该包，且 manifest path 位于 `product/Halo Studio/src/apps/halo-desktop/Cargo.toml`。这只验证 workspace 拓扑，不解析完整依赖图。
 - 已跟踪的 `Cargo.lock` 包含精确 Git source：`tao` 的 `c704261c519c58cfdd0bc2d58ba24e06a0b71c92`，以及 `tauri-runtime`、`tauri-runtime-wry`、`tauri-utils` 共用的 `ce3860e84b79af0d5ee628b304399499a87328b1`；manifest 未设置 branch 或 tag。锁文件没有 `halo-tauri-desktop` 本地包条目，因此尚未把新桌面包纳入锁定图。
 - VS x64 下的完整 `cargo metadata --locked --format-version 1` 和 `cargo tree --locked -p halo-tauri-desktop` 均在输出图之前退出码 `1`：Cargo 尝试更新 `https://github.com/tauri-apps/tauri.git`，随后报 `revision ce3860e84b79af0d5ee628b304399499a87328b1 not found`，根因是 `failed to send request: 无法与服务器建立连接`。这不能归类为代码或 pinned rev 无效。
 - 一次受控的 `cargo fetch --locked` 在 VS x64 会话中运行约 `1804` 秒后由执行超时终止（退出码 `124`）。没有获得 Tauri checkout 或该 rev；遗留的两个 `cargo` 进程已显式结束，随后确认没有 `cargo`、`git`、`git-remote-https` 或 `rustc` 后台进程。
@@ -41,7 +41,7 @@ Halo 正式入口、Halo scope、首屏静态结构、范围外路由裁剪、03
 | 假设 | 结论 | 证据 |
 | --- | --- | --- |
 | H1：新增 `halo-tauri-desktop` 后未刷新 `Cargo.lock` | 确认 | `cargo metadata --locked --no-deps --format-version 1` 退出码 `0`，workspace/default members 都包含 `halo-tauri-desktop`；`rg -n '^name = "halo-tauri-desktop"$' Cargo.lock` 退出码 `1`，且 `git diff -- Cargo.lock` 为空。 |
-| H2：workspace 拓扑或 pnpm wrapper 使用错误 manifest/workspace | 排除 | `cargo locate-project --workspace` 指向 `product/bitfun/Cargo.toml`；`desktop:dev` 与 `desktop:build` 都经 `scripts/halo-tauri.mjs` 在 `src/apps/halo-desktop` 运行强制的 `tauri.conf.json`。该目录、package `halo-tauri-desktop` 与 bin target `halo-studio` 均与 metadata 一致。 |
+| H2：workspace 拓扑或 pnpm wrapper 使用错误 manifest/workspace | 排除 | `cargo locate-project --workspace` 指向 `product/Halo Studio/Cargo.toml`；`desktop:dev` 与 `desktop:build` 都经 `scripts/halo-tauri.mjs` 在 `src/apps/halo-desktop` 运行强制的 `tauri.conf.json`。该目录、package `halo-tauri-desktop` 与 bin target `halo-studio` 均与 metadata 一致。 |
 | H3：精确 Tauri Git rev 在当前环境无法获取 | 未能证实 pin 无效；依赖获取仍受环境超时阻断 | 公开仓库在一次性授权后可达，但 Cargo 未能在时限内取得精确 revision。H1 尚未修复，故不能把 H3 视为“锁文件正确后的单独结论”。 |
 
 从 `Cargo.toml` 读取、未替换的 Git 源和一次性授权后的只读检查如下。`git ls-remote` 的 `HEAD` 检查只证明仓库可达；裸 SHA 未必是远端广告 ref，因此不能单独证明历史 commit 存在，精确 pin 仍需 Cargo/Git fetch 或本地 `cat-file` 验证。
@@ -103,7 +103,7 @@ cargo metadata --format-version 1
 授权后的 VS x64 命令如下，未安装软件、未修改全局配置、PATH、注册表或环境变量：
 
 ```text
-cmd.exe /d /s /c 'call "D:\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && cd /d "D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\bitfun" && rustc -vV && where link && cargo fetch --locked && cargo check --locked -p halo-tauri-desktop && cargo build --locked -p halo-tauri-desktop'
+cmd.exe /d /s /c 'call "D:\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && cd /d "D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\Halo Studio" && rustc -vV && where link && cargo fetch --locked && cargo check --locked -p halo-tauri-desktop && cargo build --locked -p halo-tauri-desktop'
 ```
 
 ### Cargo Git Transport Triage (2026-07-30)
@@ -116,7 +116,7 @@ All probes used the VS x64 environment, `cargo metadata --format-version 1 -vv`,
 | --- | --- |
 | `CARGO_NET_GIT_FETCH_WITH_CLI=true` | Exit `124` after `120.324 s`; timeout at `Updating git repository https://github.com/tauri-apps/tauri.git`. |
 | `CARGO_NET_GIT_FETCH_WITH_CLI=false` | Exit `124` after `120.413 s`; timeout at the same Git update stage. |
-| CLI transport with `CARGO_HOME=D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\bitfun\.cargo-transport-probe-20260730-019fb08b` | Exit `124` after `120.296 s`; timeout at the same Git update stage. The temporary directory was removed. |
+| CLI transport with `CARGO_HOME=D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\Halo Studio\.cargo-transport-probe-20260730-019fb08b` | Exit `124` after `120.296 s`; timeout at the same Git update stage. The temporary directory was removed. |
 
 `cargo fetch -vv` was not run after either `metadata -vv` timeout because it would repeat the same already-red pre-resolution Git update path without changing a diagnostic variable. No probe reached dependency resolution, so there was no lockfile change to inspect and no basis to run locked metadata/tree/check, `desktop:build`, or native-window smoke.
 
@@ -136,11 +136,11 @@ This changed only the timeout window from the prior 120-second transport probes;
 
 ### 03a Selected Path B Preflight (2026-07-30)
 
-The user selected the audited vendor strategy. The intended tracked artifacts are `product/bitfun/Cargo.lock`, `product/bitfun/vendor/cargo/`, `product/bitfun/.cargo/config.toml`, and a 03a vendor audit record under `docs/requirements/bitfun-tauri-product-migration/`.
+The user selected the audited vendor strategy. The intended tracked artifacts are `product/Halo Studio/Cargo.lock`, `product/Halo Studio/vendor/cargo/`, `product/Halo Studio/.cargo/config.toml`, and a 03a vendor audit record under `docs/requirements/bitfun-tauri-product-migration/`.
 
-This worktree currently has no `product/bitfun/.cargo/config.toml` and no Cargo vendor directory. Because B must be generated by Cargo rather than hand-built, the current machine first needs a successful Cargo lock graph for the existing exact pins. The prior online Cargo path is already red after a 900-second timeout at `Updating git repository https://github.com/tauri-apps/tauri.git`.
+This worktree currently has no `product/Halo Studio/.cargo/config.toml` and no Cargo vendor directory. Because B must be generated by Cargo rather than hand-built, the current machine first needs a successful Cargo lock graph for the existing exact pins. The prior online Cargo path is already red after a 900-second timeout at `Updating git repository https://github.com/tauri-apps/tauri.git`.
 
-A short, no-network cache probe was run from `product/bitfun`:
+A short, no-network cache probe was run from `product/Halo Studio`:
 
 ```text
 cargo metadata --locked --offline --format-version 1
@@ -148,22 +148,22 @@ cargo metadata --locked --offline --format-version 1
 
 Result: exit `1` after about `1.3 s`. Cargo stopped before validation because the local offline registry/cache is incomplete: `no matching package named objc2-core-foundation found`, required through `arboard v3.6.1` and the locked `bitfun-cli` graph. This confirms the current machine cannot produce the lock/vendor artifacts offline, and the existing online Cargo path cannot produce them either. No source files, `Cargo.lock`, Cargo cache configuration, vendor directory, global Cargo config, PATH, registry, or system environment were modified.
 
-B therefore requires a trusted external environment that can resolve the current `product/bitfun` workspace with the existing `tao` and `tauri` pins, run `cargo vendor --locked vendor/cargo`, and return only Cargo-generated artifacts for audit/import. Ticket 03a remains **BLOCKED** until those artifacts are available; Ticket 03 remains **BLOCKED**, and Ticket 04 remains out of scope.
+B therefore requires a trusted external environment that can resolve the current `product/Halo Studio` workspace with the existing `tao` and `tauri` pins, run `cargo vendor --locked vendor/cargo`, and return only Cargo-generated artifacts for audit/import. Ticket 03a remains **BLOCKED** until those artifacts are available; Ticket 03 remains **BLOCKED**, and Ticket 04 remains out of scope.
 
 ### 03a Selected Path B Verification (2026-07-30)
 
-External Cargo-generated artifacts were returned into the current worktree: `product/bitfun/Cargo.lock`, `product/bitfun/.cargo/config.toml`, and `product/bitfun/vendor/cargo/`. The public summary retained the exact Tauri pin `https://github.com/tauri-apps/tauri.git` at `ce3860e84b79af0d5ee628b304399499a87328b1` and the exact Tao pin `https://github.com/tauri-apps/tao.git` at `c704261c519c58cfdd0bc2d58ba24e06a0b71c92`; no commit, push, lockfile hand-edit, or pin replacement occurred.
+External Cargo-generated artifacts were returned into the current worktree: `product/Halo Studio/Cargo.lock`, `product/Halo Studio/.cargo/config.toml`, and `product/Halo Studio/vendor/cargo/`. The public summary retained the exact Tauri pin `https://github.com/tauri-apps/tauri.git` at `ce3860e84b79af0d5ee628b304399499a87328b1` and the exact Tao pin `https://github.com/tauri-apps/tao.git` at `c704261c519c58cfdd0bc2d58ba24e06a0b71c92`; no commit, push, lockfile hand-edit, or pin replacement occurred.
 
 Local audit results:
 
 - `.cargo/config.toml` uses `directory = "vendor/cargo"` and contains no external absolute path.
 - `Cargo.lock` contains `halo-tauri-desktop v0.2.14`.
-- `git diff -- product/bitfun/Cargo.lock` only adds the `halo-tauri-desktop` package block with dependencies on `tauri` and `tauri-build`.
+- `git diff -- product/Halo Studio/Cargo.lock` only adds the `halo-tauri-desktop` package block with dependencies on `tauri` and `tauri-build`.
 - `vendor/cargo` contains 1091 crate directories and 1091 `.cargo-checksum.json` files.
 - A script verified 56768 vendor files against `.cargo-checksum.json`; missing checksum files, missing listed files, hash mismatches, and extra unlisted files were all `0`.
 - The external license/copyright inventory pattern returns 1777 entries: 1762 files and 15 directories. Every vendor crate has either a Cargo `license`/`license-file` field or a top-level license-like file.
 
-The first `cargo check --locked --offline -p halo-tauri-desktop` reached real compilation and failed with exit `101` because Halo's Tauri config did not declare `app.macOSPrivateApi` while the workspace `tauri` dependency enables the `macos-private-api` feature. This was classified as a code/config mismatch, not a vendor or transport failure. The fix was to add `app.macOSPrivateApi: true` to `product/bitfun/src/apps/halo-desktop/tauri.conf.json`, matching the existing BitFun desktop Tauri config.
+The first `cargo check --locked --offline -p halo-tauri-desktop` reached real compilation and failed with exit `101` because Halo's Tauri config did not declare `app.macOSPrivateApi` while the workspace `tauri` dependency enables the `macos-private-api` feature. This was classified as a code/config mismatch, not a vendor or transport failure. The fix was to add `app.macOSPrivateApi: true` to `product/Halo Studio/src/apps/halo-desktop/tauri.conf.json`, matching the existing BitFun desktop Tauri config.
 
 After that fix, the VS x64 offline locked validation passed:
 
@@ -181,7 +181,7 @@ Ticket 03a is now **ready-for-review** and no longer blocks Ticket 03's desktop 
 
 After 03a passed, Ticket 03 validation resumed.
 
-`pnpm run desktop:build` was run from `product/bitfun` in the VS x64 environment through the Halo wrapper. It used the same Halo scope and Tauri config path as the static wrapper audit:
+`pnpm run desktop:build` was run from `product/Halo Studio` in the VS x64 environment through the Halo wrapper. It used the same Halo scope and Tauri config path as the static wrapper audit:
 
 ```text
 pnpm run desktop:build
@@ -190,7 +190,7 @@ pnpm run desktop:build
 Result: exit `1`. The Halo frontend built successfully, and Tauri compiled the release executable:
 
 ```text
-Built application at: D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\bitfun\target\release\halo-studio.exe
+Built application at: D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\Halo Studio\target\release\halo-studio.exe
 ```
 
 The failure occurred after Rust compilation, during Tauri bundling:
@@ -228,9 +228,9 @@ Limitations: this native smoke does not satisfy full Ticket 03 acceptance. In th
 
 The returned 03a vendor artifacts were re-audited in this turn and still satisfy the Cargo dependency-ingestion acceptance criteria:
 
-- `product/bitfun/.cargo/config.toml` exists and uses only `directory = "vendor/cargo"` for `source.vendored-sources`; no external absolute path is referenced.
+- `product/Halo Studio/.cargo/config.toml` exists and uses only `directory = "vendor/cargo"` for `source.vendored-sources`; no external absolute path is referenced.
 - `Cargo.lock` contains `halo-tauri-desktop v0.2.14`.
-- `git diff -- product/bitfun/Cargo.lock` only adds the `halo-tauri-desktop` package block with dependencies on `tauri` and `tauri-build`.
+- `git diff -- product/Halo Studio/Cargo.lock` only adds the `halo-tauri-desktop` package block with dependencies on `tauri` and `tauri-build`.
 - Tauri remains pinned to `https://github.com/tauri-apps/tauri.git` at `ce3860e84b79af0d5ee628b304399499a87328b1`; Tao remains pinned to `https://github.com/tauri-apps/tao.git` at `c704261c519c58cfdd0bc2d58ba24e06a0b71c92`.
 - `vendor/cargo` contains 1091 top-level package directories and 1091 `.cargo-checksum.json` files. Every top-level package directory has a checksum file, all checksum JSON files parse with a `files` map, and a deterministic 20-package SHA-256 sample had zero mismatches.
 - A strict local filename recount found 1762 license/copyright files; the returned full audit's broader pattern counts 1777 entries as 1762 files plus 15 directories.
@@ -260,7 +260,7 @@ The normal run exited `1`. A one-time outside-sandbox rerun was attempted to dis
 
 A fresh native smoke was run against the locally compiled release executable as auxiliary evidence:
 
-- Executable: `product/bitfun/target/release/halo-studio.exe`
+- Executable: `product/Halo Studio/target/release/halo-studio.exe`
 - Native window title: `Halo Studio - 编码工作台`
 - Window visible: `true`
 - Window size: `1454 x 938`
@@ -294,7 +294,7 @@ Because `bundle.targets` remains `"all"`, the successful packaging path also cre
 Command:
 
 ```text
-cmd.exe /d /s /c """D:\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat"" -arch=x64 -host_arch=x64 && cd /d ""D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\bitfun"" && where link && pnpm run desktop:build"
+cmd.exe /d /s /c """D:\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat"" -arch=x64 -host_arch=x64 && cd /d ""D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\Halo Studio"" && where link && pnpm run desktop:build"
 ```
 
 Result: exit `0` after about `212` seconds.
@@ -312,25 +312,25 @@ Relevant output:
 
 ```text
 [halo-tauri] build src\halo-workbench\index.html -> src\apps\halo-desktop\Cargo.toml
-[halo-workbench] built D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\bitfun\src\halo-workbench\dist
+[halo-workbench] built D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\Halo Studio\src\halo-workbench\dist
 Finished `release` profile [optimized] target(s) in 1m 37s
-Built application at: D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\bitfun\target\release\halo-studio.exe
-Running candle for "D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\bitfun\target\release\wix\x64\main.wxs"
-Running light to produce D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\bitfun\target\release\bundle\msi\Halo Studio_0.1.0_x64_en-US.msi
-Running makensis to produce D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\bitfun\target\release\bundle\nsis\Halo Studio_0.1.0_x64-setup.exe
+Built application at: D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\Halo Studio\target\release\halo-studio.exe
+Running candle for "D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\Halo Studio\target\release\wix\x64\main.wxs"
+Running light to produce D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\Halo Studio\target\release\bundle\msi\Halo Studio_0.1.0_x64_en-US.msi
+Running makensis to produce D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\Halo Studio\target\release\bundle\nsis\Halo Studio_0.1.0_x64-setup.exe
 Finished 2 bundles
 ```
 
 Generated artifacts:
 
-- `product/bitfun/target/release/halo-studio.exe`
-- `product/bitfun/target/release/bundle/msi/Halo Studio_0.1.0_x64_en-US.msi`
-- `product/bitfun/target/release/bundle/msi/Halo Studio_0.1.0_x64_en-US.wixpdb`
-- `product/bitfun/target/release/bundle/nsis/Halo Studio_0.1.0_x64-setup.exe`
+- `product/Halo Studio/target/release/halo-studio.exe`
+- `product/Halo Studio/target/release/bundle/msi/Halo Studio_0.1.0_x64_en-US.msi`
+- `product/Halo Studio/target/release/bundle/msi/Halo Studio_0.1.0_x64_en-US.wixpdb`
+- `product/Halo Studio/target/release/bundle/nsis/Halo Studio_0.1.0_x64-setup.exe`
 
 #### Real native release-window smoke
 
-Smoke command: launch `product/bitfun/target/release/halo-studio.exe` as a real Windows process with a current-process-only WebView2 user-data directory and remote-debugging port, bind strictly to the launched PID/path/window handle, then drive the native Tauri WebView DOM through CDP and close the process after capture. This does not use the HTTP smoke script and does not count an HTTP page as native acceptance.
+Smoke command: launch `product/Halo Studio/target/release/halo-studio.exe` as a real Windows process with a current-process-only WebView2 user-data directory and remote-debugging port, bind strictly to the launched PID/path/window handle, then drive the native Tauri WebView DOM through CDP and close the process after capture. This does not use the HTTP smoke script and does not count an HTTP page as native acceptance.
 
 Result: exit `0`.
 
@@ -338,7 +338,7 @@ Checks:
 
 | Check | Result |
 | --- | --- |
-| real native window visible | `true`; launched PID `9064`, process path exactly `D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\bitfun\target\release\halo-studio.exe`, window handle `0x6C01F0`, foreground handle `0x6C01F0`, title `Halo Studio - 编码工作台`, size `1454x938` |
+| real native window visible | `true`; launched PID `9064`, process path exactly `D:\Halo Studio\.worktrees\issue-03-tauri-workbench\product\Halo Studio\target\release\halo-studio.exe`, window handle `0x6C01F0`, foreground handle `0x6C01F0`, title `Halo Studio - 编码工作台`, size `1454x938` |
 | non-empty window | `true`; native before/after screenshots and CDP page screenshot are non-empty and show the Halo local coding workbench |
 | Halo scope/product | `true`; CDP summary reports `scope=local-coding`, `product=halo-studio`, `url=http://tauri.localhost/` |
 | Halo three-column workbench | `true`; CDP summary reports `.shell`, `.sidebar.sidebar--left`, `.main-panel`, and `.sidebar.sidebar--right` all present |
@@ -406,7 +406,7 @@ Ticket 03 is now **ready-for-review**.
 | `node --check scripts/halo-tauri.mjs` 等 4 个 Halo 脚本 | `0` | 语法通过 |
 | `node scripts/halo-workbench-smoke.mjs` | `0` | HTTP 200；输出 `tauriWindow:false`，仅为辅助证据 |
 | `rg` 对正式 Halo wrapper、Tauri app、Halo frontend 扫描 `D:\BitFun-main`、旧 desktop、PySide/QML/Electron | `1`（无匹配） | 正式运行入口没有这些引用 |
-| `rg -n -F 'D:\BitFun-main' product/bitfun --glob '!target/**' --glob '!node_modules/**'` | `1`（无匹配） | 产品树没有该绝对路径字面量；scope 检查使用分段拒绝令牌 |
+| `rg -n -F 'D:\BitFun-main' product/Halo Studio --glob '!target/**' --glob '!node_modules/**'` | `1`（无匹配） | 产品树没有该绝对路径字面量；scope 检查使用分段拒绝令牌 |
 | `git diff --check HEAD -- .` | `0` | 已跟踪改动无空白错误 |
 | 未跟踪文本文件尾随空白扫描 | `0` | 未发现尾随空白 |
 

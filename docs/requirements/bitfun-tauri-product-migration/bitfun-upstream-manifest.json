@@ -51,7 +51,7 @@
     ]
   },
   "import": {
-    "scope_root": "product/bitfun",
+    "scope_root": "product/Halo Studio",
     "imported_on": "2026-07-29",
     "source_mode": "full upstream Git tree without Git metadata",
     "reused_verified_reference_files": 4784,
@@ -78,23 +78,23 @@
     "local temporary build artifacts"
   ],
   "licenses": {
-    "bitfun_mit": "product/bitfun/LICENSE",
+    "bitfun_mit": "product/Halo Studio/LICENSE",
     "nested_license_files": [
-      "product/bitfun/src/crates/assembly/core/builtin_skills/docx/LICENSE.txt",
-      "product/bitfun/src/crates/assembly/core/builtin_skills/pdf/LICENSE.txt",
-      "product/bitfun/src/crates/assembly/core/builtin_skills/ppt-design/LICENSE.txt",
-      "product/bitfun/src/crates/assembly/core/builtin_skills/pptx/LICENSE.txt",
-      "product/bitfun/src/crates/assembly/core/builtin_skills/xlsx/LICENSE.txt",
-      "product/bitfun/src/crates/execution/tool-call-jsonrepair/LICENSE",
-      "product/bitfun/src/web-ui/public/fonts/FiraCode/LICENSE.txt",
-      "product/bitfun/src/web-ui/public/fonts/Noto_Sans_SC/variable/LICENSE.txt"
+      "product/Halo Studio/src/crates/assembly/core/builtin_skills/docx/LICENSE.txt",
+      "product/Halo Studio/src/crates/assembly/core/builtin_skills/pdf/LICENSE.txt",
+      "product/Halo Studio/src/crates/assembly/core/builtin_skills/ppt-design/LICENSE.txt",
+      "product/Halo Studio/src/crates/assembly/core/builtin_skills/pptx/LICENSE.txt",
+      "product/Halo Studio/src/crates/assembly/core/builtin_skills/xlsx/LICENSE.txt",
+      "product/Halo Studio/src/crates/execution/tool-call-jsonrepair/LICENSE",
+      "product/Halo Studio/src/web-ui/public/fonts/FiraCode/LICENSE.txt",
+      "product/Halo Studio/src/web-ui/public/fonts/Noto_Sans_SC/variable/LICENSE.txt"
     ],
     "attribution_index": "product/THIRD_PARTY_NOTICES.md",
     "dependency_manifests": [
-      "product/bitfun/package.json",
-      "product/bitfun/pnpm-lock.yaml",
-      "product/bitfun/Cargo.toml",
-      "product/bitfun/Cargo.lock"
+      "product/Halo Studio/package.json",
+      "product/Halo Studio/pnpm-lock.yaml",
+      "product/Halo Studio/Cargo.toml",
+      "product/Halo Studio/Cargo.lock"
     ],
     "central_third_party_notice_present": false
   },

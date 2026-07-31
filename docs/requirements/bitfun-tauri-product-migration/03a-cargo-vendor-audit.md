@@ -6,9 +6,9 @@
 
 ## Returned Artifacts
 
-- `product/bitfun/Cargo.lock`
-- `product/bitfun/.cargo/config.toml`
-- `product/bitfun/vendor/cargo/`
+- `product/Halo Studio/Cargo.lock`
+- `product/Halo Studio/.cargo/config.toml`
+- `product/Halo Studio/vendor/cargo/`
 
 External public summary:
 
@@ -23,10 +23,10 @@ External public summary:
 
 ## Local Audit
 
-- `product/bitfun/.cargo/config.toml` exists and replaces crates.io plus the exact Tauri/Tao Git sources with `source.vendored-sources`.
+- `product/Halo Studio/.cargo/config.toml` exists and replaces crates.io plus the exact Tauri/Tao Git sources with `source.vendored-sources`.
 - `source.vendored-sources.directory` is `vendor/cargo`; no external absolute path, home path, or `file://` source is present.
 - `Cargo.lock` contains `halo-tauri-desktop v0.2.14`.
-- `git diff -- product/bitfun/Cargo.lock` only adds the `halo-tauri-desktop` package block with dependencies on `tauri` and `tauri-build`.
+- `git diff -- product/Halo Studio/Cargo.lock` only adds the `halo-tauri-desktop` package block with dependencies on `tauri` and `tauri-build`.
 - Tauri lock sources still use `ce3860e84b79af0d5ee628b304399499a87328b1`.
 - Tao lock sources still use `c704261c519c58cfdd0bc2d58ba24e06a0b71c92`.
 
@@ -44,7 +44,7 @@ Vendor inventory:
 
 ## Local Fix
 
-`product/bitfun/src/apps/halo-desktop/tauri.conf.json` now declares `app.macOSPrivateApi: true`. This is required because the workspace-level `tauri` dependency enables the `macos-private-api` feature, and the existing BitFun desktop config already declares the same Tauri allowlist flag.
+`product/Halo Studio/src/apps/halo-desktop/tauri.conf.json` now declares `app.macOSPrivateApi: true`. This is required because the workspace-level `tauri` dependency enables the `macos-private-api` feature, and the existing BitFun desktop config already declares the same Tauri allowlist flag.
 
 ## Verification
 
