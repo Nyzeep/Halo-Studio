@@ -4,7 +4,7 @@
 
 ## Problem Statement
 
-Halo Studio 当前正式启动入口仍是旧 PySide6/QML 应用，现有 Rust Sidecar 也是独立于 BitFun Runtime 的权威运行时。此前六个 issue 已形成可迁移能力基线，但没有把 BitFun 工作台、Tauri 桌面入口和 BitFun Runtime 纳入正式 Halo 产品树，因此不能视为目标产品基座上的完整验收，也不能据此放行 P0。
+Halo Studio 已把受跟踪的 BitFun 下游源码、Halo Tauri 入口和正式 BitFun Web UI 纳入产品树；工单 03/03A1 的构建与原生 UI 证据证明界面基座已经对齐，但当前桌面运行链尚未通过新的 Halo Workbench Runtime 接入真实模型和 Agent 执行。旧 PySide6/QML 与 Rust Sidecar 中此前六个 issue 只形成可迁移能力基线，不能替代目标 Tauri 产品上的运行时迁移和真实 OpenCode 验收。
 
 项目需要在保留既有行为证据的同时，将 Halo Studio 建立为持续获取 BitFun 上游更新、但独立提交和发布的下游产品。迁移必须避免长期双运行时、外部目录构建依赖、旧 IPC 兼容层和过早删除旧实现。
 
@@ -12,7 +12,9 @@ Halo Studio 当前正式启动入口仍是旧 PySide6/QML 应用，现有 Rust S
 
 Halo Studio 在受跟踪的 Halo 产品树中纳入完整 BitFun 下游源码，建立 Halo 品牌的 Tauri 桌面入口，并只装配本地桌面编码主链。BitFun 上游只提供显式同步候选；所有 Halo 改动、验证和发布都发生在 Halo 自己的仓库中。
 
-新的 Halo Workbench Runtime Module 位于 Tauri 接缝，成为工作区、标准会话、受管任务、工具执行、配置、凭据引用、Git 状态和结构化事件的唯一权威。旧 Sidecar 的用户可观察语义迁入该 Module，但旧 `stdio JSONL v1` 不作为兼容目标。
+新的 Halo Workbench Runtime Module 位于 Tauri seam，成为工作区、标准会话、受管任务、配置、凭据引用、Git 状态和结构化事件的唯一 Halo 权威。P0 在该 Module 内只提供 OpenCode Server Adapter：受控启动本机 OpenCode 1.x，并通过回环 HTTP/SSE Interface 复用 OpenCode 的 Provider、模型、Session 和 Agent 工具循环。旧 Sidecar 的用户可观察语义迁入该 Module，但旧 `stdio JSONL v1`、OpenCode 内部源码和远程标识都不作为兼容目标。
+
+OpenCode 负责模型连接和原生 Agent 执行；Halo 负责工作区信任、系统凭据引用、受管任务状态、一次性决议、脱敏、交付证据和生命周期。前端只依赖 Halo Workbench Runtime 的小 Interface，不直接访问 OpenCode 端点、凭据或原始事件。
 
 迁移采用扩展再收缩：旧实现作为可迁移能力基线保留，直到新 Tauri 产品逐项达到行为等价、通过一次上游同步演练并完成真实 OpenCode UI 验收；随后再以独立变更删除旧产品入口和源码。
 
@@ -21,11 +23,11 @@ Halo Studio 在受跟踪的 Halo 产品树中纳入完整 BitFun 下游源码，
 1. 作为本地开发者，我希望启动 Halo Studio 时直接进入 Halo 品牌的 Tauri 工作台，以便使用真正的目标产品而不是旧 QML 界面。
 2. 作为本地开发者，我希望保留 BitFun 成熟的三栏工作台和高密度交互，以便迁移后仍拥有完整的编码工作流。
 3. 作为本地开发者，我希望只看到 Halo 首期本地编码主链，以便办公、Mini App、远程、Relay 和移动端能力不会干扰产品。
-4. 作为本地开发者，我希望标准编码模式继续使用 BitFun 的原生会话与工具能力，以便日常编码体验不会因受管交付功能而退化。
+4. 作为本地开发者，我希望标准编码模式通过 OpenCode 的原生会话与工具能力运行，以便日常编码和 P0 受管交付复用同一条可靠执行链，同时保持两种模式的状态与保留策略隔离。
 5. 作为本地开发者，我希望显式进入受管交付模式，以便标准会话不会被错误归为可审查交付。
 6. 作为本地开发者，我希望打开并确认一个 Git 工作区后再使用受管能力，以便任务、文件和证据边界清晰。
 7. 作为本地开发者，我希望受管任务记录创建时的工作区基线，以便区分已有改动和任务期间改动。
-8. 作为本地开发者，我希望为受管任务选择 Code Agent、Pi 或 OpenCode，以便明确当前交付的主执行器。
+8. 作为本地开发者，我希望 P0 受管任务明确使用已通过真实探测的本机 OpenCode 1.x，以便尽快获得一条可靠执行链而不是一个尚未实现的多执行器选择器。
 9. 作为本地开发者，我希望在系统凭据存储中管理凭据并只向界面暴露引用，以便密钥不会进入产品状态、日志或证据。
 10. 作为本地开发者，我希望检查 OpenCode 1.x 兼容性并看到真实失败原因，以便不会把未就绪运行时误报为可用。
 11. 作为本地开发者，我希望通过真实 OpenCode 发送首轮任务消息，以便建立受管任务会话而不是模拟流程。
@@ -55,6 +57,8 @@ Halo Studio 在受跟踪的 Halo 产品树中纳入完整 BitFun 下游源码，
 35. 作为维护者，我希望迁移验收后通过独立收缩变更删除旧 QML、旧 Sidecar 和旧入口，以便最终仓库只有一个正式产品路径。
 36. 作为发布负责人，我希望真实 OpenCode 原生 UI 验收只记录脱敏结论，以便发布证据不包含密钥、完整对话、连接信息或远程标识。
 37. 作为发布负责人，我希望删除旧源码后重新执行构建、自动化、同步演练和桌面验收，以便最终产品状态而非迁移中间态获得放行。
+38. 作为维护者，我希望通过 OpenCode 的稳定 Server Interface 复用其 Provider、模型连接和 Agent 循环，以便 Halo 不复制 OpenCode 内部实现或承担重复维护。
+39. 作为维护者，我希望 `D:\opencode-dev` 只作为只读协议研究快照，以便正式产品不依赖没有可审计 Git 来源的本机目录。
 
 ## Implementation Decisions
 
@@ -63,20 +67,26 @@ Halo Studio 在受跟踪的 Halo 产品树中纳入完整 BitFun 下游源码，
 - Halo 产品树是长期产品源码边界，不在迁移完成后再次搬回仓库根目录。
 - 范围外 BitFun 模块可以保留源码，但不得进入 Halo 首期构建、路由、导航、后台初始化、配置入口或隐藏开关。
 - Halo 保留 BitFun 工作台交互骨架，并用 Halo 名称、图标、视觉令牌、简体中文文案和产品范围重新表达。
-- Halo Workbench Runtime Module 位于 Tauri 接缝，并拥有工作区、会话、受管任务、工具、Git、配置和结构化事件的唯一权威状态。
+- Halo Workbench Runtime Module 位于 Tauri seam，并拥有工作区、会话、受管任务、工具、Git、配置和结构化事件的唯一权威状态。
 - 前端只依赖该 Module 的小型公开接口，不分别直连大量底层命令，也不调用旧 Halo Sidecar。
+- P0 唯一生产受管执行 Adapter 是本机 OpenCode 1.x；Pi 与 BitFun 内置 Code Agent 延后到独立决策和验收，不进入当前 UI 选择器或发布矩阵。
+- OpenCode Server Adapter 受控启动 `opencode serve`，使用随机回环端口、每次启动的新认证材料、工作区绑定、受控子进程环境和真实健康/能力检查。
+- OpenCode 负责 Provider、模型、Session、Prompt 和 Agent 工具循环；Halo 不复制 OpenCode 内部 Provider/Core 源码，不让前端直连 OpenCode，也不持久化其原始端口、Authorization 或 Session/Message 标识。
+- 兼容性档案至少验证 `/global/health`、`/provider`、`/session`、`/session/:id/prompt_async`、`/event`、permission/question、`/session/:id/abort` 与 `/global/dispose` 的所需语义；具体路径和原生载荷封装在 Adapter 实现内。
 - 旧 Sidecar 中可复用的纯领域逻辑和测试夹具可以迁移，进程边界、JSONL envelope 和 Python/QML 适配层不保留兼容性。
 - 迁移保持用户可观察行为等价，不要求内部模块、文件布局或传输协议等价。
-- 标准编码模式和受管交付模式共享 BitFun Runtime 基础，但受管任务必须经过显式接入、工作区信任和受管策略。
+- 标准编码模式和受管交付模式共享 Halo Workbench Runtime Interface 与安全配置权威源，并通过隔离的 OpenCode profile 执行；受管任务还必须经过显式接入、工作区信任和受管策略。
 - 凭据明文只在系统凭据存储读取与执行器启动时短暂存在；前端、事件、日志、证据和持久化只处理凭据引用。
 - 上游同步必须形成独立、可审查的候选，记录来源 commit，并通过产品裁剪、运行时契约、自动化和真实 UI 门槛。
 - 迁移采用扩展再收缩；旧产品源码删除是最后的独立变更，受全部行为迁移和验收票据阻断。
 - 旧六票被记录为可迁移能力基线，不重新定义为最终产品验收；真实 UI 验收只在目标 Tauri 产品上完成。
+- GitHub #9–#14 保持历史需求、状态与验收记录不变；OpenCode P0 决策只通过本规格、ADR-0071 和迁移工单 04–15 建立前向映射。
 
 ## Testing Decisions
 
-- 主要程序化测试接缝是 Halo Workbench Runtime Module 的公开 Tauri command/event 接口；测试用户可观察结果，不锁定私有 Rust 函数或 React 组件状态。
+- 主要程序化测试 seam 是 Halo Workbench Runtime Module 的公开 Tauri command/event Interface；测试用户可观察结果，不锁定私有 Rust 函数或 React 组件状态。
 - Rust 契约测试覆盖工作区快照、标准会话、受管任务、一次性决议、证据、凭据边界、Git 操作和中断语义。
+- OpenCode Adapter 契约测试覆盖进程级认证、工作区路由、Provider/模型投影、Session/Prompt/SSE、权限与澄清、abort/dispose、顺序事件规范化和敏感字段剥离；受控替身只用于自动化，不构成生产回退。
 - Tauri 桌面烟测和少量端到端测试覆盖真实 Halo 启动入口、三栏工作台、产品裁剪、品牌、关键导航和运行时连接。
 - 行为等价矩阵把旧六票的自动化证据映射到新接口与桌面路径；旧 JSONL 封包不作为兼容断言。
 - 上游同步测试至少演练一次新的 BitFun commit 候选，证明来源记录、冲突处理、产品裁剪和回归门槛可执行。
@@ -93,9 +103,12 @@ Halo Studio 在受跟踪的 Halo 产品树中纳入完整 BitFun 下游源码，
 - 在迁移完成前删除旧产品源码或伪造真实 OpenCode UI 验收。
 - 自动提交、推送、改写 Git 历史或替用户完成交付接受决定。
 - OpenCode 2.x 兼容性放行。
+- 复制、vendor 或分叉 `D:\opencode-dev` 的 OpenCode Provider/Core/Session/Agent 实现，或把该目录作为构建依赖。
+- 在 P0 中实现 Pi、BitFun 内置 Code Agent 或多执行器选择/交接。
 
 ## Further Notes
 
 - 首次导入前必须从 `GCWing/BitFun.git` 选择并记录精确上游 commit；本地参考树当前没有 Git 元数据，不能单独作为来源证明。
+- 本机 `D:\opencode-dev` 快照显示 OpenCode package version `1.18.10` 及所需 Server 路径，但目录没有 Git 元数据；它只能用于协议研究。生产兼容结论必须来自已安装 OpenCode 1.x 的真实 probe、health 和能力验证。
 - 现有根目录工作树包含多组未归类改动。能力基线提交、迁移文档提交、上游源码导入和临时产物清理必须保持独立。
 - 迁移完成的必要条件包括：Tauri 构建与打包、标准工作台、唯一运行时、行为等价矩阵、上游同步演练、许可证审计、真实 OpenCode UI 验收，以及删除旧源码后的完整复验。
