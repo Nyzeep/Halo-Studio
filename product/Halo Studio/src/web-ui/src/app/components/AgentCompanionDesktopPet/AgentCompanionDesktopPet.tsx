@@ -1,0 +1,1057 @@
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { emit, listen } from '@tauri-apps/api/event';
+import { cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
+import { aiExperienceConfigService, type AgentCompanionPetSelection, type AIExperienceSettings } from '@/infrastructure/config/services/AIExperienceConfigService';
+import { ChatInputPixelPet, type ChatInputPixelPetMood } from '@/flow_chat/components/ChatInputPixelPet';
+import type { ChatInputPetMood } from '@/flow_chat/utils/chatInputPetMood';
+import type {
+  AgentCompanionActivityPayload,
+  AgentCompanionTaskState,
+  AgentCompanionTaskStatus,
+} from '@/flow_chat/utils/agentCompanionActivity';
+import type { AgentCompanionPetCommand } from '@/app/services/agentCompanionPetCommands';
+import { createLogger } from '@/shared/utils/logger';
+import './AgentCompanionDesktopPet.scss';
+
+const log = createLogger('AgentCompanionDesktopPet');
+const DEFAULT_PET_SIZE = 96;
+const DEFAULT_PETDEX_DISPLAY_SIZE = { width: 96, height: 104 };
+const PETDEX_DESKTOP_SCALE = 0.5;
+const WINDOW_MAX_WIDTH = 360;
+const WINDOW_MAX_HEIGHT = 240;
+const WINDOW_HORIZONTAL_GAP = 8;
+const MAX_VISIBLE_BUBBLES = 2;
+const BUBBLE_GAP = 6;
+const BUBBLE_WIDTH = 180;
+const BUBBLE_OUTPUT_TYPEWRITER_INTERVAL_MS = 28;
+const WINDOW_EDGE_BUFFER = 4;
+const POINTER_HOVER_POLL_INTERVAL_MS = 120;
+/** Clicks shorter/smaller than this use `show_main_window`; beyond it we start a native drag. */
+const PET_DRAG_THRESHOLD_PX = 8;
+const IS_WINDOWS_WEBVIEW = /\bWindows\b/i.test(window.navigator.userAgent);
+const PET_COMMAND_EVENT = 'agent-companion://pet-command';
+const MENU_EDGE_MARGIN = 4;
+
+interface TypewriterOutputState {
+  target: string;
+  visible: string;
+}
+
+/**
+ * Which surface is layered above the pet dock. Only one may be open at a time so
+ * the window never has to grow for two panels.
+ */
+type PetOverlayState =
+  | { kind: 'pet-menu' }
+  | { kind: 'bubble-menu'; sessionId: string }
+  | { kind: 'composer'; sessionId: string }
+  | null;
+
+/**
+ * Bubbles are derived from live session activity, so "close this bubble" cannot
+ * simply delete an item. It records which kind of bubble was dismissed instead:
+ * silencing a working bubble keeps it hidden while the task runs, but a later
+ * notice (needs input / finished / failed) still gets through.
+ */
+type BubbleDismissBucket = 'active' | 'notice';
+
+/**
+ * Where a context menu was opened, measured from the window's bottom-right
+ * corner. The host keeps that corner fixed while the window grows to make room
+ * for the menu, so this anchor survives the resize while `clientX`/`clientY`
+ * would not.
+ */
+interface MenuAnchor {
+  right: number;
+  bottom: number;
+}
+
+function menuAnchorFromEvent(event: React.MouseEvent): MenuAnchor {
+  return {
+    right: Math.max(0, window.innerWidth - event.clientX),
+    bottom: Math.max(0, window.innerHeight - event.clientY),
+  };
+}
+
+function bubbleDismissBucket(state: AgentCompanionTaskState): BubbleDismissBucket {
+  return state === 'running' || state === 'waiting' ? 'active' : 'notice';
+}
+
+function isAcknowledgeableTaskState(state: AgentCompanionTaskState): boolean {
+  return state === 'completed' || state === 'error' || state === 'interrupted';
+}
+
+function rectContainsPoint(rect: DOMRect, x: number, y: number): boolean {
+  return x >= rect.left
+    && x <= rect.right
+    && y >= rect.top
+    && y <= rect.bottom;
+}
+
+function seedTypewriterOutput(target: string): string {
+  if (target.length <= 1) {
+    return '';
+  }
+
+  return target.slice(0, -1);
+}
+
+function advanceTypewriterOutput(visible: string, target: string): string {
+  if (visible === target) {
+    return visible;
+  }
+
+  if (!target.startsWith(visible)) {
+    return target;
+  }
+
+  const gap = target.length - visible.length;
+  const step = Math.max(1, Math.floor(gap / 8));
+  return target.slice(0, visible.length + step);
+}
+
+export const AgentCompanionDesktopPet: React.FC = () => {
+  const { t } = useTranslation('flow-chat');
+  const [pet, setPet] = useState<AgentCompanionPetSelection | null>(
+    () => aiExperienceConfigService.getSettings().agent_companion_pet ?? null,
+  );
+  const [mood, setMood] = useState<ChatInputPetMood>('rest');
+  const [tasks, setTasks] = useState<AgentCompanionTaskStatus[]>([]);
+  const [typedOutputBySessionId, setTypedOutputBySessionId] = useState<Record<string, TypewriterOutputState>>({});
+  const [isHoveringPet, setIsHoveringPet] = useState(false);
+  const [isDraggingPet, setIsDraggingPet] = useState(false);
+  const [petFrameSize, setPetFrameSize] = useState<{ width: number; height: number } | null>(null);
+  const [overlay, setOverlay] = useState<PetOverlayState>(null);
+  const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
+  const [menuPosition, setMenuPosition] = useState<MenuAnchor | null>(null);
+  const [dismissedBubbles, setDismissedBubbles] = useState<Record<string, BubbleDismissBucket>>({});
+  const [composerValue, setComposerValue] = useState('');
+  const [isSendingComposer, setIsSendingComposer] = useState(false);
+  const [hoveredBubbleSessionId, setHoveredBubbleSessionId] = useState<string | null>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
+  const bubblesRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const composerInputRef = useRef<HTMLInputElement>(null);
+  const outputRefs = useRef<Map<string, HTMLSpanElement>>(new Map());
+  const lastActivitySequenceRef = useRef(0);
+  const lastActivityEmittedAtRef = useRef(0);
+  const petPointerSessionRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    dragStarted: boolean;
+  } | null>(null);
+  const visibleTasks = useMemo(
+    () => tasks.filter(task => dismissedBubbles[task.sessionId] !== bubbleDismissBucket(task.state)),
+    [dismissedBubbles, tasks],
+  );
+  const displayTasks = [...visibleTasks].reverse();
+  const activePetSize = pet && petFrameSize
+    ? petFrameSize
+    : pet
+      ? DEFAULT_PETDEX_DISPLAY_SIZE
+      : { width: DEFAULT_PET_SIZE, height: DEFAULT_PET_SIZE };
+
+  useEffect(() => {
+    let disposed = false;
+    document.documentElement.classList.add('bitfun-agent-companion-window-root');
+    document.body.classList.add('bitfun-agent-companion-window-body');
+
+    const hidePetWindowForInactiveSettings = () => {
+      void getCurrentWindow().hide().catch(error => {
+        log.warn('Failed to hide inactive Agent companion window', error);
+      });
+    };
+
+    const applySettings = (settings: AIExperienceSettings) => {
+      setPet(settings.agent_companion_pet ?? null);
+      setPetFrameSize(null);
+      if (!settings.enable_agent_companion || settings.agent_companion_display_mode !== 'desktop') {
+        hidePetWindowForInactiveSettings();
+      }
+    };
+
+    void aiExperienceConfigService.getSettingsAsync()
+      .then(settings => {
+        if (!disposed) {
+          applySettings(settings);
+        }
+      })
+      .catch(error => {
+        if (!disposed) {
+          log.warn('Failed to load Agent companion settings', error);
+        }
+      });
+
+    let removeTauriListener: (() => void) | null = null;
+    const settingsListenerReady = listen<AIExperienceSettings>('agent-companion://settings-updated', event => {
+      applySettings(event.payload);
+    }).then(unlisten => {
+      if (disposed) {
+        unlisten();
+        return false;
+      }
+      removeTauriListener = unlisten;
+      return true;
+    }).catch(error => {
+      log.warn('Failed to listen for Agent companion settings updates', error);
+      return false;
+    });
+
+    let removeActivityListener: (() => void) | null = null;
+    const activityListenerReady = listen<AgentCompanionActivityPayload>('agent-companion://activity-updated', event => {
+      const emittedAt = event.payload.emittedAt ?? 0;
+      const sequence = event.payload.sequence ?? 0;
+      if (
+        emittedAt < lastActivityEmittedAtRef.current
+        || (emittedAt === lastActivityEmittedAtRef.current && sequence <= lastActivitySequenceRef.current)
+      ) {
+        return;
+      }
+      lastActivityEmittedAtRef.current = emittedAt;
+      lastActivitySequenceRef.current = sequence;
+      setMood(event.payload.mood);
+      setTasks(event.payload.tasks);
+    }).then(unlisten => {
+      if (disposed) {
+        unlisten();
+        return false;
+      }
+      removeActivityListener = unlisten;
+      return true;
+    }).catch(error => {
+      log.warn('Failed to listen for Agent companion activity updates', error);
+      return false;
+    });
+
+    void Promise.all([settingsListenerReady, activityListenerReady])
+      .then(([settingsReady, activityReady]) => {
+        if (!disposed && settingsReady && activityReady) {
+          void emit('agent-companion://ready');
+        }
+      })
+      .catch(error => {
+        if (!disposed) {
+          log.warn('Failed to request Agent companion startup sync', error);
+        }
+      });
+
+    return () => {
+      disposed = true;
+      removeTauriListener?.();
+      removeActivityListener?.();
+      document.documentElement.classList.remove('bitfun-agent-companion-window-root');
+      document.body.classList.remove('bitfun-agent-companion-window-body');
+    };
+  }, []);
+
+  // Drop dismissals whose bubble kind changed (a silenced task now needs
+  // attention or finished) or whose session left the activity payload.
+  useEffect(() => {
+    setDismissedBubbles(previous => {
+      const previousSessionIds = Object.keys(previous);
+      if (previousSessionIds.length === 0) {
+        return previous;
+      }
+
+      const next: Record<string, BubbleDismissBucket> = {};
+      tasks.forEach(task => {
+        const dismissedBucket = previous[task.sessionId];
+        if (dismissedBucket && dismissedBucket === bubbleDismissBucket(task.state)) {
+          next[task.sessionId] = dismissedBucket;
+        }
+      });
+
+      // Kept entries always carry the same bucket, so the count is enough.
+      return Object.keys(next).length === previousSessionIds.length ? previous : next;
+    });
+  }, [tasks]);
+
+  // Never leave a bubble menu or composer floating over a bubble that is gone.
+  useEffect(() => {
+    setOverlay(previous => {
+      if (!previous || previous.kind === 'pet-menu') {
+        return previous;
+      }
+      return visibleTasks.some(task => task.sessionId === previous.sessionId) ? previous : null;
+    });
+    setHoveredBubbleSessionId(previous => (
+      previous && !visibleTasks.some(task => task.sessionId === previous)
+        ? null
+        : previous
+    ));
+  }, [visibleTasks]);
+
+  useEffect(() => {
+    setTypedOutputBySessionId(previous => {
+      const next: Record<string, TypewriterOutputState> = {};
+
+      visibleTasks.forEach(task => {
+        if (!task.latestOutput) {
+          return;
+        }
+
+        const previousOutput = previous[task.sessionId];
+        next[task.sessionId] = previousOutput
+          ? { ...previousOutput, target: task.latestOutput }
+          : {
+            target: task.latestOutput,
+            visible: seedTypewriterOutput(task.latestOutput),
+          };
+      });
+
+      return next;
+    });
+  }, [visibleTasks]);
+
+  // rAF-driven typewriter. The effect only depends on the derived boolean
+  // "is anything still typing", so the ticking loop is NOT torn down and
+  // rebuilt on every tick (the previous interval version re-ran the effect
+  // ~36x/second because it depended on the state it was writing).
+  const hasTypingOutput = useMemo(
+    () => Object.values(typedOutputBySessionId)
+      .some(output => output.visible !== output.target),
+    [typedOutputBySessionId],
+  );
+
+  useEffect(() => {
+    if (!hasTypingOutput) {
+      return;
+    }
+
+    let frameId: number | null = null;
+    let lastTickAt = 0;
+
+    const tick = (now: number) => {
+      frameId = requestAnimationFrame(tick);
+      if (now - lastTickAt < BUBBLE_OUTPUT_TYPEWRITER_INTERVAL_MS) {
+        return;
+      }
+      lastTickAt = now;
+
+      setTypedOutputBySessionId(previous => {
+        let changed = false;
+        const next: Record<string, TypewriterOutputState> = {};
+
+        Object.entries(previous).forEach(([sessionId, output]) => {
+          const visible = advanceTypewriterOutput(output.visible, output.target);
+          if (visible !== output.visible) {
+            changed = true;
+          }
+          next[sessionId] = { ...output, visible };
+        });
+
+        return changed ? next : previous;
+      });
+    };
+
+    frameId = requestAnimationFrame(tick);
+
+    return () => {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+    };
+  }, [hasTypingOutput]);
+
+  // Bumped whenever dock layout may have changed; lets the pointer poll reuse
+  // cached getBoundingClientRect results between layout changes.
+  const layoutEpochRef = useRef(0);
+
+  useLayoutEffect(() => {
+    // Typewriter output grows the bubbles (and shifts the ones below them), so
+    // any cached bubble rect must be invalidated on every typed-output flush.
+    layoutEpochRef.current += 1;
+    outputRefs.current.forEach(element => {
+      element.scrollTop = element.scrollHeight;
+    });
+  }, [typedOutputBySessionId]);
+
+  const visibleTaskCountRef = useRef(0);
+
+  useLayoutEffect(() => {
+    // Written here (not during render) so an abandoned/double render cannot
+    // leave the count out of sync with the committed layout epoch.
+    visibleTaskCountRef.current = visibleTasks.length;
+    layoutEpochRef.current += 1;
+    const bubbleCount = visibleTasks.length;
+    const bubbleElements = Array.from(bubblesRef.current?.children ?? [])
+      .slice(0, MAX_VISIBLE_BUBBLES);
+    const visibleBubbleHeight = bubbleElements.reduce(
+      (sum, child) => sum + child.getBoundingClientRect().height,
+      0,
+    ) + Math.max(0, bubbleElements.length - 1) * BUBBLE_GAP;
+    const measuredBubbleHeight = bubblesRef.current?.scrollHeight ?? 0;
+    const targetBubbleHeight = bubbleCount === 1
+      ? activePetSize.height
+      : bubbleCount > MAX_VISIBLE_BUBBLES
+        ? visibleBubbleHeight
+        : measuredBubbleHeight;
+    const nextHeight = bubbleCount > 0
+      ? Math.max(activePetSize.height, Math.min(WINDOW_MAX_HEIGHT, targetBubbleHeight))
+      : activePetSize.height;
+    const measuredBubbleWidth = bubbleCount > 0 ? BUBBLE_WIDTH : 0;
+    const measuredDockWidth = bubbleCount > 0
+      ? measuredBubbleWidth + WINDOW_HORIZONTAL_GAP + activePetSize.width + WINDOW_EDGE_BUFFER
+      : Math.max(
+        activePetSize.width,
+        dockRef.current?.scrollWidth ?? 0,
+        dockRef.current?.getBoundingClientRect().width ?? 0,
+      );
+    const nextWidth = Math.max(
+      activePetSize.width,
+      Math.min(WINDOW_MAX_WIDTH, Math.ceil(measuredDockWidth)),
+    );
+
+    if (!Number.isFinite(nextWidth) || !Number.isFinite(nextHeight)) {
+      log.warn('Skipped invalid Agent companion window resize', {
+        width: nextWidth,
+        height: nextHeight,
+      });
+      return;
+    }
+
+    void import('@tauri-apps/api/core')
+      .then(({ invoke }) => invoke('resize_agent_companion_desktop_pet', {
+        width: nextWidth,
+        height: nextHeight,
+      }))
+      .catch(error => {
+        log.warn('Failed to resize Agent companion window', error);
+      });
+  }, [activePetSize.height, activePetSize.width, overlay, visibleTasks]);
+
+  useEffect(() => {
+    if (IS_WINDOWS_WEBVIEW) {
+      return;
+    }
+
+    const tauriWindow = getCurrentWindow();
+    let disposed = false;
+    let windowPosition: { x: number; y: number } | null = null;
+    let scaleFactor = 1;
+    let pointerPollInFlight = false;
+    let removeWindowMovedListener: (() => void) | null = null;
+    let removeScaleChangedListener: (() => void) | null = null;
+
+    void tauriWindow.outerPosition()
+      .then(position => {
+        windowPosition = position;
+      })
+      .catch(error => {
+        log.warn('Failed to read Agent companion window position', error);
+      });
+
+    void tauriWindow.scaleFactor()
+      .then(rawScaleFactor => {
+        const nextScaleFactor = Number(rawScaleFactor);
+        scaleFactor = Number.isFinite(nextScaleFactor) && nextScaleFactor > 0 ? nextScaleFactor : 1;
+      })
+      .catch(error => {
+        log.warn('Failed to read Agent companion window scale factor', error);
+      });
+
+    void tauriWindow.onMoved(event => {
+      windowPosition = event.payload;
+    }).then(unlisten => {
+      if (disposed) {
+        unlisten();
+      } else {
+        removeWindowMovedListener = unlisten;
+      }
+    }).catch(error => {
+      log.warn('Failed to listen for Agent companion window moves', error);
+    });
+
+    void tauriWindow.onScaleChanged(event => {
+      const nextScaleFactor = Number(event.payload.scaleFactor);
+      scaleFactor = Number.isFinite(nextScaleFactor) && nextScaleFactor > 0 ? nextScaleFactor : 1;
+    }).then(unlisten => {
+      if (disposed) {
+        unlisten();
+      } else {
+        removeScaleChangedListener = unlisten;
+      }
+    }).catch(error => {
+      log.warn('Failed to listen for Agent companion scale changes', error);
+    });
+
+    // Rect cache: getBoundingClientRect results are reused until the dock
+    // layout changes (layoutEpochRef bump) or the window resizes, instead of
+    // re-reading layout on every 120ms poll tick.
+    let rectCacheEpoch = -1;
+    let cachedHitboxRect: DOMRect | null = null;
+    let cachedBubbleRects: Array<{ sessionId: string | null; rect: DOMRect }> = [];
+
+    const invalidateRectCache = () => {
+      rectCacheEpoch = -1;
+    };
+    window.addEventListener('resize', invalidateRectCache);
+
+    const refreshRectCacheIfNeeded = () => {
+      if (rectCacheEpoch === layoutEpochRef.current) {
+        return;
+      }
+      const dock = dockRef.current;
+      const hitbox = dock?.querySelector<HTMLElement>('.bitfun-agent-companion-window__pet-hitbox') ?? null;
+      cachedHitboxRect = hitbox?.getBoundingClientRect() ?? null;
+      cachedBubbleRects = visibleTaskCountRef.current > 0
+        ? Array.from(
+          dock?.querySelectorAll<HTMLElement>('[data-agent-companion-session-id]') ?? [],
+        ).map(element => ({
+          sessionId: element.dataset.agentCompanionSessionId ?? null,
+          rect: element.getBoundingClientRect(),
+        }))
+        : [];
+      rectCacheEpoch = layoutEpochRef.current;
+    };
+
+    const pollPointerHover = async () => {
+      if (pointerPollInFlight) {
+        return;
+      }
+      pointerPollInFlight = true;
+      try {
+        if (!windowPosition) {
+          windowPosition = await tauriWindow.outerPosition();
+        }
+
+        const pointer = await cursorPosition();
+        if (disposed) {
+          return;
+        }
+
+        refreshRectCacheIfNeeded();
+        if (!cachedHitboxRect) {
+          setIsHoveringPet(false);
+        }
+
+        const safeScaleFactor = Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : 1;
+        const pointerX = (pointer.x - windowPosition.x) / safeScaleFactor;
+        const pointerY = (pointer.y - windowPosition.y) / safeScaleFactor;
+        const isPointerInsideHitbox = cachedHitboxRect
+          ? rectContainsPoint(cachedHitboxRect, pointerX, pointerY)
+          : false;
+        const hoveredBubble = cachedBubbleRects.find(({ rect }) => rectContainsPoint(
+          rect,
+          pointerX,
+          pointerY,
+        ));
+
+        setIsHoveringPet(isPointerInsideHitbox);
+        setHoveredBubbleSessionId(hoveredBubble?.sessionId ?? null);
+      } catch (error) {
+        log.warn('Failed to poll Agent companion pointer hover state', error);
+      } finally {
+        pointerPollInFlight = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      // Pause the IPC poll while the pet window is not visible.
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
+      void pollPointerHover();
+    }, POINTER_HOVER_POLL_INTERVAL_MS);
+    void pollPointerHover();
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('resize', invalidateRectCache);
+      removeWindowMovedListener?.();
+      removeScaleChangedListener?.();
+    };
+  }, []);
+
+  const showMainWindowFromPet = useCallback(async () => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('show_main_window');
+    } catch (error) {
+      log.warn('Failed to show main window from Agent companion pet', error);
+    }
+  }, []);
+
+  const onContextMenu = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+  }, []);
+
+  const closeOverlay = useCallback(() => {
+    setOverlay(null);
+  }, []);
+
+  const sendPetCommand = useCallback(async (command: AgentCompanionPetCommand) => {
+    await emit(PET_COMMAND_EVENT, command);
+  }, []);
+
+  const onPetContextMenu = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMenuAnchor(menuAnchorFromEvent(event));
+    setOverlay(previous => (previous?.kind === 'pet-menu' ? null : { kind: 'pet-menu' }));
+  }, []);
+
+  const onBubbleContextMenu = useCallback((event: React.MouseEvent, sessionId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMenuAnchor(menuAnchorFromEvent(event));
+    setOverlay(previous => (
+      previous?.kind === 'bubble-menu' && previous.sessionId === sessionId
+        ? null
+        : { kind: 'bubble-menu', sessionId }
+    ));
+  }, []);
+
+  const closeDesktopPet = useCallback(() => {
+    setOverlay(null);
+    void sendPetCommand({ type: 'close-desktop-pet' })
+      .catch(error => {
+        log.warn('Failed to request Agent companion desktop pet close', error);
+      });
+  }, [sendPetCommand]);
+
+  const closeBubble = useCallback((task: AgentCompanionTaskStatus) => {
+    setOverlay(null);
+    setDismissedBubbles(previous => ({
+      ...previous,
+      [task.sessionId]: bubbleDismissBucket(task.state),
+    }));
+
+    if (!isAcknowledgeableTaskState(task.state)) {
+      return;
+    }
+    // Finished / failed / interrupted bubbles are pure "unread" notices, so tell
+    // the main window the user has seen this one.
+    void sendPetCommand({ type: 'dismiss-task', sessionId: task.sessionId })
+      .catch(error => {
+        log.warn('Failed to acknowledge Agent companion task', {
+          sessionId: task.sessionId,
+          error,
+        });
+      });
+  }, [sendPetCommand]);
+
+  const openBubbleComposer = useCallback((sessionId: string) => {
+    setComposerValue('');
+    setIsSendingComposer(false);
+    setOverlay({ kind: 'composer', sessionId });
+    void getCurrentWindow().setFocus()
+      .catch(error => {
+        log.warn('Failed to focus Agent companion window for composer', error);
+      });
+  }, []);
+
+  const cancelBubbleComposer = useCallback(() => {
+    setComposerValue('');
+    setOverlay(null);
+  }, []);
+
+  const submitBubbleComposer = useCallback(async () => {
+    const sessionId = overlay?.kind === 'composer' ? overlay.sessionId : null;
+    const message = composerValue.trim();
+    if (!sessionId || !message || isSendingComposer) {
+      return;
+    }
+
+    setIsSendingComposer(true);
+    try {
+      await sendPetCommand({ type: 'send-message', sessionId, message });
+      setComposerValue('');
+      setOverlay(null);
+    } catch (error) {
+      log.warn('Failed to send Agent companion message from pet composer', {
+        sessionId,
+        error,
+      });
+    } finally {
+      setIsSendingComposer(false);
+    }
+  }, [composerValue, isSendingComposer, overlay, sendPetCommand]);
+
+  const onComposerKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelBubbleComposer();
+      return;
+    }
+    if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      void submitBubbleComposer();
+    }
+  }, [cancelBubbleComposer, submitBubbleComposer]);
+
+  useEffect(() => {
+    if (overlay?.kind !== 'composer') {
+      return;
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      composerInputRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [overlay]);
+
+  const isMenuOverlay = overlay?.kind === 'pet-menu' || overlay?.kind === 'bubble-menu';
+
+  // Place the menu at the cursor, kept fully inside the window. The window is
+  // deliberately not resized for a menu: growing it moves every anchored
+  // element for a frame, which reads as the whole pet flashing.
+  useLayoutEffect(() => {
+    if (!isMenuOverlay || !menuAnchor) {
+      setMenuPosition(null);
+      return;
+    }
+
+    const placeMenu = () => {
+      // Fractional sizes matter here: rounding up can push the menu a pixel
+      // outside the window.
+      const menuBox = menuRef.current?.getBoundingClientRect();
+      const menuWidth = menuBox?.width ?? 0;
+      const menuHeight = menuBox?.height ?? 0;
+      const right = Math.min(
+        Math.max(menuAnchor.right, MENU_EDGE_MARGIN),
+        Math.max(0, window.innerWidth - menuWidth),
+      );
+      const bottom = Math.min(
+        Math.max(menuAnchor.bottom, MENU_EDGE_MARGIN),
+        Math.max(0, window.innerHeight - menuHeight),
+      );
+      setMenuPosition(previous => (
+        previous && previous.right === right && previous.bottom === bottom
+          ? previous
+          : { right, bottom }
+      ));
+    };
+
+    placeMenu();
+    // A bubble arriving while the menu is open still resizes the window.
+    window.addEventListener('resize', placeMenu);
+    return () => window.removeEventListener('resize', placeMenu);
+  }, [isMenuOverlay, menuAnchor]);
+
+  const clearPetPointerSession = (target: HTMLDivElement, pointerId: number) => {
+    const session = petPointerSessionRef.current;
+    if (!session || session.pointerId !== pointerId) {
+      return;
+    }
+    petPointerSessionRef.current = null;
+    try {
+      target.releasePointerCapture(pointerId);
+    } catch {
+      /* already released */
+    }
+  };
+
+  const onPetPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+    // The bubble composer stays interactive while open (it lives inside a
+    // bubble), so touching the pet is what dismisses it.
+    if (overlay?.kind === 'composer') {
+      setOverlay(null);
+    }
+    petPointerSessionRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      dragStarted: false,
+    };
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const onPetPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const session = petPointerSessionRef.current;
+    if (!session || event.pointerId !== session.pointerId || session.dragStarted) {
+      return;
+    }
+    const dx = event.clientX - session.startX;
+    const dy = event.clientY - session.startY;
+    if (dx * dx + dy * dy < PET_DRAG_THRESHOLD_PX * PET_DRAG_THRESHOLD_PX) {
+      return;
+    }
+    session.dragStarted = true;
+    event.preventDefault();
+    setIsDraggingPet(true);
+    void getCurrentWindow().startDragging()
+      .catch(error => {
+        log.warn('Failed to start Agent companion window drag', error);
+      })
+      .finally(() => {
+        setIsDraggingPet(false);
+      });
+  };
+
+  const onPetPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const session = petPointerSessionRef.current;
+    if (!session || event.pointerId !== session.pointerId) {
+      return;
+    }
+    const shouldShowMain = !session.dragStarted;
+    clearPetPointerSession(event.currentTarget, event.pointerId);
+    if (shouldShowMain) {
+      void showMainWindowFromPet();
+    }
+  };
+
+  const onPetPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    const session = petPointerSessionRef.current;
+    if (!session || event.pointerId !== session.pointerId) {
+      return;
+    }
+    clearPetPointerSession(event.currentTarget, event.pointerId);
+  };
+
+  const displayMood: ChatInputPixelPetMood = isDraggingPet
+    ? 'dragging'
+    : isHoveringPet
+      ? 'hover'
+      : mood;
+
+  const openTaskSession = async (task: AgentCompanionTaskStatus) => {
+    try {
+      const [{ invoke }, { emit }] = await Promise.all([
+        import('@tauri-apps/api/core'),
+        import('@tauri-apps/api/event'),
+      ]);
+      await emit('agent-companion://open-session', { sessionId: task.sessionId });
+      await invoke('show_main_window');
+    } catch (error) {
+      log.warn('Failed to open Agent companion task session', {
+        sessionId: task.sessionId,
+        error,
+      });
+    }
+  };
+
+  const handlePetFrameSizeChange = useCallback((size: { width: number; height: number } | null) => {
+    setPetFrameSize(size);
+  }, []);
+
+  const dockVars = {
+    '--bitfun-agent-companion-pet-width': `${activePetSize.width}px`,
+    '--bitfun-agent-companion-pet-height': `${activePetSize.height}px`,
+    '--bitfun-agent-companion-gap': `${WINDOW_HORIZONTAL_GAP}px`,
+  } as React.CSSProperties;
+  const isSingleTask = visibleTasks.length === 1;
+  const hasAttentionTask = visibleTasks.some(task => task.state === 'attention');
+  const overlayTask = overlay && overlay.kind !== 'pet-menu'
+    ? visibleTasks.find(task => task.sessionId === overlay.sessionId) ?? null
+    : null;
+  const menuItem = overlay?.kind === 'pet-menu'
+    ? { label: t('agentCompanion.menu.closePet'), onClick: closeDesktopPet }
+    : overlay?.kind === 'bubble-menu' && overlayTask
+      ? { label: t('agentCompanion.menu.closeBubble'), onClick: () => closeBubble(overlayTask) }
+      : null;
+
+  return (
+    <main
+      className={`bitfun-agent-companion-window${isMenuOverlay ? ' bitfun-agent-companion-window--menu-open' : ''}${IS_WINDOWS_WEBVIEW ? ' bitfun-agent-companion-window--native-hover' : ''}`}
+      onContextMenu={onContextMenu}
+    >
+      {overlay && (
+        <div
+          className="bitfun-agent-companion-window__backdrop"
+          onPointerDown={closeOverlay}
+        />
+      )}
+      {menuItem && (
+        <div
+          ref={menuRef}
+          className="bitfun-agent-companion-window__overlay bitfun-agent-companion-window__overlay--anchored"
+          style={{
+            right: `${menuPosition?.right ?? MENU_EDGE_MARGIN}px`,
+            bottom: `${menuPosition?.bottom ?? MENU_EDGE_MARGIN}px`,
+            visibility: menuPosition ? 'visible' : 'hidden',
+          }}
+        >
+          <div className="bitfun-agent-companion-window__menu" role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              className="bitfun-agent-companion-window__menu-item"
+              onClick={menuItem.onClick}
+            >
+              {menuItem.label}
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="bitfun-agent-companion-window__stack" style={dockVars}>
+        <div
+          ref={dockRef}
+          className="bitfun-agent-companion-window__dock"
+        >
+          {visibleTasks.length > 0 && (
+            <div
+              ref={bubblesRef}
+              className={`bitfun-agent-companion-window__bubbles${isSingleTask ? ' bitfun-agent-companion-window__bubbles--single' : ''}`}
+              aria-live="polite"
+              onDoubleClick={event => event.stopPropagation()}
+            >
+              {displayTasks.map(task => {
+                const isComposingTask = overlay?.kind === 'composer'
+                  && overlay.sessionId === task.sessionId;
+                const isHoveredTask = hoveredBubbleSessionId === task.sessionId;
+                const bubbleClassName = `bitfun-agent-companion-window__bubble bitfun-agent-companion-window__bubble--${task.state}${isSingleTask ? ' bitfun-agent-companion-window__bubble--single' : ''}${isComposingTask ? ' bitfun-agent-companion-window__bubble--composing' : ''}`;
+                const bubbleBody = (
+                  <>
+                    <span className="bitfun-agent-companion-window__bubble-title">
+                      {task.title}
+                    </span>
+                    <span className="bitfun-agent-companion-window__bubble-status">
+                      {t(task.labelKey, { defaultValue: task.defaultLabel })}
+                    </span>
+                    {isSingleTask && task.latestOutput && (() => {
+                      const typedOutput = typedOutputBySessionId[task.sessionId];
+                      const visibleOutput = typedOutput?.visible ?? seedTypewriterOutput(task.latestOutput);
+                      const targetOutput = typedOutput?.target ?? task.latestOutput;
+                      const isTyping = visibleOutput !== targetOutput;
+                      const sessionId = task.sessionId;
+
+                      return (
+                        <span
+                          ref={element => {
+                            if (element) {
+                              outputRefs.current.set(sessionId, element);
+                            } else {
+                              outputRefs.current.delete(sessionId);
+                            }
+                          }}
+                          className={`bitfun-agent-companion-window__bubble-output${isTyping ? ' bitfun-agent-companion-window__bubble-output--typing' : ''}`}
+                        >
+                          {visibleOutput}
+                        </span>
+                      );
+                    })()}
+                  </>
+                );
+
+                return (
+                  <div
+                    key={task.sessionId}
+                    data-agent-companion-session-id={task.sessionId}
+                    className={`bitfun-agent-companion-window__bubble-shell${isSingleTask ? ' bitfun-agent-companion-window__bubble-shell--single' : ''}${isHoveredTask ? ' bitfun-agent-companion-window__bubble-shell--hovered' : ''}`}
+                    onContextMenu={event => onBubbleContextMenu(event, task.sessionId)}
+                  >
+                    {isComposingTask ? (
+                      // The bubble itself becomes the composer: no extra panel,
+                      // and the window keeps its size.
+                      <div className={bubbleClassName}>
+                        {bubbleBody}
+                        <div className="bitfun-agent-companion-window__bubble-composer">
+                          <input
+                            ref={composerInputRef}
+                            type="text"
+                            data-mouse-glow-ignore
+                            className="bitfun-agent-companion-window__bubble-composer-input"
+                            value={composerValue}
+                            placeholder={t('agentCompanion.composer.placeholder')}
+                            aria-label={t('agentCompanion.composer.ariaLabel')}
+                            onChange={event => setComposerValue(event.target.value)}
+                            onKeyDown={onComposerKeyDown}
+                          />
+                          <button
+                            type="button"
+                            className="bitfun-agent-companion-window__bubble-composer-cancel"
+                            title={t('agentCompanion.composer.cancel')}
+                            aria-label={t('agentCompanion.composer.cancel')}
+                            onClick={cancelBubbleComposer}
+                          >
+                            <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true">
+                              <path
+                                d="M4 4l8 8M12 4l-8 8"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="bitfun-agent-companion-window__bubble-composer-send"
+                            title={t('agentCompanion.composer.send')}
+                            aria-label={t('agentCompanion.composer.send')}
+                            disabled={!composerValue.trim() || isSendingComposer}
+                            onClick={() => void submitBubbleComposer()}
+                          >
+                            <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true">
+                              <path
+                                d="M8 13V3.6M4 7.6 8 3.4l4 4.2"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className={bubbleClassName}
+                        onClick={() => void openTaskSession(task)}
+                      >
+                        {bubbleBody}
+                      </button>
+                    )}
+                    {task.canReply !== false && !isComposingTask && (
+                      <button
+                        type="button"
+                        className="bitfun-agent-companion-window__bubble-compose"
+                        title={t('agentCompanion.composer.openTitle')}
+                        aria-label={t('agentCompanion.composer.openTitle')}
+                        onClick={() => openBubbleComposer(task.sessionId)}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true">
+                          <path
+                            d="M10.6 2.6a1.4 1.4 0 0 1 2 2L6 11.2l-3 .8.8-3 6.8-6.4zM3.5 14h9"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div
+            className={`bitfun-agent-companion-window__pet-hitbox${hasAttentionTask ? ' bitfun-agent-companion-window__pet-hitbox--needs-attention' : ''}`}
+            onPointerEnter={() => setIsHoveringPet(true)}
+            onPointerLeave={() => setIsHoveringPet(false)}
+            onPointerDown={onPetPointerDown}
+            onPointerMove={onPetPointerMove}
+            onPointerUp={onPetPointerUp}
+            onPointerCancel={onPetPointerCancel}
+            onContextMenu={onPetContextMenu}
+          >
+            <ChatInputPixelPet
+              mood={displayMood}
+              pet={pet}
+              nativePetdexSize
+              petdexScale={PETDEX_DESKTOP_SCALE}
+              onPetFrameSizeChange={handlePetFrameSizeChange}
+              className="bitfun-agent-companion-window__pet"
+            />
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+};
+
+export default AgentCompanionDesktopPet;

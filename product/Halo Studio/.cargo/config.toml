@@ -1,0 +1,15 @@
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source."git+https://github.com/tauri-apps/tao.git?rev=c704261c519c58cfdd0bc2d58ba24e06a0b71c92"]
+git = "https://github.com/tauri-apps/tao.git"
+rev = "c704261c519c58cfdd0bc2d58ba24e06a0b71c92"
+replace-with = "vendored-sources"
+
+[source."git+https://github.com/tauri-apps/tauri.git?rev=ce3860e84b79af0d5ee628b304399499a87328b1"]
+git = "https://github.com/tauri-apps/tauri.git"
+rev = "ce3860e84b79af0d5ee628b304399499a87328b1"
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor/cargo"

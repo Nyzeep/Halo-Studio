@@ -1,0 +1,568 @@
+/**
+ * FloatingMiniChat — subtle circular button + spring-animated expanded panel.
+ *
+ * Button style follows the app's muted dark-UI language.
+ * Panel springs from the button position (bottom-right) on open.
+ * Button hides while the panel is visible.
+ */
+
+@use '../../component-library/styles/tokens' as *;
+
+$fmc-ease: cubic-bezier(0.4, 0, 0.2, 1);
+$fmc-open-duration: 0.42s;
+$fmc-close-duration: 0.25s;
+
+$button-size: 44px;
+$button-offset: 28px;
+// Sized for the full session composer (workspace strip, model/permission
+// controls, action row) rather than the single-line input it replaced.
+$panel-width: 440px;
+$panel-height: 680px;
+
+// ─── Root container ────────────────────────────────────────
+// Children opt into pointer events individually. A blanket `& > *` override
+// here used to decide, by source order alone, whether the collapsed panel or
+// the trigger under it received the press — too fragile for the one control
+// that has to work on the first try.
+//
+// Stacking inside this context, bottom to top: backdrop (0), panel (1),
+// trigger (2). The trigger therefore always sits above the collapsed panel
+// that overlaps it, and is removed from hit testing by `visibility` — not by
+// pointer-events alone — once the panel is open.
+.bitfun-fmc {
+  position: fixed;
+  bottom: $button-offset;
+  right: $button-offset;
+  z-index: $z-overlay + 1;
+  pointer-events: none;
+  transition:
+    right $motion-base $easing-decelerate,
+    bottom $motion-base $easing-decelerate;
+
+  &--miniapp-customizing {
+    right: calc(clamp(380px, 38vw, 560px) + #{$button-offset + 16px});
+  }
+}
+
+// ─── Fullscreen backdrop (catches outside clicks) ──────────
+.bitfun-fmc__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: auto;
+}
+
+// ─── Circular trigger button ───────────────────────────────
+.bitfun-fmc__button {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+  width: $button-size;
+  height: $button-size;
+  border-radius: 50%;
+  border: 1px solid var(--border-base);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-tertiary);
+  box-shadow:
+    0 2px 8px rgba(var(--color-static-black-rgb), 0.35),
+    inset 0 1px 0 var(--color-overlay-white-04);
+  transition:
+    transform 0.2s $fmc-ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity $fmc-close-duration $fmc-ease;
+
+  &:hover {
+    background: var(--color-bg-elevated);
+    border-color: var(--border-medium);
+    color: var(--color-text-primary);
+    box-shadow:
+      0 4px 16px rgba(var(--color-static-black-rgb), 0.45),
+      0 0 12px color-mix(in srgb, var(--color-accent-500) 8%, transparent);
+    transform: scale(1.06);
+  }
+
+  &:active {
+    transform: scale(0.94);
+  }
+
+  // Hide when the panel is open. `visibility` (delayed until the fade-out
+  // finishes) is what actually removes it from hit testing; opacity alone
+  // would leave an invisible but clickable trigger under the panel.
+  .bitfun-fmc--open & {
+    opacity: 0;
+    transform: scale(0.5);
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      transform 0.2s $fmc-ease,
+      opacity $fmc-close-duration $fmc-ease,
+      visibility 0s linear $fmc-close-duration;
+  }
+}
+
+.bitfun-fmc__button--miniapp {
+  color: var(--color-text-primary);
+  background: var(--color-bg-elevated);
+  border-color: var(--border-medium);
+
+  &:hover {
+    color: var(--color-text-primary);
+    background: var(--element-bg-hover);
+    border-color: var(--border-strong);
+  }
+}
+
+.bitfun-fmc__button--processing {
+  border-color: var(--border-strong);
+}
+
+.bitfun-fmc__miniapp-trigger-icon {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: inherit;
+}
+
+.bitfun-fmc__button-activity {
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  pointer-events: none;
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+
+  &::before {
+    border: 2px solid color-mix(in srgb, var(--color-text-muted) 24%, transparent);
+    border-top-color: var(--color-text-primary);
+    border-right-color: color-mix(in srgb, var(--color-text-primary) 62%, transparent);
+    filter: drop-shadow(
+      0 0 4px color-mix(in srgb, var(--color-text-primary) 38%, transparent)
+    );
+    animation: fmc-button-activity-spin 1.1s linear infinite;
+    will-change: transform;
+  }
+
+  &::after {
+    inset: 4px;
+    box-shadow:
+      0 0 10px color-mix(in srgb, var(--color-text-primary) 18%, transparent),
+      0 0 18px color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+    animation: fmc-button-activity-glow 1.6s $fmc-ease infinite;
+    will-change: opacity, transform;
+  }
+}
+
+@keyframes fmc-button-activity-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fmc-button-activity-glow {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.94);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bitfun-fmc__button-activity {
+    &::before,
+    &::after {
+      animation: none;
+    }
+
+    &::after {
+      opacity: 0.7;
+      transform: none;
+    }
+  }
+}
+
+// ─── Panel ─────────────────────────────────────────────────
+.bitfun-fmc__panel {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  z-index: 1;
+  width: $panel-width;
+  height: $panel-height;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 80px);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow:
+    0 4px 12px var(--color-overlay-black-30),
+    0 0 1px var(--color-overlay-white-08);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+
+  // Pre-open state: collapsed into the button position. The collapsed panel
+  // still overlaps the trigger, so it is hidden outright once the close
+  // animation ends rather than relying on pointer-events alone.
+  transform-origin: bottom right;
+  opacity: 0;
+  transform: scale(0.15);
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity $fmc-close-duration $fmc-ease,
+    transform $fmc-close-duration $fmc-ease,
+    visibility 0s linear $fmc-close-duration;
+
+  &--open {
+    opacity: 1;
+    transform: scale(1);
+    visibility: visible;
+    pointer-events: auto;
+    transition:
+      opacity $fmc-open-duration $fmc-ease,
+      transform $fmc-open-duration $fmc-ease,
+      visibility 0s linear 0s;
+  }
+
+  // ── State borders ──
+  &--processing {
+    border-color: var(--color-accent-300);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      border-radius: 8px 8px 0 0;
+      background: linear-gradient(
+        90deg,
+        var(--color-accent-600),
+        var(--color-purple-500),
+        var(--color-accent-600)
+      );
+      background-size: 200% 100%;
+      animation: fmc-progress 2s linear infinite;
+      z-index: 10;
+    }
+  }
+
+}
+
+@keyframes fmc-progress {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+// ─── Header ────────────────────────────────────────────────
+.bitfun-fmc__header {
+  flex: 0 0 auto;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.bitfun-fmc__header-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: var(--element-bg-base);
+    color: var(--color-text-primary);
+  }
+
+  &:active {
+    transform: scale(0.92);
+  }
+
+  &--close:hover {
+    background: var(--color-error-bg);
+    color: var(--color-error);
+  }
+}
+
+.bitfun-fmc__miniapp-session-icon {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  border-radius: 7px;
+  border: 1px solid var(--border-subtle);
+  background: var(--element-bg-subtle);
+}
+
+// ─── Title ─────────────────────────────────────────────────
+// Plain display. Session switching lives in the shared SessionMenu ("+"),
+// matching floating window mode.
+.bitfun-fmc__title-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.bitfun-fmc__title-display {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  box-sizing: border-box;
+  color: var(--color-text-primary);
+  font-size: var(--flowchat-font-size-xs);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--size-radius-sm);
+}
+
+.bitfun-fmc__title-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+// ─── FlowChat body ─────────────────────────────────────────
+// Host for the reused main-window session surface (ChatPane: conversation +
+// ChatInput). Only sizing is adjusted here — the surface keeps the main
+// window's own look and behavior.
+.bitfun-fmc__body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  .bitfun-chat-pane__content {
+    flex: 1;
+    min-height: 0;
+    background: transparent;
+  }
+
+  .modern-flowchat-container {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    overflow-x: hidden;
+
+    > .flowchat-header {
+      display: none;
+    }
+  }
+}
+
+.bitfun-fmc__miniapp-session-pending {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--color-text-muted);
+  font-size: var(--flowchat-font-size-sm);
+  text-align: center;
+}
+
+.bitfun-fmc__miniapp-session-pending-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-primary);
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--element-bg-subtle);
+}
+
+// MiniApps describe this empty state as bounded data through
+// app.chat.claimComposer. The host owns the markup, behavior, and theme.
+.bitfun-fmc__miniapp-welcome {
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 42px 36px;
+  overflow-y: auto;
+  color: var(--color-text-primary);
+
+  h2 {
+    max-width: 420px;
+    margin: 8px 0 0;
+    font-size: 23px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+  }
+}
+
+.bitfun-fmc__miniapp-welcome-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-primary);
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--element-bg-subtle);
+  box-shadow:
+    0 10px 28px var(--color-overlay-black-20);
+}
+
+.bitfun-fmc__miniapp-welcome-eyebrow {
+  margin-top: 18px;
+  color: var(--color-text-muted);
+  font-size: var(--flowchat-font-size-xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+}
+
+.bitfun-fmc__miniapp-welcome-description {
+  max-width: 420px;
+  margin: 12px 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--flowchat-font-size-sm);
+  line-height: 1.6;
+}
+
+.bitfun-fmc__miniapp-workspace {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 6px 9px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--element-bg-subtle);
+  color: var(--color-text-muted);
+  font-size: var(--flowchat-font-size-xs);
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.bitfun-fmc__miniapp-suggestions {
+  width: 100%;
+  margin-top: 28px;
+}
+
+.bitfun-fmc__miniapp-suggestions-label {
+  margin-bottom: 8px;
+  color: var(--color-text-muted);
+  font-size: var(--flowchat-font-size-xs);
+}
+
+.bitfun-fmc__miniapp-suggestions-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.bitfun-fmc__miniapp-suggestion {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--size-radius-sm);
+  background: var(--element-bg-subtle);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--flowchat-font-size-sm);
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background $motion-fast $easing-standard,
+    border-color $motion-fast $easing-standard,
+    color $motion-fast $easing-standard,
+    transform $motion-fast $easing-standard;
+
+  span {
+    min-width: 0;
+  }
+
+  svg {
+    flex: 0 0 auto;
+    color: var(--color-text-muted);
+  }
+
+  &:hover {
+    border-color: var(--border-medium);
+    background: var(--element-bg-hover);
+    color: var(--color-text-primary);
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-accent-500);
+    outline-offset: 2px;
+  }
+}
+
+@media (max-width: 900px) {
+  .bitfun-fmc--miniapp-customizing {
+    right: $button-offset;
+    bottom: calc(#{$button-offset} + 64px);
+  }
+
+  .bitfun-fmc__miniapp-welcome {
+    padding: 32px 24px;
+  }
+}

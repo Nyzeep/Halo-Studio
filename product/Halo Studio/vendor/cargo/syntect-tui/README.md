@@ -1,0 +1,65 @@
+# syntect-tui [![Build Status](https://app.travis-ci.com/chanq-io/syntect-tui.svg?branch=main)](https://app.travis-ci.com/chanq-io/syntect-tui)
+A lightweight translation layer between [syntect](https://github.com/trishume/syntect) and
+[ratatui](https://github.com/ratatui-org/ratatui) style types. If you're building a CLI app with a UI powered by Ratatui and need syntax highlighting, then you may find this crate useful!
+
+Given the limited scope of this crate I do not have plans to extend existing functionality much further. However, I am open to requests and/or contributions, so feel free to fork and submit a pull request.
+
+## Getting Started
+`syntect-tui` is [available on crates.io](https://crates.io/crates/syntect-tui). You can install it by adding the following line to your `Cargo.toml`:
+
+```
+syntect-tui = "3.0"
+```
+
+## Docs
+For more usage information read the [docs](https://docs.rs/syntect-tui/latest/syntect_tui/)
+
+## Example Code
+Building upon [syntect's simple example](https://github.com/trishume/syntect#example-code), here's a
+snippet that parses some rust code, highlights it using syntect and converts it into
+[ratatui::text::Line](https://docs.rs/ratatui/latest/ratatui/text/struct.Line.html) ready for rendering in a tui appliction:
+```rust
+use ratatui::text::{Line, Span};
+use syntect::easy::HighlightLines;
+use syntect::highlighting::ThemeSet;
+use syntect::parsing::SyntaxSet;
+use syntect::util::LinesWithEndings;
+use syntect_tui::into_span;
+
+const EXAMPLE: &str = "
+pub struct Wow {
+    hi: u64
+}
+fn blah() -> u64 {}
+";
+
+let ps = SyntaxSet::load_defaults_newlines();
+let ts = ThemeSet::load_defaults();
+let syntax = ps.find_syntax_by_extension("rs").unwrap();
+let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
+for line in LinesWithEndings::from(EXAMPLE) {
+    // LinesWithEndings enables use of newlines mode
+    let spans: Vec<Span> = h
+        .highlight_line(line, &ps)
+        .unwrap()
+        .into_iter()
+        .filter_map(|segment| into_span(segment).ok())
+        .collect();
+
+    let line = Line::from(spans);
+    println!("{:?}", line);
+}
+```
+
+## Licence & Acknowledgements
+ All code is released under the MIT License. Thanks to [trishume](https://github.com/trishume),
+ [fdehau](https://github.com/fdehau/), and the [ratatui
+ community](https://github.com/ratatui-org/ratatui) for building `sytect`, `tui`, and `ratatui`!
+ Also a big thank you to fellow rustaceans who have contributed to the maintenance of this crate:
+
+- [depu105](https://github.com/deepu105)
+- [MickHarrigan](https://github.com/MickHarrigan)
+- [HamZag](https://github.com/zaghaghi)
+- [orhun](https://github.com/orhun)
+- [jvanbuel](https://github.com/jvanbuel)
+- [chrysn](https://github.com/chrysn)

@@ -1,0 +1,12 @@
+packages:
+  - "src/web-ui"
+  - "src/mobile-web"
+  - "src/miniapp-market-web"
+  - "BitFun-Installer"
+  - "tests/e2e"
+allowBuilds:
+  '@parcel/watcher': true
+  edgedriver: false
+  esbuild: true
+  geckodriver: false
+  sharp: true

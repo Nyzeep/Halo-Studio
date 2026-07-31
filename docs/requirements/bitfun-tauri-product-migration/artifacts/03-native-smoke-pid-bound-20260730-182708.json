@@ -1,0 +1,27 @@
+﻿{
+    "ok":  true,
+    "launcherPid":  9064,
+    "processPath":  "D:\\Halo Studio\\.worktrees\\issue-03-tauri-workbench\\product\\bitfun\\target\\release\\halo-studio.exe",
+    "expectedPath":  "D:\\Halo Studio\\.worktrees\\issue-03-tauri-workbench\\product\\bitfun\\target\\release\\halo-studio.exe",
+    "pathMatches":  true,
+    "foregroundHandle":  "0x6C01F0",
+    "foregroundMatchesWindow":  true,
+    "window":  {
+                   "handle":  "0x6C01F0",
+                   "title":  "Halo Studio - 编码工作台",
+                   "visible":  true,
+                   "left":  82,
+                   "top":  22,
+                   "width":  1454,
+                   "height":  938
+               },
+    "webviewUserData":  "D:\\Halo Studio\\.worktrees\\issue-03-tauri-workbench\\product\\bitfun\\target\\native-smoke-webview2-20260730-182708",
+    "cdpPort":  14359,
+    "cdpFullEvidence":  "D:\\Halo Studio\\.worktrees\\issue-03-tauri-workbench\\docs\\requirements\\bitfun-tauri-product-migration\\artifacts\\03-native-smoke-pid-bound-20260730-182708-cdp.json",
+    "cdpSummaryEvidence":  "D:\\Halo Studio\\.worktrees\\issue-03-tauri-workbench\\docs\\requirements\\bitfun-tauri-product-migration\\artifacts\\03-native-smoke-pid-bound-20260730-182708-cdp-summary.json",
+    "screenshots":  {
+                        "nativeBefore":  "D:\\Halo Studio\\.worktrees\\issue-03-tauri-workbench\\docs\\requirements\\bitfun-tauri-product-migration\\artifacts\\03-native-smoke-pid-bound-20260730-182708-before.png",
+                        "nativeAfter":  "D:\\Halo Studio\\.worktrees\\issue-03-tauri-workbench\\docs\\requirements\\bitfun-tauri-product-migration\\artifacts\\03-native-smoke-pid-bound-20260730-182708-after.png",
+                        "cdpAfter":  "D:\\Halo Studio\\.worktrees\\issue-03-tauri-workbench\\docs\\requirements\\bitfun-tauri-product-migration\\artifacts\\03-native-smoke-pid-bound-20260730-182708-cdp-after.png"
+                    }
+}

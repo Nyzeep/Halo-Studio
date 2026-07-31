@@ -1,0 +1,881 @@
+/* eslint-disable @typescript-eslint/no-use-before-define */
+/**
+ * Model round item component.
+ * Renders mixed FlowItems (text + tools).
+ *
+ * Note: explore-only rounds are handled by ExploreGroupRenderer,
+ * and this component only renders rounds with critical output.
+ */
+
+import React, { useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Copy, Check, CircleAlert } from 'lucide-react';
+import type { ModelRound, ModelRoundAttempt, ModelRoundAttemptDiagnostic, FlowItem, FlowTextItem, FlowToolItem, FlowThinkingItem, TokenUsage, ToolRejectOptions } from '../../types/flow-chat';
+import { useI18n } from '@/infrastructure/i18n';
+import { FlowTextBlock } from '../FlowTextBlock';
+import { FlowToolCard } from '../FlowToolCard';
+import { ModelThinkingDisplay } from '../../tool-cards/ModelThinkingDisplay';
+import { TypewriterRevealGateProvider } from '../../hooks/TypewriterRevealGate';
+import { useCreateTypewriterRevealGate } from '../../hooks/typewriterRevealGateContext';
+import { getModelRoundItemClassName } from './modelRoundItemClassName';
+import { isCollapsibleTool } from '../../tool-cards/toolCardMetadata';
+import { useFlowChatContext } from './FlowChatContext';
+import { taskCollapseStateManager } from '../../store/TaskCollapseStateManager';
+import { getEffectiveToolName } from '../../utils/toolInvocationIdentity';
+import { ExportImageButton } from './ExportImageButton';
+import { ForkSessionButton } from './ForkSessionButton';
+import {
+  buildModelRoundItemGroups,
+  type ModelRoundItemGroup,
+} from './modelRoundItemGrouping';
+import { Tooltip } from '@/component-library';
+import { notificationService } from '@/shared/notification-system';
+import { createLogger } from '@/shared/utils/logger';
+import {
+  isStartupRenderTraceEnabled,
+  recordReactRenderProfile,
+  startupTrace,
+} from '@/shared/utils/startupTrace';
+import { SubagentProjectionView } from '../subagent/SubagentProjectionView';
+import { buildModelRoundUsageMeta } from '../../utils/tokenUsageDisplay';
+import { buildDialogTurnCopyText } from '../../utils/dialogTurnCopy';
+import type { TranscriptExportScope } from '../../utils/dialogTranscriptExport';
+import { buildTranscriptExportLabels } from '../../utils/transcriptExportLabels';
+import './ModelRoundItem.scss';
+import './SubagentItems.scss';
+
+const log = createLogger('ModelRoundItem');
+
+interface ModelRoundGroupSummary {
+  textItemCount: number;
+  toolItemCount: number;
+  criticalGroupCount: number;
+  exploreGroupCount: number;
+}
+
+function summarizeModelRoundItemGroups(groups: ModelRoundItemGroup[]): ModelRoundGroupSummary {
+  return groups.reduce<ModelRoundGroupSummary>((summary, group) => {
+    if (group.type === 'explore') {
+      summary.exploreGroupCount += 1;
+      for (const item of group.items) {
+        if (item.type === 'text') {
+          summary.textItemCount += 1;
+        } else if (item.type === 'tool') {
+          summary.toolItemCount += 1;
+        }
+      }
+      return summary;
+    }
+
+    summary.criticalGroupCount += 1;
+    if (group.item.type === 'text') {
+      summary.textItemCount += 1;
+    } else if (group.item.type === 'tool') {
+      summary.toolItemCount += 1;
+    }
+    return summary;
+  }, {
+    textItemCount: 0,
+    toolItemCount: 0,
+    criticalGroupCount: 0,
+    exploreGroupCount: 0,
+  });
+}
+
+interface ModelRoundRenderTraceProps {
+  startedAtMs: number;
+  turnId: string;
+  round: ModelRound;
+  itemCount: number;
+  groupCount: number;
+  groupSummary: ModelRoundGroupSummary;
+}
+
+const ModelRoundRenderTrace: React.FC<ModelRoundRenderTraceProps> = ({
+  startedAtMs,
+  turnId,
+  round,
+  itemCount,
+  groupCount,
+  groupSummary,
+}) => {
+  useLayoutEffect(() => {
+    recordReactRenderProfile(startupTrace, {
+      component: 'ModelRoundItem',
+      phase: 'commit',
+      actualDurationMs: performance.now() - startedAtMs,
+      turnId,
+      roundId: round.id,
+      itemCount,
+      groupCount,
+      textItemCount: groupSummary.textItemCount,
+      toolItemCount: groupSummary.toolItemCount,
+      criticalGroupCount: groupSummary.criticalGroupCount,
+      exploreGroupCount: groupSummary.exploreGroupCount,
+      isStreaming: round.isStreaming,
+    });
+  });
+
+  return null;
+};
+
+interface ModelRoundItemProps {
+  round: ModelRound;
+  turnId: string;
+  isLastRound?: boolean;
+  isTurnComplete?: boolean;
+  turnStartedAt?: number;
+  turnEndedAt?: number;
+  turnDurationMs?: number;
+  turnTokenUsage?: TokenUsage;
+}
+
+function sortRoundAttempts(attempts: ModelRoundAttempt[]): ModelRoundAttempt[] {
+  return [...attempts].sort((left, right) => left.index - right.index);
+}
+
+function attemptDiagnosticCategoryLabel(
+  diagnostic: ModelRoundAttemptDiagnostic,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  switch (diagnostic.category) {
+    case 'transient_request_error':
+      return t('modelRound.attemptDiagnostics.categories.transientRequestError');
+    case 'interrupted_tool_arguments':
+      return t('modelRound.attemptDiagnostics.categories.interruptedToolArguments');
+    case 'partial_stream_error':
+      return t('modelRound.attemptDiagnostics.categories.partialStreamError');
+    case 'invalid_tool_arguments':
+      return t('modelRound.attemptDiagnostics.categories.invalidToolArguments');
+    case 'no_effective_output':
+      return t('modelRound.attemptDiagnostics.categories.noEffectiveOutput');
+    case 'transient_stream_error':
+      return t('modelRound.attemptDiagnostics.categories.transientStreamError');
+    default:
+      return t('modelRound.attemptDiagnostics.categories.unknown', { category: diagnostic.category });
+  }
+}
+
+const AttemptDiagnosticDetails: React.FC<{ diagnostic: ModelRoundAttemptDiagnostic }> = ({ diagnostic }) => {
+  const { t } = useTranslation('flow-chat');
+  const [isOpen, setIsOpen] = useState(false);
+  const [copiedValue, setCopiedValue] = useState<string | null>(null);
+
+  const copyValue = useCallback(async (value: string, valueKey: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedValue(valueKey);
+      window.setTimeout(() => setCopiedValue(current => current === valueKey ? null : current), 2000);
+    } catch (error) {
+      log.error('Failed to copy attempt diagnostic value', error);
+    }
+  }, []);
+
+  const renderCopyButton = (value: string, valueKey: string) => (
+    <Tooltip content={copiedValue === valueKey ? t('modelRound.attemptDiagnostics.copied') : t('modelRound.attemptDiagnostics.copy')} placement="top">
+      <button
+        type="button"
+        className="model-round-item__attempt-diagnostic-copy"
+        onClick={() => void copyValue(value, valueKey)}
+        aria-label={t('modelRound.attemptDiagnostics.copy')}
+      >
+        {copiedValue === valueKey ? <Check size={13} /> : <Copy size={13} />}
+      </button>
+    </Tooltip>
+  );
+
+  const detailsId = `attempt-diagnostic-${diagnostic.attemptId}`;
+
+  return (
+    <>
+      <Tooltip content={isOpen ? t('modelRound.attemptDiagnostics.hide') : t('modelRound.attemptDiagnostics.show')} placement="top">
+        <button
+          type="button"
+          className="model-round-item__attempt-diagnostic-toggle"
+          onClick={() => setIsOpen(current => !current)}
+          aria-expanded={isOpen}
+          aria-controls={detailsId}
+          aria-label={isOpen ? t('modelRound.attemptDiagnostics.hide') : t('modelRound.attemptDiagnostics.show')}
+        >
+          <CircleAlert size={13} aria-hidden="true" />
+        </button>
+      </Tooltip>
+
+      {isOpen && (
+        <div id={detailsId} className="model-round-item__attempt-diagnostic-details">
+          <div className="model-round-item__attempt-diagnostic-category">
+            {attemptDiagnosticCategoryLabel(diagnostic, t)}
+          </div>
+
+          {diagnostic.rawError && (
+            <div className="model-round-item__attempt-diagnostic-section">
+              <div className="model-round-item__attempt-diagnostic-section-header">
+                <span>{t('modelRound.attemptDiagnostics.providerError')}</span>
+                {renderCopyButton(diagnostic.rawError, 'raw-error')}
+              </div>
+              <pre>{diagnostic.rawError}</pre>
+            </div>
+          )}
+
+          {(diagnostic.toolCalls ?? []).map((toolCall, index) => {
+            const toolLabel = toolCall.toolName || toolCall.toolId || t('modelRound.attemptDiagnostics.unknownTool');
+            return (
+              <div key={`${toolCall.toolId ?? toolCall.toolName ?? 'tool'}:${index}`} className="model-round-item__attempt-diagnostic-section">
+                <div className="model-round-item__attempt-diagnostic-tool-title">
+                  {t('modelRound.attemptDiagnostics.toolArguments', { name: toolLabel })}
+                </div>
+                {toolCall.rawArguments && (
+                  <>
+                    <div className="model-round-item__attempt-diagnostic-section-header">
+                      <span>{t('modelRound.attemptDiagnostics.rawArguments')}</span>
+                      {renderCopyButton(toolCall.rawArguments, `raw-arguments:${index}`)}
+                    </div>
+                    <pre>{toolCall.rawArguments}</pre>
+                  </>
+                )}
+                {toolCall.validationError && (
+                  <>
+                    <div className="model-round-item__attempt-diagnostic-section-header">
+                      <span>{t('modelRound.attemptDiagnostics.validationError')}</span>
+                      {renderCopyButton(toolCall.validationError, `validation-error:${index}`)}
+                    </div>
+                    <pre>{toolCall.validationError}</pre>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+};
+
+function useTaskCollapsed(toolId: string): boolean {
+  const [isCollapsed, setIsCollapsed] = useState(() =>
+    taskCollapseStateManager.isCollapsed(toolId)
+  );
+
+  useEffect(() => {
+    setIsCollapsed(taskCollapseStateManager.isCollapsed(toolId));
+
+    const unsubscribe = taskCollapseStateManager.addListener((changedToolId, collapsed) => {
+      if (changedToolId === toolId) {
+        setIsCollapsed(collapsed);
+      }
+    });
+
+    return unsubscribe;
+  }, [toolId]);
+
+  return isCollapsed;
+}
+
+interface TaskWithSubagentWrapperProps {
+  taskItem: FlowItem;
+  parentTaskToolId: string;
+  parentSessionId?: string;
+  directSubagentSessionId?: string;
+  directSubagentDialogTurnId?: string;
+  turnId: string;
+  roundId?: string;
+}
+
+const TaskWithSubagentWrapper: React.FC<TaskWithSubagentWrapperProps> = React.memo(({
+  taskItem,
+  parentTaskToolId,
+  parentSessionId,
+  directSubagentSessionId,
+  directSubagentDialogTurnId,
+  turnId,
+  roundId,
+}) => {
+  const isCollapsed = useTaskCollapsed(parentTaskToolId);
+  const isTaskRunning =
+    taskItem.status === 'preparing' || taskItem.status === 'streaming' || taskItem.status === 'running';
+  const hasPrompt = Boolean(
+    taskItem.type === 'tool' &&
+    (taskItem as FlowToolItem).toolCall?.input?.prompt
+  );
+  const className = [
+    'task-with-subagent-wrapper',
+    !isCollapsed && 'task-with-subagent-wrapper--expanded',
+    hasPrompt && 'task-with-subagent-wrapper--has-prompt',
+  ].filter(Boolean).join(' ');
+
+  return (
+    <div className={className}>
+      <FlowItemRenderer
+        item={taskItem}
+        turnId={turnId}
+        roundId={roundId}
+        isLastItem={false}
+      />
+      <SubagentProjectionView
+        parentTaskToolId={parentTaskToolId}
+        parentSessionId={parentSessionId}
+        directSubagentSessionId={directSubagentSessionId}
+        directSubagentDialogTurnId={directSubagentDialogTurnId}
+        parentToolIds={new Set<string>([parentTaskToolId, (taskItem as FlowToolItem).toolCall?.id].filter(Boolean) as string[])}
+        liveItemsMode={isTaskRunning ? 'full-turn' : 'last-round'}
+        turnId={turnId}
+      />
+    </div>
+  );
+});
+
+export const ModelRoundItem = React.memo<ModelRoundItemProps>(
+  ({
+    round,
+    turnId,
+    isLastRound = false,
+    isTurnComplete = false,
+    turnStartedAt,
+    turnEndedAt,
+    turnDurationMs,
+    turnTokenUsage,
+  }) => {
+    const { t } = useTranslation('flow-chat');
+    const { formatDate, formatNumber } = useI18n('flow-chat');
+    const { sessionId, allowTranscriptExport = true } = useFlowChatContext();
+    const typewriterRevealGate = useCreateTypewriterRevealGate();
+    const [copied, setCopied] = useState(false);
+    const [showRetryHistory, setShowRetryHistory] = useState(false);
+    const [showRoundHistory, setShowRoundHistory] = useState(false);
+    const [openHistoryRoundAttemptIds, setOpenHistoryRoundAttemptIds] = useState<Record<string, boolean>>({});
+    const [isCopyMenuOpen, setIsCopyMenuOpen] = useState(false);
+    const copyButtonRef = useRef<HTMLButtonElement>(null);
+    const copyMenuRef = useRef<HTMLDivElement>(null);
+    const renderTraceEnabled = isStartupRenderTraceEnabled();
+    const renderTraceStartedAtMs = renderTraceEnabled ? performance.now() : null;
+
+    useEffect(() => {
+      if (!copied && !isCopyMenuOpen) return;
+
+      const handleClickOutside = (event: MouseEvent) => {
+        const target = event.target as Node;
+        if (copyButtonRef.current?.contains(target) || copyMenuRef.current?.contains(target)) {
+          return;
+        }
+        setCopied(false);
+        setIsCopyMenuOpen(false);
+      };
+
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }, [copied, isCopyMenuOpen]);
+
+    useEffect(() => {
+      if (!isCopyMenuOpen) return;
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          setIsCopyMenuOpen(false);
+        }
+      };
+
+      document.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown);
+      };
+    }, [isCopyMenuOpen]);
+
+    const attempts = useMemo(
+      () => sortRoundAttempts(round.attempts ?? []),
+      [round.attempts]
+    );
+    const activeAttempt = [...attempts].reverse().find(attempt => !attempt.diagnostic);
+    const historicalAttempts = attempts.filter(attempt => attempt !== activeAttempt);
+    const historyRounds = round.historyRounds ?? [];
+
+    useEffect(() => {
+      if (historicalAttempts.length === 0 && showRetryHistory) {
+        setShowRetryHistory(false);
+      }
+    }, [historicalAttempts.length, showRetryHistory]);
+
+    useEffect(() => {
+      if (historyRounds.length === 0 && showRoundHistory) {
+        setShowRoundHistory(false);
+      }
+    }, [historyRounds.length, showRoundHistory]);
+
+    const toggleHistoryRoundAttempts = useCallback((historyRoundId: string) => {
+      setOpenHistoryRoundAttemptIds((current) => ({
+        ...current,
+        [historyRoundId]: !current[historyRoundId],
+      }));
+    }, []);
+
+    // Keep the recorded round order; FlowChatStore already applies immutable updates.
+    const sortedItems = useMemo(
+      () => activeAttempt?.items ?? (attempts.length === 0 ? round.items : []),
+      [activeAttempt?.items, attempts.length, round.items]
+    );
+    
+    // Group items in two passes:
+    // 1) group subagent items
+    // 2) group normal items into explore/critical via anchor tool
+    const groupedItems = useMemo(() => {
+      return buildModelRoundItemGroups({
+        items: sortedItems,
+        isStreaming: round.isStreaming,
+        disableExploreGrouping: round.renderHints?.disableExploreGrouping === true,
+        isCollapsibleTool,
+      });
+    }, [round.isStreaming, round.renderHints?.disableExploreGrouping, sortedItems]);
+
+    const groupSummary = useMemo(
+      () => renderTraceEnabled ? summarizeModelRoundItemGroups(groupedItems) : null,
+      [groupedItems, renderTraceEnabled],
+    );
+
+    const renderGroupList = useCallback((
+      groups: ModelRoundItemGroup[],
+      options: {
+        roundId: string;
+        keyPrefix: string;
+        isFinalSection: boolean;
+      },
+    ) => (
+      groups.map((group, groupIndex) => {
+        const isLastGroup = groupIndex === groups.length - 1;
+        const isLast = options.isFinalSection && isLastGroup;
+        switch (group.type) {
+          case 'explore':
+            return group.items.map((item, itemIdx) => (
+              <FlowItemRenderer
+                key={`${options.keyPrefix}:${item.id}`}
+                item={item}
+                turnId={turnId}
+                roundId={options.roundId}
+                isLastItem={isLast && itemIdx === group.items.length - 1}
+              />
+            ));
+
+          case 'critical': {
+            const projectedSubagent = group.item.type === 'tool' && getEffectiveToolName(group.item as FlowToolItem) === 'Task'
+              ? group.item as FlowToolItem
+              : undefined;
+            if (projectedSubagent) {
+              return (
+                <TaskWithSubagentWrapper
+                  key={`${options.keyPrefix}:task-with-subagent-${projectedSubagent.id}`}
+                  taskItem={projectedSubagent}
+                  parentTaskToolId={projectedSubagent.id}
+                  parentSessionId={sessionId}
+                  directSubagentSessionId={projectedSubagent.subagentSessionId}
+                  directSubagentDialogTurnId={projectedSubagent.subagentDialogTurnId}
+                  turnId={turnId}
+                  roundId={options.roundId}
+                />
+              );
+            }
+            return (
+              <FlowItemRenderer
+                key={`${options.keyPrefix}:${group.item.id}`}
+                item={group.item}
+                turnId={turnId}
+                roundId={options.roundId}
+                isLastItem={isLast}
+              />
+            );
+          }
+
+          default:
+            return null;
+        }
+      })
+    ), [sessionId, turnId]);
+
+    const handleCopyScope = useCallback(async (scope: TranscriptExportScope) => {
+      setIsCopyMenuOpen(false);
+      try {
+        const content = buildDialogTurnCopyText(turnId, scope, buildTranscriptExportLabels(t));
+
+        if (!content.trim()) {
+          // Result-only copy on a turn that produced no prose lands here.
+          log.warn('No content to copy', { turnId, scope });
+          notificationService.warning(t('transcriptExport.copyEmpty'));
+          return;
+        }
+
+        await navigator.clipboard.writeText(content);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (error) {
+        log.error('Failed to copy', error);
+        notificationService.error(t('errors:general.copyFailed'));
+      }
+    }, [t, turnId]);
+
+    const hasContent = sortedItems.some(item => 
+      (item.type === 'text' && (item as FlowTextItem).content.trim()) ||
+      (item.type === 'tool' && (item as FlowToolItem).toolCall)
+    );
+
+    const completedAt = turnEndedAt ?? round.endTime;
+    const effectiveDurationMs = turnDurationMs ??
+      (typeof turnStartedAt === 'number' && typeof completedAt === 'number'
+        ? Math.max(0, completedAt - turnStartedAt)
+        : round.durationMs);
+    const usageMetaItems = useMemo(() => buildModelRoundUsageMeta({
+      completedAt,
+      durationMs: effectiveDurationMs,
+      tokenUsage: turnTokenUsage,
+      status: round.status,
+      formatTime: timestamp => formatDate(new Date(timestamp), {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }),
+      formatNumber,
+      t,
+    }), [completedAt, effectiveDurationMs, formatDate, formatNumber, round.status, t, turnTokenUsage]);
+    // Wait for typewriter catch-up before revealing footer controls. Reserve
+    // footer layout as soon as the model round completes so the eventual
+    // reveal does not resize the list (that resize flashed the chat pane).
+    const isVisuallyStreaming = round.isStreaming || typewriterRevealGate.isAnyRevealing;
+    const shouldReserveFooter = isTurnComplete &&
+      isLastRound &&
+      !round.isStreaming &&
+      (hasContent || usageMetaItems.length > 0);
+    const shouldRevealFooter = shouldReserveFooter && !typewriterRevealGate.isAnyRevealing;
+    
+    return (
+      <TypewriterRevealGateProvider value={typewriterRevealGate}>
+      <div 
+        className={getModelRoundItemClassName({
+          isVisuallyStreaming,
+        })}
+        data-testid="chat-assistant-message"
+        data-turn-id={turnId}
+        data-round-id={round.id}
+        data-status={round.status}
+        data-model-config-id={round.modelConfigId || ''}
+        data-effective-model-name={round.effectiveModelName || ''}
+        data-streaming={isVisuallyStreaming ? 'true' : 'false'}
+      >
+        {renderTraceEnabled && renderTraceStartedAtMs !== null && groupSummary && (
+          <ModelRoundRenderTrace
+            startedAtMs={renderTraceStartedAtMs}
+            turnId={turnId}
+            round={round}
+            itemCount={sortedItems.length}
+            groupCount={groupedItems.length}
+            groupSummary={groupSummary}
+          />
+        )}
+
+        {historyRounds.length > 0 && (
+          <div className="model-round-item__retry-history">
+            <button
+              type="button"
+              className="model-round-item__retry-toggle"
+              onClick={() => setShowRoundHistory(current => !current)}
+            >
+              {showRoundHistory
+                ? t('modelRound.roundHistoryHide')
+                : t('modelRound.roundHistoryShow', { count: historyRounds.length })}
+            </button>
+
+            {showRoundHistory && historyRounds.map((historyRound, historyIndex) => {
+              const historyAttempts = sortRoundAttempts(historyRound.attempts ?? []);
+              const historyOlderAttempts = historyAttempts.length > 1
+                ? historyAttempts.slice(0, -1)
+                : [];
+              const historyLatestAttempt = historyAttempts.length > 0
+                ? historyAttempts[historyAttempts.length - 1]
+                : undefined;
+              const showHistoryRoundAttempts = openHistoryRoundAttemptIds[historyRound.id] === true;
+              const historyGroups = buildModelRoundItemGroups({
+                items: historyLatestAttempt?.items ?? historyRound.items,
+                isStreaming: false,
+                disableExploreGrouping: true,
+                isCollapsibleTool,
+              });
+
+              return (
+                <div key={historyRound.id} className="model-round-item__retry-attempt">
+                  <div className="model-round-item__retry-attempt-label">
+                    {t('modelRound.roundRetryLabel', { index: historyIndex + 1 })}
+                  </div>
+                  {historyOlderAttempts.length > 0 && (
+                    <div className="model-round-item__retry-history">
+                      <button
+                        type="button"
+                        className="model-round-item__retry-toggle"
+                        onClick={() => toggleHistoryRoundAttempts(historyRound.id)}
+                      >
+                        {showHistoryRoundAttempts
+                          ? t('modelRound.retryHistoryHide')
+                          : t('modelRound.retryHistoryShow', { count: historyOlderAttempts.length })}
+                      </button>
+
+                      {showHistoryRoundAttempts && historyOlderAttempts.map((attempt) => {
+                        const attemptGroups = buildModelRoundItemGroups({
+                          items: attempt.items,
+                          isStreaming: false,
+                          disableExploreGrouping: true,
+                          isCollapsibleTool,
+                        });
+
+                        return (
+                          <div key={attempt.id} className="model-round-item__retry-attempt">
+                            <div className="model-round-item__retry-attempt-label">
+                              <span>{t('modelRound.attemptLabel', { index: attempt.index })}</span>
+                              {attempt.diagnostic && <AttemptDiagnosticDetails diagnostic={attempt.diagnostic} />}
+                            </div>
+                            {renderGroupList(attemptGroups, {
+                              roundId: historyRound.id,
+                              keyPrefix: `history-round:${historyRound.id}:attempt:${attempt.id}`,
+                              isFinalSection: false,
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {renderGroupList(historyGroups, {
+                    roundId: historyRound.id,
+                    keyPrefix: `history-round:${historyRound.id}`,
+                    isFinalSection: false,
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {historicalAttempts.length > 0 && (
+          <div className="model-round-item__retry-history">
+            <button
+              type="button"
+              className="model-round-item__retry-toggle"
+              onClick={() => setShowRetryHistory(current => !current)}
+            >
+              {showRetryHistory
+                ? t('modelRound.retryHistoryHide')
+                : t('modelRound.retryHistoryShow', { count: historicalAttempts.length })}
+            </button>
+
+            {showRetryHistory && historicalAttempts.map((attempt) => {
+              const attemptGroups = buildModelRoundItemGroups({
+                items: attempt.items,
+                isStreaming: false,
+                disableExploreGrouping: true,
+                isCollapsibleTool,
+              });
+
+              return (
+                <div key={attempt.id} className="model-round-item__retry-attempt">
+                  <div className="model-round-item__retry-attempt-label">
+                    <span>{t('modelRound.attemptLabel', { index: attempt.index })}</span>
+                    {attempt.diagnostic && <AttemptDiagnosticDetails diagnostic={attempt.diagnostic} />}
+                  </div>
+                  {renderGroupList(attemptGroups, {
+                    roundId: round.id,
+                    keyPrefix: `attempt:${attempt.id}`,
+                    isFinalSection: false,
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {renderGroupList(groupedItems, {
+          roundId: round.id,
+          keyPrefix: activeAttempt ? `attempt:${activeAttempt.id}` : 'round',
+          isFinalSection: isLastRound,
+        })}
+
+        {shouldReserveFooter && (
+          <div
+            className={`model-round-item__footer${shouldRevealFooter ? '' : ' model-round-item__footer--pending'}`}
+            aria-hidden={!shouldRevealFooter}
+          >
+            {usageMetaItems.length > 0 && (
+              <div
+                className="model-round-item__meta"
+                aria-label={t('modelRound.meta.label')}
+              >
+                {usageMetaItems.map(item => (
+                  <span key={item.key} className="model-round-item__meta-item">
+                    <span className="model-round-item__meta-label">{item.label}</span>
+                    <span className="model-round-item__meta-value">{item.value}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <ForkSessionButton sessionId={sessionId} turnId={turnId} />
+
+            {allowTranscriptExport && <div className="model-round-item__copy-menu-anchor">
+              <Tooltip content={copied ? t('modelRound.copiedDialog') : t('modelRound.copyDialog')} placement="top">
+                <button
+                  ref={copyButtonRef}
+                  className={`model-round-item__action-btn model-round-item__copy-btn ${copied ? 'copied' : ''}`}
+                  onClick={() => setIsCopyMenuOpen(current => !current)}
+                  tabIndex={shouldRevealFooter ? 0 : -1}
+                  disabled={!shouldRevealFooter}
+                  aria-haspopup="menu"
+                  aria-expanded={isCopyMenuOpen}
+                  aria-label={copied ? t('modelRound.copiedDialog') : t('modelRound.copyDialog')}
+                  data-testid="model-round-copy-btn"
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </Tooltip>
+
+              {isCopyMenuOpen && (
+                <div
+                  ref={copyMenuRef}
+                  className="model-round-item__copy-menu"
+                  role="menu"
+                  data-testid="model-round-copy-menu"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="model-round-item__copy-menu-item"
+                    onClick={() => void handleCopyScope('full')}
+                    data-testid="model-round-copy-full"
+                  >
+                    {t('transcriptExport.copyFull')}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="model-round-item__copy-menu-item"
+                    onClick={() => void handleCopyScope('result')}
+                    data-testid="model-round-copy-result"
+                  >
+                    {t('transcriptExport.copyResult')}
+                  </button>
+                </div>
+              )}
+            </div>}
+
+            {allowTranscriptExport && <ExportImageButton turnId={turnId} />}
+          </div>
+        )}
+      </div>
+      </TypewriterRevealGateProvider>
+    );
+  },
+  (prev, next) => {
+    // Streaming content accumulates, so always re-render.
+    if (next.round.isStreaming || prev.round.isStreaming) {
+      return false;
+    }
+    
+    // In complete state, compare items array reference to detect tool state changes.
+    return (
+      prev.round.id === next.round.id &&
+      prev.round.items === next.round.items &&
+      prev.round.attempts === next.round.attempts &&
+      prev.round.attemptDiagnostics === next.round.attemptDiagnostics &&
+      prev.round.historyRounds === next.round.historyRounds &&
+      prev.isLastRound === next.isLastRound &&
+      prev.isTurnComplete === next.isTurnComplete &&
+      prev.turnStartedAt === next.turnStartedAt &&
+      prev.turnEndedAt === next.turnEndedAt &&
+      prev.turnDurationMs === next.turnDurationMs &&
+      prev.turnTokenUsage === next.turnTokenUsage
+    );
+  }
+);
+
+ModelRoundItem.displayName = 'ModelRoundItem';
+
+/**
+ * FlowItem renderer (text or tool).
+ */
+interface FlowItemRendererProps {
+  item: FlowItem;
+  turnId: string;
+  roundId?: string;
+  isLastItem?: boolean;
+}
+
+// Do not memoize: streaming content updates frequently.
+const FlowItemRenderer: React.FC<FlowItemRendererProps> = ({
+  item,
+  turnId,
+  roundId,
+  isLastItem,
+}) => {
+  const {
+    onToolConfirm,
+    onToolReject,
+    onFileViewRequest,
+    onTabOpen,
+    sessionId,
+  } = useFlowChatContext();
+  
+  switch (item.type) {
+    case 'text':
+      return (
+        <FlowTextBlock
+          textItem={item as FlowTextItem}
+          traceContext={{
+            turnId,
+            roundId,
+            itemId: item.id,
+          }}
+          testId="chat-assistant-message-content"
+          testAttributes={{
+            'data-turn-id': turnId,
+            'data-flow-item-id': item.id,
+            'data-status': item.status,
+          }}
+        />
+      );
+    
+    case 'thinking':
+      return (
+        <ModelThinkingDisplay thinkingItem={item as FlowThinkingItem} isLastItem={isLastItem} />
+      );
+    
+    case 'tool': {
+      const toolItem = item as FlowToolItem;
+
+      return (
+        <div className="flowchat-flow-item" data-flow-item-id={item.id} data-flow-item-type="tool">
+          <FlowToolCard
+            toolItem={toolItem}
+            isLastItem={isLastItem}
+            onConfirm={async (toolId: string, permissionOptionId?: string, approve?: boolean) => {
+              if (onToolConfirm) {
+                await onToolConfirm(toolId, permissionOptionId, approve);
+              }
+            }}
+            onReject={async (_toolId: string, options?: ToolRejectOptions) => {
+              if (onToolReject) {
+                await onToolReject(item.id, options);
+              }
+            }}
+            onOpenInEditor={(filePath: string) => {
+              if (onFileViewRequest) {
+                onFileViewRequest(filePath, filePath.split(/[/\\]/).pop() || filePath);
+              }
+            }}
+            onOpenInPanel={(_panelType: string, data: any) => {
+              if (onTabOpen) {
+                onTabOpen(data, sessionId);
+              }
+            }}
+            sessionId={sessionId}
+            turnId={turnId}
+          />
+        </div>
+      );
+    }
+
+    default:
+      return null;
+  }
+};
