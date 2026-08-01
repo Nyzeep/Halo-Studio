@@ -15,22 +15,23 @@ const artifactRoot = path.join(
   'bitfun-tauri-product-migration',
   'artifacts',
 );
-const exePath = path.join(productRoot, 'target', 'release', 'halo-studio.exe');
+const exePath = path.join(productRoot, 'target', 'release-fast', 'halo-studio.exe');
 
 const stamp = new Date().toISOString()
   .replace(/[-:]/g, '')
   .replace(/\..+$/, '')
   .replace('T', '-');
 const baseName = `03a1-native-smoke-${stamp}`;
-const userDataDir = path.join(os.tmpdir(), `${baseName}-webview2`);
 const appDataDir = path.join(os.tmpdir(), `${baseName}-appdata`);
 const e2eUserRoot = path.join(os.tmpdir(), `${baseName}-user-root`);
 const e2eHomeRoot = path.join(os.tmpdir(), `${baseName}-home`);
 const smokeWorkspace = path.join(os.tmpdir(), `${baseName}-workspace`);
 const logDir = path.join(artifactRoot, `${baseName}-logs`);
+const haloLogRoot = path.join(appDataDir, 'Halo Studio', 'logs');
+const bitfunLogRoot = path.join(appDataDir, 'bitfun', 'logs');
+const keepFailureArtifacts = process.env.HALO_SMOKE_KEEP_FAILURE_ARTIFACTS === '1';
 
 fs.mkdirSync(artifactRoot, { recursive: true });
-fs.rmSync(userDataDir, { recursive: true, force: true });
 fs.rmSync(appDataDir, { recursive: true, force: true });
 fs.rmSync(e2eUserRoot, { recursive: true, force: true });
 fs.rmSync(e2eHomeRoot, { recursive: true, force: true });
@@ -75,7 +76,7 @@ const child = spawn(exePath, [], {
     BITFUN_HOME: e2eHomeRoot,
     BITFUN_E2E_LOG_DIR: logDir,
     BITFUN_LOG_DIR: logDir,
-    WEBVIEW2_USER_DATA_FOLDER: userDataDir,
+    HALO_LOG_DIR: haloLogRoot,
     WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
   },
   stdio: 'ignore',
@@ -88,52 +89,154 @@ child.once('exit', (code, signal) => {
 
 let cdp;
 let finalSummary;
+let smokeStage = 'launch';
+let cdpTargetDiagnostics = null;
 try {
+  smokeStage = 'wait-for-page';
   const target = await waitForCdpTarget(port, 60000);
   cdp = await connectCdp(target.webSocketDebuggerUrl);
   await cdp.send('Runtime.enable');
   await cdp.send('Page.enable');
 
+  smokeStage = 'wait-for-app-layout';
   await waitForEval(cdp, `
     document.readyState === 'complete'
       && !!document.querySelector('[data-testid="app-layout"]')
       && document.documentElement.dataset.haloScope === 'local-coding'
   `, 60000);
 
+  smokeStage = 'capture-before';
   const wideBeforePath = path.join(artifactRoot, `${baseName}-wide-before.png`);
   const wideBefore = captureWindow(child.pid, wideBeforePath, 1440, 900);
 
+  smokeStage = 'initial-dom';
   const initialDom = await evalValue(cdp, domProbeExpression());
 
-  const workspaceResult = await evalValue(cdp, `
+  smokeStage = 'window-controls';
+  const windowInteraction = await evalValue(cdp, `
     (async () => {
+      const invoke = window.__TAURI__?.core?.invoke;
+      if (typeof invoke !== 'function') {
+        return { ok: false, stage: 'resolve-invoke', error: 'Tauri core invoke is unavailable' };
+      }
+      const invokeWithTimeout = async (command, timeoutMs = 5000) => {
+        let timer;
+        try {
+          return await Promise.race([
+            invoke(command),
+            new Promise((_, reject) => {
+              timer = setTimeout(() => reject(new Error('Timed out invoking ' + command)), timeoutMs);
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      };
+      const state = async () => invokeWithTimeout('plugin:window|is_maximized');
       try {
-        await window.__TAURI__.core.invoke('open_workspace', {
-          request: { path: ${JSON.stringify(smokeWorkspace)} },
-        });
-        return { ok: true };
+        const before = await state();
+        if (before) await invokeWithTimeout('plugin:window|unmaximize');
+        await invokeWithTimeout('plugin:window|maximize');
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        const afterMaximize = await state();
+        await invokeWithTimeout('plugin:window|unmaximize');
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        const afterRestore = await state();
+        return { ok: true, before, afterMaximize, afterRestore };
       } catch (error) {
-        return { ok: false, error: String(error && error.message ? error.message : error) };
+        return {
+          ok: false,
+          stage: 'window-command',
+          error: String(error && error.message ? error.message : error),
+        };
       }
     })()
   `);
 
-  if (workspaceResult.ok) {
-    await cdp.send('Page.reload', { ignoreCache: true });
-    await waitForEval(cdp, `
-      document.readyState === 'complete'
-        && !!document.querySelector('[data-testid="app-layout"]')
-        && document.documentElement.dataset.haloScope === 'local-coding'
-    `, 60000);
-  }
+  smokeStage = 'open-workspace';
+  const workspaceResult = await evalValue(cdp, `
+    (async () => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const waitFor = async (predicate, timeoutMs = 30000) => {
+        const started = Date.now();
+        while (Date.now() - started < timeoutMs) {
+          const value = predicate();
+          if (value) return value;
+          await sleep(250);
+        }
+        return false;
+      };
 
+      const internals = window.__TAURI_INTERNALS__;
+      const originalInvoke = internals?.invoke;
+      if (!internals || typeof originalInvoke !== 'function') {
+        return { ok: false, stage: 'resolve-tauri-invoke', error: 'Tauri internals invoke is unavailable' };
+      }
+
+      let dialogRequested = false;
+      let workspaceCommandSucceeded = false;
+      internals.invoke = async function smokeInvoke(command, args, options) {
+        if (command === 'plugin:dialog|open') {
+          dialogRequested = true;
+          return ${JSON.stringify(smokeWorkspace)};
+        }
+
+        const result = await originalInvoke.call(this, command, args, options);
+        if (command === 'open_workspace') {
+          workspaceCommandSucceeded = true;
+        }
+        return result;
+      };
+
+      try {
+        const workspaceButton = document.querySelector('[data-testid="nav-workspace-add-btn"]');
+        if (!workspaceButton) {
+          return { ok: false, stage: 'find-workspace-menu-button', error: 'Workspace menu button is unavailable' };
+        }
+
+        workspaceButton.click();
+        const menu = await waitFor(() => document.querySelector('.bitfun-nav-panel__workspace-menu'), 5000);
+        if (!menu) {
+          return { ok: false, stage: 'open-workspace-menu', error: 'Workspace menu did not open' };
+        }
+
+        const openProjectItem = [...menu.querySelectorAll('.bitfun-nav-panel__workspace-menu-item')]
+          .find((element) => /open|鎵撳紑|椤圭洰/i.test(element.textContent || ''));
+        if (!openProjectItem) {
+          return { ok: false, stage: 'find-open-project-item', error: 'Open project menu item is unavailable' };
+        }
+
+        openProjectItem.click();
+        const workspaceVisible = await waitFor(() =>
+          workspaceCommandSucceeded
+            && document.body.innerText.includes('${path.basename(smokeWorkspace)}'),
+          30000,
+        );
+
+        return {
+          ok: Boolean(dialogRequested && workspaceCommandSucceeded && workspaceVisible),
+          dialogRequested,
+          workspaceCommandSucceeded,
+          workspaceVisible: Boolean(workspaceVisible),
+        };
+      } catch (error) {
+        return { ok: false, stage: 'open-workspace-through-ui', error: String(error && error.message ? error.message : error) };
+      } finally {
+        internals.invoke = originalInvoke;
+      }
+    })()
+  `);
+
+  smokeStage = 'wait-for-workspace';
   await waitForEval(cdp, `
     !!document.querySelector('[data-testid="nav-panel"]')
       && document.body.innerText.includes('${path.basename(smokeWorkspace)}')
   `, 30000).catch(() => {});
 
+  smokeStage = 'workspace-dom';
   const workspaceDom = await evalValue(cdp, domProbeExpression());
 
+  smokeStage = 'file-interaction';
   const fileInteraction = await clickAndProbe(cdp, '[data-testid="nav-file-viewer-btn"]', `
     (async () => {
       const waitFor = async (predicate, timeoutMs = 15000) => {
@@ -145,7 +248,7 @@ try {
         }
         return false;
       };
-      await waitFor(() => document.querySelector('.bitfun-file-explorer__tree'), 10000);
+      await waitFor(() => document.querySelector('.bitfun-file-explorer__tree'), 5000);
       const fileNodes = () => [
         ...document.querySelectorAll(
           '.bitfun-file-explorer__node-content[data-file="true"][data-is-directory="false"]',
@@ -170,13 +273,13 @@ try {
           || document.querySelector('.code-editor-tool[data-monaco-editor="true"][data-file-path$="main.ts"]')
           || document.querySelector('.canvas-tab[data-tab-title="README.md"][data-tab-type="markdown-editor"]')
           || document.querySelector('.bitfun-markdown-editor'),
-        20000,
+        6000,
       );
       await waitFor(() => {
         const codeEditor = document.querySelector('.code-editor-tool[data-monaco-editor="true"][data-file-path$="main.ts"]');
         if (!codeEditor) return false;
         return !codeEditor.classList.contains('is-loading') && !codeEditor.classList.contains('is-error');
-      }, 20000);
+      }, 6000);
       await waitFor(() => {
         const monacoText = [...document.querySelectorAll('.monaco-editor .view-line')]
           .map((line) => line.textContent || '')
@@ -190,7 +293,7 @@ try {
         return monacoText.includes('export const smoke')
           || monacoText.includes('halo-03a1')
           || modelTextVisible;
-      }, 20000);
+      }, 6000);
       const tabs = [...document.querySelectorAll('.canvas-tab')].map((tab) => ({
         title: tab.getAttribute('data-tab-title'),
         type: tab.getAttribute('data-tab-type'),
@@ -249,6 +352,7 @@ try {
     })()
   `);
 
+  smokeStage = 'git-interaction';
   const gitInteraction = await clickAndProbe(cdp, '[data-testid="nav-git-btn"]', `
     (async () => {
       await sleep(1000);
@@ -261,6 +365,7 @@ try {
     })()
   `);
 
+  smokeStage = 'terminal-interaction';
   const terminalInteraction = await clickAndProbe(cdp, '[data-testid="shell-panel-entry"]', `
     (async () => {
       await sleep(1000);
@@ -272,6 +377,7 @@ try {
     })()
   `);
 
+  smokeStage = 'session-interaction';
   const sessionInteraction = await clickAndProbe(cdp, '[data-testid="nav-new-code-session-btn"]', `
     (async () => {
       await sleep(1200);
@@ -284,6 +390,7 @@ try {
     })()
   `);
 
+  smokeStage = 'workspace-menu-interaction';
   const workspaceMenuInteraction = await clickAndProbe(cdp, '[data-testid="nav-workspace-add-btn"]', `
     (async () => {
       await sleep(500);
@@ -297,6 +404,7 @@ try {
     })()
   `);
 
+  smokeStage = 'screenshots-and-logs';
   const afterDom = await evalValue(cdp, domProbeExpression());
   const cdpScreenshotPath = path.join(artifactRoot, `${baseName}-cdp-after.png`);
   const cdpScreenshot = await cdp.send('Page.captureScreenshot', {
@@ -309,6 +417,10 @@ try {
   const wideAfter = captureWindow(child.pid, wideAfterPath, 1440, 900);
   const narrowAfterPath = path.join(artifactRoot, `${baseName}-narrow-after.png`);
   const narrowAfter = captureWindow(child.pid, narrowAfterPath, 1120, 720);
+  await sleep(500);
+  const haloLogFiles = listLogFiles(haloLogRoot);
+  const bitfunLogFiles = listLogFiles(bitfunLogRoot);
+  const forbiddenFallbackLogFiles = listLogFiles(logDir);
 
   finalSummary = {
     status: 'passed',
@@ -332,6 +444,7 @@ try {
     },
     interactions: {
       initial: pickDomBooleans(initialDom),
+      window: windowInteraction,
       workspace: {
         openWorkspaceCommandOk: Boolean(workspaceResult.ok),
         openWorkspaceError: workspaceResult.ok ? null : redactText(workspaceResult.error),
@@ -360,8 +473,12 @@ try {
       fullWorkspacePathRecorded: false,
     },
     diagnostics: {
-      logDir: redactPath(logDir),
-      logFiles: listLogFiles(logDir).map(redactPath),
+      haloLogRoot: redactPath(haloLogRoot),
+      haloLogFiles: haloLogFiles.map(redactPath),
+      bitfunLogRoot: redactPath(bitfunLogRoot),
+      bitfunLogFiles: bitfunLogFiles.map(redactPath),
+      forbiddenFallbackLogDir: redactPath(logDir),
+      forbiddenFallbackLogFiles: forbiddenFallbackLogFiles.map(redactPath),
     },
   };
 
@@ -381,6 +498,12 @@ try {
     !afterDom.visibleBrandLeaks.bitfunText,
     !afterDom.visibleBrandLeaks.rawI18nKeys,
     !afterDom.visibleBrandLeaks.updateDialog,
+    windowInteraction.ok
+      && windowInteraction.afterMaximize === true
+      && windowInteraction.afterRestore === false,
+    haloLogFiles.length > 0,
+    bitfunLogFiles.length === 0,
+    forbiddenFallbackLogFiles.length === 0,
     Boolean(workspaceResult.ok),
     workspaceDom.workspaceVisible,
     workspaceMenuInteraction.workspaceAddButton,
@@ -405,6 +528,7 @@ try {
 } catch (error) {
   finalSummary = {
     status: 'failed',
+    stage: smokeStage,
     error: String(error && error.stack ? error.stack : error),
     launchedProcess: {
       pid: child.pid,
@@ -416,8 +540,13 @@ try {
       fullWorkspacePathRecorded: false,
     },
     diagnostics: {
-      logDir: redactPath(logDir),
-      logFiles: listLogFiles(logDir).map(redactPath),
+      haloLogRoot: redactPath(haloLogRoot),
+      haloLogFiles: listLogFiles(haloLogRoot).map(redactPath),
+      bitfunLogRoot: redactPath(bitfunLogRoot),
+      bitfunLogFiles: listLogFiles(bitfunLogRoot).map(redactPath),
+      forbiddenFallbackLogDir: redactPath(logDir),
+      forbiddenFallbackLogFiles: listLogFiles(logDir).map(redactPath),
+      cdpTarget: cdpTargetDiagnostics,
     },
   };
   process.exitCode = 1;
@@ -431,8 +560,18 @@ try {
   try {
     execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
   } catch {}
-  fs.rmSync(userDataDir, { recursive: true, force: true });
-  fs.rmSync(appDataDir, { recursive: true, force: true });
+  if (keepFailureArtifacts && finalSummary?.status === 'failed' && fs.existsSync(appDataDir)) {
+    try {
+      fs.cpSync(
+        appDataDir,
+        path.join(artifactRoot, `${baseName}-failure-appdata`),
+        { recursive: true, force: true },
+      );
+    } catch {}
+  }
+  if (!keepFailureArtifacts || finalSummary?.status !== 'failed') {
+    fs.rmSync(appDataDir, { recursive: true, force: true });
+  }
   fs.rmSync(e2eUserRoot, { recursive: true, force: true });
   fs.rmSync(e2eHomeRoot, { recursive: true, force: true });
   fs.rmSync(smokeWorkspace, { recursive: true, force: true });
@@ -585,17 +724,47 @@ async function getFreePort() {
 
 async function waitForCdpTarget(cdpPort, timeoutMs) {
   const started = Date.now();
+  let lastTargets = [];
+  let lastError = null;
   while (Date.now() - started < timeoutMs) {
     try {
       const response = await fetch(`http://127.0.0.1:${cdpPort}/json/list`);
       const targets = await response.json();
-      const page = targets.find((target) => target.type === 'page' && target.webSocketDebuggerUrl)
-        ?? targets.find((target) => target.webSocketDebuggerUrl);
-      if (page) return page;
-    } catch {}
+      lastTargets = targets.map(({ id, type, title, url, webSocketDebuggerUrl }) => ({
+        id,
+        type,
+        title,
+        url,
+        hasWebSocketDebuggerUrl: Boolean(webSocketDebuggerUrl),
+      }));
+      const page = targets.find((target) =>
+        target.type === 'page'
+          && target.webSocketDebuggerUrl
+          && typeof target.url === 'string'
+          && target.url.length > 0
+          && target.url !== 'about:blank'
+      );
+      if (page) {
+        cdpTargetDiagnostics = {
+          selected: {
+            id: page.id,
+            type: page.type,
+            title: page.title,
+            url: page.url,
+          },
+          targets: lastTargets,
+        };
+        return page;
+      }
+    } catch (error) {
+      lastError = String(error?.message || error);
+    }
     await sleep(300);
   }
-  throw new Error('Timed out waiting for Tauri WebView CDP target');
+  cdpTargetDiagnostics = { targets: lastTargets, lastError };
+  throw new Error(
+    `Timed out waiting for Tauri WebView CDP target: ${JSON.stringify(cdpTargetDiagnostics)}`,
+  );
 }
 
 async function connectCdp(webSocketDebuggerUrl) {
@@ -614,6 +783,10 @@ async function connectCdp(webSocketDebuggerUrl) {
 
   let id = 0;
   const pending = new Map();
+  const rejectPending = (error) => {
+    for (const { reject } of pending.values()) reject(error);
+    pending.clear();
+  };
   ws.addEventListener('message', (event) => {
     const message = JSON.parse(event.data);
     if (!message.id || !pending.has(message.id)) return;
@@ -622,12 +795,13 @@ async function connectCdp(webSocketDebuggerUrl) {
     if (message.error) reject(new Error(JSON.stringify(message.error)));
     else resolve(message.result ?? {});
   });
+  ws.addEventListener('error', () => rejectPending(new Error('CDP websocket error')));
+  ws.addEventListener('close', () => rejectPending(new Error('CDP websocket closed')));
 
   return {
     send(method, params = {}) {
       const messageId = ++id;
-      ws.send(JSON.stringify({ id: messageId, method, params }));
-      return new Promise((resolve, reject) => {
+      const response = new Promise((resolve, reject) => {
         pending.set(messageId, { resolve, reject });
         setTimeout(() => {
           if (!pending.has(messageId)) return;
@@ -635,6 +809,13 @@ async function connectCdp(webSocketDebuggerUrl) {
           reject(new Error(`Timed out waiting for CDP method ${method}`));
         }, 30000);
       });
+      try {
+        ws.send(JSON.stringify({ id: messageId, method, params }));
+      } catch (error) {
+        pending.delete(messageId);
+        throw error;
+      }
+      return response;
     },
     close() {
       ws.close();
@@ -667,6 +848,7 @@ async function evalValue(cdpClient, expression) {
 function captureWindow(pid, screenshotPath, width, height) {
   const ps = `
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 Add-Type -AssemblyName System.Drawing
 Add-Type -TypeDefinition @"
 using System;

@@ -270,6 +270,13 @@ export function verifyHaloScope(rootDir = ROOT) {
   const config = readJson(configPath);
   const desktopCargoToml = requireFile(rootDir, `${scope.desktopRoot}/Cargo.toml`);
   const desktopMain = requireFile(rootDir, `${scope.desktopRoot}/src/main.rs`);
+  const capabilityPath = requireFile(rootDir, `${scope.desktopRoot}/capabilities/default.json`);
+  const desktopLib = requireFile(rootDir, 'src/apps/desktop/src/lib.rs');
+  const loggingSourcePath = requireFile(rootDir, 'src/apps/desktop/src/logging.rs');
+  const storageCommandsPath = requireFile(rootDir, 'src/apps/desktop/src/api/storage_commands.rs');
+  const storageCleanupPath = requireFile(rootDir, 'src/crates/assembly/core/src/infrastructure/storage/cleanup.rs');
+  const pathManagerPath = requireFile(rootDir, 'src/crates/assembly/core/src/infrastructure/app_paths/path_manager.rs');
+  const desktopTheme = requireFile(rootDir, 'src/apps/desktop/src/theme.rs');
   const webIndexPath = requireFile(rootDir, `${scope.frontendRoot}/index.html`);
   const webMainPath = requireFile(rootDir, `${scope.frontendRoot}/src/main.tsx`);
   const webVitePath = requireFile(rootDir, `${scope.frontendRoot}/vite.config.ts`);
@@ -322,12 +329,53 @@ export function verifyHaloScope(rootDir = ROOT) {
   if (config.build?.frontendDist !== '../../../dist') fail('Tauri frontendDist must load the BitFun Web UI build output');
   if (config.app?.security?.csp !== null) fail('BitFun Web UI requires the inherited desktop CSP compatibility setting');
   if (config.app?.withGlobalTauri !== true) fail('BitFun Web UI requires withGlobalTauri');
-  if (config.app?.windows?.[0]?.visible !== true) fail('Halo main window must be visible by default');
-  if (!String(config.app?.windows?.[0]?.title ?? '').includes('Halo Studio')) fail('Halo window title must use Halo Studio');
+  const mainWindowConfig = config.app?.windows?.[0];
+  if ((config.app?.windows ?? []).length !== 1 || mainWindowConfig?.label !== 'main') {
+    fail('Halo must declare exactly one main window configuration');
+  }
+  if (!Array.isArray(config.app?.security?.capabilities) || !config.app.security.capabilities.includes('halo-default')) {
+    fail('Halo must explicitly bind the halo-default Tauri capability');
+  }
+  if (mainWindowConfig.create !== false) {
+    fail('Halo main window configuration must set create:false so the shared desktop bootstrap owns creation');
+  }
+  if (!String(mainWindowConfig.title ?? '').includes('Halo Studio')) fail('Halo window title must use Halo Studio');
   if (!Array.isArray(config.bundle?.icon) || !config.bundle.icon.includes('icons/halo-icon.ico')) fail('Tauri bundle must use the Halo desktop icon');
   for (const icon of config.bundle.icon) requireFile(rootDir, `${scope.desktopRoot}/${icon}`);
   const desktopCargoSource = readText(desktopCargoToml);
   requireContains(desktopCargoSource, 'halo-local-coding', 'src/apps/halo-desktop/Cargo.toml');
+  requireContains(desktopCargoSource, 'custom-protocol = ["tauri/custom-protocol"]', 'src/apps/halo-desktop/Cargo.toml');
+  for (const dependency of [
+    'tauri-plugin-autostart.workspace = true',
+    'tauri-plugin-dialog.workspace = true',
+    'tauri-plugin-fs.workspace = true',
+    'tauri-plugin-global-shortcut.workspace = true',
+    'tauri-plugin-log.workspace = true',
+    'tauri-plugin-notification.workspace = true',
+    'tauri-plugin-opener.workspace = true',
+    'tauri-plugin-updater.workspace = true',
+    'tauri-plugin-window-state.workspace = true',
+  ]) {
+    requireContains(desktopCargoSource, dependency, 'src/apps/halo-desktop/Cargo.toml');
+  }
+  const capability = readJson(capabilityPath);
+  if (capability.identifier !== 'halo-default') fail('Halo capability identifier must stay product-specific');
+  if (JSON.stringify(capability.windows) !== JSON.stringify(['main'])) {
+    fail('Halo capability must apply only to the main window');
+  }
+  for (const permission of [
+    'core:default',
+    'core:window:allow-is-maximized',
+    'core:window:allow-maximize',
+    'core:window:allow-unmaximize',
+    'core:window:allow-minimize',
+    'core:window:allow-close',
+    'core:window:allow-start-dragging',
+  ]) {
+    if (!capability.permissions?.includes(permission)) {
+      fail(`Halo capability must grant ${permission}`);
+    }
+  }
   for (const command of [config.build.beforeDevCommand, config.build.beforeBuildCommand]) {
     const [, scriptPath] = String(command).split(/\s+/, 2);
     if (!scriptPath) fail(`Tauri hook command is missing a script path: ${command}`);
@@ -351,8 +399,35 @@ export function verifyHaloScope(rootDir = ROOT) {
   requireContains(webMain, '<App />', 'src/web-ui/src/main.tsx');
 
   const haloDesktopMain = readText(desktopMain);
-  requireContains(haloDesktopMain, 'bitfun_desktop_lib::run_with_context(tauri::generate_context!()).await', 'src/apps/halo-desktop/src/main.rs');
+  requireContains(haloDesktopMain, 'DesktopRunOptions::with_logs_root', 'src/apps/halo-desktop/src/main.rs');
+  requireContains(haloDesktopMain, 'product_logs_root("Halo Studio")', 'src/apps/halo-desktop/src/main.rs');
   requireNoMatch(haloDesktopMain, /tauri::Builder::default\(\)\s*\.run/, 'src/apps/halo-desktop/src/main.rs');
+  const desktopLibSource = readText(desktopLib);
+  requireContains(desktopLibSource, 'pub struct DesktopRunOptions', 'src/apps/desktop/src/lib.rs');
+  requireContains(desktopLibSource, 'run_with_context_and_options', 'src/apps/desktop/src/lib.rs');
+  const loggingSource = readText(loggingSourcePath);
+  requireContains(loggingSource, 'set_logs_root_override', 'src/apps/desktop/src/logging.rs');
+  requireContains(loggingSource, 'pub fn product_logs_root', 'src/apps/desktop/src/logging.rs');
+  requireContains(loggingSource, 'HALO_LOG_DIR', 'src/apps/desktop/src/logging.rs');
+  const storageCommandsSource = readText(storageCommandsPath);
+  requireContains(storageCommandsSource, 'crate::logging::logs_root()', 'src/apps/desktop/src/api/storage_commands.rs');
+  const storageCleanupSource = readText(storageCleanupPath);
+  requireContains(storageCleanupSource, 'new_with_logs_dir', 'src/crates/assembly/core/src/infrastructure/storage/cleanup.rs');
+  const pathManagerSource = readText(pathManagerPath);
+  requireNoMatch(
+    pathManagerSource,
+    /pub async fn initialize_user_directories[\s\S]*?self\.logs_dir\(\)/,
+    'src/crates/assembly/core/src/infrastructure/app_paths/path_manager.rs',
+    'fixed BitFun log directory initialization'
+  );
+  const desktopThemeSource = readText(desktopTheme);
+  requireContains(desktopThemeSource, 'WebviewWindowBuilder::new(app_handle, "main", main_url)', 'src/apps/desktop/src/theme.rs');
+  requireNoMatch(
+    desktopThemeSource,
+    /(?:\.data_directory\(|HALO_WEBVIEW_DATA_DIR|isolated WebView2 data directory)/,
+    'src/apps/desktop/src/theme.rs',
+    'manual WebView2 profile overrides that bypass the product identifier'
+  );
 
   const viteConfig = readText(webVitePath);
   requireMatch(viteConfig, /port:\s*1422/, 'src/web-ui/vite.config.ts', 'dev server port 1422');
