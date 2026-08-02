@@ -100,7 +100,7 @@ pub fn initialize_run_state(session_log_dir: PathBuf, startup_trace_id: &str) {
         .map(Path::to_path_buf)
         .unwrap_or_else(|| session_log_dir.clone());
     let run_state_path = logs_root.join(RUN_STATE_FILE);
-    let previous = detect_previous_unexpected_exit(&run_state_path);
+    let previous = detect_previous_unexpected_exit(&run_state_path, &logs_root);
     let _ = PREVIOUS_UNEXPECTED_EXIT.set(previous);
 
     let context = RunContext {
@@ -268,7 +268,10 @@ pub fn export_diagnostics_bundle() -> Result<DiagnosticsBundleInfo, String> {
     })
 }
 
-fn detect_previous_unexpected_exit(run_state_path: &Path) -> Option<UnexpectedExitInfo> {
+fn detect_previous_unexpected_exit(
+    run_state_path: &Path,
+    logs_root: &Path,
+) -> Option<UnexpectedExitInfo> {
     let state = read_json_file::<RunState>(run_state_path).ok()?;
     if state.clean_shutdown {
         return None;
@@ -277,7 +280,8 @@ fn detect_previous_unexpected_exit(run_state_path: &Path) -> Option<UnexpectedEx
     let session_log_dir = if state.session_log_dir.is_empty() {
         None
     } else {
-        Some(state.session_log_dir.clone())
+        validate_session_log_dir(logs_root, &state.session_log_dir)
+            .map(|_| state.session_log_dir.clone())
     };
     let crash_report_path = session_log_dir
         .as_ref()
@@ -310,6 +314,19 @@ fn detect_previous_unexpected_exit(run_state_path: &Path) -> Option<UnexpectedEx
         notify_on_startup,
         reason,
     })
+}
+
+fn validate_session_log_dir(logs_root: &Path, session_log_dir: &str) -> Option<PathBuf> {
+    let canonical_root = fs::canonicalize(logs_root).ok()?;
+    let canonical_session = fs::canonicalize(session_log_dir).ok()?;
+    if !canonical_session.is_dir()
+        || canonical_session == canonical_root
+        || !canonical_session.starts_with(&canonical_root)
+    {
+        return None;
+    }
+
+    Some(canonical_session)
 }
 
 fn recent_session_dirs(logs_root: &Path, limit: usize) -> Result<Vec<PathBuf>, String> {
@@ -489,7 +506,7 @@ mod tests {
         let run_state_path = temp_dir.join(RUN_STATE_FILE);
         write_json_file(&run_state_path, &run_state).expect("test run state should be written");
 
-        let info = detect_previous_unexpected_exit(&run_state_path)
+        let info = detect_previous_unexpected_exit(&run_state_path, &temp_dir)
             .expect("unclean run state should be detected");
         assert!(info.detected);
         assert_eq!(
@@ -527,7 +544,7 @@ mod tests {
         let run_state_path = temp_dir.join(RUN_STATE_FILE);
         write_json_file(&run_state_path, &run_state).expect("test run state should be written");
 
-        assert!(detect_previous_unexpected_exit(&run_state_path).is_none());
+        assert!(detect_previous_unexpected_exit(&run_state_path, &temp_dir).is_none());
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -558,7 +575,7 @@ mod tests {
         let run_state_path = temp_dir.join(RUN_STATE_FILE);
         write_json_file(&run_state_path, &run_state).expect("test run state should be written");
 
-        let info = detect_previous_unexpected_exit(&run_state_path)
+        let info = detect_previous_unexpected_exit(&run_state_path, &temp_dir)
             .expect("unclean run state should still be recorded");
         assert!(info.detected);
         assert!(info.crash_report_path.is_none());
@@ -566,5 +583,56 @@ mod tests {
         assert!(!info.notify_on_startup);
 
         let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn ignores_crash_report_outside_current_log_root() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "bitfun-crash-diagnostics-root-test-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time should be after unix epoch")
+                .as_nanos()
+        ));
+        let outside_dir = temp_dir
+            .parent()
+            .expect("temporary directory should have a parent")
+            .join(format!(
+                "bitfun-crash-diagnostics-outside-{}",
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("system time should be after unix epoch")
+                    .as_nanos()
+            ));
+        let outside_session_dir = outside_dir.join("20260528T120000");
+        fs::create_dir_all(&outside_session_dir)
+            .expect("outside session directory should be created");
+        fs::write(outside_session_dir.join(CRASH_REPORT_FILE), "{}")
+            .expect("outside crash report should be written");
+
+        let run_state = RunState {
+            app_version: "test".to_string(),
+            pid: 123,
+            started_at: "2026-05-28T12:00:00Z".to_string(),
+            updated_at: "2026-05-28T12:00:01Z".to_string(),
+            session_log_dir: outside_session_dir.to_string_lossy().to_string(),
+            clean_shutdown: false,
+            shutdown_at: None,
+            exit_reason: None,
+            startup_trace_id: "test-trace".to_string(),
+        };
+        fs::create_dir_all(&temp_dir).expect("current log root should be created");
+        let run_state_path = temp_dir.join(RUN_STATE_FILE);
+        write_json_file(&run_state_path, &run_state).expect("test run state should be written");
+
+        let info = detect_previous_unexpected_exit(&run_state_path, &temp_dir)
+            .expect("unclean run state should still be detected");
+        assert_eq!(info.session_log_dir, None);
+        assert_eq!(info.crash_report_path, None);
+        assert_eq!(info.category, UnexpectedExitCategory::UncleanShutdown);
+        assert!(!info.notify_on_startup);
+
+        let _ = fs::remove_dir_all(temp_dir);
+        let _ = fs::remove_dir_all(outside_dir);
     }
 }

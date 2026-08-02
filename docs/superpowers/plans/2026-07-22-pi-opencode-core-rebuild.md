@@ -1,4 +1,6 @@
-# Halo Studio Pi 与 OpenCode 核心重构实施计划
+# Halo Studio Pi 与 OpenCode 核心重构实施计划（历史计划）
+
+> 历史计划：本文的 Electron/OpenCode Server 方案已被 ADR-0072 和迁移工单 03B 取代。保留它只为记录过去的实现背景；不得从本文开始新的 P0 实现。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

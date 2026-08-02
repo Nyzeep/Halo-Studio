@@ -38,6 +38,34 @@ const agentRuntimeIpcForbiddenDeps = [
   'syntect-tui',
 ];
 
+const piRpcAdapterForbiddenDeps = [
+  'bitfun-acp',
+  'bitfun-agent-runtime',
+  'bitfun-agent-runtime-ipc',
+  'bitfun-agent-stream',
+  'bitfun-agent-tools',
+  'bitfun-ai-adapters',
+  'bitfun-claude-code-adapter',
+  'bitfun-codex-adapter',
+  'bitfun-core',
+  'bitfun-external-sources',
+  'bitfun-harness',
+  'bitfun-opencode-adapter',
+  'bitfun-plugin-runtime-client',
+  'bitfun-product-capabilities',
+  'bitfun-runtime-services',
+  'bitfun-sdk-host',
+  'bitfun-static-hook-support',
+  'bitfun-tool-packs',
+  'bitfun-cli',
+  'ratatui',
+  'crossterm',
+  'arboard',
+  'syntect-tui',
+  'tauri',
+  'tool-runtime',
+];
+
 export const noCoreDependencyCrates = [
   'core-types',
   'events',
@@ -60,6 +88,7 @@ export const noCoreDependencyCrates = [
   'claude-code-adapter',
   'codex-adapter',
   'opencode-adapter',
+  'pi-rpc-adapter',
   'static-hook-support',
   'external-sources',
   'terminal',
@@ -103,6 +132,16 @@ export const forbiddenManifestDependencyRules = [
     message:
       'only bitfun-core product-full assembly may register bitfun-opencode-adapter through reviewed capability composition roots',
   },
+  {
+    dependencyNames: ['bitfun-pi-rpc-adapter'],
+    scanRoots: ['src/apps', 'src/crates', 'BitFun-Installer/src-tauri'],
+    workspaceManifestPath: 'Cargo.toml',
+    allowManifestPaths: ['src/crates/assembly/core/Cargo.toml'],
+    reason:
+      'the P0 Pi RPC execution adapter has one reviewed Halo Workbench product composition root',
+    message:
+      'only bitfun-core Halo Workbench product assembly may select bitfun-pi-rpc-adapter; apps, contracts, execution owners, and sibling adapters consume the Workbench seam instead',
+  },
   ...[
     ['bitfun-claude-code-adapter', 'claude-code-adapter'],
     ['bitfun-codex-adapter', 'codex-adapter'],
@@ -138,6 +177,12 @@ export const lightweightBoundaryRules = [
     reason:
       'agent-runtime-ipc is the non-published local protocol for the reviewed Shared TUI adapter, not a Runtime, SDK Host, service, or remote product surface',
     forbiddenDeps: agentRuntimeIpcForbiddenDeps,
+  },
+  {
+    crateName: 'pi-rpc-adapter',
+    reason:
+      'pi-rpc-adapter is the Pi RPC projection for the Halo Workbench execution seam, not a runtime owner, product selector, ACP path, or generic executor registry',
+    forbiddenDeps: piRpcAdapterForbiddenDeps,
   },
   {
     crateName: 'core-types',
@@ -694,3 +739,5 @@ export const dependencyProfileRules = [
     ],
   },
 ];
+
+

@@ -19,10 +19,12 @@
         "minWidth": 1100,
         "minHeight": 650,
         "resizable": true,
-        "visible": true
+        "visible": true,
+        "create": false
       }
     ],
     "security": {
+      "capabilities": ["halo-default"],
       "csp": null
     },
     "macOSPrivateApi": true,

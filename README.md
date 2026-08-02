@@ -5,9 +5,11 @@ Halo Studio 是面向本地开发者的原生开发工作台。产品正在从�
 ## 当前状态
 
 - **当前可运行基线：** `app/` 与 `sidecar/` 仍可用于旧六票的自动化复验，但不是最终产品入口。
-- **唯一目标产品：** 受跟踪的 `product/` 产品树、Tauri 桌面入口和 BitFun Runtime 内的 Halo Workbench Runtime Module。
-- **发布状态：** BitFun/Tauri 迁移尚未完成，真实 OpenCode 原生 UI 验收尚未执行，P0 未放行。
+- **唯一目标产品：** 受跟踪的 `product/` 产品树、Tauri 桌面入口和 Tauri seam 上的 Halo Workbench Runtime Module；BitFun 仍是产品基座，不是第二个 P0 执行权威。
+- **发布状态：** BitFun/Tauri 迁移尚未完成，真实 Pi RPC 原生 UI 验收尚未执行，P0 未放行。
+- **P0 执行链：** `Halo Workbench Runtime → 受控 Pi 子进程 → pi --mode rpc → stdin/stdout JSONL`。
 - **外部上游参考：** `D:\BitFun-main` 只用于获取和检查 BitFun 上游，不是构建依赖或 Halo 提交位置。
+- **Pi 协议参考：** `D:\pi-main` 只读用于核对 Pi RPC、extension、模型和 session 行为，不复制源码、不建立依赖、不修改该目录。
 
 ## 文档入口
 

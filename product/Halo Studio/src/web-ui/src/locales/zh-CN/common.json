@@ -206,6 +206,27 @@
       "needsToolConfirm": "等待确认",
       "badgeNeedsInput": "等待中",
       "badgeNeedsConfirm": "待确认",
+      "workbenchRuntime": {
+        "runtimePhase": {
+          "disconnected": "未连接",
+          "probing": "正在检查工作区",
+          "starting": "正在启动",
+          "ready": "就绪",
+          "failed": "不可用",
+          "stopping": "正在停止"
+        },
+        "sessionPhase": {
+          "creating": "正在创建",
+          "idle": "空闲",
+          "running": "运行中",
+          "waitingDeveloper": "等待你的处理",
+          "interrupted": "已中断",
+          "stopping": "正在停止",
+          "ended": "已结束",
+          "failed": "失败"
+        },
+        "error": "Workbench Runtime 无法继续。请检查工作区后重试。"
+      },
       "ariaNeedsInput": "有会话需要你的输入",
       "ariaNeedsInputWithName": "会话 '{{name}}' 需要你的输入",
       "ariaNeedsInputPlural": "{{count}} 个会话需要你的输入",

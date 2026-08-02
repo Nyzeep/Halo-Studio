@@ -51,7 +51,10 @@ const command = process.platform === 'win32' ? `"${tauriBinary}"` : tauriBinary;
 const devtoolsArgs = mode === 'dev' && !tauriArgs.some(argument => argument === '--features' || argument.startsWith('--features='))
   ? ['--features', 'devtools']
   : [];
-const result = spawnSync(command, [mode, '--config', 'tauri.conf.json', ...devtoolsArgs, ...tauriArgs, ...(cargoArgs.length > 0 ? ['--', ...cargoArgs] : [])], {
+const productionArgs = mode === 'build' && !tauriArgs.some(argument => argument === '--features' || argument.startsWith('--features='))
+  ? ['--features', 'custom-protocol']
+  : [];
+const result = spawnSync(command, [mode, '--config', 'tauri.conf.json', ...devtoolsArgs, ...productionArgs, ...tauriArgs, ...(cargoArgs.length > 0 ? ['--', ...cargoArgs] : [])], {
   cwd: DESKTOP_ROOT,
   env: {
     ...process.env,

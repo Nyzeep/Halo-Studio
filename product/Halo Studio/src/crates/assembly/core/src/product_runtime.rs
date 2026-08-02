@@ -141,15 +141,15 @@ pub fn ensure_product_dialog_scheduler(
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-struct SystemPermissionClock;
+pub(crate) struct SystemProductClock;
 
-impl RuntimeServicePort for SystemPermissionClock {
+impl RuntimeServicePort for SystemProductClock {
     fn capability(&self) -> RuntimeServiceCapability {
         RuntimeServiceCapability::Clock
     }
 }
 
-impl ClockPort for SystemPermissionClock {
+impl ClockPort for SystemProductClock {
     fn now_unix_millis(&self) -> i64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -177,7 +177,7 @@ pub fn core_permission_request_manager() -> Result<Arc<PermissionRequestManager>
     let reply_store: Arc<dyn bitfun_runtime_ports::PermissionReplyStorePort> = store.clone();
     let grant_store: Arc<dyn bitfun_runtime_ports::PermissionGrantStorePort> = store;
     let manager = Arc::new(
-        PermissionRequestManager::new(audit_store, reply_store, Arc::new(SystemPermissionClock))
+        PermissionRequestManager::new(audit_store, reply_store, Arc::new(SystemProductClock))
             .with_grant_store(grant_store),
     );
     let _ = PERMISSION_REQUEST_MANAGER.set(manager);

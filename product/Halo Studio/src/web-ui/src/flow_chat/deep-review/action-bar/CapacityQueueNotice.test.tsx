@@ -43,7 +43,7 @@ describe('CapacityQueueNotice', () => {
     );
 
     expect(html).toContain('Waiting for model capacity');
-    expect(html).toContain('BitFun is waiting for temporary model capacity.');
+    expect(html).toContain('Halo Studio is waiting for temporary model capacity.');
     expect(html).toContain('Reason: model concurrency limit');
     expect(html).toContain('The model provider rejected another concurrent review request.');
     expect(html).toContain('Waited 12s of 1m 0s');

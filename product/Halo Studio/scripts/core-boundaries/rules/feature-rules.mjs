@@ -25,6 +25,7 @@ export const optionalDependencyFeatureOwnerRules = [
       { depName: 'aes-gcm', ownerFeatures: ['service-integrations'] },
       { depName: 'axum', ownerFeatures: ['service-integrations'] },
       { depName: 'bitfun-ai-adapters', ownerFeatures: ['ai-adapter-runtime'] },
+      { depName: 'bitfun-pi-rpc-adapter', ownerFeatures: ['product-full'] },
       { depName: 'bitfun-product-capabilities', ownerFeatures: ['product-capabilities'] },
       { depName: 'bitfun-product-domains', ownerFeatures: ['product-domains'] },
       { depName: 'bitfun-tool-packs', ownerFeatures: ['tool-packs'] },
@@ -236,3 +237,5 @@ export const ownerCrateFeatureAssemblyRules = [
     requiredProductFullFeatures: ['plugin-source', 'miniapp', 'function-agents', 'external-sources'],
   },
 ];
+
+

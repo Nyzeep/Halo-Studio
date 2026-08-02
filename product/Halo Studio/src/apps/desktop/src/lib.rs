@@ -53,6 +53,7 @@ use tauri_plugin_window_state::{AppHandleExt, StateFlags, WindowExt};
 // Re-export API
 pub use api::*;
 
+#[cfg(not(feature = "halo-local-coding"))]
 use api::acp_client_api::*;
 use api::clipboard_file_api::*;
 use api::commands::*;
@@ -66,6 +67,7 @@ use api::custom_agent_api::{
 use api::diff_api::*;
 use api::external_hooks_api::*;
 use api::external_sources_api::*;
+#[cfg(not(feature = "halo-local-coding"))]
 use api::git_agent_api::*;
 use api::git_api::*;
 use api::i18n_api::*;
@@ -79,6 +81,7 @@ use api::session_api::*;
 use api::skill_api::*;
 use api::snapshot_service::*;
 use api::speech_api::*;
+#[cfg(not(feature = "halo-local-coding"))]
 use api::startchat_agent_api::*;
 use api::storage_commands::*;
 use api::subagent_api::*;
@@ -435,7 +438,31 @@ pub async fn run() {
     run_with_context(tauri::generate_context!()).await;
 }
 
+#[derive(Debug, Default)]
+pub struct DesktopRunOptions {
+    logs_root: Option<std::path::PathBuf>,
+}
+
+impl DesktopRunOptions {
+    pub fn with_logs_root(path: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            logs_root: Some(path.into()),
+        }
+    }
+}
+
 pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
+    run_with_context_and_options(context, DesktopRunOptions::default()).await;
+}
+
+pub async fn run_with_context_and_options(
+    context: tauri::Context<tauri::Wry>,
+    options: DesktopRunOptions,
+) {
+    if let Some(logs_root) = options.logs_root {
+        logging::set_logs_root_override(logs_root);
+    }
+
     let startup_started = Instant::now();
     let startup_trace_id = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -538,25 +565,47 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
         return;
     }
 
-    let step_started = Instant::now();
-    let (coordinator, scheduler, event_queue, event_router, ai_client_factory, token_usage_service) =
-        match init_agentic_system().await {
+    #[cfg(not(feature = "halo-local-coding"))]
+    let (
+        coordinator,
+        scheduler,
+        event_queue,
+        event_router,
+        _ai_client_factory,
+        token_usage_service,
+    ) = {
+        let step_started = Instant::now();
+        let state = match init_agentic_system().await {
             Ok(state) => state,
             Err(e) => {
                 log::error!("Failed to initialize agentic system: {}", e);
                 return;
             }
         };
-    startup_timings.record_elapsed("init_agentic_system", step_started);
-    startup_trace.record_elapsed_step("native_pre_tauri", "init_agentic_system", step_started);
+        startup_timings.record_elapsed("init_agentic_system", step_started);
+        startup_trace.record_elapsed_step("native_pre_tauri", "init_agentic_system", step_started);
 
-    let step_started = Instant::now();
-    if let Err(e) = init_function_agents(ai_client_factory.clone()).await {
-        log::error!("Failed to initialize function agents: {}", e);
-        return;
-    }
-    startup_timings.record_elapsed("init_function_agents", step_started);
-    startup_trace.record_elapsed_step("native_pre_tauri", "init_function_agents", step_started);
+        let step_started = Instant::now();
+        if let Err(e) = init_function_agents(state.4.clone()).await {
+            log::error!("Failed to initialize function agents: {}", e);
+            return;
+        }
+        startup_timings.record_elapsed("init_function_agents", step_started);
+        startup_trace.record_elapsed_step("native_pre_tauri", "init_function_agents", step_started);
+        state
+    };
+
+    #[cfg(feature = "halo-local-coding")]
+    let token_usage_service = {
+        let path_manager = get_path_manager_arc();
+        match bitfun_core::service::token_usage::TokenUsageService::new(path_manager).await {
+            Ok(service) => Arc::new(service),
+            Err(error) => {
+                log::error!("Failed to initialize Halo token usage service: {}", error);
+                return;
+            }
+        }
+    };
 
     let step_started = Instant::now();
     let workspace_search_enabled =
@@ -585,14 +634,22 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
     startup_timings.record_elapsed("initialize_app_state", step_started);
     startup_trace.record_elapsed_step("native_pre_tauri", "initialize_app_state", step_started);
 
-    let step_started = Instant::now();
+    #[cfg(feature = "halo-local-coding")]
+    let halo_workbench = Some(bitfun_core::halo_workbench::build_halo_workbench_runtime(
+        app_state.workspace_service.clone(),
+    ));
+    #[cfg(not(feature = "halo-local-coding"))]
+    let halo_workbench = None;
+
+    #[cfg(not(feature = "halo-local-coding"))]
     let desktop_runtime = match runtime::DesktopRuntimeContext::build(
-        coordinator.clone(),
-        scheduler.clone(),
+        Some(coordinator.clone()),
+        Some(scheduler.clone()),
         app_state.token_usage_service.clone(),
         app_state.workspace_service.clone(),
         app_state.ssh_manager.clone(),
         app_state.acp_client_service.clone(),
+        halo_workbench,
     ) {
         Ok(runtime) => runtime,
         Err(error) => {
@@ -600,6 +657,26 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
             return;
         }
     };
+    #[cfg(feature = "halo-local-coding")]
+    let desktop_runtime = match runtime::DesktopRuntimeContext::build(
+        None,
+        None,
+        app_state.token_usage_service.clone(),
+        app_state.workspace_service.clone(),
+        app_state.ssh_manager.clone(),
+        None,
+        halo_workbench,
+    ) {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            log::error!(
+                "Failed to initialize Halo Workbench Runtime host: {}",
+                error
+            );
+            return;
+        }
+    };
+    let step_started = Instant::now();
     startup_timings.record_elapsed("initialize_desktop_agent_runtime", step_started);
     startup_trace.record_elapsed_step(
         "native_pre_tauri",
@@ -607,10 +684,12 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
         step_started,
     );
 
+    #[cfg(not(feature = "halo-local-coding"))]
     let coordinator_state = CoordinatorState {
         coordinator: coordinator.clone(),
     };
 
+    #[cfg(not(feature = "halo-local-coding"))]
     let scheduler_state = SchedulerState {
         scheduler: scheduler.clone(),
     };
@@ -620,6 +699,13 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
     let path_manager = get_path_manager_arc();
 
     let builder = tauri::Builder::default();
+
+    #[cfg(not(feature = "halo-local-coding"))]
+    let builder = builder
+        .manage(coordinator_state)
+        .manage(scheduler_state)
+        .manage(coordinator)
+        .manage(scheduler);
 
     #[cfg(all(
         feature = "single-instance",
@@ -662,11 +748,7 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
         .manage(app_state)
         .manage(sleep_prevention::SleepPreventionState::default())
         .manage(desktop_runtime)
-        .manage(coordinator_state)
-        .manage(scheduler_state)
         .manage(path_manager)
-        .manage(coordinator)
-        .manage(scheduler)
         .manage(terminal_state)
         .manage(startup_trace.clone())
         .on_page_load(|webview, payload| {
@@ -692,6 +774,13 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
         .setup(move |app| {
             let setup_started = Instant::now();
             startup_trace.record_phase("tauri_setup_start", "native_setup");
+            #[cfg(feature = "halo-local-coding")]
+            if let Err(error) = app
+                .state::<runtime::DesktopRuntimeContext>()
+                .start_halo_workbench_event_forwarding(app.handle().clone())
+            {
+                log::error!("Failed to start Halo Workbench Runtime event projection: {error}");
+            }
             #[cfg(target_os = "macos")]
             {
                 app.on_menu_event(|app, event| {
@@ -991,14 +1080,21 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
                 });
             }
 
-            let transport = Arc::new(TauriTransportAdapter::new(app_handle.clone()));
+            #[cfg(not(feature = "halo-local-coding"))]
+            {
+                let transport = Arc::new(TauriTransportAdapter::new(app_handle.clone()));
 
-            let step_started = Instant::now();
-            start_event_loop_with_transport(event_queue, event_router, transport);
-            startup_trace.record_elapsed_step(
-                "native_setup",
-                "start_event_loop_with_transport",
-                step_started,
+                let step_started = Instant::now();
+                start_event_loop_with_transport(event_queue, event_router, transport);
+                startup_trace.record_elapsed_step(
+                    "native_setup",
+                    "start_event_loop_with_transport",
+                    step_started,
+                );
+            }
+            #[cfg(feature = "halo-local-coding")]
+            log::info!(
+                "Skipped legacy Agent Runtime event loop for the Halo Workbench Runtime product"
             );
 
             // Eagerly initialize the remote connect service so previously
@@ -1031,12 +1127,19 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
                 );
             }
 
-            let step_started = Instant::now();
-            init_mcp_servers(app_handle.clone());
-            startup_trace.record_elapsed_step("native_setup", "init_mcp_servers", step_started);
-            let step_started = Instant::now();
-            init_acp_clients(app_handle.clone());
-            startup_trace.record_elapsed_step("native_setup", "init_acp_clients", step_started);
+            #[cfg(not(feature = "halo-local-coding"))]
+            {
+                let step_started = Instant::now();
+                init_mcp_servers(app_handle.clone());
+                startup_trace.record_elapsed_step("native_setup", "init_mcp_servers", step_started);
+                let step_started = Instant::now();
+                init_acp_clients(app_handle.clone());
+                startup_trace.record_elapsed_step("native_setup", "init_acp_clients", step_started);
+            }
+            #[cfg(feature = "halo-local-coding")]
+            log::info!(
+                "Skipped legacy MCP and ACP initialization for the Halo Workbench Runtime product"
+            );
 
             let step_started = Instant::now();
             init_services(app_handle.clone(), startup_log_level);
@@ -1133,55 +1236,107 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
         .invoke_handler(tauri::generate_handler![
             theme::show_main_window,
             hide_main_window_after_close_request,
+            #[cfg(feature = "halo-local-coding")]
+            api::workbench_runtime_api::halo_workbench_runtime_snapshot,
+            #[cfg(feature = "halo-local-coding")]
+            api::workbench_runtime_api::halo_workbench_runtime_submit_intent,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::create_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::update_session_model,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::update_session_title,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::ensure_coordinator_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::start_dialog_turn,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::compact_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::activate_session_goal,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::get_session_thread_goal,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::clear_session_thread_goal,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::set_session_thread_goal_status,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::update_session_thread_goal_objective,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::ensure_assistant_bootstrap,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::run_init_agents_md,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::cancel_dialog_turn,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::steer_dialog_turn,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::control_deep_review_queue,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::cancel_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::set_subagent_timeout,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::control_background_command,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::send_background_command_input,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::read_background_command_output,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::list_background_command_activities,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::delete_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::restore_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::restore_session_view,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::restore_session_with_turns,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::reset_memory,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::get_memory_paths,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::set_session_memory_mode,
             webdriver_bridge_result,
             get_startup_native_trace,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::list_sessions,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::list_pending_permission_requests,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::subscribe_permission_requests,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::respond_permission,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::respond_permission_batch,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::list_project_permission_grants,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::remove_project_permission_grant,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::clear_project_permission_grants,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::list_project_permission_audit,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::get_project_permission_rules,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::save_project_permission_rules,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::cancel_tool,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::generate_session_title,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::get_available_modes,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::get_default_review_team_definition,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::btw_api::btw_ask_stream,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::btw_api::btw_cancel,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::editor_ai_api::editor_ai_stream,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::editor_ai_api::editor_ai_cancel,
             get_external_hook_catalog,
             get_external_hook_import_snapshot,
@@ -1207,19 +1362,29 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
             set_external_mcp_server_decision_command,
             choose_external_mcp_conflict_command,
             api::context_upload_api::upload_image_contexts,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_all_tools_info,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_readonly_tools_info,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_tool_info,
+            #[cfg(not(feature = "halo-local-coding"))]
             validate_tool_input,
+            #[cfg(not(feature = "halo-local-coding"))]
             execute_tool,
+            #[cfg(not(feature = "halo-local-coding"))]
             submit_user_answers,
             initialize_workspace_startup_state,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_available_tools,
             report_ide_control_result,
             get_health_status,
             get_statistics,
+            #[cfg(not(feature = "halo-local-coding"))]
             test_ai_connection,
+            #[cfg(not(feature = "halo-local-coding"))]
             test_ai_config_connection,
+            #[cfg(not(feature = "halo-local-coding"))]
             list_ai_models_by_config,
             list_subscription_accounts,
             start_subscription_login,
@@ -1227,7 +1392,9 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
             cancel_subscription_login,
             logout_subscription_account,
             refresh_subscription_account,
+            #[cfg(not(feature = "halo-local-coding"))]
             initialize_ai,
+            #[cfg(not(feature = "halo-local-coding"))]
             refresh_model_client,
             get_app_state,
             update_app_status,
@@ -1377,104 +1544,197 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
             api::worktree_api::worktree_remove,
             api::worktree_api::worktree_recreate,
             api::worktree_api::worktree_bind_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             generate_commit_message,
+            #[cfg(not(feature = "halo-local-coding"))]
             quick_commit_message,
             save_git_repo_history,
             load_git_repo_history,
+            #[cfg(not(feature = "halo-local-coding"))]
             preview_commit_message,
+            #[cfg(not(feature = "halo-local-coding"))]
             analyze_work_state,
+            #[cfg(not(feature = "halo-local-coding"))]
             quick_analyze_work_state,
+            #[cfg(not(feature = "halo-local-coding"))]
             generate_greeting_only,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_work_state_summary,
             compute_diff,
             apply_patch,
             save_merged_diff_content,
+            #[cfg(not(feature = "halo-local-coding"))]
             initialize_snapshot,
+            #[cfg(not(feature = "halo-local-coding"))]
             record_file_change,
+            #[cfg(not(feature = "halo-local-coding"))]
             rollback_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             rollback_to_turn,
+            #[cfg(not(feature = "halo-local-coding"))]
             accept_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             accept_file,
+            #[cfg(not(feature = "halo-local-coding"))]
             reject_file,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_session_files,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_session_turns,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_turn_files,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_file_diff,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_operation_diff,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_session_file_diff_stats,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_operation_summary,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_session_operations,
+            #[cfg(not(feature = "halo-local-coding"))]
             accept_operation,
+            #[cfg(not(feature = "halo-local-coding"))]
             reject_operation,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_session_stats,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_snapshot_system_stats,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_snapshot_sessions,
+            #[cfg(not(feature = "halo-local-coding"))]
             check_git_isolation,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_file_change_history,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_all_modified_files,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_baseline_snapshot_diff,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_storage_paths,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_project_storage_paths,
+            #[cfg(not(feature = "halo-local-coding"))]
             cleanup_storage,
+            #[cfg(not(feature = "halo-local-coding"))]
             cleanup_storage_with_policy,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_storage_statistics,
+            #[cfg(not(feature = "halo-local-coding"))]
             initialize_project_storage,
             // Session persistence API
+            #[cfg(not(feature = "halo-local-coding"))]
             list_persisted_sessions,
+            #[cfg(not(feature = "halo-local-coding"))]
             search_referenceable_sessions,
+            #[cfg(not(feature = "halo-local-coding"))]
             list_persisted_sessions_page,
+            #[cfg(not(feature = "halo-local-coding"))]
             load_session_turns,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_session_usage_report,
+            #[cfg(not(feature = "halo-local-coding"))]
             save_session_turn,
+            #[cfg(not(feature = "halo-local-coding"))]
             save_session_metadata,
+            #[cfg(not(feature = "halo-local-coding"))]
             export_session_transcript,
+            #[cfg(not(feature = "halo-local-coding"))]
             delete_persisted_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             touch_session_activity,
+            #[cfg(not(feature = "halo-local-coding"))]
             load_persisted_session_metadata,
+            #[cfg(not(feature = "halo-local-coding"))]
             fork_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             archive_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             unarchive_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             archive_all_sessions,
+            #[cfg(not(feature = "halo-local-coding"))]
             list_archived_sessions,
+            #[cfg(not(feature = "halo-local-coding"))]
             delete_all_archived_sessions,
+            #[cfg(not(feature = "halo-local-coding"))]
             initialize_mcp_servers,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::mcp_api::initialize_mcp_servers_non_destructive,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_mcp_servers,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::mcp_api::list_mcp_resources,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::mcp_api::read_mcp_resource,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::mcp_api::list_mcp_prompts,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::mcp_api::get_mcp_prompt,
+            #[cfg(not(feature = "halo-local-coding"))]
             start_mcp_server,
+            #[cfg(not(feature = "halo-local-coding"))]
             stop_mcp_server,
+            #[cfg(not(feature = "halo-local-coding"))]
             restart_mcp_server,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_mcp_server_status,
+            #[cfg(not(feature = "halo-local-coding"))]
             load_mcp_json_config,
+            #[cfg(not(feature = "halo-local-coding"))]
             save_mcp_json_config,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_mcp_tool_ui_uri,
+            #[cfg(not(feature = "halo-local-coding"))]
             fetch_mcp_app_resource,
+            #[cfg(not(feature = "halo-local-coding"))]
             send_mcp_app_message,
+            #[cfg(not(feature = "halo-local-coding"))]
             submit_mcp_interaction_response,
+            #[cfg(not(feature = "halo-local-coding"))]
             update_mcp_remote_auth,
+            #[cfg(not(feature = "halo-local-coding"))]
             clear_mcp_remote_auth,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::mcp_api::delete_mcp_server,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::mcp_api::start_mcp_remote_oauth,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::mcp_api::get_mcp_remote_oauth_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::mcp_api::cancel_mcp_remote_oauth,
+            #[cfg(not(feature = "halo-local-coding"))]
             initialize_acp_clients,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_acp_clients,
+            #[cfg(not(feature = "halo-local-coding"))]
             probe_acp_client_requirements,
+            #[cfg(not(feature = "halo-local-coding"))]
             predownload_acp_client_adapter,
+            #[cfg(not(feature = "halo-local-coding"))]
             install_acp_client_cli,
+            #[cfg(not(feature = "halo-local-coding"))]
             stop_acp_client,
+            #[cfg(not(feature = "halo-local-coding"))]
             load_acp_json_config,
+            #[cfg(not(feature = "halo-local-coding"))]
             save_acp_json_config,
+            #[cfg(not(feature = "halo-local-coding"))]
             submit_acp_permission_response,
+            #[cfg(not(feature = "halo-local-coding"))]
             create_acp_flow_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             start_acp_dialog_turn,
+            #[cfg(not(feature = "halo-local-coding"))]
             cancel_acp_dialog_turn,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_acp_session_options,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_acp_session_commands,
+            #[cfg(not(feature = "halo-local-coding"))]
             set_acp_session_model,
+            #[cfg(not(feature = "halo-local-coding"))]
             set_acp_session_config_option,
             lsp_initialize,
             lsp_start_server_for_file,
@@ -1522,6 +1782,7 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
             reload_global_config,
             get_global_config_status,
             subscribe_config_updates,
+            #[cfg(not(feature = "halo-local-coding"))]
             get_model_configs,
             get_recent_workspaces,
             remove_recent_workspace,
@@ -1537,10 +1798,15 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
             reorder_opened_workspaces,
             get_current_workspace,
             scan_workspace_info,
+            #[cfg(not(feature = "halo-local-coding"))]
             list_cron_jobs,
+            #[cfg(not(feature = "halo-local-coding"))]
             create_cron_job,
+            #[cfg(not(feature = "halo-local-coding"))]
             update_cron_job,
+            #[cfg(not(feature = "halo-local-coding"))]
             delete_cron_job,
+            #[cfg(not(feature = "halo-local-coding"))]
             notify_cron_host_ready,
             api::config_api::canonicalize_agent_profile_configs,
             api::terminal_api::terminal_get_shells,
@@ -1696,14 +1962,23 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
             api::miniapp_market_api::miniapp_market_import_package,
             api::miniapp_market_api::miniapp_market_inspect_package,
             api::miniapp_market_api::miniapp_market_submit_installed,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::miniapp_api::miniapp_ai_complete,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::miniapp_api::miniapp_ai_chat,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::miniapp_api::miniapp_ai_cancel,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::miniapp_api::miniapp_ai_list_models,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::miniapp_agent_api::miniapp_agent_ensure_session,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::miniapp_agent_api::miniapp_agent_run,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::miniapp_agent_api::miniapp_agent_cancel,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::miniapp_agent_api::miniapp_agent_turn_text,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::miniapp_agent_api::miniapp_agent_cancel_stale_runs,
             api::miniapp_export_api::miniapp_render_slide_page,
             // Browser API (embedded webview)
@@ -1720,10 +1995,12 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
             api::browser_control_api::browser_control_restart_with_cdp,
             api::browser_control_api::browser_control_create_launcher,
             // Insights API
+            #[cfg(not(feature = "halo-local-coding"))]
             api::insights_api::generate_insights,
             api::insights_api::get_latest_insights,
             api::insights_api::load_insights_report,
             api::insights_api::has_insights_data,
+            #[cfg(not(feature = "halo-local-coding"))]
             api::insights_api::cancel_insights_generation,
             // SSH Remote API
             api::ssh_api::ssh_list_saved_connections,
@@ -1794,6 +2071,18 @@ pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
                     crash_diagnostics::mark_clean_shutdown("tauri_run_exit");
                     save_main_window_state(_app_handle);
+                    #[cfg(feature = "halo-local-coding")]
+                    if let Some(runtime) =
+                        _app_handle.try_state::<runtime::DesktopRuntimeContext>()
+                    {
+                        if let Err(error) = tauri::async_runtime::block_on(
+                            runtime.shutdown_halo_workbench_once(),
+                        ) {
+                            log::warn!(
+                                "Failed to shut down Halo Workbench Runtime during app exit: {error}"
+                            );
+                        }
+                    }
                     perform_process_exit_cleanup();
                 }
                 #[cfg(target_os = "macos")]
@@ -1982,6 +2271,7 @@ async fn init_agentic_system() -> anyhow::Result<(
     ))
 }
 
+#[cfg(not(feature = "halo-local-coding"))]
 async fn init_function_agents(ai_client_factory: Arc<AIClientFactory>) -> anyhow::Result<()> {
     let _ = bitfun_core::function_agents::git_func_agent::GitFunctionAgent::new(
         ai_client_factory.clone(),
@@ -1994,12 +2284,14 @@ async fn init_function_agents(ai_client_factory: Arc<AIClientFactory>) -> anyhow
     Ok(())
 }
 
+#[cfg(not(feature = "halo-local-coding"))]
 fn init_mcp_servers(app_handle: tauri::AppHandle) {
     tokio::spawn(async move {
         let _ = app_handle;
     });
 }
 
+#[cfg(not(feature = "halo-local-coding"))]
 fn init_acp_clients(app_handle: tauri::AppHandle) {
     tokio::spawn(async move {
         let state: tauri::State<'_, api::AppState> = app_handle.state();

@@ -143,6 +143,7 @@ function checkSourceAssembly(rootDir, scope) {
     searchDialog: requireFile(rootDir, `${scope.frontendRoot}/src/app/components/NavPanel/NavSearchDialog.tsx`),
     workspaceList: requireFile(rootDir, `${scope.frontendRoot}/src/app/components/NavPanel/sections/workspaces/WorkspaceListSection.tsx`),
     workspaceItem: requireFile(rootDir, `${scope.frontendRoot}/src/app/components/NavPanel/sections/workspaces/WorkspaceItem.tsx`),
+    workbenchSessions: requireFile(rootDir, `${scope.frontendRoot}/src/app/components/NavPanel/sections/sessions/WorkbenchSessionsSection.tsx`),
     welcomeScene: requireFile(rootDir, `${scope.frontendRoot}/src/app/scenes/welcome/WelcomeScene.tsx`),
     settingsConfig: requireFile(rootDir, `${scope.frontendRoot}/src/app/scenes/settings/settingsConfig.ts`),
     settingsContentRegistry: requireFile(rootDir, `${scope.frontendRoot}/src/app/scenes/settings/settingsContentRegistry.ts`),
@@ -153,16 +154,28 @@ function checkSourceAssembly(rootDir, scope) {
     dailyUpdateGate: requireFile(rootDir, `${scope.frontendRoot}/src/infrastructure/update/DailyAppUpdateGate.tsx`),
     aiExperienceConfigService: requireFile(rootDir, `${scope.frontendRoot}/src/infrastructure/config/services/AIExperienceConfigService.ts`),
     agentCompanionWindowService: requireFile(rootDir, `${scope.frontendRoot}/src/infrastructure/config/services/AgentCompanionWindowService.ts`),
+    deferredStartupSystems: requireFile(rootDir, `${scope.frontendRoot}/src/app/startup/deferredStartupSystems.ts`),
+    permissionRequestNotify: requireFile(rootDir, `${scope.frontendRoot}/src/app/hooks/usePermissionRequestNotify.ts`),
+    chatInput: requireFile(rootDir, `${scope.frontendRoot}/src/flow_chat/components/ChatInput.tsx`),
+    workbenchClient: requireFile(rootDir, `${scope.frontendRoot}/src/infrastructure/workbench-runtime/client.ts`),
+    workbenchStore: requireFile(rootDir, `${scope.frontendRoot}/src/infrastructure/workbench-runtime/store.ts`),
+    workbenchTypes: requireFile(rootDir, `${scope.frontendRoot}/src/infrastructure/workbench-runtime/types.ts`),
   };
 
   const appSource = readText(files.app);
   requireContains(appSource, 'isHaloLocalCodingScope() || !interactiveShellReady', 'App.tsx');
   requireContains(appSource, 'if (isHaloLocalCodingScope()) {', 'App.tsx');
+  requireContains(appSource, 'isHaloLocalCodingScope() && isTauriRuntime()', 'App.tsx');
+  requireContains(appSource, 'workbenchRuntimeStore.getState().start()', 'App.tsx');
+  requireContains(appSource, 'includeAgentExtensions: !isHaloLocalCodingScope()', 'App.tsx');
   requireNoMatch(appSource, /SSHRemoteProvider|RemoteWorkspaceProvider/, 'App.tsx');
 
   const appLayoutSource = readText(files.appLayout);
   requireContains(appLayoutSource, 'recentWorkspaces.filter(workspace => !isRemoteWorkspace(workspace))', 'AppLayout.tsx');
   requireContains(appLayoutSource, 'if (isRemoteWorkspace(currentWorkspace)) return;', 'AppLayout.tsx');
+  requireContains(appLayoutSource, 'if (isHaloLocalCodingScope()) return;', 'AppLayout.tsx');
+  requireContains(appLayoutSource, "type: 'openWorkspace'", 'AppLayout.tsx');
+  requireNoMatch(appLayoutSource, /import\s+\{\s*FlowChatManager\s*\}/, 'AppLayout.tsx');
   requireNoMatch(appLayoutSource, /FloatingMiniChat|MCPInteractionDialog|SSHContext|WorkspaceKind|bitfun:create-acp-session|bitfun:acp-session-creation|createAcpChatSession|ensureAssistantBootstrap|agent-companion|MiniApp/, 'AppLayout.tsx');
 
   const registrySource = readText(files.registry);
@@ -198,6 +211,9 @@ function checkSourceAssembly(rootDir, scope) {
   requireContains(mainNavSource, 'data-testid="nav-file-viewer-btn"', 'MainNav.tsx');
   requireContains(mainNavSource, 'data-testid="nav-git-btn"', 'MainNav.tsx');
   requireContains(mainNavSource, 'WorkspaceListSection variant="projects"', 'MainNav.tsx');
+  requireContains(mainNavSource, 'workbenchRuntimeStore', 'MainNav.tsx');
+  requireContains(mainNavSource, "intent: { type: 'createSession', mode: 'standard' }", 'MainNav.tsx');
+  requireNoMatch(mainNavSource, /FlowChatManager|flowChatManager|resolveAgentTypeForSessionCreation/, 'MainNav.tsx');
   requireNoMatch(mainNavSource, /MiniAppEntry|Cowork|SSHRemote|RemoteWorkspaceDialog|openScene\('assistant'\)|openScene\('browser'\)|openScene\('insights'\)/, 'MainNav.tsx');
 
   const footerSource = readText(files.footerActions);
@@ -216,9 +232,18 @@ function checkSourceAssembly(rootDir, scope) {
   requireNoMatch(workspaceListSource, /assistantWorkspacesList|emptyAssistants|variant:\s*'assistants'/, 'WorkspaceListSection.tsx');
 
   const workspaceItemSource = readText(files.workspaceItem);
-  requireContains(workspaceItemSource, 'remoteConnectionId={null}', 'WorkspaceItem.tsx');
-  requireContains(workspaceItemSource, 'remoteSshHost={null}', 'WorkspaceItem.tsx');
+  requireContains(workspaceItemSource, 'WorkbenchSessionsSection', 'WorkspaceItem.tsx');
+  requireContains(workspaceItemSource, 'workbenchRuntimeStore', 'WorkspaceItem.tsx');
+  requireNoMatch(
+    workspaceItemSource,
+    /FlowChatManager|flowChatManager|from ['"]\.\.\/sessions\/SessionsSection|<SessionsSection/,
+    'WorkspaceItem.tsx'
+  );
   requireNoMatch(workspaceItemSource, /Cowork|cowork|Acp|acp|ScheduledJobs|RemoteConnectDialog|WorkspaceKind|isRemoteWorkspace|assistant|MiniApp|MCP|openScene\('agents'\)|openScene\('skills'\)/i, 'WorkspaceItem.tsx');
+
+  const workbenchSessionsSource = readText(files.workbenchSessions);
+  requireContains(workbenchSessionsSource, 'selectWorkbenchRuntimeSessionsForWorkspace', 'WorkbenchSessionsSection.tsx');
+  requireNoMatch(workbenchSessionsSource, /FlowChatManager|flowChatManager|agentAPI|ACPClientAPI|MCPAPI/, 'WorkbenchSessionsSection.tsx');
 
   const welcomeSceneSource = readText(files.welcomeScene);
   requireContains(welcomeSceneSource, 'filter(ws => !isRemoteWorkspace(ws))', 'WelcomeScene.tsx');
@@ -259,6 +284,35 @@ function checkSourceAssembly(rootDir, scope) {
 
   const agentCompanionWindowServiceSource = readText(files.agentCompanionWindowService);
   requireContains(agentCompanionWindowServiceSource, 'if (isHaloLocalCodingScope()) return;', 'AgentCompanionWindowService.ts');
+
+  const deferredStartupSource = readText(files.deferredStartupSystems);
+  requireContains(deferredStartupSource, 'if (includeAgentExtensions)', 'deferredStartupSystems.ts');
+
+  const permissionRequestNotifySource = readText(files.permissionRequestNotify);
+  requireContains(permissionRequestNotifySource, 'if (isHaloLocalCodingScope()) return;', 'usePermissionRequestNotify.ts');
+
+  const chatInputSource = readText(files.chatInput);
+  requireContains(chatInputSource, 'const legacyExecutionEnabled = !isHaloLocalCodingScope();', 'ChatInput.tsx');
+  requireContains(chatInputSource, 'disabled={!legacyExecutionEnabled}', 'ChatInput.tsx');
+
+  const workbenchClientSource = readText(files.workbenchClient);
+  requireContains(workbenchClientSource, "'halo_workbench_runtime_snapshot'", 'workbench-runtime/client.ts');
+  requireContains(workbenchClientSource, "'halo_workbench_runtime_submit_intent'", 'workbench-runtime/client.ts');
+  requireContains(workbenchClientSource, "'halo-workbench://event'", 'workbench-runtime/client.ts');
+  requireNoMatch(workbenchClientSource, /Authorization|Bearer\s|EventSource|WebSocket|fetch\(|opencode serve|opencode acp|127\.0\.0\.1|localhost:|sidecar/i, 'workbench-runtime/client.ts');
+
+  const workbenchStoreSource = readText(files.workbenchStore);
+  requireContains(workbenchStoreSource, 'PI_RPC_ADAPTER_IDENTITY', 'workbench-runtime/store.ts');
+  requireContains(workbenchStoreSource, 'client.subscribe', 'workbench-runtime/store.ts');
+  requireContains(workbenchStoreSource, 'client.readSnapshot', 'workbench-runtime/store.ts');
+
+  const workbenchTypesSource = readText(files.workbenchTypes);
+  requireContains(workbenchTypesSource, "'pi-rpc-p0'", 'workbench-runtime/types.ts');
+  requireNoMatch(
+    workbenchTypesSource,
+    /authorization|credential|accessToken|remoteSession|remoteMessage|\bport\b|https?:\/\/|serverUrl/i,
+    'workbench-runtime/types.ts'
+  );
 }
 
 export function verifyHaloScope(rootDir = ROOT) {
@@ -351,7 +405,16 @@ export function verifyHaloScope(rootDir = ROOT) {
   requireContains(webMain, '<App />', 'src/web-ui/src/main.tsx');
 
   const haloDesktopMain = readText(desktopMain);
-  requireContains(haloDesktopMain, 'bitfun_desktop_lib::run_with_context(tauri::generate_context!()).await', 'src/apps/halo-desktop/src/main.rs');
+  requireContains(
+    haloDesktopMain,
+    'bitfun_desktop_lib::run_with_context_and_options',
+    'src/apps/halo-desktop/src/main.rs',
+  );
+  requireContains(
+    haloDesktopMain,
+    'bitfun_desktop_lib::DesktopRunOptions::with_logs_root',
+    'src/apps/halo-desktop/src/main.rs',
+  );
   requireNoMatch(haloDesktopMain, /tauri::Builder::default\(\)\s*\.run/, 'src/apps/halo-desktop/src/main.rs');
 
   const viteConfig = readText(webVitePath);

@@ -1,10 +1,14 @@
-﻿# 设计文档目录（docs/design/）
+# 设计文档目录（docs/design/）
 
-依据 `requirements-alignment/03-ide-editor-and-reference-alignment.md`。
+**Status:** archived - non-authoritative
 
-## 当前发布依据
+本目录中的 OpenCode、Pi、Sidecar 和 Electron 设计均为迁移前历史材料。它们不得作为当前 P0 实现入口；当前依据是 [Pi RPC 迁移规格](../../../requirements/bitfun-tauri-product-migration/00-bitfun-tauri-product-migration-spec.md) 与 [ADR-0072](../../../adr/0072-use-pi-rpc-as-the-p0-managed-execution-adapter.md)。
 
-真实 Agent 首个可用版本以 [04 - 真实 OpenCode 受管任务会话：需求对齐与范围统一](../requirements-alignment/04-real-opencode-managed-task-session.md) 与其 [06 - 规格](../requirements-alignment/06-real-opencode-managed-task-session-spec.md) 为当前发布边界。10–13、15 号设计的实现状态以下表为准，但不改变该发布边界；14 号真实协议设计在该对齐记录所列 P0 修订下实施。
+依据 `requirements/03-ide-editor-and-reference-alignment.md`。
+
+## 迁移时历史发布依据（不再有效）
+
+真实 Agent 首个可用版本以 [04 - 真实 OpenCode 受管任务会话：需求对齐与范围统一](../requirements/04-real-opencode-managed-task-session.md) 与其 [06 - 规格](../requirements/06-real-opencode-managed-task-session-spec.md) 为当前发布边界。10–13、15 号设计的实现状态以下表为准，但不改变该发布边界；14 号真实协议设计在该对齐记录所列 P0 修订下实施。
 
 ## 编号规则
 

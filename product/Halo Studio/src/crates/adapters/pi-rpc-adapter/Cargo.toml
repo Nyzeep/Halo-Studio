@@ -1,0 +1,23 @@
+[package]
+name = "bitfun-pi-rpc-adapter"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Halo Workbench Runtime adapter for the local Pi RPC contract"
+
+[lib]
+name = "bitfun_pi_rpc_adapter"
+crate-type = ["rlib"]
+
+[dependencies]
+async-trait = { workspace = true }
+bitfun-runtime-ports = { path = "../../contracts/runtime-ports" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+
+[lints]
+workspace = true

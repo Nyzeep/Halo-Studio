@@ -972,6 +972,7 @@ dependencies = [
  "bitfun-external-sources",
  "bitfun-harness",
  "bitfun-opencode-adapter",
+ "bitfun-pi-rpc-adapter",
  "bitfun-plugin-runtime-client",
  "bitfun-product-capabilities",
  "bitfun-product-domains",
@@ -1237,6 +1238,20 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.19",
  "tokio",
+]
+
+[[package]]
+name = "bitfun-pi-rpc-adapter"
+version = "0.2.14"
+dependencies = [
+ "async-trait",
+ "bitfun-runtime-ports",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -4100,6 +4115,15 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-log",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tauri-plugin-updater",
+ "tauri-plugin-window-state",
  "tokio",
 ]
 
