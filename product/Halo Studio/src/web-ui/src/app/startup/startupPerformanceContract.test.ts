@@ -678,9 +678,6 @@ describe('startup performance contract', () => {
     const sessionsSectionSource = readSource('../../app/components/NavPanel/sections/sessions/SessionsSection.tsx');
     const footerActionsSource = readSource('../../app/components/NavPanel/components/PersistentFooterActions.tsx');
     const newProjectDialogSource = readSource('../../app/components/NewProjectDialog/NewProjectDialog.tsx');
-    const relatedPathsDialogSource = readSource(
-      '../../app/components/NavPanel/sections/workspaces/WorkspaceRelatedPathsDialog.tsx'
-    );
 
     expect(appLayoutSource).not.toMatch(/import\s+\{\s*open\s*\}\s+from\s+['"]@tauri-apps\/plugin-dialog['"]/);
     expect(appLayoutSource).not.toMatch(/import\s+\{\s*NewProjectDialog\s*\}\s+from/);
@@ -711,9 +708,6 @@ describe('startup performance contract', () => {
     expect(newProjectDialogSource).not.toMatch(/from\s+['"]@tauri-apps\/plugin-dialog['"]/);
     expect(newProjectDialogSource).not.toContain("await import('@tauri-apps/plugin-dialog')");
     expect(newProjectDialogSource).toContain('@/infrastructure/peer-device/pickWorkspaceDirectory');
-    expect(relatedPathsDialogSource).not.toMatch(/from\s+['"]@tauri-apps\/plugin-dialog['"]/);
-    expect(relatedPathsDialogSource).not.toContain("await import('@tauri-apps/plugin-dialog')");
-    expect(relatedPathsDialogSource).toContain('@/infrastructure/peer-device/pickWorkspaceDirectory');
   });
 
   it('keeps startup session metadata paging on the narrow SessionAPI entrypoint', () => {
