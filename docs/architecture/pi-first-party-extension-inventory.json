@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 1,
+  "scope": {
+    "productRoot": "product/Halo Studio",
+    "runtimeAdapter": "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/lib.rs",
+    "auditScript": "product/Halo Studio/scripts/pi-extension-audit.mjs"
+  },
+  "releaseGate": {
+    "status": "blocked",
+    "blockingReasons": [
+      "The upstream candidate is recorded for review but has not been merged or validated against the Halo product tree.",
+      "The pinned initial-import base commit cannot be resolved in the shallow/grafted read-only candidate tree, so incremental-sync ancestry is unproven.",
+      "The declared initial-import tree fba189b8b3db23c45a4bfed18c0250018b251387 does not reproduce from the recorded file manifest (derived tree f6a559f45e266945921913f9752eb0e5b4609bdb); base tree provenance requires reconciliation.",
+      "The canonical UTF-8 candidate diff is recorded separately from the legacy C-quoted count anomaly and still requires manual product/runtime review.",
+      "Pi 0.83.0 always loads the built-in llama.cpp inline extension; it is not disabled by --no-extensions and is excluded from the Halo release until its capability boundary is separately approved.",
+      "The Pi host reference tree has no Git metadata, so its source commit/tag cannot be proved.",
+      "The Pi host package is not a Halo lockfile dependency and its complete transitive license evidence is not a Halo release artifact.",
+      "No exact desktop distribution artifact has been recorded for the license/notice inclusion check.",
+      "The Halo Cargo workspace lists src/crates/adapters/pi-rpc-adapter twice; this task reports the boundary defect without modifying Cargo.toml or Cargo.lock.",
+      "The audit must remain fail-closed until the required verification matrix produces fresh evidence."
+    ]
+  },
+  "upstreamCandidateEvidence": {
+    "path": "docs/requirements/bitfun-tauri-product-migration/artifacts/issue-13-upstream-sync-candidate.json",
+    "baseCommit": "ca56631e38f36db675583288df2bd44c540d250a",
+    "candidateCommit": "1616ccaf73c0dabc50783344e583d304dd77622b",
+    "diffRecorded": true,
+    "automatedMerge": false,
+    "upstreamWrite": false
+  },
+  "dependencyBoundary": {
+    "workspaceManifest": "product/Halo Studio/Cargo.toml",
+    "uniqueMembers": ["src/crates/adapters/pi-rpc-adapter"]
+  },
+  "runtime": {
+    "adapterPath": "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/lib.rs",
+    "scanPaths": [
+      "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/lib.rs",
+      "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts",
+      "product/Halo Studio/scripts/halo-tauri.mjs",
+      "product/Halo Studio/scripts/halo-scope.mjs",
+      "product/Halo Studio/src/apps/desktop/src/lib.rs",
+      "product/Halo Studio/src/apps/desktop/src/runtime"
+    ],
+    "allowlistedFindings": [
+      {
+        "path": "product/Halo Studio/scripts/halo-scope.mjs",
+        "code": "forbidden-absolute-path",
+        "sha256": "894652f9373a70b878e24a36dd8a787610def01a03d158fc89a9b21d64e0374f",
+        "reason": "The match is a negative guard literal used to reject a legacy BitFun-main path; it is not used as a build or runtime input path."
+      },
+      {
+        "path": "product/Halo Studio/src/apps/desktop/src/runtime/session_application.rs",
+        "code": "forbidden-absolute-path",
+        "sha256": "ea9f802a741c3c1a0fd43dda9b454306bd8ae46471909939094e3c1c659e1d2e",
+        "reason": "The only absolute paths are fixed #[cfg(test)] session-scope fixtures; the production runtime does not use them as build or runtime inputs. The file hash pins this exception to the audited fixture source."
+      }
+    ],
+    "builtInExtensions": [
+      {
+        "id": "llama.cpp",
+        "package": "@earendil-works/pi-coding-agent",
+        "version": "0.83.0",
+        "sourcePath": "readonly-evidence://pi-main/packages/coding-agent/src/extensions/llama",
+        "sourcePathRole": "read-only-evidence",
+        "sourceCommit": null,
+        "sourceTag": null,
+        "loadMode": "always-inline",
+        "allowedByNoExtensions": false,
+        "releaseEligible": false,
+        "policy": "blocked until a Git-pinned, license-complete, offline-capable Pi host or an audited replacement is supplied",
+        "capabilities": {
+          "tools": [],
+          "events": [],
+          "network": ["configured llama.cpp HTTP/HTTPS server", "huggingface.co model metadata/download endpoints"],
+          "files": ["HF token paths", "Pi models-store.json"],
+          "credentials": ["LLAMA_API_KEY", "LLAMA_BASE_URL", "HF_TOKEN", "Pi stored provider credentials"],
+          "process": "inherits the full Pi child-process permission; no direct child-process spawn observed",
+          "evidence": [
+            "readonly-evidence://pi-main/packages/coding-agent/src/extensions/index.ts",
+            "readonly-evidence://pi-main/packages/coding-agent/src/extensions/llama/client.ts",
+            "readonly-evidence://pi-main/packages/coding-agent/src/extensions/llama/huggingface.ts",
+            "readonly-evidence://pi-main/packages/coding-agent/src/extensions/llama/provider.ts"
+          ]
+        }
+      }
+    ]
+  },
+  "extensions": [
+    {
+      "id": "halo-workbench-permission-gate",
+      "fixedVersion": "1.0.0",
+      "sourcePath": "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts",
+      "sourceCommit": "e8c445d6a81d90851ac03d6aac7a4f11b6b749a3",
+      "sourceTag": null,
+      "gitHashObject": "15d6908cc30e45f8812a87c591e58799d2f7ae69",
+      "sha256": "a6f704110e56be3c1c0754dadde1be2b27f65c76ee03f2c19a1e43cd06848c0b",
+      "load": {
+        "arguments": [
+          "--mode",
+          "rpc",
+          "--no-session",
+          "--no-approve",
+          "--no-extensions",
+          "--extension",
+          "<adapter-owned-temp>/halo-workbench-permission-gate-<sha256>.ts"
+        ],
+        "noExtensions": true,
+        "projectAutoDiscovery": false,
+        "userAutoDiscovery": false,
+        "runtimeDownload": false,
+        "inlineBuiltInsPolicy": "audited-host-built-ins",
+        "pathPolicy": "Only the adapter-owned temporary copy of the embedded, hash-verified source may be passed to --extension."
+      },
+      "capabilities": {
+        "tools": [],
+        "events": ["tool_call"],
+        "ui": ["ctx.ui.confirm", "extension_ui_request", "extension_ui_response"],
+        "cleanup": ["stop", "abort", "eof", "failure", "application-exit"]
+      },
+      "impact": {
+        "files": "No direct file API; the host adapter writes one verified temporary source copy and removes its owned directory.",
+        "network": "None in extension source; provider network remains Pi/host scope and is not an extension capability.",
+        "process": "None in extension source; it runs inside the Pi child process.",
+        "credentials": "No credential API, environment read, auth.json access, or secret transport in extension source.",
+        "git": "None.",
+        "renderer": "None; only RPC extension UI confirmation is requested."
+      },
+      "hostPermissions": "The extension inherits the launching user's Pi process permissions and is not a sandbox. Halo Workbench Runtime owns trust, redaction, one-shot decisions, and fail-closed lifecycle behavior.",
+      "dependencies": {
+        "runtime": {
+          "direct": [],
+          "transitive": [],
+          "evidence": "The extension has no package.json and its only import is type-only. The Halo package.json, pnpm-lock.yaml, package-lock.json, and Cargo.lock contain no @earendil-works/pi-coding-agent runtime entry."
+        },
+        "typeOnly": ["@earendil-works/pi-coding-agent"],
+        "host": {
+          "package": "@earendil-works/pi-coding-agent",
+          "version": "0.83.0",
+          "sourcePath": "readonly-evidence://pi-main/packages/coding-agent/package.json",
+          "sourcePathRole": "read-only-evidence",
+          "sourceCommit": null,
+          "sourceTag": null,
+          "runtimeSuppliedBy": "User-installed Pi; not bundled by Halo P0.",
+          "directDependencies": "Not a Halo extension runtime dependency; host package closure is not admitted to the Halo lockfile.",
+          "transitiveDependencies": "Not imported or audited as Halo release dependencies; exact closure is unavailable for this gate.",
+          "dependencyClosure": {
+            "status": "incomplete",
+            "direct": [],
+            "transitive": [],
+            "evidence": "The Pi host lockfiles are outside Halo's lockfile boundary and no complete release-time closure/notice artifact is admitted."
+          },
+          "licenseEvidence": {
+            "observedSpdx": "MIT",
+            "evidencePath": "readonly-evidence://pi-main/LICENSE",
+            "evidencePathRole": "read-only-evidence",
+            "releaseStatus": "Not a Halo distribution artifact; do not infer or treat as Halo release evidence.",
+            "releaseFiles": []
+          }
+        },
+        "lockfiles": [
+          "product/Halo Studio/package.json",
+          "product/Halo Studio/pnpm-lock.yaml",
+          "product/Halo Studio/package-lock.json",
+          "product/Halo Studio/Cargo.toml",
+          "product/Halo Studio/Cargo.lock"
+        ]
+      },
+      "license": {
+        "spdx": "MIT",
+        "copyright": "Copyright (c) 2026 CWing",
+        "evidence": [
+          {
+            "path": "product/Halo Studio/LICENSE",
+            "requiredText": ["MIT License", "Copyright (c) 2026 CWing"]
+          },
+          {
+            "path": "product/THIRD_PARTY_NOTICES.md",
+            "requiredText": ["halo-workbench-permission-gate", "MIT License", "halo_permission_gate.ts"]
+          }
+        ],
+        "lockfileEvidence": [
+          "product/Halo Studio/pnpm-lock.yaml",
+          "product/Halo Studio/package-lock.json",
+          "product/Halo Studio/Cargo.lock"
+        ],
+        "distributionFiles": [
+          {
+            "path": "product/Halo Studio/LICENSE",
+            "requiredText": [
+              "MIT License",
+              "Copyright (c) 2026 CWing",
+              "Permission is hereby granted"
+            ]
+          },
+          {
+            "path": "product/THIRD_PARTY_NOTICES.md",
+            "requiredText": [
+              "# BitFun third-party attribution index",
+              "MIT license and the upstream copyright notice",
+              "halo-workbench-permission-gate",
+              "A6F704110E56BE3C1C0754DADDE1BE2B27F65C76EE03F2C19A1E43CD06848C0B"
+            ]
+          }
+        ],
+        "releaseArtifactEvidence": null,
+        "status": "blocked until an exact release artifact is inspected"
+      },
+      "updateResponsibility": "Halo Studio maintainers. Any source, embedded-loader, host-permission, or dependency change increments the fixed version and requires new source commit/hash/license evidence and fresh contract verification."
+    }
+  ]
+}

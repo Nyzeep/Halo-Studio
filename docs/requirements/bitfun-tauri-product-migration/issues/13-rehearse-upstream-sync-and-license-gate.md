@@ -4,13 +4,13 @@
 
 **Blocked by:** 03B - 固定 P0 Pi RPC 受管执行器（废弃历史 OpenCode Server 决策）；04 - 建立 Halo Workbench Runtime 公共契约.
 
-**Status:** ready-for-agent
+**Status:** blocked — evidence and audit tooling are recorded, but the release gate is intentionally not passed.
 
 ## 实现边界
 
 - BitFun 上游同步候选、Pi extension 审计和产品发布树保持可审计边界；任何失败候选可丢弃，不污染已验证树、Pi 参考目录或上游。
 - extension 清单必须覆盖加载来源、固定版本/hash、依赖、宿主权限、工具影响、许可证和更新责任；清单缺失或审计未完成时，候选不能成为发布版本，也不能把任意路径加入显式 `--extension` 加载清单。
-- 本票不更新 Pi、下载包、修改 GitHub Issue、复制 `D:\pi-main` 或改变 P0 transport。
+- 本票不更新 Pi、下载包、修改 GitHub Issue、复制 `<PI_REFERENCE_ROOT>` 或改变 P0 transport。
 
 ## 验收标准
 
@@ -21,7 +21,7 @@
 - [ ] Pi 第一方 extension inventory 记录源文件、来源 commit/tag、固定版本或内容 hash、加载参数、可访问工具/事件、宿主权限、网络/文件/进程影响、直接/传递依赖及许可证；未审计 extension 不得进入 `--extension` 加载清单。
 - [ ] extension 依赖锁定在 Halo 可审计的 lockfile/manifest 中，不允许运行时从 npm、Git 或项目 `.pi/extensions` 自动下载；依赖漏洞、来源不可追溯或许可证不兼容均阻止接纳。
 - [ ] 源码与发行包包含所需 BitFun MIT 归属、Pi extension 许可证和第三方声明，许可证检查失败阻止接纳。
-- [ ] 同步不引入 `D:\BitFun-main`、`D:\pi-main`、`D:\opencode-dev` 或其他外部绝对路径，不复制/vendor Pi 或历史 OpenCode 内部源码，也不启用历史 OpenCode/Code Agent P0 路径。
+- [ ] 同步不引入 BitFun legacy、Pi reference、OpenCode legacy 或其他外部绝对路径，不复制/vendor Pi 或历史 OpenCode 内部源码，也不启用历史 OpenCode/Code Agent P0 路径。
 
 ## Halo 第一方 Pi extension inventory
 
@@ -38,14 +38,40 @@
 | 许可证 | Halo extension 源码的许可只能按仓库 `LICENSE` 和发布 notice 审计后记录；不能把 Pi 安装包、Pi Provider 或 `@earendil-works/pi-coding-agent` 的许可证推断为已审计。Pi 二进制不随 Halo P0 分发；若未来分发，许可证、归属和完整文本必须另行阻断审查。 |
 | 当前门槛 | 没有来源 commit、hash、依赖清单、宿主权限说明和逐项许可证证据时，状态为 `blocked`，不能把 `--extension` 视为放行证据。 |
 
+Pi `0.83.0` 的隐藏 `llama.cpp` 是 host inline built-in，不属于 Halo 第一方
+extension；Pi 即使收到 `--no-extensions` 仍会加载它。它的网络、模型状态、凭据
+和 token 文件能力已单独登记在 inventory 的 `runtime.builtInExtensions`，由于
+没有精确 source commit/tag、Halo lockfile 闭包和发行 notice，`releaseEligible`
+固定为 `false`。因此 `--no-extensions` 只能证明项目/用户发现式路径关闭，不能证明
+P0 extension 集合只有 Halo permission gate。
+
 ## 验证要求
 
 - 记录精确上游 commit、候选 diff、冲突决策、清单变化、Pi extension manifest/hash/依赖/权限/许可证 inventory 和全部门槛命令/退出码。
 - 失败候选必须可安全丢弃，不污染已验证产品树或上游参考树。
 
+## 本候选实现记录
+
+- 机器可读 extension inventory：`docs/architecture/pi-first-party-extension-inventory.json`。
+- 上游候选树/blob 比对与 Halo 品牌、Workbench Runtime、PiRpcPort 保留决策：
+  `docs/requirements/bitfun-tauri-product-migration/artifacts/issue-13-upstream-sync-candidate.json`。
+- canonical UTF-8 path-level candidate diff（724 条记录；608 modified、112 added、4 removed）：
+  `docs/requirements/bitfun-tauri-product-migration/artifacts/issue-13-upstream-sync-diff.json`。
+- 本次 release gate、许可证证据和环境缺口：
+  `docs/requirements/bitfun-tauri-product-migration/artifacts/issue-13-release-gate.md`。
+- 可重复审计入口：
+  `node "product/Halo Studio/scripts/pi-extension-audit.mjs" --json`；测试入口：
+  `node --test "product/Halo Studio/scripts/pi-extension-audit.test.mjs"`。
+
+本任务不修改 `package.json`、Cargo/PNPM lockfile、PiRpcAdapter Runtime、
+Workbench Runtime 或共享启动参数；因此 audit script 以独立 CLI 存在，不能假装
+已经成为现有产品命令的 release gate。当前 gate 保持 `blocked`，直到主集成流程
+明确接入并重新记录完整验证矩阵。
+
 ## 精确验证命令
 
 ```powershell
+$env:HALO_BITFUN_REFERENCE_ROOT = '<local read-only checkout supplied out of band>'
 $extension = "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts"
 Get-FileHash -Algorithm SHA256 $extension
 git hash-object -- $extension
@@ -61,4 +87,12 @@ pnpm --dir "product/Halo Studio" run desktop:build:fast
 git diff --check
 ```
 
-上游候选还必须使用只读参考树记录 `git -C <reference-root> rev-parse --verify HEAD`、候选 commit 和 `git diff --stat <base> <candidate> -- product/Halo Studio`；`<reference-root>` 不能进入构建输入。许可证核对必须把 `LICENSE`、`THIRD_PARTY_NOTICES.md`、Cargo/PNPM lockfile、extension inventory 和实际分发文件逐项对照；本票不通过 `npx` 临时下载审计工具，不把网络可用性当作许可证证据。任何未能给出精确 hash、依赖来源、权限范围或许可证文本的项都保持阻断。
+上游候选必须使用只读参考树记录 `HEAD`、tree、branch、clean status 和 `HEAD^` 结果；由于 base commit 不在候选浅克隆的对象库中，不能声称执行了本地 `git diff <base> <candidate>`。本次用初始导入 manifest 与 raw UTF-8 `git ls-tree -z` 的 724 条路径级记录重算候选 diff；`<reference-root>` 不能进入构建输入。许可证核对必须把 `LICENSE`、`THIRD_PARTY_NOTICES.md`、Cargo/PNPM lockfile、extension inventory 和实际分发文件逐项对照；本票不通过 `npx` 临时下载审计工具，不把网络可用性当作许可证证据。任何未能给出精确 hash、依赖来源、权限范围或许可证文本的项都保持阻断。
+
+候选证据同时记录 base/candidate 的 `rev-parse --verify <oid>^{commit}` 结果和
+`merge-base --is-ancestor <base> <candidate>` 结果；审计脚本会在只读参考树中重新执行这些
+检查。当前 base 解析退出 `128`、ancestry 为 `unproven`，所以路径/tree 比对不能被解释为
+已证明的增量 ancestry，也不能放行 release gate。审计还会重算 initial-import manifest
+的 Git tree；当前声明的 `fba189b8b3db23c45a4bfed18c0250018b251387` 与 manifest-derived
+`f6a559f45e266945921913f9752eb0e5b4609bdb` 不一致，因此该 base tree provenance 也保持
+blocked，不能用新 hash 覆盖旧证据。

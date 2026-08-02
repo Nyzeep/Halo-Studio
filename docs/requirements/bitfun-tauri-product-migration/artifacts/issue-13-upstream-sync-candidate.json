@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Read-only BitFun upstream candidate synchronization evidence for Halo Studio issue 13",
+  "operation": "incremental_sync",
+  "base": {
+    "upstreamRepository": "https://github.com/GCWing/BitFun.git",
+    "ref": "refs/heads/main",
+    "commit": "ca56631e38f36db675583288df2bd44c540d250a",
+    "haloInitialImportCommit": "58dd8fcdcf0fe97ee7b367751326000e95bb068d",
+    "haloDownstreamReviewBase": "416dbddb8b2a7f98cbbbb9f676075d8f33746039",
+    "initialImportManifest": "docs/requirements/bitfun-tauri-product-migration/bitfun-upstream-manifest.json",
+    "initialImportTree": "fba189b8b3db23c45a4bfed18c0250018b251387",
+    "manifestDerivedTree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
+    "treeBindingStatus": "mismatch",
+    "initialImportScope": "product/bitfun (renamed to product/Halo Studio by Halo brand adaptation)",
+    "resolution": {
+      "status": "unresolved",
+      "resolvedCommit": null,
+      "objectType": null,
+      "exitCode": 128,
+      "reason": "The shallow/grafted candidate reference checkout does not contain the pinned base object; this is not treated as ancestry evidence."
+    }
+  },
+  "candidate": {
+    "referenceRoot": "readonly-evidence://bitfun-latest",
+    "referenceRootRole": "read-only-evidence",
+    "referenceRootEnvironmentVariable": "HALO_BITFUN_REFERENCE_ROOT",
+    "branch": "main",
+    "commit": "1616ccaf73c0dabc50783344e583d304dd77622b",
+    "tree": "396a5fcd7423aa81e2f28610211f435599c94343",
+    "remote": "git@github.com:GCWing/BitFun.git",
+    "status": "clean; branch main is synchronized with origin/main",
+    "gitMetadata": "available locally; candidate checkout is shallow/grafted and its parent is unavailable",
+    "parentEvidence": {
+      "command": "git -c safe.directory=<HALO_BITFUN_REFERENCE_ROOT> -C <HALO_BITFUN_REFERENCE_ROOT> rev-parse HEAD^",
+      "exitCode": 128,
+      "result": "candidate parent is unavailable locally; no ancestry claim is made"
+    },
+    "resolution": {
+      "status": "resolved",
+      "resolvedCommit": "1616ccaf73c0dabc50783344e583d304dd77622b",
+      "objectType": "commit",
+      "exitCode": 0
+    },
+    "repositoryState": {
+      "isShallow": true,
+      "shallowFilePresent": true,
+      "graftsFilePresent": false,
+      "replaceRefs": []
+    }
+  },
+  "ancestry": {
+    "status": "unproven",
+    "exitCode": 128,
+    "command": "git -c safe.directory=<HALO_BITFUN_REFERENCE_ROOT> -C <HALO_BITFUN_REFERENCE_ROOT> merge-base --is-ancestor ca56631e38f36db675583288df2bd44c540d250a 1616ccaf73c0dabc50783344e583d304dd77622b",
+    "reason": "The base object is unavailable in the shallow/grafted candidate checkout; no ancestry claim is made."
+  },
+  "comparison": {
+    "method": "Compare the initial import manifest's path/mode/blob SHA entries with raw UTF-8 records from git ls-tree -r -l --full-tree -z HEAD from the read-only candidate; no checkout, merge, fetch, or push.",
+    "pathEncoding": "raw UTF-8 Git paths; the legacy non-NUL Git output is retained only as an encoding anomaly record",
+    "commands": [
+      "git -c safe.directory=<HALO_BITFUN_REFERENCE_ROOT> -C <HALO_BITFUN_REFERENCE_ROOT> status --porcelain=v2 --branch",
+      "git -c safe.directory=<HALO_BITFUN_REFERENCE_ROOT> -C <HALO_BITFUN_REFERENCE_ROOT> rev-parse HEAD",
+      "git -c safe.directory=<HALO_BITFUN_REFERENCE_ROOT> -C <HALO_BITFUN_REFERENCE_ROOT> rev-parse HEAD^{tree}",
+      "git -c safe.directory=<HALO_BITFUN_REFERENCE_ROOT> -C <HALO_BITFUN_REFERENCE_ROOT> ls-tree -r -l --full-tree HEAD",
+      "node product/Halo Studio/scripts/pi-extension-audit.mjs --manifest docs/architecture/pi-first-party-extension-inventory.json --json"
+    ],
+    "baseEntries": 5254,
+    "candidateEntries": 5362,
+    "identicalBlobOrModeEntries": 4641,
+    "modifiedEntries": 608,
+    "addedEntries": 113,
+    "removedEntries": 5,
+    "changedEntries": 726,
+    "legacyCQuotedCounts": {
+      "identical": 4641,
+      "modified": 608,
+      "added": 113,
+      "removed": 5,
+      "changedEntries": 726,
+      "anomaly": "The default C-quoted output splits one non-ASCII path into a delete/add pair; these are not canonical UTF-8 path changes."
+    },
+    "canonicalUtf8Counts": {
+      "identical": 4642,
+      "modified": 608,
+      "added": 112,
+      "removed": 4,
+      "changedEntries": 724
+    },
+    "recordsPath": "docs/requirements/bitfun-tauri-product-migration/artifacts/issue-13-upstream-sync-diff.json",
+    "topLevelChangedEntries": {
+      "src": 695,
+      "AGENTS.md": 1,
+      "AGENTS-CN.md": 1,
+      "BitFun-Installer": 4,
+      "Cargo.lock": 1,
+      "Cargo.toml": 1,
+      "deploy": 3,
+      "docs": 10,
+      "MiniApp": 1,
+      "package.json": 1,
+      "package-lock.json": 1,
+      "pnpm-lock.yaml": 1,
+      "scripts": 4
+    },
+    "representativeChangedPaths": {
+      "brandAndDesktopSurfaces": [
+        "src/apps/desktop/src/lib.rs",
+        "src/apps/desktop/src/runtime/mod.rs",
+        "src/apps/desktop/src/runtime/session_application.rs",
+        "src/apps/desktop/src/api/mod.rs"
+      ],
+      "workbenchRuntimeOverlap": [
+        "src/apps/desktop/src/lib.rs",
+        "src/apps/desktop/src/runtime/mod.rs",
+        "src/apps/desktop/src/runtime/session_application.rs",
+        "src/crates/contracts/runtime-ports/src/lib.rs",
+        "src/crates/assembly/core/src/runtime_ownership.rs",
+        "src/crates/assembly/core/src/service_agent_runtime.rs"
+      ],
+      "dependencyAndLicenseSurfaces": [
+        "Cargo.toml",
+        "Cargo.lock",
+        "package.json",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "BitFun-Installer/package.json",
+        "BitFun-Installer/package-lock.json"
+      ],
+      "sourcePolicySurfaces": [
+        "scripts/core-boundaries/rules/source/forbidden-rules.mjs",
+        "scripts/core-boundaries/rules/source/public-api-rules.mjs",
+        "scripts/core-boundaries/rules/source/required-rules.mjs",
+        "scripts/core-boundaries/self-test.mjs"
+      ]
+    },
+    "ancestryLimitation": "The candidate tree is not an ancestry diff from ca56631e in the local reference checkout because the candidate parent/base object is unavailable. The counts above are an exact manifest/blob comparison against the pinned initial-import evidence, not a fabricated git ancestry claim."
+  },
+  "conflictsAndDecisions": {
+    "mergeAttempted": false,
+    "automaticMerge": false,
+    "conflictMarkers": "not applicable: no merge was attempted",
+    "manualReviewRequired": [
+      "All 695 canonical changed src entries remain candidate-only evidence; none are applied to product/Halo Studio.",
+      "Candidate changes touching desktop/runtime and runtime-ports surfaces require a Halo-specific three-way review against the 416dbddb8 downstream base.",
+      "Candidate dependency/lockfile changes require a separate license and dependency closure review; Cargo.lock and package lockfiles are not changed by this task.",
+      "The candidate is not allowed to replace Halo's first-party extension, brand scope, Workbench Runtime owner, PiRpcPort, Pi RPC transport, or fail-closed permission boundary."
+    ],
+    "retainedHaloBrand": [
+      "product/Halo Studio/",
+      "product/Halo Studio/package.json",
+      "product/Halo Studio/LICENSE",
+      "product/THIRD_PARTY_NOTICES.md"
+    ],
+    "retainedWorkbenchRuntime": [
+      "product/Halo Studio/src/crates/contracts/runtime-ports/src/halo_workbench.rs",
+      "product/Halo Studio/src/crates/execution/agent-runtime/src/halo_workbench.rs",
+      "product/Halo Studio/src/crates/assembly/core/src/halo_workbench.rs",
+      "product/Halo Studio/src/apps/desktop/src/api/workbench_runtime_api.rs",
+      "product/Halo Studio/src/web-ui/src/infrastructure/workbench-runtime/"
+    ],
+    "retainedPiRpcPort": [
+      "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/",
+      "pi-rpc-p0 as the only P0 production identity",
+      "strict LF JSONL framing",
+      "--no-extensions --extension with the adapter-owned, hash-verified extension copy",
+      "fail-closed extension UI decisions and existing contract tests"
+    ],
+    "prohibitedActions": [
+      "No automatic merge or cherry-pick was performed.",
+      "No commit, push, fetch, or file write was performed in the BitFun reference tree.",
+      "The Pi read-only reference locator, any BitFun legacy path, and historical OpenCode paths were not used as build or runtime inputs.",
+      "No Pi Provider/Core/Session source was copied and no npm/Git dependency was added."
+    ]
+  },
+  "releaseGate": {
+    "status": "blocked",
+    "reason": "A candidate with exact tree/blob evidence is not a release candidate until manual conflict decisions, product/runtime verification, dependency closure, license evidence, and distribution-file checks are fresh and complete.",
+    "evidenceGaps": [
+      "The pinned base commit cannot be resolved in the shallow/grafted reference checkout; incremental-sync ancestry is unproven.",
+      "The declared initial-import tree does not reproduce from the recorded file manifest; the derived tree is recorded separately and requires provenance reconciliation.",
+      "Candidate parent ancestry is unavailable in the shallow reference checkout.",
+      "The candidate has not been applied or built in the Halo downstream tree.",
+      "The Pi host reference tree has no Git commit/tag evidence.",
+      "No exact desktop release artifact has been recorded for license/notice inspection."
+    ]
+  }
+}

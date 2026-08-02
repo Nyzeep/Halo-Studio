@@ -1,12 +1,14 @@
 # Halo first-party Pi extension audit
 
-Status: audit record for the issue-04 Pi RPC migration; release approval remains
+Status: audit record for issue 13's Pi extension and license-gate rehearsal; release approval remains
 blocked until the recorded source, dependency, permission, and license evidence
 is reviewed against the exact product tree that will be released.
 
-This record covers the only extension permitted on the Halo P0 path. It does
-not authorize Pi's default permissions, project extensions, user extensions,
-Pi packages, Provider extensions, or runtime downloads.
+This record covers the only Halo-owned extension permitted on the Halo P0 path.
+Pi inline built-ins are a separate host capability inventory and are not
+silently counted as Halo first-party extensions. This record does not authorize
+Pi's default permissions, project extensions, user extensions, Pi packages,
+Provider extensions, or runtime downloads.
 
 ## Fixed artifact
 
@@ -15,7 +17,7 @@ Pi packages, Provider extensions, or runtime downloads.
 | Extension ID | `halo-workbench-permission-gate` |
 | Fixed version | `1.0.0` (`HALO_PI_EXTENSION_VERSION`) |
 | Source file | `product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts` |
-| Source binding | The Adapter embeds the audited source with `include_str!`; the release candidate must record the source commit and `git hash-object` result. This migration is not committed, so no commit hash is asserted here. |
+| Source binding | The Adapter embeds the audited source with `include_str!`; the source last changed in `e8c445d6a81d90851ac03d6aac7a4f11b6b749a3` and its current `git hash-object` is `15d6908cc30e45f8812a87c591e58799d2f7ae69`. |
 | SHA-256 | `A6F704110E56BE3C1C0754DADDE1BE2B27F65C76EE03F2C19A1E43CD06848C0B` |
 | Load boundary | The Adapter copies the verified source to its own task/process temporary directory and loads only the exact path with `--no-extensions --extension <exact-path>`. It must not load from the project `.pi` tree or the user-wide Pi directory. |
 | Cleanup | The task/process temporary extension directory is removed during normal stop, abort, EOF, failure, and application exit cleanup. A cleanup failure is a failed gate, not a successful release result. |
@@ -45,8 +47,13 @@ Pi packages, Provider extensions, or runtime downloads.
   download to Cargo or PNPM lockfiles.
 - The runtime loader is supplied by the user's installed Pi. Halo must not
   download from npm, Git, a project `.pi/extensions` directory, or an arbitrary
-  extension path at runtime. `D:\pi-main` is read-only reference material and
+  extension path at runtime. `<PI_REFERENCE_ROOT>` is read-only reference material and
   is not a source, dependency, or build input.
+- Pi 0.83.0 always injects the hidden `llama.cpp` extension as an inline built-in;
+  `--no-extensions` closes project/user discovery but does not remove that
+  built-in. The inventory records its network, token-file, credential and model
+  state capabilities and keeps it `releaseEligible: false` until a separately
+  pinned, license-complete host boundary is approved.
 - Any dependency, transitive dependency, package source, or generated bundle
   change requires a new fixed version, hash, inventory, and acceptance review.
 
@@ -82,9 +89,45 @@ cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-ada
 The expected SHA-256 is the value recorded above. A mismatch, missing source,
 new runtime dependency, or unreviewed license is a blocking difference.
 
+The machine-readable inventory is
+`docs/architecture/pi-first-party-extension-inventory.json`. It records the
+fixed source version, source commit/tag, Git object hash, SHA-256, load
+arguments, tool/event surface, host permissions, direct/transitive dependency
+boundary, license evidence, and update responsibility. The audit CLI is
+`product/Halo Studio/scripts/pi-extension-audit.mjs`; it is intentionally
+fail-closed and returns exit code `1` while the release gate is blocked.
+For a fresh check of the external candidate tree, set the local read-only
+checkout through `HALO_BITFUN_REFERENCE_ROOT`; the committed evidence stores
+only the `readonly-evidence://bitfun-latest` locator and never a machine path.
+
+The current inventory remains blocked because the read-only Pi host tree has no
+Git commit/tag, its package closure is not a Halo lockfile dependency or Halo
+release artifact, its inline `llama.cpp` built-in is not release-eligible, the
+workspace member boundary is duplicated, and no exact desktop distribution
+artifact has yet been recorded for the license/notice inclusion check. The Pi
+package license is not inferred from its name; any future bundled Pi
+distribution requires its own license, attribution, source provenance, and
+complete dependency review.
+
+## Pi host built-in boundary
+
+The candidate host is Pi `0.83.0`. Pi's `builtInExtensions` includes hidden
+`llama.cpp` factories that are loaded even when `--no-extensions` is present;
+the flag disables discovery paths, not inline factories. The read-only evidence
+is `<PI_REFERENCE_ROOT>/packages/coding-agent/src/extensions/index.ts`,
+`main.ts`, `resource-loader.ts`, and the `llama` source files recorded in the
+machine-readable inventory.
+
+The observed built-in can register a provider and model command, access a
+configured llama.cpp HTTP/HTTPS server and Hugging Face endpoints, read
+`LLAMA_API_KEY`, `LLAMA_BASE_URL`, `HF_TOKEN` and token files, and persist model
+state. It has no exact Git source commit/tag in the host tree and no Halo
+release license/notice closure. It is therefore explicitly excluded from the
+Halo first-party inventory and blocks the release gate.
+
 ## Migration verification command set
 
-The following are the issue-04 documentation gate commands. They must use a
+The following are the issue-13 documentation gate commands. They must use a
 fake Pi child process or protocol fixture; they must not start a real
 `pi --mode rpc`, send a prompt, or read credentials.
 
