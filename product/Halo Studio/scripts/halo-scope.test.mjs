@@ -70,6 +70,66 @@ test('Tauri hooks resolve to the BitFun Web UI dev server and dist output', () =
   ]);
 });
 
+test('Halo declares the main window without letting Tauri create it', () => {
+  const config = JSON.parse(read('src/apps/halo-desktop/tauri.conf.json'));
+  assert.equal(config.app.windows?.length, 1);
+  assert.equal(config.app.windows[0].label, 'main');
+  assert.equal(config.app.windows[0].create, false);
+  assert.match(config.app.windows[0].title, /Halo Studio/);
+});
+
+test('Halo grants the native window commands through its own capability', () => {
+  const config = JSON.parse(read('src/apps/halo-desktop/tauri.conf.json'));
+  const capability = JSON.parse(read('src/apps/halo-desktop/capabilities/default.json'));
+  assert.deepEqual(config.app.security.capabilities, ['halo-default']);
+  assert.equal(capability.identifier, 'halo-default');
+  assert.deepEqual(capability.windows, ['main']);
+  for (const permission of [
+    'core:window:allow-is-maximized',
+    'core:window:allow-maximize',
+    'core:window:allow-unmaximize',
+  ]) {
+    assert.ok(capability.permissions.includes(permission), permission);
+  }
+});
+
+test('Halo keeps runtime logging and storage cleanup on its own log root', () => {
+  const haloMain = read('src/apps/halo-desktop/src/main.rs');
+  const desktopLib = read('src/apps/desktop/src/lib.rs');
+  const logging = read('src/apps/desktop/src/logging.rs');
+  const storageCommands = read('src/apps/desktop/src/api/storage_commands.rs');
+  const storageCleanup = read('src/crates/assembly/core/src/infrastructure/storage/cleanup.rs');
+  const pathManager = read('src/crates/assembly/core/src/infrastructure/app_paths/path_manager.rs');
+  const haloCargo = read('src/apps/halo-desktop/Cargo.toml');
+
+  assert.match(haloMain, /product_logs_root\("Halo Studio"\)/);
+  assert.match(haloMain, /DesktopRunOptions::with_logs_root/);
+  assert.match(desktopLib, /run_with_context_and_options/);
+  assert.match(logging, /set_logs_root_override/);
+  assert.match(logging, /pub fn product_logs_root/);
+  assert.match(logging, /HALO_LOG_DIR/);
+  assert.match(storageCommands, /crate::logging::logs_root\(\)/);
+  assert.match(storageCleanup, /new_with_logs_dir/);
+  assert.doesNotMatch(
+    pathManager,
+    /pub async fn initialize_user_directories[\s\S]*?self\.logs_dir\(\)/
+  );
+  assert.doesNotMatch(haloMain, /BITFUN_LOG_DIR|BITFUN_E2E_LOG_DIR/);
+  for (const dependency of [
+    'tauri-plugin-log.workspace = true',
+    'tauri-plugin-window-state.workspace = true',
+  ]) {
+    assert.match(haloCargo, new RegExp(dependency.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
+test('Halo uses its product identifier for the default WebView2 profile', () => {
+  const config = JSON.parse(read('src/apps/halo-desktop/tauri.conf.json'));
+  const theme = read(join('src', 'apps', 'desktop', 'src', 'theme.rs'));
+  assert.equal(config.identifier, 'com.halostudio.desktop');
+  assert.doesNotMatch(theme, /\.data_directory\(|HALO_WEBVIEW_DATA_DIR|isolated WebView2 data directory/);
+});
+
 test('Vite desktop build uses the real BitFun Web UI entry and Halo dist path', () => {
   const webPackageJson = JSON.parse(read(join('src', 'web-ui', 'package.json')));
   const viteConfig = read(join('src', 'web-ui', 'vite.config.ts'));
@@ -97,8 +157,16 @@ test('Halo wrapper forwards Cargo profiles after the Tauri arguments', () => {
   assert.match(wrapper, /const cargoArgs = \[\];/);
   assert.match(wrapper, /cargoArgs\.push\('--profile', profile\)/);
   assert.match(wrapper, /\.\.\.\(cargoArgs\.length > 0 \? \['--', \.\.\.cargoArgs\] : \[\]\)/);
-  assert.match(haloMain, /bitfun_desktop_lib::run_with_context\(tauri::generate_context!\(\)\)\.await/);
+  assert.match(haloMain, /bitfun_desktop_lib::run_with_context_and_options/);
   assert.doesNotMatch(haloMain, /tauri::Builder::default\(\)\s*\.run/);
+});
+
+test('Halo production builds enable Tauri custom protocol while dev keeps Vite', () => {
+  const wrapper = read(join('scripts', 'halo-tauri.mjs'));
+  const desktopCargo = read(join('src', 'apps', 'halo-desktop', 'Cargo.toml'));
+  assert.match(wrapper, /mode === 'build'/);
+  assert.match(wrapper, /'--features', 'custom-protocol'/);
+  assert.match(desktopCargo, /custom-protocol = \["tauri\/custom-protocol"\]/);
 });
 
 test('Halo preview launches the debug binary beside the Web UI dev server', () => {

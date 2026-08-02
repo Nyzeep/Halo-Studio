@@ -138,10 +138,6 @@ impl DeterministicPiRpc {
             .expect("runtime listener is active");
     }
 
-    fn close_events(&self) {
-        self.events.lock().expect("events lock").take();
-    }
-
     fn commands(&self) -> Vec<PiRpcCommand> {
         self.commands.lock().expect("commands lock").clone()
     }
@@ -183,19 +179,6 @@ impl DeterministicPiRpc {
             Some(CommandKind::ResolveOperation) => self.resolve_gate.wait_if_enabled().await,
             Some(CommandKind::Shutdown) => self.shutdown_gate.wait_if_enabled().await,
             None => {}
-        }
-    }
-
-    fn command_gate(&self, kind: CommandKind) -> &CommandGate {
-        match kind {
-            CommandKind::Probe => &self.probe_gate,
-            CommandKind::Start => &self.start_gate,
-            CommandKind::CreateSession => &self.create_session_gate,
-            CommandKind::SendUserInput => &self.send_user_input_gate,
-            CommandKind::StopSession => &self.stop_session_gate,
-            CommandKind::EndSession => &self.end_session_gate,
-            CommandKind::ResolveOperation => &self.resolve_gate,
-            CommandKind::Shutdown => &self.shutdown_gate,
         }
     }
 
@@ -277,21 +260,6 @@ impl WorkbenchWorkspaceFactsPort for RevocableWorkspaceFacts {
             trusted: self.trusted.load(Ordering::Acquire),
             git_repository: true,
         })
-    }
-}
-
-struct FailingWorkspaceFacts;
-
-#[async_trait]
-impl WorkbenchWorkspaceFactsPort for FailingWorkspaceFacts {
-    async fn inspect(
-        &self,
-        _request: WorkbenchWorkspaceFactsRequest,
-    ) -> PortResult<WorkbenchWorkspaceFacts> {
-        Err(PortError::new(
-            PortErrorKind::Backend,
-            "workspace-port-canary",
-        ))
     }
 }
 
@@ -476,56 +444,6 @@ async fn wait_for_no_pending_operation(runtime: &HaloWorkbenchRuntime, operation
     })
     .await
     .expect("operation leaves the pending set");
-}
-
-async fn assert_session_command_is_fenced_by_close(
-    kind: CommandKind,
-    build_intent: fn(String) -> HaloWorkbenchIntent,
-) {
-    let adapter = Arc::new(DeterministicPiRpc::new());
-    let runtime = build_runtime(adapter.clone());
-    let generation = open_ready(&runtime, &adapter, "open-session-fence", "fence").await;
-    let session_id =
-        create_idle_session(&runtime, &adapter, generation, "create-session-fence").await;
-    adapter.clear_commands();
-    adapter.command_gate(kind).block();
-
-    let command_runtime = runtime.clone();
-    let command = tokio::spawn(async move {
-        command_runtime
-            .submit(HaloWorkbenchIntentRequest {
-                request_id: format!("fenced-{kind:?}"),
-                intent: build_intent(session_id),
-            })
-            .await
-    });
-    adapter.command_gate(kind).wait_until_started().await;
-
-    let close_runtime = runtime.clone();
-    adapter.shutdown_gate.block();
-    let close = tokio::spawn(async move {
-        close_runtime
-            .submit(HaloWorkbenchIntentRequest {
-                request_id: format!("close-fenced-{kind:?}"),
-                intent: HaloWorkbenchIntent::CloseWorkspace,
-            })
-            .await
-    });
-    wait_for_phase(&runtime, HaloWorkbenchPhase::Stopping).await;
-    assert_eq!(adapter.count(CommandKind::Shutdown), 0);
-    adapter.command_gate(kind).release();
-
-    let error = command
-        .await
-        .expect("session command task")
-        .expect_err("close supersedes an in-flight session command");
-    assert_eq!(error.code, "runtime_not_ready");
-    adapter.shutdown_gate.wait_until_started().await;
-    adapter.shutdown_gate.release();
-    close.await.expect("close task").expect("close accepted");
-    assert_eq!(adapter.count(kind), 1);
-    assert_eq!(adapter.count(CommandKind::Shutdown), 1);
-    assert_eq!(runtime.snapshot().phase, HaloWorkbenchPhase::Disconnected);
 }
 
 #[tokio::test]

@@ -2,6 +2,7 @@
 
 use crate::infrastructure::PathManager;
 use crate::util::errors::*;
+use std::path::PathBuf;
 
 pub use bitfun_services_core::storage_cleanup::{CleanupCategory, CleanupPolicy, CleanupResult};
 
@@ -11,9 +12,17 @@ pub struct CleanupService {
 
 impl CleanupService {
     pub fn new(path_manager: PathManager, policy: CleanupPolicy) -> Self {
+        Self::new_with_logs_dir(path_manager.clone(), policy, path_manager.logs_dir())
+    }
+
+    pub fn new_with_logs_dir(
+        path_manager: PathManager,
+        policy: CleanupPolicy,
+        logs_dir: PathBuf,
+    ) -> Self {
         let roots = bitfun_services_core::storage_cleanup::CleanupRoots {
             temp_dir: path_manager.temp_dir(),
-            logs_dir: path_manager.logs_dir(),
+            logs_dir,
             cache_dir: path_manager.cache_root(),
         };
         Self {

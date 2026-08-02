@@ -35,7 +35,7 @@ pub async fn get_storage_paths(state: State<'_, AppState>) -> Result<StoragePath
         user_config_dir: path_manager.user_config_dir(),
         user_data_dir: path_manager.user_data_dir(),
         cache_root: path_manager.cache_root(),
-        logs_dir: path_manager.logs_dir(),
+        logs_dir: crate::logging::logs_root(),
         temp_dir: path_manager.temp_dir(),
     })
 }
@@ -75,7 +75,11 @@ pub async fn cleanup_storage(state: State<'_, AppState>) -> Result<CleanupResult
     let path_manager = workspace_service.path_manager();
 
     let policy = CleanupPolicy::default();
-    let cleanup_service = CleanupService::new((**path_manager).clone(), policy);
+    let cleanup_service = CleanupService::new_with_logs_dir(
+        (**path_manager).clone(),
+        policy,
+        crate::logging::logs_root(),
+    );
 
     cleanup_service
         .cleanup_all()
@@ -91,7 +95,11 @@ pub async fn cleanup_storage_with_policy(
     let workspace_service = &state.workspace_service;
     let path_manager = workspace_service.path_manager();
 
-    let cleanup_service = CleanupService::new((**path_manager).clone(), policy);
+    let cleanup_service = CleanupService::new_with_logs_dir(
+        (**path_manager).clone(),
+        policy,
+        crate::logging::logs_root(),
+    );
 
     cleanup_service
         .cleanup_all()
@@ -106,7 +114,7 @@ pub async fn get_storage_statistics(state: State<'_, AppState>) -> Result<Storag
 
     let config_size = calculate_dir_size(&path_manager.user_config_dir()).await?;
     let cache_size = calculate_dir_size(&path_manager.cache_root()).await?;
-    let logs_size = calculate_dir_size(&path_manager.logs_dir()).await?;
+    let logs_size = calculate_dir_size(&crate::logging::logs_root()).await?;
     let temp_size = calculate_dir_size(&path_manager.temp_dir()).await?;
 
     let total_size = config_size + cache_size + logs_size + temp_size;

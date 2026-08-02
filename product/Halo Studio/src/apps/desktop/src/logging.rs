@@ -24,6 +24,7 @@ const FLOW_CHAT_LOG_MAX_BATCH_ENTRIES: usize = 256;
 const FLOW_CHAT_LOG_MAX_BATCH_BYTES: usize = 1024 * 1024;
 const FLOW_CHAT_LOG_MAX_ENTRY_BYTES: usize = 32 * 1024;
 static SESSION_LOG_DIR: OnceLock<PathBuf> = OnceLock::new();
+static LOGS_ROOT_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
 // Default to Debug in early development for easier diagnostics
 static CURRENT_LOG_LEVEL: AtomicU8 = AtomicU8::new(level_filter_to_u8(log::LevelFilter::Debug));
 static FLOW_CHAT_DIAGNOSTICS_WRITE_LOCK: Mutex<()> = Mutex::new(());
@@ -51,6 +52,10 @@ fn is_embedded_webdriver_mode() -> bool {
 }
 
 fn resolve_logs_root() -> PathBuf {
+    if let Some(path) = LOGS_ROOT_OVERRIDE.get() {
+        return path.clone();
+    }
+
     if let Some(path) = std::env::var_os("BITFUN_LOG_DIR").map(PathBuf::from) {
         return path;
     }
@@ -64,6 +69,29 @@ fn resolve_logs_root() -> PathBuf {
     }
 
     get_path_manager_arc().logs_dir()
+}
+
+/// Set the product-owned log root before desktop startup creates its session.
+///
+/// The shared desktop crate keeps BitFun's historical path as its default, but
+/// product shells can provide an explicit root before `LogConfig::new` runs.
+pub fn set_logs_root_override(path: PathBuf) {
+    let _ = LOGS_ROOT_OVERRIDE.set(path);
+}
+
+/// Resolve the root that owns the current process's log sessions.
+pub fn logs_root() -> PathBuf {
+    resolve_logs_root()
+}
+
+/// Resolve a product-specific log root without consulting BitFun's path manager.
+pub fn product_logs_root(product_name: &str) -> PathBuf {
+    if let Some(path) = std::env::var_os("HALO_LOG_DIR") {
+        return PathBuf::from(path);
+    }
+
+    let config_root = dirs::config_dir().unwrap_or_else(std::env::temp_dir);
+    config_root.join(product_name).join("logs")
 }
 
 impl LogConfig {

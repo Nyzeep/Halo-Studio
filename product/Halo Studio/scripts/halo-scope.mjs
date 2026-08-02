@@ -405,7 +405,16 @@ export function verifyHaloScope(rootDir = ROOT) {
   requireContains(webMain, '<App />', 'src/web-ui/src/main.tsx');
 
   const haloDesktopMain = readText(desktopMain);
-  requireContains(haloDesktopMain, 'bitfun_desktop_lib::run_with_context(tauri::generate_context!()).await', 'src/apps/halo-desktop/src/main.rs');
+  requireContains(
+    haloDesktopMain,
+    'bitfun_desktop_lib::run_with_context_and_options',
+    'src/apps/halo-desktop/src/main.rs',
+  );
+  requireContains(
+    haloDesktopMain,
+    'bitfun_desktop_lib::DesktopRunOptions::with_logs_root',
+    'src/apps/halo-desktop/src/main.rs',
+  );
   requireNoMatch(haloDesktopMain, /tauri::Builder::default\(\)\s*\.run/, 'src/apps/halo-desktop/src/main.rs');
 
   const viteConfig = readText(webVitePath);

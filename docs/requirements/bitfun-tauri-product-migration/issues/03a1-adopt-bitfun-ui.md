@@ -149,7 +149,7 @@ Halo 适配仅限产品名、图标、启动标题、核心中文文案、`local
 
 ## 不在本票范围
 
-- 不实现 Workbench Runtime command/event 契约，不迁移 OpenCode、凭据、受管任务或中断语义。
+- 不实现 Workbench Runtime command/event 契约，不迁移 Pi RPC、凭据、受管任务或中断语义；历史 OpenCode 只作为迁移比较材料保留。
 - 不把 BitFun 全部办公、远程、Relay、移动端能力接入 Halo。
 - 不修改或提交 `D:\BitFun-main`，不向 BitFun 上游推送 Halo 改动。
 - 不安装软件，不修改系统 PATH、注册表、全局 Cargo 配置或系统环境变量。

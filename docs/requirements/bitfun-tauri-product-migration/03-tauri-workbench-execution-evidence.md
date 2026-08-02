@@ -425,7 +425,7 @@ Ticket 03 is now **ready-for-review**.
 
 ## Historical boundary note (pre-03a/WiX unblock; superseded where noted)
 
-本轮没有修改 `D:\BitFun-main`、主工作区、`Cargo.lock` 或系统配置，没有提交或推送，没有关闭 GitHub Issue，也没有进入工单 04 的 Runtime 契约、真实 OpenCode 会话或工单 14 UI 验收。
+本轮没有修改 `D:\BitFun-main`、主工作区、`Cargo.lock` 或系统配置，没有提交或推送，没有关闭 GitHub Issue，也没有进入工单 04 的 Runtime 契约、真实 Pi RPC 会话或工单 14 UI 验收。
 
 ## Final boundary/status after WiX unblock (2026-07-30)
 

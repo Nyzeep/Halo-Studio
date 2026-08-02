@@ -438,7 +438,31 @@ pub async fn run() {
     run_with_context(tauri::generate_context!()).await;
 }
 
+#[derive(Debug, Default)]
+pub struct DesktopRunOptions {
+    logs_root: Option<std::path::PathBuf>,
+}
+
+impl DesktopRunOptions {
+    pub fn with_logs_root(path: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            logs_root: Some(path.into()),
+        }
+    }
+}
+
 pub async fn run_with_context(context: tauri::Context<tauri::Wry>) {
+    run_with_context_and_options(context, DesktopRunOptions::default()).await;
+}
+
+pub async fn run_with_context_and_options(
+    context: tauri::Context<tauri::Wry>,
+    options: DesktopRunOptions,
+) {
+    if let Some(logs_root) = options.logs_root {
+        logging::set_logs_root_override(logs_root);
+    }
+
     let startup_started = Instant::now();
     let startup_trace_id = SystemTime::now()
         .duration_since(UNIX_EPOCH)
