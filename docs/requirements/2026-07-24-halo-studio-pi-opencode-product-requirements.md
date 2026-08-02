@@ -1,4 +1,11 @@
-# Halo Studio Pi 与 OpenCode 受管工作台产品需求
+---
+status: historical
+superseded by: docs/requirements/bitfun-tauri-product-migration/00-bitfun-tauri-product-migration-spec.md and ADR-0072
+---
+
+# Halo Studio Pi 与 OpenCode 受管工作台产品需求（历史版本）
+
+> 本文记录 2026-07-24 的 Electron/Pi/OpenCode 双执行器阶段。它不是当前活动需求，不得指导 P0 实现；当前 P0 以 Halo Workbench Runtime、Pi RPC 和迁移工单 03B → 04 为准。
 
 **状态：** 已确认
 

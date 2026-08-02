@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { agentAPI } from '@/infrastructure/api';
 import { systemAPI } from '@/infrastructure/api/service-api/SystemAPI';
 import { configManager } from '@/infrastructure/config/services/ConfigManager';
-import { flowChatStore } from '@/flow_chat/store/FlowChatStore';
 import { useI18n } from '@/infrastructure/i18n';
+import { isHaloLocalCodingScope } from '@/infrastructure/runtime';
 import { createLogger } from '@/shared/utils/logger';
 import {
   buildDialogCompletionNotificationCopy,
@@ -29,58 +28,69 @@ export const useDialogCompletionNotify = () => {
   const windowFocusedRef = useRef(true);
 
   useEffect(() => {
+    if (isHaloLocalCodingScope()) return;
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
     const handleFocus = () => { windowFocusedRef.current = true; };
     const handleBlur = () => { windowFocusedRef.current = false; };
 
     window.addEventListener('focus', handleFocus);
     window.addEventListener('blur', handleBlur);
 
-    const unlisten = agentAPI.onDialogTurnCompleted(async (event) => {
-      // Send notification if page is hidden OR window lost OS focus
-      const isBackground = document.hidden || !windowFocusedRef.current;
+    void Promise.all([
+      import('@/infrastructure/api/service-api/AgentAPI'),
+      import('@/flow_chat/store/FlowChatStore'),
+    ]).then(([{ agentAPI }, { flowChatStore }]) => {
+      if (disposed) return;
+      unlisten = agentAPI.onDialogTurnCompleted(async (event) => {
+        const isBackground = document.hidden || !windowFocusedRef.current;
 
-      let enabled = true;
-      try {
-        enabled = await configManager.getConfig<boolean>(
-          'app.notifications.dialog_completion_notify'
+        let enabled = true;
+        try {
+          enabled = await configManager.getConfig<boolean>(
+            'app.notifications.dialog_completion_notify'
+          );
+        } catch (error) {
+          log.warn('Failed to read dialog_completion_notify config', error);
+        }
+
+        const sessionId: string = event?.sessionId ?? '';
+        const session = sessionId
+          ? flowChatStore.getState().sessions.get(sessionId)
+          : undefined;
+        if (
+          !shouldSendDialogCompletionNotification({
+            event,
+            session,
+            isBackground,
+            notificationsEnabled: enabled,
+          })
+        ) {
+          return;
+        }
+
+        const notificationCopy = buildDialogCompletionNotificationCopy({
+          sessionTitle: session?.title,
+          success: event?.success,
+          finishReason: event?.finishReason ?? event?.finish_reason,
+          t,
+        });
+
+        await systemAPI.sendSystemNotification(
+          notificationCopy.title,
+          notificationCopy.body,
         );
-      } catch (error) {
-        log.warn('Failed to read dialog_completion_notify config', error);
-      }
-
-      // Resolve session title from store; fall back to short session id
-      const sessionId: string = event?.sessionId ?? '';
-      const session = sessionId
-        ? flowChatStore.getState().sessions.get(sessionId)
-        : undefined;
-      if (
-        !shouldSendDialogCompletionNotification({
-          event,
-          session,
-          isBackground,
-          notificationsEnabled: enabled,
-        })
-      ) {
-        return;
-      }
-
-      const notificationCopy = buildDialogCompletionNotificationCopy({
-        sessionTitle: session?.title,
-        success: event?.success,
-        finishReason: event?.finishReason ?? event?.finish_reason,
-        t,
       });
-
-      await systemAPI.sendSystemNotification(
-        notificationCopy.title,
-        notificationCopy.body,
-      );
+    }).catch(error => {
+      if (!disposed) log.warn('Failed to initialize dialog completion notifications', error);
     });
 
     return () => {
+      disposed = true;
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('blur', handleBlur);
-      unlisten();
+      unlisten?.();
     };
   }, [t]);
 };

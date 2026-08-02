@@ -1,0 +1,93 @@
+.bitfun-workbench-session-scene {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--color-bg-scene);
+  color: var(--color-text-primary);
+
+  &--entering {
+    animation: bitfun-workbench-session-enter 140ms ease-out;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 48px;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  &__heading {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  &__workspace {
+    overflow: hidden;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__phase,
+  &__adapter,
+  &__session-phase {
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-xs);
+  }
+
+  &__adapter {
+    flex: 0 0 auto;
+  }
+
+  &__body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: auto;
+    padding: 14px 18px;
+  }
+
+  &__state,
+  &__session {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 34px;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+  }
+
+  &__state.is-error {
+    color: var(--color-status-error);
+  }
+
+  &__session-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@keyframes bitfun-workbench-session-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bitfun-workbench-session-scene--entering {
+    animation: none;
+  }
+}

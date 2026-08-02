@@ -1,10 +1,12 @@
 ---
-status: superseded by ADR-0071 for P0
+status: superseded by ADR-0072 for P0 executor scope
 ---
+
+> Historical dual-executor context. The current P0 vertical slice uses only the Pi RPC Adapter; historical OpenCode Server, BitFun Code Agent, and cross-executor handoff are not production paths.
 
 # 可验证双 Agent 编码交付工作流
 
-在核心安全边界完成后，Halo Studio 将面向个人本地开发者，以受信任 Git 工作区中的 Pi/OpenCode 显式任务、Git 增量证据、用户审查和手动交接作为首个用户可用纵切。该选择优先提供可解释、可恢复的编码交付，而不复制通用 AI 平台的自动编排、任意 Shell、Git 自动写入、远程协作或办公生态；它保留两种受管应用的原生权限与写入语义，并让接受结论和 Git/发布操作保持分离。
+在核心安全边界完成后，本文曾以 Pi/OpenCode 双执行器设想描述首个用户可用纵切。该记录保留为历史产品工作流背景；当前 P0 的唯一执行器、权限门控和交付链以 ADR-0072 的 Pi RPC 决策为准。
 
 ## Considered Options
 
@@ -14,4 +16,4 @@ status: superseded by ADR-0071 for P0
 
 这些选项都会扩大权限和兼容性边界，并掩盖 Pi/OpenCode 的原生语义，因此不进入首个交付工作流。
 
-ADR-0071 取消 P0 双 Agent 范围：当前首个纵切只通过 OpenCode Server Adapter 交付；Pi 与执行器交接留待 P0 之后重新决策。
+ADR-0072 进一步取消 P0 双 Agent 范围：当前首个纵切只通过 Pi RPC Adapter 交付；历史 OpenCode Server、BitFun 内置 Code Agent 和跨执行器交接留待独立决策。

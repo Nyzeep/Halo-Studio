@@ -4365,4 +4365,33 @@ export const forbiddenContentUnderRules = [
       },
     ],
   },
+  {
+    path: 'src',
+    reason:
+      'Pi RPC Workbench execution adapter imports are limited to the reviewed product assembly module',
+    patterns: [
+      {
+        regex:
+          /\b(?:use\s+bitfun_pi_rpc_adapter\b|extern\s+crate\s+bitfun_pi_rpc_adapter\b|bitfun_pi_rpc_adapter::)/,
+        allowPaths: [
+          'src/crates/assembly/core/src/halo_workbench.rs',
+        ],
+        message:
+          'only Halo Workbench product assembly may import bitfun-pi-rpc-adapter; other layers consume the stable PiRpcPort seam',
+      },
+    ],
+  },
+  {
+    path: 'BitFun-Installer/src-tauri',
+    reason:
+      'Pi RPC Workbench execution adapter imports are limited to the reviewed product assembly module',
+    patterns: [
+      {
+        regex:
+          /\b(?:use\s+bitfun_pi_rpc_adapter\b|extern\s+crate\s+bitfun_pi_rpc_adapter\b|bitfun_pi_rpc_adapter::)/,
+        message:
+          'installer code must not import or assemble the Halo Workbench Pi RPC adapter',
+      },
+    ],
+  },
 ];

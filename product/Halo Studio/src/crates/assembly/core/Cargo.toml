@@ -142,6 +142,7 @@ bitfun-runtime-services = { path = "../../execution/runtime-services" }
 
 # Reviewed product-full plugin composition root.
 bitfun-opencode-adapter = { path = "../../adapters/opencode-adapter", optional = true }
+bitfun-pi-rpc-adapter = { path = "../../adapters/pi-rpc-adapter", optional = true }
 bitfun-claude-code-adapter = { path = "../../adapters/claude-code-adapter", optional = true }
 bitfun-codex-adapter = { path = "../../adapters/codex-adapter", optional = true }
 bitfun-plugin-runtime-client = { path = "../../execution/plugin-runtime-client", optional = true }
@@ -180,6 +181,7 @@ product-full = [
     "dep:globset",
     "dep:include_dir",
     "dep:bitfun-opencode-adapter",
+    "dep:bitfun-pi-rpc-adapter",
     "dep:bitfun-claude-code-adapter",
     "dep:bitfun-codex-adapter",
     "dep:bitfun-external-sources",

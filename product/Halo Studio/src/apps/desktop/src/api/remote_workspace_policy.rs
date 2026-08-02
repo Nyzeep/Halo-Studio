@@ -743,6 +743,14 @@ pub const REMOTE_WORKSPACE_COMMAND_POLICIES: &[(&str, RemoteWorkspacePolicy)] = 
         "hide_main_window_after_close_request",
         RemoteWorkspacePolicy::LocalOnly,
     ),
+    (
+        "halo_workbench_runtime_snapshot",
+        RemoteWorkspacePolicy::RemoteUnsupported,
+    ),
+    (
+        "halo_workbench_runtime_submit_intent",
+        RemoteWorkspacePolicy::RemoteUnsupported,
+    ),
     ("i18n_get_config", RemoteWorkspacePolicy::WorkspaceAgnostic),
     (
         "i18n_get_current_language",
@@ -1939,7 +1947,7 @@ mod tests {
         block[..end]
             .lines()
             .map(str::trim)
-            .filter(|line| !line.is_empty() && !line.starts_with("//"))
+            .filter(|line| !line.is_empty() && !line.starts_with("//") && !line.starts_with("#["))
             .map(|line| {
                 let entry = line.trim_end_matches(',');
                 entry

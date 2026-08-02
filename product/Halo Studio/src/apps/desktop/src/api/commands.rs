@@ -36,6 +36,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+#[cfg(feature = "halo-local-coding")]
+use tauri::Manager;
 use tauri::{AppHandle, Emitter, State};
 
 struct WorkspaceStateSnapshot {
@@ -81,6 +83,22 @@ fn remote_workspace_from_info(info: &WorkspaceInfo) -> Option<crate::api::Remote
         connection_name: name,
         ssh_host,
     })
+}
+
+#[cfg(feature = "halo-local-coding")]
+async fn close_halo_workbench_before_workspace_transition(app: &AppHandle) -> Result<(), String> {
+    let runtime = app
+        .try_state::<crate::runtime::DesktopRuntimeContext>()
+        .ok_or_else(|| "Halo Workbench Runtime state is unavailable".to_string())?;
+    runtime
+        .close_halo_workbench_workspace()
+        .await
+        .map_err(|error| format!("Halo Workbench Runtime cleanup failed: {}", error.code))
+}
+
+#[cfg(not(feature = "halo-local-coding"))]
+async fn close_halo_workbench_before_workspace_transition(_app: &AppHandle) -> Result<(), String> {
+    Ok(())
 }
 
 fn lock_active_searches<'a>(
@@ -1357,6 +1375,7 @@ pub async fn open_workspace(
     app: tauri::AppHandle,
     request: OpenWorkspaceRequest,
 ) -> Result<WorkspaceInfoDto, String> {
+    close_halo_workbench_before_workspace_transition(&app).await?;
     match state
         .workspace_service
         .open_workspace(request.path.clone().into())
@@ -1396,6 +1415,7 @@ pub async fn open_remote_workspace(
     app: tauri::AppHandle,
     request: OpenRemoteWorkspaceRequest,
 ) -> Result<WorkspaceInfoDto, String> {
+    close_halo_workbench_before_workspace_transition(&app).await?;
     use bitfun_core::service::remote_ssh::normalize_remote_workspace_path;
     use bitfun_core::service::remote_ssh::workspace_state::remote_workspace_stable_id;
     use bitfun_core::service::workspace::WorkspaceCreateOptions;
@@ -1527,6 +1547,7 @@ pub async fn create_assistant_workspace(
     app: tauri::AppHandle,
     _request: CreateAssistantWorkspaceRequest,
 ) -> Result<WorkspaceInfoDto, String> {
+    close_halo_workbench_before_workspace_transition(&app).await?;
     match state
         .workspace_service
         .create_assistant_workspace(None)
@@ -1602,6 +1623,7 @@ pub async fn delete_assistant_workspace(
         .unwrap_or(false);
 
     if is_active_workspace {
+        close_halo_workbench_before_workspace_transition(&app).await?;
         state
             .workspace_service
             .close_workspace(&request.workspace_id)
@@ -1734,6 +1756,16 @@ pub async fn reset_assistant_workspace(
         ));
     }
 
+    let is_active_workspace = state
+        .workspace_service
+        .get_current_workspace()
+        .await
+        .map(|workspace| workspace.id == request.workspace_id)
+        .unwrap_or(false);
+    if is_active_workspace {
+        close_halo_workbench_before_workspace_transition(&app).await?;
+    }
+
     clear_directory_contents(&workspace_info.root_path).await?;
 
     bitfun_core::service::reset_workspace_persona_files_to_default(&workspace_info.root_path)
@@ -1776,6 +1808,14 @@ pub async fn close_workspace(
         .workspace_service
         .get_workspace(&request.workspace_id)
         .await;
+    let closes_active_workspace = state
+        .workspace_service
+        .get_current_workspace()
+        .await
+        .is_some_and(|workspace| workspace.id == request.workspace_id);
+    if closes_active_workspace {
+        close_halo_workbench_before_workspace_transition(&app).await?;
+    }
 
     match state
         .workspace_service
@@ -1815,6 +1855,15 @@ pub async fn set_active_workspace(
     app: tauri::AppHandle,
     request: SetActiveWorkspaceRequest,
 ) -> Result<WorkspaceInfoDto, String> {
+    let changes_active_workspace = state
+        .workspace_service
+        .get_current_workspace()
+        .await
+        .map(|workspace| workspace.id != request.workspace_id)
+        .unwrap_or(true);
+    if changes_active_workspace {
+        close_halo_workbench_before_workspace_transition(&app).await?;
+    }
     match state
         .workspace_service
         .set_active_workspace(&request.workspace_id)
@@ -2097,6 +2146,7 @@ async fn cleanup_invalid_workspaces_impl(
     command_name: Option<&str>,
     command_started: Instant,
 ) -> Result<usize, String> {
+    close_halo_workbench_before_workspace_transition(app).await?;
     let cleanup_started = Instant::now();
     match state.workspace_service.cleanup_invalid_workspaces().await {
         Ok(local_removed_count) => {
@@ -3215,7 +3265,12 @@ fn split_remote_archive_path(path: &str) -> Result<(String, String), String> {
     //
     // Checked against the input rather than the resolved parent, which is
     // synthesized for relative paths.
-    if trimmed.split('/').rev().skip(1).any(|component| component == "..") {
+    if trimmed
+        .split('/')
+        .rev()
+        .skip(1)
+        .any(|component| component == "..")
+    {
         return Err(format!(
             "Remote path '{}' must not contain '..' components",
             path

@@ -2,6 +2,34 @@
 
 export const requiredContentRules = [
   {
+    path: 'src/crates/adapters/pi-rpc-adapter/src/lib.rs',
+    reason:
+      'the P0 production adapter must stay fixed to the accepted Pi RPC Halo Workbench execution seam',
+    patterns: [
+      {
+        regex: /\bimpl\s+PiRpcPort\s+for\s+PiRpcAdapter\b/,
+        message:
+          'PiRpcAdapter must implement the stable Workbench PiRpcPort directly',
+      },
+      {
+        regex:
+          /\bIDENTITY\s*:\s*&\x27static\s+str\s*=\s*PI_RPC_ADAPTER_IDENTITY\b/,
+        message:
+          'PiRpcAdapter must retain the fixed pi-rpc-p0 production identity',
+      },
+      {
+        regex: /\bpi --mode rpc\b/,
+        message:
+          'PiRpcAdapter must own the controlled pi --mode rpc child-process path',
+      },
+      {
+        regex: /\bagent_settled\b/,
+        message:
+          'PiRpcAdapter must expose Pi agent_settled settlement semantics to the Workbench seam',
+      },
+    ],
+  },
+  {
     path: 'src/crates/services/services-core/src/persistence.rs',
     reason:
       'services-core must own generic JSON persistence storage while core keeps only PathManager compatibility adapters',

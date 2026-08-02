@@ -24,11 +24,15 @@ import {
   hideStartupOverlay,
   isStartupOverlayPresent,
 } from './startup/startupOverlay';
-import { ToolbarModeProvider } from '../flow_chat/components/toolbar-mode/ToolbarModeProvider';
 import type { AgentCompanionPetCommand } from './services/agentCompanionPetCommands';
-import AskUserAnnouncer from './components/NavPanel/AskUserAnnouncer';
 
 const log = createLogger('App');
+const AskUserAnnouncer = lazy(() => import('./components/NavPanel/AskUserAnnouncer'));
+const LazyToolbarModeProvider = lazy(() =>
+  import('../flow_chat/components/toolbar-mode/ToolbarModeProvider').then(module => ({
+    default: module.ToolbarModeProvider,
+  }))
+);
 
 function isBackgroundTaskCancelledError(error: unknown): boolean {
   return error instanceof Error && error.name === 'BackgroundTaskCancelledError';
@@ -93,6 +97,26 @@ function App() {
   const [appLayoutReady, setAppLayoutReady] = useState(false);
 
   workspaceLoadingRef.current = workspaceLoading;
+
+  useEffect(() => {
+    if (!(isHaloLocalCodingScope() && isTauriRuntime())) return;
+
+    let disposed = false;
+    let stopRuntime: (() => void) | null = null;
+
+    void import('@/infrastructure/workbench-runtime').then(({ workbenchRuntimeStore }) => {
+      if (disposed) return;
+      stopRuntime = () => workbenchRuntimeStore.getState().stop();
+      return workbenchRuntimeStore.getState().start();
+    }).catch(() => {
+      log.warn('Failed to start Halo Workbench Runtime projection');
+    });
+
+    return () => {
+      disposed = true;
+      stopRuntime?.();
+    };
+  }, []);
 
   const releaseInteractiveShellReadyIfReady = useCallback((reason: string) => {
     const latestWorkspaceLoading = workspaceLoadingRef.current;
@@ -327,7 +351,9 @@ function App() {
     }
 
     log.info('Application visible and interactive, scheduling deferred systems');
-    const startupSystemsHandle = scheduleDeferredStartupSystems();
+    const startupSystemsHandle = scheduleDeferredStartupSystems({
+      includeAgentExtensions: !isHaloLocalCodingScope(),
+    });
     startupSystemsHandle.promise.catch(error => {
       if (!isBackgroundTaskCancelledError(error)) {
         log.warn('Deferred startup systems task failed', error);
@@ -840,36 +866,43 @@ function App() {
     };
   }, [interactiveShellReady, t]);
 
-  // Unified layout via a single AppLayout
+  const appShell = (
+    <ViewModeProvider defaultMode="coder">
+      {/* Unified app layout with startup/workspace modes */}
+      <Suspense fallback={null}>
+        <LazyAppLayout onReady={handleAppLayoutReady} />
+      </Suspense>
+
+      {/* Context menu renderer */}
+      <ContextMenuRenderer />
+
+      {/* Notification system */}
+      <NotificationContainer />
+      <NotificationCenter />
+
+      {/* Confirm dialog */}
+      <ConfirmDialogRenderer />
+
+      {/* Announcement / feature-demo / tips system */}
+      <AnnouncementProvider />
+
+      {!isHaloLocalCodingScope() ? (
+        <Suspense fallback={null}>
+          <AskUserAnnouncer />
+        </Suspense>
+      ) : null}
+    </ViewModeProvider>
+  );
+
+  // Halo's composition point has no legacy FlowChat provider in its startup
+  // graph. The provider is loaded only for the historical BitFun path.
   return (
     <ChatProvider>
-      <ViewModeProvider defaultMode="coder">
-        <ToolbarModeProvider>
-          {/* Unified app layout with startup/workspace modes */}
-          <Suspense fallback={null}>
-            <LazyAppLayout onReady={handleAppLayoutReady} />
-          </Suspense>
-
-          {/* Context menu renderer */}
-          <ContextMenuRenderer />
-
-          {/* Notification system */}
-          <NotificationContainer />
-          <NotificationCenter />
-
-          {/* Confirm dialog */}
-          <ConfirmDialogRenderer />
-
-          {/* Announcement / feature-demo / tips system */}
-          <AnnouncementProvider />
-
-          {/* AskUserQuestion waiting-state aria-live announcer.
-              Mounted here (inside ToolbarModeProvider, outside LazyAppLayout)
-              so it persists across both normal and Toolbar Mode. */}
-          <AskUserAnnouncer />
-
-        </ToolbarModeProvider>
-      </ViewModeProvider>
+      {isHaloLocalCodingScope() ? appShell : (
+        <LazyToolbarModeProvider>
+          {appShell}
+        </LazyToolbarModeProvider>
+      )}
     </ChatProvider>
   );
 }

@@ -1,6 +1,8 @@
 ---
-status: superseded by ADR-0071 for P0
+status: superseded by ADR-0072 for P0 execution transport
 ---
+
+> Historical boundary record. The original OpenCode Server wording below is comparison material only; ADR-0072 is the current P0 Pi RPC execution source.
 
 # Pi/OpenCode 受管工作台边界
 
@@ -13,4 +15,4 @@ Halo Studio 只将 Pi 与 OpenCode 视为受管应用，首个可发布版本交
 
 两者都会扩大权限边界并与当前仅支持 Pi/OpenCode 的产品定位冲突，因此不采用。
 
-ADR-0071 将 P0 进一步收窄为本机 OpenCode 1.x 单一生产执行 Adapter；本记录只保留为早期产品边界历史。
+ADR-0071 曾将 P0 收窄为 OpenCode Server；该决策已由 ADR-0072 改为本机 Pi RPC。本文只保留早期 Pi/OpenCode 产品边界和安全范围历史，不作为当前执行器协议来源。

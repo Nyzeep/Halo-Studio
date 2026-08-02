@@ -34,6 +34,17 @@ use tokio::sync::RwLock;
 
 const MAX_WORKSPACE_NAME_CHARS: usize = 80;
 
+/// Returns the workspace trust fact consumed by product-specific runtime
+/// projections. The workspace owner is the only layer that interprets the
+/// persisted decision; assembly only forwards the resulting fact.
+pub fn is_halo_workbench_workspace_trusted(workspace: &WorkspaceInfo) -> bool {
+    workspace
+        .metadata
+        .get("haloWorkbenchTrusted")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true)
+}
+
 /// Workspace service.
 pub struct WorkspaceService {
     manager: Arc<RwLock<WorkspaceManager>>,
