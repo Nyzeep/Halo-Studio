@@ -8,11 +8,16 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use bitfun_agent_runtime::halo_workbench::HaloWorkbenchRuntime;
-use bitfun_pi_rpc_adapter::PiRpcAdapter;
+use bitfun_pi_rpc_adapter::{
+    JsonFilePiRuntimeConfigurationRepository, PiRpcAdapter, PiRpcConfig,
+    PiRuntimeConfigurationService,
+};
 use bitfun_runtime_ports::{
-    PiProviderReadiness, PiProviderReadinessPort, PiRpcPort, PortError, PortErrorKind, PortResult,
+    PiCredentialSecret, PiCredentialStorePort, PiProviderReadiness, PiProviderReadinessPort,
+    PiRpcPort, PiRuntimeConfigurationManagementPort, PortError, PortErrorKind, PortResult,
     WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
 };
+use sha2::{Digest, Sha256};
 
 use crate::product_runtime::SystemProductClock;
 use crate::service::remote_ssh::{canonicalize_local_workspace_root, local_workspace_roots_equal};
@@ -92,23 +97,187 @@ fn project_workspace_facts(
     })
 }
 
+/// System-vault implementation for Halo Pi credentials. The existing
+/// subscription credential store already owns the platform keychain,
+/// Credential Manager and Secret Service setup; this adapter gives Pi an
+/// opaque, provider-bound namespace without making Pi's `auth.json` the
+/// authority.
 #[derive(Debug, Clone, Copy, Default)]
-/// Probe has already established executable compatibility; provider auth and
-/// model availability remain Pi-native and are reported on the first prompt.
-/// This gate must not claim that a version-only check is RPC readiness: the
-/// selected adapter's `Start` performs the full `get_state`/`get_entries`
-/// handshake before it emits `Ready`.
-struct PiRpcReadinessGate;
+pub struct PiSystemCredentialStore;
+
+pub const PI_CREDENTIAL_REF_PREFIX: &str = "halo-pi-credential-v1-";
+
+fn valid_pi_provider_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 256
+        && !value.starts_with('-')
+        && value
+            .chars()
+            .all(|character| !character.is_control() && character != '\\')
+}
+
+fn provider_binding(provider_id: &str) -> String {
+    let digest = Sha256::digest(provider_id.as_bytes());
+    format!("{digest:x}")
+}
+
+fn credential_ref_for(provider_id: &str) -> String {
+    format!(
+        "{PI_CREDENTIAL_REF_PREFIX}{}-{}",
+        provider_binding(provider_id),
+        uuid::Uuid::new_v4()
+    )
+}
+
+fn credential_ref_belongs_to_provider(provider_id: &str, credential_ref: &str) -> bool {
+    credential_ref
+        .strip_prefix(PI_CREDENTIAL_REF_PREFIX)
+        .and_then(|suffix| suffix.strip_prefix(&provider_binding(provider_id)))
+        .is_some_and(|suffix| suffix.starts_with('-'))
+}
 
 #[async_trait]
-impl PiProviderReadinessPort for PiRpcReadinessGate {
-    async fn check(&self) -> PortResult<PiProviderReadiness> {
-        Ok(PiProviderReadiness { available: true })
+impl PiCredentialStorePort for PiSystemCredentialStore {
+    async fn write(&self, provider_id: &str, secret: PiCredentialSecret) -> PortResult<String> {
+        if !valid_pi_provider_id(provider_id) {
+            return Err(PortError::new(
+                PortErrorKind::InvalidRequest,
+                "Pi provider is required",
+            ));
+        }
+        let value = secret.into_string();
+        if value.is_empty() {
+            return Err(PortError::new(
+                PortErrorKind::InvalidRequest,
+                "Pi credential must not be empty",
+            ));
+        }
+        let credential_ref = credential_ref_for(provider_id);
+        bitfun_ai_adapters::subscription_auth::store::write_pi_credential(&credential_ref, &value)
+            .await
+            .map_err(|_| {
+                PortError::new(
+                    PortErrorKind::Backend,
+                    "system credential store is unavailable",
+                )
+            })?;
+        Ok(credential_ref)
+    }
+
+    async fn read(
+        &self,
+        provider_id: &str,
+        credential_ref: &str,
+    ) -> PortResult<PiCredentialSecret> {
+        if !valid_pi_provider_id(provider_id)
+            || !credential_ref_belongs_to_provider(provider_id, credential_ref)
+        {
+            return Err(PortError::new(
+                PortErrorKind::PermissionDenied,
+                "Pi credential provider does not match configuration",
+            ));
+        }
+        let value =
+            bitfun_ai_adapters::subscription_auth::store::read_pi_credential(credential_ref)
+                .await
+                .map_err(|_| {
+                    PortError::new(
+                        PortErrorKind::Backend,
+                        "system credential store is unavailable",
+                    )
+                })?
+                .ok_or_else(|| {
+                    PortError::new(
+                        PortErrorKind::NotFound,
+                        "Pi credential reference is missing",
+                    )
+                })?;
+        Ok(PiCredentialSecret::new(value))
+    }
+
+    async fn delete(&self, provider_id: &str, credential_ref: &str) -> PortResult<()> {
+        if !valid_pi_provider_id(provider_id)
+            || !credential_ref_belongs_to_provider(provider_id, credential_ref)
+        {
+            return Err(PortError::new(
+                PortErrorKind::PermissionDenied,
+                "Pi credential provider does not match configuration",
+            ));
+        }
+        bitfun_ai_adapters::subscription_auth::store::delete_pi_credential(credential_ref)
+            .await
+            .map_err(|_| {
+                PortError::new(
+                    PortErrorKind::Backend,
+                    "system credential store is unavailable",
+                )
+            })
     }
 }
 
-fn selected_pi_rpc() -> Arc<dyn PiRpcPort> {
-    Arc::new(PiRpcAdapter::new())
+struct PiRpcConfiguredReadinessGate {
+    configuration: Arc<dyn PiProviderReadinessPort>,
+}
+
+#[async_trait]
+impl PiProviderReadinessPort for PiRpcConfiguredReadinessGate {
+    async fn check(&self) -> PortResult<PiProviderReadiness> {
+        self.configuration.check().await
+    }
+}
+
+fn selected_pi_rpc(
+    configuration: Arc<PiRuntimeConfigurationService>,
+    credential_store: Arc<PiSystemCredentialStore>,
+) -> Arc<dyn PiRpcPort> {
+    Arc::new(PiRpcAdapter::with_config(PiRpcConfig {
+        runtime_configuration: Some(configuration.clone()),
+        credential_store: Some(credential_store),
+        ..PiRpcConfig::default()
+    }))
+}
+
+pub struct HaloWorkbenchRuntimeComponents {
+    pub runtime: HaloWorkbenchRuntime,
+    pub configuration: Arc<dyn PiRuntimeConfigurationManagementPort>,
+    pub credential_store: Arc<dyn PiCredentialStorePort>,
+}
+
+fn pi_configuration_path() -> Result<std::path::PathBuf, String> {
+    let path_manager = crate::infrastructure::try_get_path_manager_arc()
+        .map_err(|error| format!("Pi configuration path is unavailable: {error}"))?;
+    Ok(path_manager
+        .user_config_dir()
+        .join("pi-runtime-configuration.json"))
+}
+
+/// Builds the runtime and the single configuration authority used by both
+/// standard and managed Pi sessions.
+pub fn build_halo_workbench_runtime_components(
+    workspace_service: Arc<WorkspaceService>,
+) -> Result<HaloWorkbenchRuntimeComponents, String> {
+    let repository = Arc::new(JsonFilePiRuntimeConfigurationRepository::new(
+        pi_configuration_path()?,
+    ));
+    let configuration = Arc::new(PiRuntimeConfigurationService::new_without_capabilities(
+        repository,
+    ));
+    let credential_store = Arc::new(PiSystemCredentialStore);
+    let adapter = selected_pi_rpc(configuration.clone(), credential_store.clone());
+    let runtime = HaloWorkbenchRuntime::new(
+        adapter,
+        Arc::new(CoreWorkbenchWorkspaceFacts::new(workspace_service)),
+        Arc::new(PiRpcConfiguredReadinessGate {
+            configuration: configuration.clone(),
+        }),
+        Arc::new(SystemProductClock),
+    );
+    let configuration: Arc<dyn PiRuntimeConfigurationManagementPort> = configuration;
+    Ok(HaloWorkbenchRuntimeComponents {
+        runtime,
+        configuration,
+        credential_store,
+    })
 }
 
 /// Builds the sole P0 Halo Workbench Runtime composition.
@@ -117,28 +286,23 @@ fn selected_pi_rpc() -> Arc<dyn PiRpcPort> {
 /// there is intentionally no selector or fallback chain.
 pub fn build_halo_workbench_runtime(
     workspace_service: Arc<WorkspaceService>,
-) -> HaloWorkbenchRuntime {
-    HaloWorkbenchRuntime::new(
-        selected_pi_rpc(),
-        Arc::new(CoreWorkbenchWorkspaceFacts::new(workspace_service)),
-        Arc::new(PiRpcReadinessGate),
-        Arc::new(SystemProductClock),
-    )
+) -> Result<HaloWorkbenchRuntime, String> {
+    Ok(build_halo_workbench_runtime_components(workspace_service)?.runtime)
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
     use std::path::PathBuf;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex, OnceLock};
 
     use bitfun_runtime_ports::{
-        PiProviderReadinessPort, PiRpcCommand, PiRpcFailureKind, PiRpcPort, PiRpcReply,
-        PiRpcWorkspace, PortErrorKind, WorkbenchWorkspaceFactsRequest,
+        PiCredentialSecret, PiCredentialStorePort, PiRpcCommand, PiRpcFailureKind, PiRpcPort,
+        PiRpcReply, PiRpcWorkspace, PortErrorKind, WorkbenchWorkspaceFactsRequest,
     };
     use chrono::Utc;
 
-    use super::{project_workspace_facts, PiRpcReadinessGate};
+    use super::{project_workspace_facts, PiRpcAdapter, PiSystemCredentialStore};
     use crate::service::workspace::{
         GitInfo, WorkspaceInfo, WorkspaceKind, WorkspaceStatistics, WorkspaceStatus, WorkspaceType,
     };
@@ -163,6 +327,79 @@ mod tests {
             related_paths: Vec::new(),
             metadata: HashMap::new(),
         }
+    }
+
+    static PI_SYSTEM_STORE_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    #[tokio::test]
+    async fn system_pi_credentials_are_provider_bound_and_delete_without_reading_secret() {
+        let _lock = PI_SYSTEM_STORE_TEST_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("Pi system credential test lock");
+        let root = tempfile::tempdir().expect("test credential root");
+        bitfun_ai_adapters::subscription_auth::set_store_path_for_test(
+            root.path().join("subscription_auth.json"),
+        );
+        let store = PiSystemCredentialStore;
+        let reference = store
+            .write("openai", PiCredentialSecret::new("synthetic-system-secret"))
+            .await
+            .expect("synthetic credential write");
+        assert!(reference.starts_with(super::PI_CREDENTIAL_REF_PREFIX));
+        assert!(!reference.contains("synthetic-system-secret"));
+
+        let secret = store
+            .read("openai", &reference)
+            .await
+            .expect("synthetic credential read")
+            .into_string();
+        assert_eq!(secret, "synthetic-system-secret");
+        assert_eq!(
+            store
+                .read("anthropic", &reference)
+                .await
+                .expect_err("provider mismatch must fail closed")
+                .kind,
+            PortErrorKind::PermissionDenied
+        );
+
+        store
+            .delete("openai", &reference)
+            .await
+            .expect("synthetic credential delete");
+        assert_eq!(
+            store
+                .read("openai", &reference)
+                .await
+                .expect_err("deleted credential must be missing")
+                .kind,
+            PortErrorKind::NotFound
+        );
+    }
+
+    #[tokio::test]
+    async fn system_pi_credentials_use_a_dedicated_store_namespace() {
+        let _lock = PI_SYSTEM_STORE_TEST_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("Pi system credential test lock");
+        let root = tempfile::tempdir().expect("test credential root");
+        let subscription_metadata = root.path().join("subscription_auth.json");
+        bitfun_ai_adapters::subscription_auth::set_store_path_for_test(
+            subscription_metadata.clone(),
+        );
+
+        let store = PiSystemCredentialStore;
+        store
+            .write("openai", PiCredentialSecret::new("synthetic-pi-secret"))
+            .await
+            .expect("synthetic Pi credential write");
+
+        assert!(
+            !subscription_metadata.exists(),
+            "Pi credentials must not create or mutate the subscription metadata store"
+        );
     }
 
     #[test]
@@ -252,7 +489,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn p0_selection_is_fixed_and_provider_readiness_defers_to_pi() {
+    async fn p0_selection_is_fixed_to_the_pi_rpc_adapter() {
         let adapter: Arc<dyn PiRpcPort> = Arc::new(PiRpcAdapter::with_config(
             bitfun_pi_rpc_adapter::PiRpcConfig {
                 executable: Some(PathBuf::from("C:/does-not-exist/pi.exe")),
@@ -275,8 +512,5 @@ mod tests {
                 reason: PiRpcFailureKind::NotInstalled,
             }
         );
-
-        let provider_readiness = PiRpcReadinessGate.check().await.unwrap();
-        assert!(provider_readiness.available);
     }
 }

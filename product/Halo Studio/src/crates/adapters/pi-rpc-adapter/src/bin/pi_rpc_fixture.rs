@@ -6,12 +6,31 @@ use serde_json::{json, Value};
 
 fn main() {
     let arguments = env::args().collect::<Vec<_>>();
+    let mode = env::var("HALO_PI_RPC_FIXTURE_MODE").unwrap_or_else(|_| "happy".to_string());
     if arguments.iter().any(|argument| argument == "--version") {
+        if matches!(
+            mode.as_str(),
+            "version_probe_requires_isolation" | "version_probe_failure"
+        ) {
+            let Some(config_dir) = env::var_os("PI_CODING_AGENT_DIR") else {
+                std::process::exit(2);
+            };
+            if !std::path::Path::new(&config_dir).is_dir()
+                || env::var_os("HALO_PI_CREDENTIAL").is_some()
+            {
+                std::process::exit(2);
+            }
+        }
+        if mode == "version_probe_failure" {
+            std::process::exit(1);
+        }
         println!("0.81.1");
         return;
     }
 
-    let mode = env::var("HALO_PI_RPC_FIXTURE_MODE").unwrap_or_else(|_| "happy".to_string());
+    if mode == "credential_projection" && !controlled_launch_is_valid(&arguments) {
+        return;
+    }
     let stdin = io::stdin();
     let mut stdout = BufWriter::new(io::stdout().lock());
     let mut out_of_order_requests = Vec::new();
@@ -91,6 +110,28 @@ fn main() {
                 );
                 continue;
             }
+            "model_mismatch" if command == "get_available_models" => {
+                respond(
+                    &mut stdout,
+                    request.get("id").and_then(Value::as_str),
+                    command,
+                    true,
+                    json!({
+                        "models": [{ "provider": "anthropic", "id": "other-model" }]
+                    }),
+                );
+                continue;
+            }
+            "thinking_mismatch" if command == "get_available_thinking_levels" => {
+                respond(
+                    &mut stdout,
+                    request.get("id").and_then(Value::as_str),
+                    command,
+                    true,
+                    json!({ "levels": ["off"] }),
+                );
+                continue;
+            }
             "require_since"
                 if awaiting_since
                     && (command != "get_entries"
@@ -139,6 +180,35 @@ fn main() {
                         }),
                     );
                 }
+            }
+            "get_available_models" => {
+                respond(
+                    &mut stdout,
+                    request.get("id").and_then(Value::as_str),
+                    command,
+                    true,
+                    json!({
+                        "models": [{ "provider": "openai", "id": "gpt-5" }]
+                    }),
+                );
+            }
+            "set_model" => {
+                respond(
+                    &mut stdout,
+                    request.get("id").and_then(Value::as_str),
+                    command,
+                    true,
+                    Value::Null,
+                );
+            }
+            "get_available_thinking_levels" => {
+                respond(
+                    &mut stdout,
+                    request.get("id").and_then(Value::as_str),
+                    command,
+                    true,
+                    json!({ "levels": ["off", "minimal", "low", "medium"] }),
+                );
             }
             "prompt" | "follow_up" => match mode.as_str() {
                 "out_of_order" => {
@@ -230,6 +300,42 @@ fn main() {
             _ => {}
         }
     }
+}
+
+fn controlled_launch_is_valid(arguments: &[String]) -> bool {
+    if arguments.iter().any(|argument| argument == "--api-key")
+        || arguments
+            .iter()
+            .any(|argument| argument.contains("api.example.test"))
+    {
+        return false;
+    }
+    let model_is_projected = arguments
+        .windows(2)
+        .any(|pair| pair[0] == "--model" && pair[1] == "gpt-5:medium");
+    let provider_is_projected = arguments
+        .windows(2)
+        .any(|pair| pair[0] == "--provider" && pair[1] == "openai");
+    let config_dir = env::var_os("PI_CODING_AGENT_DIR").map(std::path::PathBuf::from);
+    let Some(config_dir) = config_dir else {
+        return false;
+    };
+    let Ok(models) = std::fs::read_to_string(config_dir.join("models.json")) else {
+        return false;
+    };
+    let credential_is_injected =
+        env::var("HALO_PI_CREDENTIAL").as_deref() == Ok("synthetic-credential-canary");
+    let managed_session = arguments.iter().any(|argument| argument == "--no-session")
+        && !arguments.iter().any(|argument| argument == "--session-dir");
+    model_is_projected
+        && provider_is_projected
+        && credential_is_injected
+        && managed_session
+        && models.contains("$HALO_PI_CREDENTIAL")
+        && models.contains("\"baseUrl\":\"https://api.example.test/v1\"")
+        && !models.contains("synthetic-credential-canary")
+        && !config_dir.join("auth.json").exists()
+        && !config_dir.join("settings.json").exists()
 }
 
 fn respond(

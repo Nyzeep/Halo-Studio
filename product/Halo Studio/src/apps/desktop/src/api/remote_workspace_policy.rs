@@ -751,6 +751,35 @@ pub const REMOTE_WORKSPACE_COMMAND_POLICIES: &[(&str, RemoteWorkspacePolicy)] = 
         "halo_workbench_runtime_submit_intent",
         RemoteWorkspacePolicy::RemoteUnsupported,
     ),
+    ("halo_pi_credential_write", RemoteWorkspacePolicy::LocalOnly),
+    (
+        "halo_pi_credential_delete",
+        RemoteWorkspacePolicy::LocalOnly,
+    ),
+    (
+        "halo_pi_configuration_snapshot",
+        RemoteWorkspacePolicy::LocalOnly,
+    ),
+    (
+        "halo_pi_configuration_create",
+        RemoteWorkspacePolicy::LocalOnly,
+    ),
+    (
+        "halo_pi_configuration_update",
+        RemoteWorkspacePolicy::LocalOnly,
+    ),
+    (
+        "halo_pi_configuration_delete",
+        RemoteWorkspacePolicy::LocalOnly,
+    ),
+    (
+        "halo_pi_configuration_rollback",
+        RemoteWorkspacePolicy::LocalOnly,
+    ),
+    (
+        "halo_pi_configuration_readiness",
+        RemoteWorkspacePolicy::LocalOnly,
+    ),
     ("i18n_get_config", RemoteWorkspacePolicy::WorkspaceAgnostic),
     (
         "i18n_get_current_language",

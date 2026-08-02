@@ -8,6 +8,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
 use crate::PortResult;
@@ -45,6 +46,193 @@ pub struct PiProviderReadiness {
 #[async_trait]
 pub trait PiProviderReadinessPort: Send + Sync {
     async fn check(&self) -> PortResult<PiProviderReadiness>;
+}
+
+/// The thinking levels that Halo permits in persisted runtime configuration.
+///
+/// Pi supports additional experimental levels, but P0 deliberately keeps the
+/// product boundary to the stable, bounded set below. The adapter may still
+/// learn about richer Pi capabilities behind [`PiProviderCapabilityPort`]
+/// without allowing those values into Halo configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PiThinkingLevel {
+    Off,
+    Minimal,
+    Low,
+    Medium,
+    High,
+}
+
+impl PiThinkingLevel {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Minimal => "minimal",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+        }
+    }
+}
+
+/// Startup flags that may be persisted by Halo. Session isolation is selected
+/// by the runtime session mode and is intentionally not user-configurable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PiStartupOptions {
+    pub no_extensions: bool,
+    pub no_approve: bool,
+}
+
+impl Default for PiStartupOptions {
+    fn default() -> Self {
+        Self {
+            no_extensions: true,
+            no_approve: true,
+        }
+    }
+}
+
+/// Halo's complete non-secret Pi configuration authority.
+///
+/// The custom Debug implementation is intentional: this value can cross
+/// internal async seams, but neither the credential reference nor the full
+/// base URL should appear in logs or error formatting by accident.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PiRuntimeConfiguration {
+    pub provider_id: String,
+    pub base_url: Option<String>,
+    pub model_id: String,
+    pub thinking_level: PiThinkingLevel,
+    pub startup_options: PiStartupOptions,
+    pub credential_ref: String,
+}
+
+/// Renderer-safe projection of the Halo Pi configuration authority.
+///
+/// The full base URL is never part of this DTO. `base_url_hint` is only the
+/// constant `"<configured>"`; even an origin can reveal a private host, port,
+/// or tenant identifier. The credential reference is opaque and cannot be
+/// used to retrieve a secret by the renderer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PiRuntimeConfigurationView {
+    pub provider_id: String,
+    pub model_id: String,
+    pub thinking_level: PiThinkingLevel,
+    pub startup_options: PiStartupOptions,
+    pub credential_ref: String,
+    pub base_url_hint: Option<String>,
+}
+
+impl fmt::Debug for PiRuntimeConfiguration {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PiRuntimeConfiguration")
+            .field("provider_id", &self.provider_id)
+            .field("base_url", &"<redacted>")
+            .field("model_id", &self.model_id)
+            .field("thinking_level", &self.thinking_level)
+            .field("startup_options", &self.startup_options)
+            .field("credential_ref", &"<redacted>")
+            .finish()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct PiCredentialSecret(String);
+
+impl PiCredentialSecret {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    /// Consumes the wrapper at the final child-process boundary.
+    pub fn into_string(mut self) -> String {
+        std::mem::take(&mut self.0)
+    }
+}
+
+impl fmt::Debug for PiCredentialSecret {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("<redacted credential>")
+    }
+}
+
+impl Drop for PiCredentialSecret {
+    fn drop(&mut self) {
+        // Best-effort scrubbing for the in-process copy. The operating system
+        // and child process own their separate copies after process creation.
+        unsafe {
+            self.0.as_bytes_mut().fill(0);
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct PiProviderCapabilityRequest {
+    pub provider_id: String,
+    pub model_id: String,
+    pub base_url: Option<String>,
+}
+
+impl fmt::Debug for PiProviderCapabilityRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PiProviderCapabilityRequest")
+            .field("provider_id", &self.provider_id)
+            .field("model_id", &self.model_id)
+            .field("base_url", &"<redacted>")
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PiProviderCapability {
+    pub provider_id: String,
+    pub model_id: String,
+    /// The audited Pi API implementation used for a non-native provider
+    /// projection. This stays capability metadata and is never persisted in
+    /// Halo configuration.
+    pub api: String,
+    pub accepts_base_url: bool,
+    pub supported_thinking_levels: Vec<PiThinkingLevel>,
+}
+
+#[async_trait]
+pub trait PiProviderCapabilityPort: Send + Sync {
+    async fn inspect(
+        &self,
+        request: PiProviderCapabilityRequest,
+    ) -> PortResult<PiProviderCapability>;
+}
+
+#[async_trait]
+pub trait PiRuntimeConfigurationPort: Send + Sync {
+    async fn load_configuration(&self) -> PortResult<Option<PiRuntimeConfiguration>>;
+}
+
+#[async_trait]
+pub trait PiRuntimeConfigurationManagementPort:
+    PiRuntimeConfigurationPort + PiProviderReadinessPort
+{
+    async fn create_configuration(&self, configuration: PiRuntimeConfiguration) -> PortResult<()>;
+    async fn update_configuration(&self, configuration: PiRuntimeConfiguration) -> PortResult<()>;
+    async fn delete_configuration(&self) -> PortResult<()>;
+    async fn rollback_configuration(&self) -> PortResult<()>;
+    async fn public_configuration(&self) -> PortResult<Option<PiRuntimeConfigurationView>>;
+}
+
+#[async_trait]
+pub trait PiCredentialStorePort: Send + Sync {
+    async fn write(&self, provider_id: &str, secret: PiCredentialSecret) -> PortResult<String>;
+
+    async fn read(&self, provider_id: &str, credential_ref: &str)
+        -> PortResult<PiCredentialSecret>;
+
+    async fn delete(&self, provider_id: &str, credential_ref: &str) -> PortResult<()>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

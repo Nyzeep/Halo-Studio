@@ -12,6 +12,35 @@ const SNAPSHOT_COMMAND: &str = "halo_workbench_runtime_snapshot";
 const SUBMIT_COMMAND: &str = "halo_workbench_runtime_submit_intent";
 const EVENT_NAME: &str = "halo-workbench://event";
 
+const PI_COMMANDS: [(&str, &str); 8] = [
+    ("halo_pi_credential_write", "halo_pi_credential_write"),
+    ("halo_pi_credential_delete", "halo_pi_credential_delete"),
+    (
+        "halo_pi_configuration_snapshot",
+        "halo_pi_configuration_snapshot",
+    ),
+    (
+        "halo_pi_configuration_create",
+        "halo_pi_configuration_create",
+    ),
+    (
+        "halo_pi_configuration_update",
+        "halo_pi_configuration_update",
+    ),
+    (
+        "halo_pi_configuration_delete",
+        "halo_pi_configuration_delete",
+    ),
+    (
+        "halo_pi_configuration_rollback",
+        "halo_pi_configuration_rollback",
+    ),
+    (
+        "halo_pi_configuration_readiness",
+        "halo_pi_configuration_readiness",
+    ),
+];
+
 #[test]
 fn tauri_exposes_two_commands_and_one_ordered_event_stream() {
     let app = include_str!("../src/lib.rs");
@@ -324,4 +353,181 @@ fn desktop_runtime_context_stays_a_composition_host() {
     assert!(!runtime.contains("enum HaloWorkbenchPermission"));
     assert!(!runtime.contains("credential_value"));
     assert!(!runtime.contains("external_session_id"));
+}
+
+#[test]
+fn pi_configuration_commands_are_registered_only_for_halo_local_coding() {
+    let app = include_str!("../src/lib.rs");
+    let api_mod = include_str!("../src/api/mod.rs");
+    let api = include_str!("../src/api/pi_configuration_api.rs");
+    let gate = "#[cfg(feature = \"halo-local-coding\")]";
+
+    let module_offset = api_mod
+        .find("pub mod pi_configuration_api;")
+        .expect("Pi configuration API module");
+    assert!(api_mod[module_offset.saturating_sub(100)..module_offset].contains(gate));
+
+    for (command, function) in PI_COMMANDS {
+        let registration = format!("api::pi_configuration_api::{function},");
+        assert_eq!(
+            app.matches(&registration).count(),
+            1,
+            "Pi command must have exactly one Tauri registration: {command}"
+        );
+        let offset = app
+            .find(&registration)
+            .unwrap_or_else(|| panic!("missing Pi command registration: {command}"));
+        let prefix = &app[offset.saturating_sub(120)..offset];
+        assert!(
+            prefix.contains(gate),
+            "{command} must only be registered for Halo local coding"
+        );
+
+        let command_marker = format!("pub async fn {function}");
+        assert!(
+            api.contains("#[tauri::command]"),
+            "{command} must remain a Tauri command"
+        );
+        assert!(
+            api.contains(&command_marker),
+            "missing public command handler: {function}"
+        );
+    }
+}
+
+#[test]
+fn pi_configuration_commands_are_local_only_and_have_no_remote_route() {
+    for (command, _) in PI_COMMANDS {
+        assert_eq!(
+            remote_workspace_policy(command),
+            Some(RemoteWorkspacePolicy::LocalOnly),
+            "{command} must never be routed to a remote workspace"
+        );
+    }
+
+    let policy = include_str!("../src/api/remote_workspace_policy.rs");
+    for (command, _) in PI_COMMANDS {
+        let offset = policy
+            .find(&format!("\"{command}\""))
+            .unwrap_or_else(|| panic!("missing remote policy entry: {command}"));
+        let entry = &policy[offset..policy.len().min(offset + 120)];
+        assert!(
+            entry.contains("RemoteWorkspacePolicy::LocalOnly"),
+            "{command} policy must be explicit and local-only"
+        );
+        assert!(!entry.contains("RemoteRouted"));
+        assert!(!entry.contains("RemoteUnsupported"));
+    }
+}
+
+#[test]
+fn pi_credential_response_and_errors_are_stable_and_redacted() {
+    let api = include_str!("../src/api/pi_configuration_api.rs");
+
+    let credential_request_prefix = api
+        .split_once("pub struct PiCredentialWriteRequest")
+        .expect("credential request DTO")
+        .0;
+    let credential_request = api
+        .split_once("pub struct PiCredentialWriteRequest")
+        .expect("credential request DTO")
+        .1
+        .split_once("pub struct PiCredentialWriteResponse")
+        .expect("credential response DTO")
+        .0;
+    assert!(credential_request_prefix.contains("#[derive(Deserialize)]"));
+    assert!(!credential_request_prefix.contains("derive(Debug"));
+    assert!(credential_request.contains("field(\"secret\", &\"<redacted>\")"));
+
+    let credential_response_prefix = api
+        .split_once("pub struct PiCredentialWriteResponse")
+        .expect("credential response DTO")
+        .0;
+    let credential_response = api
+        .split_once("pub struct PiCredentialWriteResponse")
+        .expect("credential response DTO")
+        .1
+        .split_once("pub struct PiRuntimeConfigurationRequest")
+        .expect("configuration request DTO")
+        .0;
+    assert!(credential_response_prefix.contains("#[derive(Debug, Serialize)]"));
+    assert!(credential_response.contains("pub credential_ref: String"));
+    for forbidden in ["secret", "authorization", "base_url", "auth.json"] {
+        assert!(
+            !credential_response.contains(forbidden),
+            "credential response must not expose {forbidden}"
+        );
+    }
+
+    let readiness_response = api
+        .split_once("pub struct PiProviderReadinessResponse")
+        .expect("readiness response DTO")
+        .1
+        .split_once("pub struct PiConfigurationCommandError")
+        .expect("command error DTO")
+        .0;
+    assert!(readiness_response.contains("pub available: bool"));
+    for forbidden in ["provider_id", "model_id", "base_url", "credential_ref"] {
+        assert!(
+            !readiness_response.contains(forbidden),
+            "readiness response must not expose {forbidden}"
+        );
+    }
+
+    let errors = api
+        .split_once("pub struct PiConfigurationCommandError")
+        .expect("command error DTO")
+        .1
+        .split_once("fn map_error")
+        .expect("stable error mapper")
+        .0;
+    assert!(errors.contains("pub code: &'static str"));
+    assert!(errors.contains("pub summary: &'static str"));
+    assert!(errors.contains("pub recovery_action: &'static str"));
+    for forbidden in ["PortError", "source", "details", "message", "secret"] {
+        assert!(
+            !errors.contains(forbidden),
+            "public command error must not expose {forbidden}"
+        );
+    }
+
+    let mapper = api
+        .split_once("fn map_error")
+        .expect("stable error mapper")
+        .1;
+    for stable_code in [
+        "pi_configuration_invalid",
+        "pi_configuration_missing",
+        "pi_configuration_denied",
+        "pi_configuration_store_unavailable",
+        "pi_configuration_unavailable",
+    ] {
+        assert!(
+            mapper.contains(stable_code),
+            "missing stable error code: {stable_code}"
+        );
+    }
+    assert!(!mapper.contains("error.to_string"));
+    assert!(!mapper.contains("format!("));
+    assert!(!api.contains("Authorization"));
+    assert!(!api.contains("auth.json"));
+    assert!(!api.contains("std::env"));
+    assert!(!api.contains("println!"));
+}
+
+#[test]
+fn pi_configuration_snapshot_is_renderer_safe() {
+    let contracts = include_str!("../../../crates/contracts/runtime-ports/src/halo_workbench.rs");
+    let view = contracts
+        .split_once("pub struct PiRuntimeConfigurationView")
+        .expect("renderer-safe Pi configuration view")
+        .1
+        .split_once("impl fmt::Debug for PiRuntimeConfiguration")
+        .expect("Pi configuration debug boundary")
+        .0;
+
+    assert!(view.contains("pub base_url_hint: Option<String>"));
+    assert!(view.contains("pub credential_ref: String"));
+    assert!(!view.contains("pub base_url: Option<String>"));
+    assert!(!view.contains("pub secret:"));
 }

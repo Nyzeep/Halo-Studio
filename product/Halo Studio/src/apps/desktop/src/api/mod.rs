@@ -36,6 +36,8 @@ pub mod miniapp_market_api;
 pub mod pages_api;
 pub mod path_target;
 pub mod peer_host_invoke;
+#[cfg(feature = "halo-local-coding")]
+pub mod pi_configuration_api;
 pub mod relay_deploy_api;
 pub mod remote_connect_api;
 pub mod remote_workspace_policy;
