@@ -207,3 +207,22 @@ test('Halo Web UI assembly omits visible out-of-scope navigation and settings ta
     assert.doesNotMatch(settingsConfig, new RegExp(`id:\\s*'${tab}'`));
   }
 });
+
+test('Halo execution UI is wired only to the Workbench Runtime interface', () => {
+  const app = read(join('src', 'web-ui', 'src', 'app', 'App.tsx'));
+  const appLayout = read(join('src', 'web-ui', 'src', 'app', 'layout', 'AppLayout.tsx'));
+  const mainNav = read(join('src', 'web-ui', 'src', 'app', 'components', 'NavPanel', 'MainNav.tsx'));
+  const workspaceItem = read(join('src', 'web-ui', 'src', 'app', 'components', 'NavPanel', 'sections', 'workspaces', 'WorkspaceItem.tsx'));
+  const client = read(join('src', 'web-ui', 'src', 'infrastructure', 'workbench-runtime', 'client.ts'));
+
+  assert.match(app, /isHaloLocalCodingScope\(\) && isTauriRuntime\(\)/);
+  assert.match(app, /workbenchRuntimeStore\.getState\(\)\.start\(\)/);
+  assert.match(appLayout, /type: 'openWorkspace'/);
+  assert.match(mainNav, /workbenchRuntimeStore/);
+  assert.doesNotMatch(mainNav, /FlowChatManager|flowChatManager/);
+  assert.match(workspaceItem, /WorkbenchSessionsSection/);
+  assert.doesNotMatch(workspaceItem, /FlowChatManager|flowChatManager/);
+  assert.match(client, /halo_workbench_runtime_snapshot/);
+  assert.match(client, /halo_workbench_runtime_submit_intent/);
+  assert.match(client, /halo-workbench:\/\/event/);
+});

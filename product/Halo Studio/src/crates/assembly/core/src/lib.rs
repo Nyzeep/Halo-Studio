@@ -26,6 +26,8 @@ mod external_subagents;
 mod external_tools;
 #[cfg(feature = "product-domains")]
 pub mod function_agents; // Function-based agents
+#[cfg(feature = "product-full")]
+pub mod halo_workbench;
 pub mod infrastructure; // AI clients, storage, logging, events
 #[cfg(feature = "product-domains")]
 pub mod miniapp; // AI-generated instant apps (Zero-Dialect Runtime)

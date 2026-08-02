@@ -34,6 +34,7 @@ export const crateLayoutRules = [
   { crateName: 'claude-code-adapter', layer: 'adapters', path: 'src/crates/adapters/claude-code-adapter' },
   { crateName: 'codex-adapter', layer: 'adapters', path: 'src/crates/adapters/codex-adapter' },
   { crateName: 'opencode-adapter', layer: 'adapters', path: 'src/crates/adapters/opencode-adapter' },
+  { crateName: 'pi-rpc-adapter', layer: 'adapters', path: 'src/crates/adapters/pi-rpc-adapter' },
   { crateName: 'static-hook-support', layer: 'adapters', path: 'src/crates/adapters/static-hook-support' },
   { crateName: 'transport', layer: 'adapters', path: 'src/crates/adapters/transport' },
   { crateName: 'webdriver', layer: 'adapters', path: 'src/crates/adapters/webdriver' },

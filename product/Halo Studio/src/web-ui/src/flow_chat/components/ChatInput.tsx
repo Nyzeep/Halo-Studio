@@ -90,7 +90,7 @@ import {
   isSessionWorktreeBindingLocked,
   sessionWorktreeBindingSubscriptionKey,
 } from '../utils/sessionWorktree';
-import { isTauriRuntime } from '@/infrastructure/runtime';
+import { isHaloLocalCodingScope, isTauriRuntime } from '@/infrastructure/runtime';
 import { Tooltip, IconButton, confirmDanger, confirmWarning } from '@/component-library';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { useAgentCanvasStore } from '@/app/components/panels/content-canvas/stores';
@@ -394,6 +394,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 }) => {
   const { t } = useTranslation('flow-chat');
   const { t: tWorktrees } = useI18n('worktrees');
+  const legacyExecutionEnabled = !isHaloLocalCodingScope();
   const canLaunchReview = isTauriRuntime();
   
   const [inputState, dispatchLocalInput] = useReducer(inputReducer, initialInputState);
@@ -5020,7 +5021,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 onCompositionStart={handleImeCompositionStart}
                 onCompositionEnd={handleImeCompositionEnd}
                 placeholder=""
-                disabled={false}
+                disabled={!legacyExecutionEnabled}
                 contexts={contexts}
                 onRemoveContext={removeContext}
                 onMentionStateChange={setMentionState}

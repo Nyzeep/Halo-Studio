@@ -300,8 +300,11 @@ describe('startup performance contract', () => {
     );
 
     expect(appSource).not.toContain("from '../flow_chat/components/toolbar-mode'");
-    expect(appSource).toContain(
+    expect(appSource).not.toContain(
       "from '../flow_chat/components/toolbar-mode/ToolbarModeProvider'"
+    );
+    expect(appSource).toContain(
+      "import('../flow_chat/components/toolbar-mode/ToolbarModeProvider')"
     );
     expect(appLayoutSource).not.toContain(
       "from '../../flow_chat/components/toolbar-mode'"
@@ -315,8 +318,9 @@ describe('startup performance contract', () => {
     expect(appLayoutSource).not.toContain("from '../../tools/workspace'");
     expect(appLayoutSource).toContain("import('../components/AboutDialog')");
     expect(appLayoutSource).toContain("import('../../tools/workspace/components/WorkspaceManager')");
-    expect(appLayoutSource).toContain("import { FlowChatManager }");
-    expect(appLayoutSource).not.toContain("import('../../flow_chat/services/FlowChatManager')");
+    expect(appLayoutSource).not.toContain("import { FlowChatManager }");
+    expect(appLayoutSource).toContain("import('../../flow_chat/services/FlowChatManager')");
+    expect(appLayoutSource).toContain('if (isHaloLocalCodingScope()) return;');
     expect(footerSource).not.toContain("import { AboutDialog }");
     expect(footerSource).toContain("import('../../AboutDialog')");
     expect(chatPaneSource).not.toContain("from '../../../flow_chat'");

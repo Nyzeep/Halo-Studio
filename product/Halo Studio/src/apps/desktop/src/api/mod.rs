@@ -54,6 +54,8 @@ pub mod subagent_api;
 pub mod system_api;
 pub mod terminal_api;
 pub mod tool_api;
+#[cfg(feature = "halo-local-coding")]
+pub mod workbench_runtime_api;
 pub mod workspace_activation;
 pub mod worktree_api;
 

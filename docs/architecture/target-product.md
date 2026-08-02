@@ -15,9 +15,19 @@ Halo Studio 是 BitFun 的受控下游产品。仓库跟踪完整的 BitFun 源�
 
 ## 运行时边界
 
-BitFun Runtime 是编码会话、工具执行和运行事实的唯一权威。Halo Workbench Runtime Module 位于 Tauri 接缝，向前端提供小而稳定的 command/event 接口，统一拥有工作区、标准会话、受管任务、Git、配置、凭据引用和结构化事件。
+BitFun 提供产品基座和工作台能力；Halo Workbench Runtime Module 位于 Tauri 接缝，是 Halo 工作区信任、编码会话投影、受管任务、权限决议、Git、配置、凭据引用、脱敏、证据和结构化事件的唯一权威。它向前端提供小而稳定的 command/event 接口。
 
 前端不得分别直连大量底层命令，也不得调用旧 Halo Sidecar。旧 `stdio JSONL v1` 只作为行为迁移证据，不是兼容目标。
+
+## P0 执行链
+
+P0 只有一个生产受管执行 Adapter：本机已安装的 Pi RPC。Runtime 受控创建 Pi 子进程并驱动：
+
+`Halo Workbench Runtime → 受控 Pi 子进程 → pi --mode rpc → stdin/stdout JSONL`
+
+RPC 输入输出严格按 LF (`\n`) 分帧；客户端可剥离输入记录尾部的 CR，但不能把 Unicode 行分隔符当作协议分隔符。Runtime 只在内部消费 `prompt`、`follow_up`、`abort`、`get_state`、`get_entries` 及已验证的 message/tool/settled 事件，并将它们转换为 Halo 本地事件。Pi 原始 session/entry 标识、完整会话、工具参数和结果、命令输出、凭据、Authorization 与原始 JSONL 不进入 Renderer、日志、持久化或证据。
+
+Pi TUI、Unix/CBOR PiServer、HTTP/SSE、历史 OpenCode Server 和 ACP 均不是 Windows P0 执行接口。任何新传输必须先有独立 ADR 和跨平台可用性证明。
 
 ## 产品模式
 
@@ -34,6 +44,6 @@ BitFun Runtime 是编码会话、工具执行和运行事实的唯一权威。Ha
 
 ## 迁移门槛
 
-旧 PySide/QML 与 Rust Sidecar 在迁移期间只作为可迁移能力基线保留。只有 Tauri 构建与打包、行为等价矩阵、上游同步演练、许可证核对和真实 OpenCode 原生 UI 验收全部完成后，才能通过独立收缩变更删除旧产品实现并重新执行完整发布验证。
+旧 PySide/QML 与 Rust Sidecar 在迁移期间只作为可迁移能力基线保留。只有 Tauri 构建与打包、行为等价矩阵、上游同步演练、Pi 第一方 extension 的依赖/权限/许可证审计和真实 Pi RPC 原生 UI 验收全部完成后，才能通过独立收缩变更删除旧产品实现并重新执行完整发布验证。OpenCode Server 相关内容只作为历史比较对象，不是当前验收门槛。
 
-具体决策以 ADR-0065 至 ADR-0070 为入口，实施顺序以 BitFun/Tauri 迁移规格和工单为准。
+具体决策以 ADR-0065 至 ADR-0072 为入口，实施顺序以 BitFun/Tauri 迁移规格和工单为准；新的实现入口是 03B → 04。

@@ -12,6 +12,7 @@ import { ACPClientAPI } from '@/infrastructure/api/service-api/ACPClientAPI';
 import { normalizeRemoteWorkspacePath } from '@/shared/utils/pathUtils';
 import { notificationService } from '@/shared/notification-system';
 import { isPeerDeviceModeActive } from '@/infrastructure/peer-device/peerModeFlag';
+import { submitWorkbenchRuntimeCloseIntent } from '@/infrastructure/workbench-runtime';
 import {
   SSHContext,
   type ConnectionStatus,
@@ -536,6 +537,7 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
             refreshRemoteAcpCapabilities(workspace.connectionId);
 
             if (!isAlreadyOpened) {
+              await submitWorkbenchRuntimeCloseIntent();
               await workspaceManager.openRemoteWorkspace(workspace).catch(() => {});
             }
             void flowChatStore
@@ -582,6 +584,7 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
             refreshRemoteAcpCapabilities(result.connectionId);
 
             if (!isAlreadyOpened) {
+              await submitWorkbenchRuntimeCloseIntent();
               await workspaceManager.openRemoteWorkspace(result.workspace).catch(() => {});
             }
             void flowChatStore
@@ -824,6 +827,10 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
     if (currentRemoteWorkspace) {
       setWorkspaceStatus(currentRemoteWorkspace.connectionId, 'disconnected');
       try {
+        const activeWorkspace = workspaceManager.getState().currentWorkspace;
+        if (activeWorkspace?.workspaceKind === WorkspaceKind.Remote) {
+          await submitWorkbenchRuntimeCloseIntent();
+        }
         await workspaceManager.removeRemoteWorkspace(currentRemoteWorkspace.connectionId);
       } catch {
         // Ignore errors
@@ -848,6 +855,7 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
     setShowFileBrowser(false);
     setWorkspaceStatus(connectionId, 'connected');
 
+    await submitWorkbenchRuntimeCloseIntent();
     await workspaceManager.openRemoteWorkspace(remoteWs);
   }, [connectionId, connectionConfig, setWorkspaceStatus]);
 
@@ -865,6 +873,10 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
     if (currentRemoteWorkspace) {
       setWorkspaceStatus(currentRemoteWorkspace.connectionId, 'disconnected');
       try {
+        const activeWorkspace = workspaceManager.getState().currentWorkspace;
+        if (activeWorkspace?.workspaceKind === WorkspaceKind.Remote) {
+          await submitWorkbenchRuntimeCloseIntent();
+        }
         await workspaceManager.removeRemoteWorkspace(currentRemoteWorkspace.connectionId);
       } catch {
         // Ignore errors

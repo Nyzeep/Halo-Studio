@@ -1314,6 +1314,118 @@ export function runManifestParserSelfTest({
   ) {
     throw new Error('OpenCode adapter source guard must allow only the reviewed core composition file');
   }
+  const piRpcLayoutRule = crateLayoutRules.find(
+    (rule) => rule.crateName === 'pi-rpc-adapter',
+  );
+  if (
+    piRpcLayoutRule?.layer !== 'adapters'
+    || piRpcLayoutRule.path !== 'src/crates/adapters/pi-rpc-adapter'
+  ) {
+    throw new Error('Pi RPC adapter must be registered in the adapter crate layout');
+  }
+  if (!noCoreDependencyCrates.includes('pi-rpc-adapter')) {
+    throw new Error('Pi RPC adapter must be covered by the no-core dependency guard');
+  }
+  const piRpcManifestRule = forbiddenManifestDependencyRules.find((rule) =>
+    rule.dependencyNames?.includes('bitfun-pi-rpc-adapter'),
+  );
+  if (!piRpcManifestRule) {
+    throw new Error('Pi RPC adapter must have a forbidden manifest dependency rule');
+  }
+  for (const scanRoot of ['src/apps', 'src/crates', 'BitFun-Installer/src-tauri']) {
+    if (!piRpcManifestRule.scanRoots?.includes(scanRoot)) {
+      throw new Error(`Pi RPC adapter manifest guard must scan ${scanRoot}`);
+    }
+  }
+  if (piRpcManifestRule.workspaceManifestPath !== 'Cargo.toml') {
+    throw new Error('Pi RPC adapter manifest guard must scan root workspace dependencies');
+  }
+  if (
+    piRpcManifestRule.allowManifestPaths?.join(',')
+    !== 'src/crates/assembly/core/Cargo.toml'
+  ) {
+    throw new Error('only bitfun-core product assembly may depend on the Pi RPC adapter');
+  }
+  const piRpcCoreOwner = optionalDependencyFeatureOwnerRules
+    .find((rule) => rule.crateName === 'core')
+    ?.dependencies.find((dependency) =>
+      dependency.depName === 'bitfun-pi-rpc-adapter',
+    );
+  if (piRpcCoreOwner?.ownerFeatures.join(',') !== 'product-full') {
+    throw new Error(
+      'bitfun-core must keep the Pi RPC adapter optional and owned only by product-full',
+    );
+  }
+  const piRpcSourceRules = forbiddenContentUnderRules.filter((rule) =>
+    rule.reason.includes('Pi RPC Workbench execution adapter imports are limited'),
+  );
+  for (const scanRoot of ['src', 'BitFun-Installer/src-tauri']) {
+    if (!piRpcSourceRules.some((rule) => rule.path === scanRoot)) {
+      throw new Error(`Pi RPC adapter source guard must scan ${scanRoot}`);
+    }
+  }
+  const piRpcSourceRegex = piRpcSourceRules[0]?.patterns?.[0]?.regex;
+  if (
+    !piRpcSourceRegex?.test('use bitfun_pi_rpc_adapter as pi_rpc;')
+    || !piRpcSourceRegex?.test('extern crate bitfun_pi_rpc_adapter;')
+    || !piRpcSourceRegex?.test('bitfun_pi_rpc_adapter::PiRpcAdapter')
+  ) {
+    throw new Error('Pi RPC adapter source guard must catch direct, alias, and extern imports');
+  }
+  const piRpcSourceAllowPaths = piRpcSourceRules
+    .find((rule) => rule.path === 'src')
+    ?.patterns?.[0]?.allowPaths;
+  if (
+    piRpcSourceAllowPaths?.join(',')
+    !== 'src/crates/assembly/core/src/halo_workbench.rs'
+  ) {
+    throw new Error('only the Halo Workbench product assembly module may import the Pi RPC adapter');
+  }
+  const piRpcLightweightRule = lightweightBoundaryRules.find(
+    (rule) => rule.crateName === 'pi-rpc-adapter',
+  );
+  for (const forbiddenDependency of [
+    'bitfun-acp',
+    'bitfun-agent-runtime',
+    'bitfun-agent-runtime-ipc',
+    'bitfun-ai-adapters',
+    'bitfun-claude-code-adapter',
+    'bitfun-codex-adapter',
+    'bitfun-core',
+    'bitfun-opencode-adapter',
+    'bitfun-plugin-runtime-client',
+    'tauri',
+  ]) {
+    if (!piRpcLightweightRule?.forbiddenDeps.includes(forbiddenDependency)) {
+      throw new Error(
+        `Pi RPC adapter boundary must forbid unrelated runtime dependency: ${forbiddenDependency}`,
+      );
+    }
+  }
+  const piRpcRequiredRule = requiredContentRules.find(
+    (rule) => rule.path === 'src/crates/adapters/pi-rpc-adapter/src/lib.rs',
+  );
+  const piRpcRequiredRuleText = piRpcRequiredRule?.patterns
+    .map((pattern) => pattern.regex.source)
+    .join('\n') ?? '';
+  for (const requiredContract of [
+    'PiRpcPort',
+    'PiRpcAdapter',
+    'PI_RPC_ADAPTER_IDENTITY',
+  ]) {
+    if (!piRpcRequiredRuleText.includes(requiredContract)) {
+      throw new Error(`Pi RPC adapter seam guard must require: ${requiredContract}`);
+    }
+  }
+  const piRpcPublicApiRule = publicApiAllowlistRules.find(
+    (rule) => rule.path === 'src/crates/adapters/pi-rpc-adapter/src/lib.rs',
+  );
+  if (
+    piRpcPublicApiRule?.allowedSymbolEntries?.map((entry) => entry.symbol).join(',')
+    !== 'HALO_PI_EXTENSION_ID,HALO_PI_EXTENSION_VERSION,HALO_PI_EXTENSION_PERMISSIONS,PiRpcConfig,PiRpcAdapter'
+  ) {
+    throw new Error('Pi RPC adapter public API must expose only the adapter and audited extension inventory');
+  }
   const runtimeServicesRule = lightweightBoundaryRules.find(
     (rule) => rule.crateName === 'runtime-services',
   );

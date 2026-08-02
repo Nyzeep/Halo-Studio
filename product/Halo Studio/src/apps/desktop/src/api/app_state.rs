@@ -126,6 +126,7 @@ impl AppState {
 
         let agent_registry = agents::get_agent_registry();
 
+        #[cfg(not(feature = "halo-local-coding"))]
         let mcp_service = match mcp::MCPService::new(config_service.clone()) {
             Ok(service) => {
                 log::info!("MCP service initialized successfully");
@@ -138,13 +139,18 @@ impl AppState {
                 None
             }
         };
+        #[cfg(feature = "halo-local-coding")]
+        let mcp_service = None;
         let path_manager = workspace_service.path_manager().clone();
+        #[cfg(not(feature = "halo-local-coding"))]
         let acp_client_service = Some(
             bitfun_acp::AcpClientService::new(config_service.clone(), path_manager.clone())
                 .map_err(|e| {
                     BitFunError::service(format!("Failed to initialize ACP client service: {}", e))
                 })?,
         );
+        #[cfg(feature = "halo-local-coding")]
+        let acp_client_service = None;
 
         let announcement_scheduler = Arc::new(
             announcement::AnnouncementScheduler::new(&path_manager)

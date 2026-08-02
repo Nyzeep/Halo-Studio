@@ -106,4 +106,43 @@ describe('scheduleDeferredStartupSystems', () => {
 
     expect(initializeIdeControl).not.toHaveBeenCalled();
   });
+
+  it('keeps IDE and renderer warmups but skips MCP and ACP for Halo', async () => {
+    let scheduledTask: ((signal: AbortSignal) => Promise<void>) | null = null;
+    const schedule = vi.fn((task: (signal: AbortSignal) => Promise<void>) => {
+      scheduledTask = task;
+      return {
+        promise: Promise.resolve(),
+        cancel: vi.fn(),
+      };
+    });
+    const initializeIdeControl = vi.fn(async () => undefined);
+    const initializeMcpServers = vi.fn(async () => undefined);
+    const initializeAcpClients = vi.fn(async () => undefined);
+    const preloadDeferredRenderers = vi.fn(async () => undefined);
+
+    scheduleDeferredStartupSystems({
+      scheduler: { schedule },
+      log: {
+        debug: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      },
+      trace: {
+        markPhase: vi.fn(),
+      },
+      includeAgentExtensions: false,
+      initializeIdeControl,
+      initializeMcpServers,
+      initializeAcpClients,
+      preloadDeferredRenderers,
+    });
+
+    await scheduledTask?.(new AbortController().signal);
+
+    expect(initializeIdeControl).toHaveBeenCalledTimes(1);
+    expect(initializeMcpServers).not.toHaveBeenCalled();
+    expect(initializeAcpClients).not.toHaveBeenCalled();
+    expect(preloadDeferredRenderers).toHaveBeenCalledTimes(1);
+  });
 });

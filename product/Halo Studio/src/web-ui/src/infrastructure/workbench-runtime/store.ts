@@ -1,0 +1,469 @@
+import { createStore, type StoreApi } from 'zustand/vanilla';
+
+import {
+  createTauriWorkbenchRuntimeTransport,
+  createWorkbenchRuntimeClient,
+  type WorkbenchRuntimeClient,
+  type WorkbenchRuntimeUnlisten,
+} from './client';
+import {
+  HALO_WORKBENCH_SCHEMA_VERSION,
+  PI_RPC_ADAPTER_IDENTITY,
+  type WorkbenchRuntimeEvent,
+  type WorkbenchRuntimeIntentReceipt,
+  type WorkbenchRuntimeIntentRequest,
+  type WorkbenchRuntimeSnapshot,
+} from './types';
+
+const EVENT_BUFFER_LIMIT = 256;
+const MAX_RESYNC_READS_WITHOUT_PROGRESS = 2;
+const RUNTIME_PHASES = new Set([
+  'disconnected',
+  'probing',
+  'starting',
+  'ready',
+  'failed',
+  'stopping',
+]);
+const SESSION_MODES = new Set(['standard', 'managed']);
+const SESSION_PHASES = new Set(['creating', 'idle', 'running', 'stopping', 'ended', 'failed']);
+const OPERATION_KINDS = new Set(['permission', 'question']);
+const OPERATION_PHASES = new Set(['awaitingDecision', 'decisionSubmitted']);
+const EVENT_KINDS = new Set([
+  'runtimeStateChanged',
+  'workspaceChanged',
+  'sessionStateChanged',
+  'operationRequested',
+  'operationResolved',
+]);
+
+export type WorkbenchRuntimeSyncStatus =
+  | 'idle'
+  | 'bootstrapping'
+  | 'ready'
+  | 'resyncing'
+  | 'failed';
+
+export interface WorkbenchRuntimeStoreState {
+  syncStatus: WorkbenchRuntimeSyncStatus;
+  snapshot: WorkbenchRuntimeSnapshot | null;
+  lastEvent: WorkbenchRuntimeEvent | null;
+  stableErrorCode: string | null;
+  start: () => Promise<void>;
+  stop: () => void;
+  submitIntent: (
+    request: WorkbenchRuntimeIntentRequest,
+  ) => Promise<WorkbenchRuntimeIntentReceipt>;
+}
+
+const isValidCounter = (value: number): boolean =>
+  Number.isSafeInteger(value) && value >= 0;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const contractMismatch = (): never => {
+  throw new Error('runtime_contract_mismatch');
+};
+
+const nullableString = (value: unknown): string | null => {
+  if (value === null) return null;
+  if (typeof value !== 'string') return contractMismatch();
+  return value;
+};
+
+const sanitizeSnapshot = (input: unknown): WorkbenchRuntimeSnapshot => {
+  if (!isRecord(input) || !isRecord(input.adapter)) return contractMismatch();
+  if (
+    input.schemaVersion !== HALO_WORKBENCH_SCHEMA_VERSION
+    || !RUNTIME_PHASES.has(String(input.phase))
+    || input.adapter.identity !== PI_RPC_ADAPTER_IDENTITY
+    || typeof input.adapter.available !== 'boolean'
+    || !Array.isArray(input.sessions)
+    || !Array.isArray(input.pendingOperations)
+    || typeof input.lastSequence !== 'number'
+    || !isValidCounter(input.lastSequence)
+    || typeof input.stateVersion !== 'number'
+    || !isValidCounter(input.stateVersion)
+  ) {
+    return contractMismatch();
+  }
+
+  const workspace = input.workspace === null
+    ? null
+    : (() => {
+        if (
+          !isRecord(input.workspace)
+          || typeof input.workspace.workspaceId !== 'string'
+          || typeof input.workspace.displayName !== 'string'
+          || typeof input.workspace.rootPath !== 'string'
+          || typeof input.workspace.trusted !== 'boolean'
+          || typeof input.workspace.gitRepository !== 'boolean'
+        ) {
+          return contractMismatch();
+        }
+        return {
+          workspaceId: input.workspace.workspaceId,
+          displayName: input.workspace.displayName,
+          rootPath: input.workspace.rootPath,
+          trusted: input.workspace.trusted,
+          gitRepository: input.workspace.gitRepository,
+        };
+      })();
+
+  const sessions = input.sessions.map(session => {
+    if (
+      !isRecord(session)
+      || typeof session.sessionId !== 'string'
+      || !SESSION_MODES.has(String(session.mode))
+      || !SESSION_PHASES.has(String(session.phase))
+    ) {
+      return contractMismatch();
+    }
+    return {
+      sessionId: session.sessionId,
+      mode: session.mode as WorkbenchRuntimeSnapshot['sessions'][number]['mode'],
+      phase: session.phase as WorkbenchRuntimeSnapshot['sessions'][number]['phase'],
+    };
+  });
+
+  const pendingOperations = input.pendingOperations.map(operation => {
+    if (
+      !isRecord(operation)
+      || typeof operation.operationId !== 'string'
+      || typeof operation.sessionId !== 'string'
+      || !OPERATION_KINDS.has(String(operation.kind))
+      || !OPERATION_PHASES.has(String(operation.phase))
+    ) {
+      return contractMismatch();
+    }
+    const redactedToolCallId = nullableString(operation.redactedToolCallId);
+    if (
+      redactedToolCallId !== null
+      && !redactedToolCallId.startsWith('tool-')
+    ) {
+      return contractMismatch();
+    }
+    return {
+      operationId: operation.operationId,
+      sessionId: operation.sessionId,
+      kind: operation.kind as WorkbenchRuntimeSnapshot['pendingOperations'][number]['kind'],
+      redactedToolCallId,
+      phase: operation.phase as WorkbenchRuntimeSnapshot['pendingOperations'][number]['phase'],
+    };
+  });
+
+  const runtimeError = input.error === null
+    ? null
+    : (() => {
+        if (
+          !isRecord(input.error)
+          || typeof input.error.code !== 'string'
+          || typeof input.error.recoveryAction !== 'string'
+          || typeof input.error.summary !== 'string'
+        ) {
+          return contractMismatch();
+        }
+        return {
+          code: input.error.code,
+          recoveryAction: input.error.recoveryAction,
+          summary: input.error.summary,
+        };
+      })();
+
+  return {
+    schemaVersion: HALO_WORKBENCH_SCHEMA_VERSION,
+    phase: input.phase as WorkbenchRuntimeSnapshot['phase'],
+    adapter: {
+      identity: PI_RPC_ADAPTER_IDENTITY,
+      available: input.adapter.available,
+    },
+    workspace,
+    sessions,
+    pendingOperations,
+    lastSequence: input.lastSequence,
+    stateVersion: input.stateVersion,
+    error: runtimeError,
+  };
+};
+
+const sanitizeEvent = (input: unknown): WorkbenchRuntimeEvent | null => {
+  if (
+    !isRecord(input)
+    || typeof input.sequence !== 'number'
+    || !isValidCounter(input.sequence)
+    || input.sequence === 0
+    || typeof input.stateVersion !== 'number'
+    || !isValidCounter(input.stateVersion)
+    || !EVENT_KINDS.has(String(input.kind))
+    || typeof input.summary !== 'string'
+    || typeof input.occurredAtMs !== 'number'
+    || !isValidCounter(input.occurredAtMs)
+  ) {
+    return null;
+  }
+
+  try {
+    return {
+      sequence: input.sequence,
+      stateVersion: input.stateVersion,
+      correlationId: nullableString(input.correlationId),
+      kind: input.kind as WorkbenchRuntimeEvent['kind'],
+      summary: input.summary,
+      sessionId: nullableString(input.sessionId),
+      operationId: nullableString(input.operationId),
+      occurredAtMs: input.occurredAtMs,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const once = (unlisten: WorkbenchRuntimeUnlisten): WorkbenchRuntimeUnlisten => {
+  let called = false;
+  return () => {
+    if (called) return;
+    called = true;
+    unlisten();
+  };
+};
+
+export const createWorkbenchRuntimeStore = (
+  client: WorkbenchRuntimeClient,
+): StoreApi<WorkbenchRuntimeStoreState> => {
+  let generation = 0;
+  let cursor = 0;
+  let activeUnlisten: WorkbenchRuntimeUnlisten | null = null;
+  let startPromise: Promise<void> | null = null;
+  let resyncPromise: Promise<void> | null = null;
+  let resyncRequested = false;
+  let bufferOverflowed = false;
+  const bufferedEvents = new Map<number, WorkbenchRuntimeEvent>();
+  const storeRef: { current: StoreApi<WorkbenchRuntimeStoreState> | null } = {
+    current: null,
+  };
+
+  const getStore = (): StoreApi<WorkbenchRuntimeStoreState> => {
+    if (!storeRef.current) throw new Error('workbench_runtime_store_uninitialized');
+    return storeRef.current;
+  };
+
+  const setState = (state: Partial<WorkbenchRuntimeStoreState>): void => {
+    getStore().setState(state);
+  };
+
+  const fail = (code: string, expectedGeneration: number): void => {
+    if (generation !== expectedGeneration) return;
+    activeUnlisten?.();
+    activeUnlisten = null;
+    resyncRequested = false;
+    bufferOverflowed = false;
+    bufferedEvents.clear();
+    setState({
+      syncStatus: 'failed',
+      snapshot: null,
+      lastEvent: null,
+      stableErrorCode: code,
+    });
+  };
+
+  const bufferEvent = (event: WorkbenchRuntimeEvent): void => {
+    if (bufferedEvents.has(event.sequence)) return;
+    if (bufferedEvents.size >= EVENT_BUFFER_LIMIT) {
+      bufferOverflowed = true;
+      const oldest = bufferedEvents.keys().next().value as number | undefined;
+      if (oldest !== undefined) bufferedEvents.delete(oldest);
+    }
+    bufferedEvents.set(event.sequence, event);
+  };
+
+  const discardCoveredEvents = (): void => {
+    for (const sequence of bufferedEvents.keys()) {
+      if (sequence <= cursor) bufferedEvents.delete(sequence);
+    }
+  };
+
+  const drainContinuousEvents = (): boolean => {
+    discardCoveredEvents();
+    let latest: WorkbenchRuntimeEvent | null = null;
+    while (bufferedEvents.has(cursor + 1)) {
+      latest = bufferedEvents.get(cursor + 1) ?? null;
+      bufferedEvents.delete(cursor + 1);
+      cursor += 1;
+    }
+    if (latest) setState({ lastEvent: latest });
+    return latest !== null;
+  };
+
+  const readValidatedSnapshot = async (): Promise<WorkbenchRuntimeSnapshot> => {
+    const next: unknown = await client.readSnapshot();
+    return sanitizeSnapshot(next);
+  };
+
+  const runResync = async (expectedGeneration: number): Promise<void> => {
+    let readsWithoutProgress = 0;
+    try {
+      do {
+        resyncRequested = false;
+        const previousCursor = cursor;
+        const next = await readValidatedSnapshot();
+        if (generation !== expectedGeneration) return;
+        if (next.lastSequence < cursor) {
+          readsWithoutProgress += 1;
+          resyncRequested = true;
+          continue;
+        }
+
+        cursor = next.lastSequence;
+        setState({ snapshot: next, stableErrorCode: null });
+        discardCoveredEvents();
+        const acceptedNewerEvents = drainContinuousEvents();
+        resyncRequested = acceptedNewerEvents
+          || bufferedEvents.size > 0
+          || bufferOverflowed;
+        bufferOverflowed = false;
+        if (!resyncRequested || cursor > previousCursor) {
+          readsWithoutProgress = 0;
+        } else {
+          readsWithoutProgress += 1;
+        }
+      } while (
+        resyncRequested
+        && readsWithoutProgress < MAX_RESYNC_READS_WITHOUT_PROGRESS
+        && generation === expectedGeneration
+      );
+
+      if (readsWithoutProgress >= MAX_RESYNC_READS_WITHOUT_PROGRESS) {
+        const code = bufferedEvents.size > 0 || bufferOverflowed
+          ? 'runtime_event_gap'
+          : 'runtime_snapshot_stale';
+        fail(code, expectedGeneration);
+        return;
+      }
+      if (generation === expectedGeneration) setState({ syncStatus: 'ready' });
+    } catch (error) {
+      const code = error instanceof Error && error.message === 'runtime_contract_mismatch'
+        ? 'runtime_contract_mismatch'
+        : 'runtime_transport_unavailable';
+      fail(code, expectedGeneration);
+    }
+  };
+
+  const scheduleResync = (expectedGeneration: number): void => {
+    if (generation !== expectedGeneration) return;
+    if (resyncPromise) {
+      resyncRequested = true;
+      return;
+    }
+    setState({ syncStatus: 'resyncing' });
+    const pendingResync = runResync(expectedGeneration);
+    resyncPromise = pendingResync;
+    void pendingResync.finally(() => {
+      if (resyncPromise !== pendingResync) return;
+      resyncPromise = null;
+      if (resyncRequested && generation === expectedGeneration) {
+        scheduleResync(expectedGeneration);
+      }
+    });
+  };
+
+  const onEvent = (expectedGeneration: number, event: WorkbenchRuntimeEvent): void => {
+    if (generation !== expectedGeneration) return;
+    const sanitizedEvent = sanitizeEvent(event);
+    if (!sanitizedEvent || sanitizedEvent.sequence <= cursor) return;
+    bufferEvent(sanitizedEvent);
+    if (getStore().getState().syncStatus === 'bootstrapping') return;
+
+    const accepted = drainContinuousEvents();
+    if (accepted || bufferedEvents.size > 0 || bufferOverflowed) {
+      scheduleResync(expectedGeneration);
+    }
+  };
+
+  const runStart = async (expectedGeneration: number): Promise<void> => {
+    try {
+      const rawUnlisten = await client.subscribe(event => onEvent(expectedGeneration, event));
+      const localUnlisten = once(rawUnlisten);
+      if (generation !== expectedGeneration) {
+        localUnlisten();
+        return;
+      }
+      activeUnlisten = localUnlisten;
+
+      const initial = await readValidatedSnapshot();
+      if (generation !== expectedGeneration) return;
+      cursor = initial.lastSequence;
+      setState({ snapshot: initial, stableErrorCode: null });
+      discardCoveredEvents();
+      const accepted = drainContinuousEvents();
+      if (accepted || bufferedEvents.size > 0 || bufferOverflowed) {
+        scheduleResync(expectedGeneration);
+      } else {
+        setState({ syncStatus: 'ready' });
+      }
+    } catch (error) {
+      const code = error instanceof Error && error.message === 'runtime_contract_mismatch'
+        ? 'runtime_contract_mismatch'
+        : 'runtime_transport_unavailable';
+      fail(code, expectedGeneration);
+    }
+  };
+
+  const start = (): Promise<void> => {
+    if (startPromise) return startPromise;
+    if (activeUnlisten && getStore().getState().syncStatus !== 'failed') return Promise.resolve();
+
+    const expectedGeneration = generation + 1;
+    generation = expectedGeneration;
+    cursor = 0;
+    bufferedEvents.clear();
+    bufferOverflowed = false;
+    resyncRequested = false;
+    setState({
+      syncStatus: 'bootstrapping',
+      snapshot: null,
+      lastEvent: null,
+      stableErrorCode: null,
+    });
+    const pendingStart = runStart(expectedGeneration);
+    startPromise = pendingStart;
+    void pendingStart.finally(() => {
+      if (startPromise === pendingStart) startPromise = null;
+    });
+    return pendingStart;
+  };
+
+  const stop = (): void => {
+    generation += 1;
+    activeUnlisten?.();
+    activeUnlisten = null;
+    startPromise = null;
+    resyncPromise = null;
+    resyncRequested = false;
+    bufferOverflowed = false;
+    bufferedEvents.clear();
+    cursor = 0;
+    setState({
+      syncStatus: 'idle',
+      snapshot: null,
+      lastEvent: null,
+      stableErrorCode: null,
+    });
+  };
+
+  storeRef.current = createStore<WorkbenchRuntimeStoreState>(() => ({
+    syncStatus: 'idle',
+    snapshot: null,
+    lastEvent: null,
+    stableErrorCode: null,
+    start,
+    stop,
+    submitIntent: request => client.submitIntent(request),
+  }));
+
+  return getStore();
+};
+
+export const workbenchRuntimeStore = createWorkbenchRuntimeStore(
+  createWorkbenchRuntimeClient(createTauriWorkbenchRuntimeTransport()),
+);

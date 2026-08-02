@@ -16,6 +16,7 @@ pub use bitfun_core_types::{
     WorktreeError, WorktreeErrorCode, WorktreeLifecycle, WorktreeSettings, WorktreeSummary,
 };
 
+mod halo_workbench;
 mod local_workspace_snapshot;
 #[cfg(feature = "permission")]
 mod permission;
@@ -32,6 +33,14 @@ pub use bitfun_product_domains::tool_permissions::{
     PermissionRequestSourceKind, PermissionResourceCaseSensitivity, PermissionRule,
     PermissionRuleset, PermissionRuntimeCeiling, PermissionRuntimeCeilingValidationError,
     ToolPermissionConfig,
+};
+pub use halo_workbench::{
+    PiProviderReadiness, PiProviderReadinessPort, PiRpcCommand,
+    PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision,
+    PiRpcOperationKind, PiRpcPort, PiRpcReply,
+    PiRpcSessionMode, PiRpcWorkspace, WorkbenchWorkspaceFacts,
+    WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
+    PI_RPC_ADAPTER_IDENTITY,
 };
 pub use local_workspace_snapshot::{
     LocalWorkspaceSnapshotPort, LocalWorkspaceSnapshotSessionRequest, LocalWorkspaceSnapshotStats,

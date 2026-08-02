@@ -16,9 +16,8 @@ import { usePermissionRequestNotify } from '../hooks/usePermissionRequestNotify'
 import { useApp } from '../hooks/useApp';
 import { useShortcut } from '@/infrastructure/hooks/useShortcut';
 import { configManager } from '@/infrastructure/config/services/ConfigManager';
-import { FlowChatManager } from '../../flow_chat/services/FlowChatManager';
 import WorkspaceBody from './WorkspaceBody';
-import { workspaceAPI } from '@/infrastructure/api';
+import { workspaceAPI } from '@/infrastructure/api/service-api/WorkspaceAPI';
 import { systemAPI } from '@/infrastructure/api/service-api/SystemAPI';
 import type { CloseBehavior } from '@/infrastructure/api/service-api/SystemAPI';
 import { confirmDialog } from '@/component-library';
@@ -27,8 +26,16 @@ import { DailyAppUpdateGate } from '@/infrastructure/update';
 import { useI18n } from '@/infrastructure/i18n';
 import { isRemoteWorkspace } from '@/shared/types';
 import { shortcutManager, parseStoredKeybindings } from '@/infrastructure/services/ShortcutManager';
-import { isMacOSDesktopRuntime } from '@/infrastructure/runtime';
+import {
+  isHaloLocalCodingScope,
+  isMacOSDesktopRuntime,
+  isTauriRuntime,
+} from '@/infrastructure/runtime';
 import { flowChatSessionConfigForWorkspace } from '../utils/projectSessionWorkspace';
+import {
+  createWorkbenchRuntimeRequestId,
+  workbenchRuntimeStore,
+} from '@/infrastructure/workbench-runtime';
 import './AppLayout.scss';
 
 type TransitionDirection = 'entering' | 'returning' | null;
@@ -68,6 +75,39 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
     () => recentWorkspaces.filter(workspace => !isRemoteWorkspace(workspace)),
     [recentWorkspaces]
   );
+  const projectedWorkbenchWorkspaceRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!(isHaloLocalCodingScope() && isTauriRuntime())) return;
+    if (!currentWorkspace?.rootPath || isRemoteWorkspace(currentWorkspace)) {
+      projectedWorkbenchWorkspaceRef.current = null;
+      return;
+    }
+
+    const workspaceFingerprint = [
+      currentWorkspace.id,
+      currentWorkspace.rootPath,
+    ].join('\n');
+    if (projectedWorkbenchWorkspaceRef.current === workspaceFingerprint) return;
+    projectedWorkbenchWorkspaceRef.current = workspaceFingerprint;
+
+    void workbenchRuntimeStore.getState().submitIntent({
+      requestId: createWorkbenchRuntimeRequestId('open-workspace'),
+      intent: {
+        type: 'openWorkspace',
+        workspace: {
+          workspaceId: currentWorkspace.id,
+          displayName: currentWorkspace.name,
+          rootPath: currentWorkspace.rootPath,
+        },
+      },
+    }).catch(() => {
+      if (projectedWorkbenchWorkspaceRef.current === workspaceFingerprint) {
+        projectedWorkbenchWorkspaceRef.current = null;
+      }
+      log.warn('Failed to project the active workspace into Halo Workbench Runtime');
+    });
+  }, [currentWorkspace, currentWorkspace?.id, currentWorkspace?.name, currentWorkspace?.rootPath]);
 
   const isMacOS = useMemo(() => {
     return isMacOSDesktopRuntime();
@@ -257,6 +297,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
 
   // Initialize FlowChatManager
   React.useEffect(() => {
+    if (isHaloLocalCodingScope()) return;
+
     let cancelled = false;
     const initializeFlowChat = async () => {
       if (!currentWorkspace?.rootPath) return;
@@ -270,6 +312,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
           sessionStorage.removeItem('bitfun:flowchat:preferredMode');
         }
 
+        const { FlowChatManager } = await import('../../flow_chat/services/FlowChatManager');
         const flowChatManager = FlowChatManager.getInstance();
         const hasHistoricalSessions = await flowChatManager.initialize(
           currentWorkspace.rootPath,
@@ -384,7 +427,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
         ]);
 
         const persistInterruptedTurnsForExit = async () => {
+          if (isHaloLocalCodingScope()) return;
+
           try {
+            const { FlowChatManager } = await import('../../flow_chat/services/FlowChatManager');
             const flowChatManager = FlowChatManager.getInstance();
             await flowChatManager.saveAllInProgressTurns();
           } catch (error) {
