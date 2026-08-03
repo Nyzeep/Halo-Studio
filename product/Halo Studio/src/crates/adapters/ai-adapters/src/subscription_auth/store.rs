@@ -27,6 +27,7 @@ const STORE_FILE_LOCK_RETRY_INTERVAL: Duration = Duration::from_millis(25);
 // Leave headroom for platform-store implementations and split every logical
 // secret so a long JWT or refresh token remains portable across all hosts.
 const SECRET_CHUNK_BYTES: usize = 2_048;
+const MAX_PI_CREDENTIAL_PARTS: usize = 256;
 
 /// A single credential assembled in memory after its secret material has been
 /// read from the platform credential vault.
@@ -1110,13 +1111,34 @@ pub async fn write_pi_credential(reference: &str, secret: &str) -> Result<()> {
         return Err(anyhow!("Pi credential must not be empty"));
     }
     let chunks = secret_chunks(secret);
+    if chunks.len() > MAX_PI_CREDENTIAL_PARTS {
+        return Err(anyhow!("Pi credential is too large"));
+    }
     for (index, chunk) in chunks.iter().enumerate() {
-        set_secret_bytes_for(
+        if let Err(error) = set_secret_bytes_for(
             PI_KEYRING_SERVICE,
             &pi_credential_entry(reference, &format!("secret/{index}")),
             chunk.clone(),
         )
-        .await?;
+        .await
+        {
+            if let Err(cleanup_error) = cleanup_pi_credential_chunks(reference, index + 1).await {
+                log::warn!(
+                    "cleanup after interrupted Pi credential write remains pending: {cleanup_error:#}"
+                );
+            }
+            if let Err(cleanup_error) = delete_secret_entry_for(
+                PI_KEYRING_SERVICE,
+                &pi_credential_entry(reference, "parts"),
+            )
+            .await
+            {
+                log::warn!(
+                    "cleanup of interrupted Pi credential metadata remains pending: {cleanup_error:#}"
+                );
+            }
+            return Err(error);
+        }
     }
     if let Err(error) = set_secret_bytes_for(
         PI_KEYRING_SERVICE,
@@ -1125,16 +1147,39 @@ pub async fn write_pi_credential(reference: &str, secret: &str) -> Result<()> {
     )
     .await
     {
-        for index in 0..chunks.len() {
-            let _ = delete_secret_entry_for(
-                PI_KEYRING_SERVICE,
-                &pi_credential_entry(reference, &format!("secret/{index}")),
-            )
-            .await;
+        if let Err(cleanup_error) = cleanup_pi_credential_chunks(reference, chunks.len()).await {
+            log::warn!(
+                "cleanup after interrupted Pi credential metadata write remains pending: {cleanup_error:#}"
+            );
+        }
+        if let Err(cleanup_error) =
+            delete_secret_entry_for(PI_KEYRING_SERVICE, &pi_credential_entry(reference, "parts"))
+                .await
+        {
+            log::warn!(
+                "cleanup of interrupted Pi credential metadata remains pending: {cleanup_error:#}"
+            );
         }
         return Err(error);
     }
     Ok(())
+}
+
+async fn cleanup_pi_credential_chunks(reference: &str, parts: usize) -> Result<()> {
+    let mut first_error = None;
+    for index in 0..parts.min(MAX_PI_CREDENTIAL_PARTS) {
+        if let Err(error) = delete_secret_entry_for(
+            PI_KEYRING_SERVICE,
+            &pi_credential_entry(reference, &format!("secret/{index}")),
+        )
+        .await
+        {
+            if first_error.is_none() {
+                first_error = Some(error);
+            }
+        }
+    }
+    first_error.map_or(Ok(()), Err)
 }
 
 /// Reads one Pi credential by its opaque reference. This is the only Pi
@@ -1149,7 +1194,7 @@ pub async fn read_pi_credential(reference: &str) -> Result<Option<String>> {
     let parts = String::from_utf8(parts)
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
-        .filter(|value| (1..=256).contains(value))
+        .filter(|value| (1..=MAX_PI_CREDENTIAL_PARTS).contains(value))
         .ok_or_else(|| anyhow!("Pi credential metadata is invalid"))?;
     let mut bytes = Vec::new();
     for index in 0..parts {
@@ -1175,13 +1220,18 @@ pub async fn delete_pi_credential(reference: &str) -> Result<()> {
     let Some(parts) =
         get_secret_bytes_for(PI_KEYRING_SERVICE, &pi_credential_entry(reference, "parts")).await?
     else {
-        return Ok(());
+        return cleanup_pi_credential_chunks(reference, MAX_PI_CREDENTIAL_PARTS).await;
     };
     let parts = String::from_utf8(parts)
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
-        .filter(|value| (1..=256).contains(value))
-        .ok_or_else(|| anyhow!("Pi credential metadata is invalid"))?;
+        .filter(|value| (1..=MAX_PI_CREDENTIAL_PARTS).contains(value));
+    let Some(parts) = parts else {
+        cleanup_pi_credential_chunks(reference, MAX_PI_CREDENTIAL_PARTS).await?;
+        delete_secret_entry_for(PI_KEYRING_SERVICE, &pi_credential_entry(reference, "parts"))
+            .await?;
+        return Err(anyhow!("Pi credential metadata is invalid"));
+    };
     for index in 0..parts {
         delete_secret_entry_for(
             PI_KEYRING_SERVICE,
@@ -2082,5 +2132,68 @@ mod file_lock_tests {
         let message = format!("{error:#}");
         assert!(message.contains("transaction lock"));
         assert!(message.contains("directory") || message.contains("regular file"));
+    }
+}
+
+#[cfg(test)]
+mod pi_credential_tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn temporary_metadata_path(label: &str) -> PathBuf {
+        std::env::temp_dir()
+            .join(format!(
+                "bitfun-pi-credential-{label}-{}",
+                uuid::Uuid::new_v4()
+            ))
+            .join("subscription_auth.json")
+    }
+
+    #[tokio::test]
+    async fn partial_pi_credential_write_removes_already_written_chunks() {
+        let _guard = test_lock().lock().expect("Pi credential test lock");
+        let metadata_path = temporary_metadata_path("partial-write");
+        set_store_path_for_test(metadata_path);
+        set_test_vault_write_failure_after(Some(1));
+        set_test_vault_delete_failure(false);
+
+        let reference = "halo-pi-credential-v1-partial-write";
+        let error = write_pi_credential(reference, &"x".repeat(SECRET_CHUNK_BYTES * 2))
+            .await
+            .expect_err("the injected second vault write must fail");
+        assert!(error.to_string().contains("injected"));
+
+        let entries = test_vault_entries_for_assertion();
+        assert!(entries.keys().all(|entry| !entry.contains(reference)));
+        set_test_vault_write_failure_after(None);
+    }
+
+    #[tokio::test]
+    async fn deleting_a_pi_credential_without_parts_cleans_orphaned_chunks() {
+        let _guard = test_lock().lock().expect("Pi credential test lock");
+        let metadata_path = temporary_metadata_path("missing-parts");
+        set_store_path_for_test(metadata_path);
+        set_test_vault_delete_failure(false);
+
+        let reference = "halo-pi-credential-v1-missing-parts";
+        set_secret_bytes_for(
+            PI_KEYRING_SERVICE,
+            &pi_credential_entry(reference, "secret/0"),
+            b"orphaned".to_vec(),
+        )
+        .await
+        .expect("orphaned test chunk");
+
+        delete_pi_credential(reference)
+            .await
+            .expect("orphaned chunks should be cleaned");
+        assert!(!test_vault_entries_for_assertion()
+            .keys()
+            .any(|entry| entry.contains(reference)));
     }
 }

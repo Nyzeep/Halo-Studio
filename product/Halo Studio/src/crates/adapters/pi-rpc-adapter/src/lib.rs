@@ -1830,17 +1830,11 @@ pub fn pi_models_json_projection(
             "models".to_string(),
             json!([{
                 "id": configuration.model_id,
-                "name": configuration.model_id,
-                "reasoning": reasoning,
-                "input": ["text"],
-                "contextWindow": 128000,
-                "maxTokens": 16384,
-                "cost": {
-                    "input": 0,
-                    "output": 0,
-                    "cacheRead": 0,
-                    "cacheWrite": 0
-                }
+                // Only facts owned by Halo's selected configuration and the
+                // audited capability port belong in this projection. Pi may
+                // discover richer metadata; inventing context, token limits,
+                // modalities, or pricing here would create false provenance.
+                "reasoning": reasoning
             }]),
         );
     }

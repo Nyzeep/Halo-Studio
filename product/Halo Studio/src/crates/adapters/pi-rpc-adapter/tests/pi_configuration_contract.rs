@@ -7,8 +7,8 @@ use bitfun_pi_rpc_adapter::{
 };
 use bitfun_runtime_ports::{
     PiCredentialSecret, PiCredentialStorePort, PiProviderCapability, PiProviderCapabilityPort,
-    PiProviderCapabilityRequest, PiRpcSessionMode, PiRuntimeConfiguration, PiStartupOptions,
-    PiThinkingLevel, PortErrorKind,
+    PiProviderCapabilityRequest, PiProviderReadinessPort, PiRpcSessionMode, PiRuntimeConfiguration,
+    PiStartupOptions, PiThinkingLevel, PortErrorKind,
 };
 
 fn configuration(model_id: &str, base_url: Option<&str>) -> PiRuntimeConfiguration {
@@ -58,6 +58,12 @@ async fn provider_capability_projection_contains_pi_api_and_model_metadata() {
     assert_eq!(provider["api"], "openai-completions");
     assert_eq!(provider["models"][0]["id"], "gpt-5");
     assert_eq!(provider["models"][0]["reasoning"], true);
+    for unverified in ["contextWindow", "maxTokens", "cost", "input"] {
+        assert!(
+            provider["models"][0].get(unverified).is_none(),
+            "projection must not invent unverified model metadata: {unverified}"
+        );
+    }
     assert_eq!(provider["baseUrl"], "https://api.example.test/v1");
     assert!(!projection.to_string().contains("synthetic"));
 }
@@ -320,4 +326,64 @@ async fn capability_port_is_called_through_the_configuration_service_seam() {
         .expect("capability seam");
     assert_eq!(capability.provider_id, "openai");
     assert_eq!(capability.model_id, "gpt-5");
+}
+
+#[tokio::test]
+async fn configured_readiness_resolves_the_credential_reference_before_reporting_available() {
+    let repository = Arc::new(MemoryPiRuntimeConfigurationRepository::new());
+    let credentials = Arc::new(MemoryPiCredentialStore::new());
+    let service = PiRuntimeConfigurationService::new_without_capabilities(repository)
+        .with_credential_store(credentials.clone());
+
+    service
+        .create(configuration("gpt-5", None))
+        .await
+        .expect("configuration shape remains independently writable");
+    assert_eq!(
+        service
+            .check()
+            .await
+            .expect_err("missing credential must not report readiness")
+            .kind,
+        PortErrorKind::NotFound
+    );
+
+    let credential_ref = credentials
+        .write(
+            "openai",
+            PiCredentialSecret::new("synthetic-readiness-secret"),
+        )
+        .await
+        .expect("readiness credential fixture");
+    service
+        .delete()
+        .await
+        .expect("remove missing configuration");
+    let mut configured = configuration("gpt-5", None);
+    configured.credential_ref = credential_ref.clone();
+    service
+        .create(configured)
+        .await
+        .expect("configuration with an opaque credential reference");
+    assert_eq!(
+        service
+            .check()
+            .await
+            .expect("credential-backed readiness")
+            .available,
+        true
+    );
+
+    credentials
+        .delete("openai", &credential_ref)
+        .await
+        .expect("delete readiness credential");
+    assert_eq!(
+        service
+            .check()
+            .await
+            .expect_err("readiness must drop after credential deletion")
+            .kind,
+        PortErrorKind::NotFound
+    );
 }

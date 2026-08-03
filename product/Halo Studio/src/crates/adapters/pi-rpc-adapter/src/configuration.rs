@@ -258,6 +258,7 @@ fn replace_configuration_file(temporary: &Path, destination: &Path) -> PortResul
 pub struct PiRuntimeConfigurationService {
     repository: Arc<dyn PiRuntimeConfigurationRepository>,
     capabilities: Option<Arc<dyn PiProviderCapabilityPort>>,
+    credential_store: Option<Arc<dyn PiCredentialStorePort>>,
     current: AsyncMutex<Option<PiRuntimeConfiguration>>,
     previous: AsyncMutex<Option<PiRuntimeConfiguration>>,
 }
@@ -270,6 +271,7 @@ impl PiRuntimeConfigurationService {
         Self {
             repository,
             capabilities: Some(capabilities),
+            credential_store: None,
             current: AsyncMutex::new(None),
             previous: AsyncMutex::new(None),
         }
@@ -281,9 +283,22 @@ impl PiRuntimeConfigurationService {
         Self {
             repository,
             capabilities: None,
+            credential_store: None,
             current: AsyncMutex::new(None),
             previous: AsyncMutex::new(None),
         }
+    }
+
+    /// Attaches the provider-bound credential store at the composition seam.
+    /// Readiness checks only whether the opaque reference resolves; the secret
+    /// is borrowed and immediately dropped without entering the configuration
+    /// projection or any error value.
+    pub fn with_credential_store(
+        mut self,
+        credential_store: Arc<dyn PiCredentialStorePort>,
+    ) -> Self {
+        self.credential_store = Some(credential_store);
+        self
     }
 
     pub async fn create(&self, configuration: PiRuntimeConfiguration) -> PortResult<()> {
@@ -362,6 +377,11 @@ impl PiRuntimeConfigurationService {
             PortError::new(PortErrorKind::NotFound, "Pi configuration is missing")
         })?;
         self.validate(&configuration).await?;
+        if let Some(credential_store) = self.credential_store.as_ref() {
+            credential_store
+                .read(&configuration.provider_id, &configuration.credential_ref)
+                .await?;
+        }
         Ok(PiProviderReadiness { available: true })
     }
 

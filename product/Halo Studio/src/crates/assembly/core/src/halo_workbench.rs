@@ -256,13 +256,14 @@ fn pi_configuration_path() -> Result<std::path::PathBuf, String> {
 pub fn build_halo_workbench_runtime_components(
     workspace_service: Arc<WorkspaceService>,
 ) -> Result<HaloWorkbenchRuntimeComponents, String> {
+    let credential_store = Arc::new(PiSystemCredentialStore);
     let repository = Arc::new(JsonFilePiRuntimeConfigurationRepository::new(
         pi_configuration_path()?,
     ));
-    let configuration = Arc::new(PiRuntimeConfigurationService::new_without_capabilities(
-        repository,
-    ));
-    let credential_store = Arc::new(PiSystemCredentialStore);
+    let configuration = Arc::new(
+        PiRuntimeConfigurationService::new_without_capabilities(repository)
+            .with_credential_store(credential_store.clone()),
+    );
     let adapter = selected_pi_rpc(configuration.clone(), credential_store.clone());
     let runtime = HaloWorkbenchRuntime::new(
         adapter,

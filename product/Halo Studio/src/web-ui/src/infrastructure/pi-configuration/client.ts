@@ -42,6 +42,79 @@ const isErrorCode = (value: unknown): value is PiConfigurationErrorCode => (
   && (PI_CONFIGURATION_ERROR_CODES as readonly string[]).includes(value)
 );
 
+const isSafeSelection = (value: unknown): value is string => (
+  typeof value === 'string'
+  && value.length > 0
+  && value.length <= 256
+  && !value.startsWith('-')
+  && !value.includes('\\')
+  && !Array.from(value).some(character => /\p{Cc}/u.test(character))
+);
+
+const isSafeBaseUrl = (value: unknown): value is string | null => {
+  if (value === null) {
+    return true;
+  }
+  if (typeof value !== 'string') {
+    return false;
+  }
+  if (
+    value.length === 0
+    || value.length > 2048
+    || value !== value.trim()
+    || /[\s\u0000-\u001f\u007f?#@]/u.test(value)
+  ) {
+    return false;
+  }
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:')
+      && url.hostname.length > 0
+      && url.username.length === 0
+      && url.password.length === 0
+      && url.search.length === 0
+      && url.hash.length === 0
+    );
+  } catch {
+    return false;
+  }
+};
+
+const rejectInvalidInput = (): never => {
+  throw new PiConfigurationError('pi_configuration_invalid');
+};
+
+const validateCredentialInput = (providerId: unknown, secret: unknown): void => {
+  if (!isSafeSelection(providerId)) {
+    rejectInvalidInput();
+  }
+  const secretValue = typeof secret === 'string' ? secret : '';
+  if (secretValue.length === 0 || secretValue.length > 512 * 1024) {
+    rejectInvalidInput();
+  }
+  if (Array.from(secretValue).some(character => /\p{Cc}/u.test(character))) {
+    rejectInvalidInput();
+  }
+};
+
+const validateConfigurationInput = (configuration: PiRuntimeConfigurationWriteInput): void => {
+  if (
+    typeof configuration !== 'object'
+    || configuration === null
+    || !isSafeSelection(configuration.providerId)
+    || !isSafeSelection(configuration.modelId)
+    || !/^halo-pi-credential-v1-[a-zA-Z0-9-]{1,96}$/u.test(configuration.credentialRef)
+    || !isSafeBaseUrl(configuration.baseUrl)
+    || typeof configuration.startupOptions !== 'object'
+    || configuration.startupOptions === null
+    || configuration.startupOptions.noExtensions !== true
+    || configuration.startupOptions.noApprove !== true
+  ) {
+    rejectInvalidInput();
+  }
+};
+
 /**
  * Converts Tauri rejections into a fixed public error vocabulary. The
  * transport's summary, recovery action, and raw payload are deliberately not
@@ -83,11 +156,14 @@ export interface PiConfigurationClient {
 export const createPiConfigurationClient = (
   transport: PiConfigurationTransport,
 ): PiConfigurationClient => ({
-  writeCredential: (providerId, secret) => invoke<PiCredentialWriteResponse>(
-    transport,
-    HALO_PI_CREDENTIAL_WRITE_COMMAND,
-    { request: { providerId, secret } },
-  ),
+  writeCredential: (providerId, secret) => {
+    validateCredentialInput(providerId, secret);
+    return invoke<PiCredentialWriteResponse>(
+      transport,
+      HALO_PI_CREDENTIAL_WRITE_COMMAND,
+      { request: { providerId, secret } },
+    );
+  },
   deleteCredential: (providerId, credentialRef) => invoke<void>(
     transport,
     HALO_PI_CREDENTIAL_DELETE_COMMAND,
@@ -98,16 +174,22 @@ export const createPiConfigurationClient = (
     HALO_PI_CONFIGURATION_SNAPSHOT_COMMAND,
     { request: {} },
   ),
-  createConfiguration: configuration => invoke<void>(
-    transport,
-    HALO_PI_CONFIGURATION_CREATE_COMMAND,
-    { request: { configuration } },
-  ),
-  updateConfiguration: configuration => invoke<void>(
-    transport,
-    HALO_PI_CONFIGURATION_UPDATE_COMMAND,
-    { request: { configuration } },
-  ),
+  createConfiguration: configuration => {
+    validateConfigurationInput(configuration);
+    return invoke<void>(
+      transport,
+      HALO_PI_CONFIGURATION_CREATE_COMMAND,
+      { request: { configuration } },
+    );
+  },
+  updateConfiguration: configuration => {
+    validateConfigurationInput(configuration);
+    return invoke<void>(
+      transport,
+      HALO_PI_CONFIGURATION_UPDATE_COMMAND,
+      { request: { configuration } },
+    );
+  },
   deleteConfiguration: () => invoke<void>(
     transport,
     HALO_PI_CONFIGURATION_DELETE_COMMAND,

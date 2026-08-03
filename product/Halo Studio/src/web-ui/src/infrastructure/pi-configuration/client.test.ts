@@ -125,4 +125,20 @@ describe('PiConfigurationClient', () => {
       recoveryAction: 'retry',
     });
   });
+
+  it('rejects unsafe credential and base-url input before crossing the Tauri boundary', async () => {
+    const invoke = vi.fn(async () => undefined);
+    const client = createPiConfigurationClient({ invoke });
+
+    await expect(client.writeCredential('openai', '')).rejects.toMatchObject({
+      code: 'pi_configuration_invalid',
+    });
+    await expect(client.createConfiguration({
+      ...CONFIGURATION,
+      baseUrl: 'https://user:pass@api.example.test/v1?api_key=secret',
+    })).rejects.toMatchObject({
+      code: 'pi_configuration_invalid',
+    });
+    expect(invoke).not.toHaveBeenCalled();
+  });
 });
