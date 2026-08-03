@@ -205,6 +205,27 @@
       "needsToolConfirm": "Needs confirmation",
       "badgeNeedsInput": "Waiting",
       "badgeNeedsConfirm": "Confirm",
+      "workbenchRuntime": {
+        "runtimePhase": {
+          "disconnected": "Disconnected",
+          "probing": "Checking workspace",
+          "starting": "Starting",
+          "ready": "Ready",
+          "failed": "Unavailable",
+          "stopping": "Stopping"
+        },
+        "sessionPhase": {
+          "creating": "Creating",
+          "idle": "Idle",
+          "running": "Running",
+          "waitingDeveloper": "Waiting for you",
+          "interrupted": "Interrupted",
+          "stopping": "Stopping",
+          "ended": "Ended",
+          "failed": "Failed"
+        },
+        "error": "Workbench Runtime couldn't continue. Check the workspace or try again."
+      },
       "ariaNeedsInput": "A session needs your input",
       "ariaNeedsInputWithName": "Session '{{name}}' needs your input",
       "ariaNeedsInputPlural": "{{count}} sessions need your input",

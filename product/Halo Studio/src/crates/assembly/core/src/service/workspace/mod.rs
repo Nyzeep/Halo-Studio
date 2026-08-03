@@ -26,10 +26,10 @@ pub use manager::{
 };
 pub use provider::{WorkspaceCleanupResult, WorkspaceProvider, WorkspaceSystemSummary};
 pub use service::{
-    get_global_workspace_service, set_global_workspace_service, BatchImportResult,
-    BatchRemoveResult, WorkspaceActivityMode, WorkspaceCreateOptions, WorkspaceExport,
-    WorkspaceHealthStatus, WorkspaceIdentityChangedEvent, WorkspaceImportResult,
-    WorkspaceInfoUpdates, WorkspaceQuickSummary, WorkspaceService,
+    get_global_workspace_service, is_halo_workbench_workspace_trusted,
+    set_global_workspace_service, BatchImportResult, BatchRemoveResult, WorkspaceActivityMode,
+    WorkspaceCreateOptions, WorkspaceExport, WorkspaceHealthStatus, WorkspaceIdentityChangedEvent,
+    WorkspaceImportResult, WorkspaceInfoUpdates, WorkspaceQuickSummary, WorkspaceService,
 };
 #[cfg(feature = "service-integrations")]
 pub use worktree_topology::{global_worktree_topology_service, WorktreeTopologyService};

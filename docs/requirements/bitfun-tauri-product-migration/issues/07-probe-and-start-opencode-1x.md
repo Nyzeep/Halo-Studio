@@ -1,4 +1,6 @@
-# 07 - 在 Tauri 运行时探测并启动 OpenCode 1.x
+> **历史工单：已由 [工单 07 - 探测并启动 Pi RPC](07-probe-and-start-pi-rpc.md) 取代。** 本文件保留用于迁移前 OpenCode 行为比较，不是当前 P0 生产路径，也不得作为实现入口。
+
+# 07 - 在 Tauri 运行时探测并启动 OpenCode 1.x（历史）
 
 **What to build:** 本地开发者可以从 Halo 工作台检查本机 OpenCode 1.x 的兼容性并启动真实运行时；版本、能力、认证或健康检查失败都会如实显示，且不会退回模拟协议。
 

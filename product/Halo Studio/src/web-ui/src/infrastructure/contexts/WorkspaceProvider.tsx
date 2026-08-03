@@ -9,8 +9,23 @@ import {
   type WorkspaceContextValue,
   getWorkspaceDisplayName,
 } from './WorkspaceContext';
+import { submitWorkbenchRuntimeCloseIntent } from '../workbench-runtime';
 
 const log = createLogger('WorkspaceProvider');
+
+const closeWorkbenchRuntimeBeforeActiveWorkspaceTransition = async (
+  targetWorkspaceId?: string,
+): Promise<void> => {
+  const activeWorkspace = workspaceManager.getState().currentWorkspace;
+  if (
+    !activeWorkspace
+    || activeWorkspace.workspaceKind === WorkspaceKind.Remote
+    || (targetWorkspaceId && activeWorkspace.id !== targetWorkspaceId)
+  ) {
+    return;
+  }
+  await submitWorkbenchRuntimeCloseIntent();
+};
 
 interface WorkspaceProviderProps {
   children: ReactNode;
@@ -33,16 +48,31 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         assistantWorkspacesList: openedWorkspacesList.filter(
           (workspace) => workspace.workspaceKind === WorkspaceKind.Assistant
         ),
-        openWorkspace: async (path: string) => workspaceManager.openWorkspace(path),
+        openWorkspace: async (path: string) => {
+          await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition();
+          return workspaceManager.openWorkspace(path);
+        },
         createAssistantWorkspace: async () => workspaceManager.createAssistantWorkspace(),
-        closeWorkspace: async () => workspaceManager.closeWorkspace(),
-        closeWorkspaceById: async (workspaceId: string) => workspaceManager.closeWorkspaceById(workspaceId),
+        closeWorkspace: async () => {
+          await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition();
+          return workspaceManager.closeWorkspace();
+        },
+        closeWorkspaceById: async (workspaceId: string) => {
+          await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition(workspaceId);
+          return workspaceManager.closeWorkspaceById(workspaceId);
+        },
         deleteAssistantWorkspace: async (workspaceId: string) =>
           workspaceManager.deleteAssistantWorkspace(workspaceId),
         resetAssistantWorkspace: async (workspaceId: string) =>
           workspaceManager.resetAssistantWorkspace(workspaceId),
-        switchWorkspace: async (workspace: WorkspaceInfo) => workspaceManager.switchWorkspace(workspace),
-        setActiveWorkspace: async (workspaceId: string) => workspaceManager.setActiveWorkspace(workspaceId),
+        switchWorkspace: async (workspace: WorkspaceInfo) => {
+          await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition();
+          return workspaceManager.switchWorkspace(workspace);
+        },
+        setActiveWorkspace: async (workspaceId: string) => {
+          await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition();
+          return workspaceManager.setActiveWorkspace(workspaceId);
+        },
         reorderOpenedWorkspacesInSection: async (
           section: 'assistants' | 'projects',
           sourceWorkspaceId: string,
@@ -83,16 +113,31 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         openedWorkspacesList: [],
         normalWorkspacesList: [],
         assistantWorkspacesList: [],
-        openWorkspace: async (path: string) => workspaceManager.openWorkspace(path),
+        openWorkspace: async (path: string) => {
+          await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition();
+          return workspaceManager.openWorkspace(path);
+        },
         createAssistantWorkspace: async () => workspaceManager.createAssistantWorkspace(),
-        closeWorkspace: async () => workspaceManager.closeWorkspace(),
-        closeWorkspaceById: async (workspaceId: string) => workspaceManager.closeWorkspaceById(workspaceId),
+        closeWorkspace: async () => {
+          await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition();
+          return workspaceManager.closeWorkspace();
+        },
+        closeWorkspaceById: async (workspaceId: string) => {
+          await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition(workspaceId);
+          return workspaceManager.closeWorkspaceById(workspaceId);
+        },
         deleteAssistantWorkspace: async (workspaceId: string) =>
           workspaceManager.deleteAssistantWorkspace(workspaceId),
         resetAssistantWorkspace: async (workspaceId: string) =>
           workspaceManager.resetAssistantWorkspace(workspaceId),
-        switchWorkspace: async (workspace: WorkspaceInfo) => workspaceManager.switchWorkspace(workspace),
-        setActiveWorkspace: async (workspaceId: string) => workspaceManager.setActiveWorkspace(workspaceId),
+        switchWorkspace: async (workspace: WorkspaceInfo) => {
+          await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition();
+          return workspaceManager.switchWorkspace(workspace);
+        },
+        setActiveWorkspace: async (workspaceId: string) => {
+          await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition();
+          return workspaceManager.setActiveWorkspace(workspaceId);
+        },
         reorderOpenedWorkspacesInSection: async (
           section: 'assistants' | 'projects',
           sourceWorkspaceId: string,
@@ -216,6 +261,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, []);
 
   const openWorkspace = useCallback(async (path: string): Promise<WorkspaceInfo> => {
+    await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition();
     return await workspaceManager.openWorkspace(path);
   }, []);
 
@@ -224,10 +270,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, []);
 
   const closeWorkspace = useCallback(async (): Promise<void> => {
+    await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition();
     return await workspaceManager.closeWorkspace();
   }, []);
 
   const closeWorkspaceById = useCallback(async (workspaceId: string): Promise<void> => {
+    await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition(workspaceId);
     return await workspaceManager.closeWorkspaceById(workspaceId);
   }, []);
 
@@ -240,10 +288,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, []);
 
   const switchWorkspace = useCallback(async (workspace: WorkspaceInfo): Promise<WorkspaceInfo> => {
+    await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition();
     return await workspaceManager.switchWorkspace(workspace);
   }, []);
 
   const setActiveWorkspace = useCallback(async (workspaceId: string): Promise<WorkspaceInfo> => {
+    await closeWorkbenchRuntimeBeforeActiveWorkspaceTransition();
     return await workspaceManager.setActiveWorkspace(workspaceId);
   }, []);
 

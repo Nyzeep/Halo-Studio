@@ -1,4 +1,6 @@
-# 架构说明
+# 架构说明（历史归档）
+
+> 本文只记录旧 PySide/QML + Rust Sidecar 的迁移前架构，包括旧 OpenCode HTTP/SSE 适配。它不是 Halo Studio 当前 P0 的架构依据；当前链路以 Halo Workbench Runtime → Pi RPC 为准。
 
 ## 分层与职责
 

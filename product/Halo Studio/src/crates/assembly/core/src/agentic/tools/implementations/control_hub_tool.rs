@@ -134,7 +134,11 @@ impl ControlHubTool {
         if browser.to_ascii_lowercase().contains("headless") {
             return Ok(());
         }
-        let reported = if browser.is_empty() { "unknown" } else { browser };
+        let reported = if browser.is_empty() {
+            "unknown"
+        } else {
+            browser
+        };
         Err(ControlHubError::new(
             ErrorCode::NotAvailable,
             format!(
@@ -402,8 +406,8 @@ Branch on `ok` and `error.code`, not on English messages.
                 // The value of a capability probe is entirely in the field
                 // values, so the assistant-visible text must be the payload
                 // itself — a one-line summary tells the model nothing.
-                let assistant = serde_json::to_string_pretty(&body)
-                    .unwrap_or_else(|_| body.to_string());
+                let assistant =
+                    serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string());
                 Ok(vec![ToolResult::ok(body, Some(assistant))])
             }
             "route_hint" => {
@@ -425,13 +429,14 @@ Branch on `ok` and `error.code`, not on English messages.
                 // otherwise send an unroutable request.
                 let mut suggestions: Vec<(&'static str, Option<&'static str>, u32, &'static str)> =
                     vec![];
-                let push = |s: &mut Vec<(&'static str, Option<&'static str>, u32, &'static str)>,
-                            domain: &'static str,
-                            tool: Option<&'static str>,
-                            score: u32,
-                            why: &'static str| {
-                    s.push((domain, tool, score, why));
-                };
+                let push =
+                    |s: &mut Vec<(&'static str, Option<&'static str>, u32, &'static str)>,
+                     domain: &'static str,
+                     tool: Option<&'static str>,
+                     score: u32,
+                     why: &'static str| {
+                        s.push((domain, tool, score, why));
+                    };
 
                 let browser_kw = [
                     "http",
@@ -2509,7 +2514,10 @@ mod control_hub_tests {
             .unwrap_or_default();
         assert!(msg.contains("Unknown domain"), "got: {msg}");
         for d in ["browser", "terminal", "meta"] {
-            assert!(msg.contains(d), "valid domain {d} missing from error: {msg}");
+            assert!(
+                msg.contains(d),
+                "valid domain {d} missing from error: {msg}"
+            );
         }
         // ComputerUse is a separate tool, not a ControlHub domain — listing it
         // as one sent models chasing a domain that never existed.
@@ -2799,9 +2807,7 @@ mod control_hub_tests {
             .expect("open_builtin succeeds without a frontend emitter");
         let payload = results.first().expect("one result").content();
         assert_eq!(
-            payload
-                .get("observable_by_agent")
-                .and_then(|v| v.as_bool()),
+            payload.get("observable_by_agent").and_then(|v| v.as_bool()),
             Some(false),
             "open_builtin must state the panel is not agent-observable: {payload}"
         );

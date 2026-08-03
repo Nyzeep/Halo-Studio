@@ -26,6 +26,7 @@ export interface DeferredStartupSystemsDependencies {
   initializeMcpServers?: () => Promise<void>;
   initializeAcpClients?: () => Promise<void>;
   preloadDeferredRenderers?: () => Promise<void>;
+  includeAgentExtensions?: boolean;
 }
 
 async function initializeIdeControlDefault(): Promise<void> {
@@ -68,6 +69,7 @@ export function scheduleDeferredStartupSystems(
   const initializeMcpServers = dependencies.initializeMcpServers ?? initializeMcpServersDefault;
   const initializeAcpClients = dependencies.initializeAcpClients ?? initializeAcpClientsDefault;
   const preloadDeferredRenderers = dependencies.preloadDeferredRenderers ?? preloadDeferredRenderersDefault;
+  const includeAgentExtensions = dependencies.includeAgentExtensions ?? true;
 
   return scheduler.schedule(async signal => {
     if (signal.aborted) {
@@ -89,8 +91,10 @@ export function scheduleDeferredStartupSystems(
     };
 
     await runStep('ide_control', initializeIdeControl);
-    await runStep('mcp_servers', initializeMcpServers);
-    await runStep('acp_clients', initializeAcpClients);
+    if (includeAgentExtensions) {
+      await runStep('mcp_servers', initializeMcpServers);
+      await runStep('acp_clients', initializeAcpClients);
+    }
     await runStep('renderer_preloads', preloadDeferredRenderers);
 
     if (!signal.aborted) {

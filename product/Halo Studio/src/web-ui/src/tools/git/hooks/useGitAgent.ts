@@ -15,6 +15,7 @@ const log = createLogger('useGitAgent');
 
 export interface UseGitAgentOptions {
   repoPath: string;
+  enabled?: boolean;
 }
 
 export interface UseGitAgentReturn {
@@ -31,7 +32,7 @@ export interface UseGitAgentReturn {
   reset: () => void;
 }
 
-export const useGitAgent = ({ repoPath }: UseGitAgentOptions): UseGitAgentReturn => {
+export const useGitAgent = ({ repoPath, enabled = true }: UseGitAgentOptions): UseGitAgentReturn => {
   const [commitMessage, setCommitMessage] = useState<CommitMessage | null>(null);
   const [commitPreview, setCommitPreview] = useState<PreviewCommitMessageResponse | null>(null);
   const [isGeneratingCommit, setIsGeneratingCommit] = useState(false);
@@ -39,6 +40,7 @@ export const useGitAgent = ({ repoPath }: UseGitAgentOptions): UseGitAgentReturn
   const cancelledCommitRef = useRef(false);
   
   const generateCommitMessage = useCallback(async (options?: CommitMessageOptions) => {
+    if (!enabled) return;
     if (!repoPath) {
       setError('Repository path not set');
       return;
@@ -61,9 +63,10 @@ export const useGitAgent = ({ repoPath }: UseGitAgentOptions): UseGitAgentReturn
     } finally {
       setIsGeneratingCommit(false);
     }
-  }, [repoPath]);
+  }, [enabled, repoPath]);
   
   const quickGenerateCommit = useCallback(async () => {
+    if (!enabled) return;
     if (!repoPath) {
       setError('Repository path not set');
       return;
@@ -92,7 +95,7 @@ export const useGitAgent = ({ repoPath }: UseGitAgentOptions): UseGitAgentReturn
     } finally {
       setIsGeneratingCommit(false);
     }
-  }, [repoPath]);
+  }, [enabled, repoPath]);
   
   const cancelCommitGeneration = useCallback(() => {
     cancelledCommitRef.current = true;
@@ -101,6 +104,7 @@ export const useGitAgent = ({ repoPath }: UseGitAgentOptions): UseGitAgentReturn
   }, []);
   
   const previewCommitMessage = useCallback(async () => {
+    if (!enabled) return;
     if (!repoPath) {
       setError('Repository path not set');
       return;
@@ -119,7 +123,7 @@ export const useGitAgent = ({ repoPath }: UseGitAgentOptions): UseGitAgentReturn
     } finally {
       setIsGeneratingCommit(false);
     }
-  }, [repoPath]);
+  }, [enabled, repoPath]);
 
   /**
    * Clear the last error.

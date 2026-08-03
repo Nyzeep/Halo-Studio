@@ -604,7 +604,6 @@ impl PathManager {
             self.user_cron_dir(),
             self.user_rules_dir(),
             self.miniapps_dir(),
-            self.logs_dir(),
             self.temp_dir(),
             self.speech_input_temp_dir(),
         ];

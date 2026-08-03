@@ -17,17 +17,17 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { Loader2 } from 'lucide-react';
 import type { SceneTabId } from '../components/SceneBar/types';
 import { useSceneManager } from '../hooks/useSceneManager';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
+import { isHaloLocalCodingScope } from '@/infrastructure/runtime';
 import { useDialogCompletionNotify } from '../hooks/useDialogCompletionNotify';
-import { ProcessingIndicator } from '@/flow_chat/components/modern/ProcessingIndicator';
 import SettingsScene from './settings/SettingsScene';
-import SessionScene from './session/SessionScene';
 import './SceneViewport.scss';
 
-// Session is the primary interaction path. Keep it in the main scene bundle so
-// first open does not stall on a lazy chunk fetch/parse before FlowChat mounts.
+const SessionScene = lazy(() => import('./session/SessionScene'));
+const WorkbenchSessionScene = lazy(() => import('./session/WorkbenchSessionScene'));
 const TerminalScene   = lazy(() => import('./terminal/TerminalScene'));
 const GitScene        = lazy(() => import('./git/GitScene'));
 const FileViewerScene = lazy(() => import('./file-viewer/FileViewerScene'));
@@ -78,6 +78,7 @@ const SceneViewport: React.FC<SceneViewportProps> = ({ workspacePath, isEntering
   const [readyVersion, setReadyVersion] = useState(0);
   const readySceneIdsRef = useRef<Set<SceneTabId>>(new Set());
   const previousActiveTabIdRef = useRef<SceneTabId>(activeTabId);
+  const haloWorkbenchEnabled = isHaloLocalCodingScope();
   useDialogCompletionNotify();
 
   const markSceneReady = useCallback((sceneId: SceneTabId) => {
@@ -185,13 +186,19 @@ const SceneViewport: React.FC<SceneViewportProps> = ({ workspacePath, isEntering
                       aria-busy="true"
                       aria-label={t('loading.scenes')}
                     >
-                      <ProcessingIndicator visible />
+                      <Loader2 size={16} aria-hidden="true" />
                     </div>
                   ) : null
                 }
               >
                 <SceneReadyBoundary sceneId={tabId} onReady={markSceneReady}>
-                  {renderScene(tabId, workspacePath, isEntering, isActive)}
+                  {renderScene(
+                    tabId,
+                    workspacePath,
+                    isEntering,
+                    isActive,
+                    haloWorkbenchEnabled,
+                  )}
                 </SceneReadyBoundary>
               </Suspense>
             </div>
@@ -206,13 +213,16 @@ function renderScene(
   id: SceneTabId,
   workspacePath?: string,
   isEntering?: boolean,
-  isActive: boolean = false
+  isActive: boolean = false,
+  haloWorkbenchEnabled: boolean = false,
 ) {
   switch (id) {
     case 'welcome':
       return <WelcomeScene />;
     case 'session':
-      return <SessionScene workspacePath={workspacePath} isEntering={isEntering} isActive={isActive} />;
+      return haloWorkbenchEnabled
+        ? <WorkbenchSessionScene isEntering={isEntering} isActive={isActive} />
+        : <SessionScene workspacePath={workspacePath} isEntering={isEntering} isActive={isActive} />;
     case 'terminal':
       return <TerminalScene isActive={isActive} />;
     case 'git':

@@ -27,10 +27,10 @@ describe('startup performance contract', () => {
   it('keeps the pre-React startup fallback logo-only', () => {
     const source = readSource('../../../index.html');
 
-    expect(source).toContain('<link rel="icon" type="image/png" href="/Logo-ICON-128.png" />');
+    expect(source).toContain('<link rel="icon" type="image/svg+xml" href="/halo-icon.svg" />');
     expect(source).not.toContain('rel="preload" as="image"');
     expect(source).toContain('class="bitfun-preload__logo"');
-    expect(source).toContain('src="/Logo-ICON-128.png"');
+    expect(source).toContain('src="/halo-icon.svg"');
     expect(source).toContain('fetchpriority="low"');
     expect(source).not.toContain('Loading workspace...');
     expect(source).not.toContain('bitfun-preload__spinner');
@@ -300,23 +300,28 @@ describe('startup performance contract', () => {
     );
 
     expect(appSource).not.toContain("from '../flow_chat/components/toolbar-mode'");
-    expect(appSource).toContain(
+    expect(appSource).not.toContain(
       "from '../flow_chat/components/toolbar-mode/ToolbarModeProvider'"
+    );
+    expect(appSource).toContain(
+      "import('../flow_chat/components/toolbar-mode/ToolbarModeProvider')"
+    );
+    expect(appSource).toContain(
+      "import('../flow_chat/components/toolbar-mode/ToolbarModeProvider')"
     );
     expect(appLayoutSource).not.toContain(
       "from '../../flow_chat/components/toolbar-mode'"
     );
-    expect(appLayoutSource).not.toContain("import { FloatingMiniChat } from './FloatingMiniChat'");
-    expect(appLayoutSource).toContain(
+    expect(appLayoutSource).not.toContain(
       "import('../../flow_chat/components/toolbar-mode/ToolbarMode')"
     );
-    expect(appLayoutSource).toContain("import('./FloatingMiniChat')");
     expect(appLayoutSource).not.toContain("import { AboutDialog }");
     expect(appLayoutSource).not.toContain("from '../../tools/workspace'");
     expect(appLayoutSource).toContain("import('../components/AboutDialog')");
     expect(appLayoutSource).toContain("import('../../tools/workspace/components/WorkspaceManager')");
-    expect(appLayoutSource).toContain("import { FlowChatManager }");
-    expect(appLayoutSource).not.toContain("import('../../flow_chat/services/FlowChatManager')");
+    expect(appLayoutSource).not.toContain("import { FlowChatManager }");
+    expect(appLayoutSource).toContain("import('../../flow_chat/services/FlowChatManager')");
+    expect(appLayoutSource).toContain('if (isHaloLocalCodingScope()) return;');
     expect(footerSource).not.toContain("import { AboutDialog }");
     expect(footerSource).toContain("import('../../AboutDialog')");
     expect(chatPaneSource).not.toContain("from '../../../flow_chat'");
@@ -413,18 +418,9 @@ describe('startup performance contract', () => {
     const sceneSource = readSource('../scenes/settings/SettingsScene.tsx');
     const registrySource = readSource('../scenes/settings/settingsContentRegistry.ts');
     const lazyPanelSpecifiers = [
-      '../../../infrastructure/config/components/AIModelConfig',
-      '../../../infrastructure/config/components/McpToolsConfig',
-      '../../../infrastructure/config/components/AcpAgentsConfig',
-      '../../../infrastructure/config/components/ExternalSourcesConfig',
       '../../../infrastructure/config/components/EditorConfig',
       '../../../infrastructure/config/components/BasicsConfig',
       '../../../infrastructure/config/components/AppearanceConfig',
-      '../../../infrastructure/config/components/ReviewConfig',
-      '../../../infrastructure/config/components/MemoriesConfig',
-      '../../../infrastructure/config/components/QuickActionsConfig',
-      '../../../infrastructure/config/components/VoiceInputConfig',
-      '../../../infrastructure/config/components/SessionConfig',
       './components/ArchivedSessionsConfig',
       './components/KeyboardShortcutsTab',
     ];
@@ -440,7 +436,7 @@ describe('startup performance contract', () => {
       expect(sceneImports).not.toContain(panelSpecifier);
       expect(registryImports).not.toContain(panelSpecifier);
     }
-    expect(registrySource).toContain('export const AIModelConfig = lazy(loadAIModelConfig)');
+    expect(registrySource).toContain('export const EditorConfig = lazy(loadEditorConfig)');
     expect(registrySource).toContain('basics: loadBasicsConfig');
   });
 
@@ -579,12 +575,15 @@ describe('startup performance contract', () => {
     expect(fileCardSource).toContain('getHistorySessionOpenTransitionSnapshot');
     expect(fileCardSource).toContain('historySessionOpenTransition === null');
     expect(fileCardSource).toContain("displayContext !== 'subagent-projection'");
-    expect(workspaceItemSource).toContain('getHistorySessionOpenTransitionSnapshot');
-    expect(workspaceItemSource).toContain('suppressWorkspaceGitRefreshOnMountDuringSessionTransition');
-    expect(workspaceItemSource).toContain('subscribeHistorySessionOpenTransition');
-    expect(workspaceItemSource).toContain('WORKSPACE_GIT_PENDING_CANCEL_SOURCES');
-    expect(workspaceItemSource).toContain('cancelPendingRefresh');
-    expect(workspaceItemSource).toContain('historySessionOpenTransition !== null');
+    expect(workspaceItemSource).toContain(
+      "const LegacySessionsSection = lazy(() => import('../sessions/SessionsSection'));"
+    );
+    expect(workspaceItemSource).toContain('const legacyNavigationEnabled = !isHaloLocalCodingScope();');
+    expect(workspaceItemSource).toContain('<WorkbenchSessionsSection');
+    expect(workspaceItemSource).not.toContain('getHistorySessionOpenTransitionSnapshot');
+    expect(workspaceItemSource).not.toContain('suppressWorkspaceGitRefreshOnMountDuringSessionTransition');
+    expect(workspaceItemSource).not.toContain('subscribeHistorySessionOpenTransition');
+    expect(workspaceItemSource).not.toContain('WORKSPACE_GIT_PENDING_CANCEL_SOURCES');
   });
 
   it('keeps non-active workspace session metadata out of the first startup window', () => {
@@ -679,9 +678,6 @@ describe('startup performance contract', () => {
     const sessionsSectionSource = readSource('../../app/components/NavPanel/sections/sessions/SessionsSection.tsx');
     const footerActionsSource = readSource('../../app/components/NavPanel/components/PersistentFooterActions.tsx');
     const newProjectDialogSource = readSource('../../app/components/NewProjectDialog/NewProjectDialog.tsx');
-    const relatedPathsDialogSource = readSource(
-      '../../app/components/NavPanel/sections/workspaces/WorkspaceRelatedPathsDialog.tsx'
-    );
 
     expect(appLayoutSource).not.toMatch(/import\s+\{\s*open\s*\}\s+from\s+['"]@tauri-apps\/plugin-dialog['"]/);
     expect(appLayoutSource).not.toMatch(/import\s+\{\s*NewProjectDialog\s*\}\s+from/);
@@ -692,27 +688,26 @@ describe('startup performance contract', () => {
     expect(workspaceItemSource).not.toMatch(/import\s+WorkspaceRelatedPathsDialog\s+from/);
     expect(workspaceItemSource).not.toMatch(/import\s+WorkspaceSessionBatchModal\s+from/);
     expect(workspaceItemSource).not.toMatch(/import\s+ScheduledJobsModal\s+from/);
-    expect(workspaceItemSource).toContain("lazy(() => import('./WorkspaceRelatedPathsDialog'))");
-    expect(workspaceItemSource).toContain("lazy(() => import('./WorkspaceSessionBatchModal'))");
-    expect(workspaceItemSource).toContain("lazy(() => import('@/app/components/scheduled-jobs/ScheduledJobsModal'))");
-    expect(workspaceItemSource).toContain('{relatedPathsDialogOpen && (');
-    expect(workspaceItemSource).toContain('{sessionBatchModalOpen && (');
-    expect(workspaceItemSource).toContain('{scheduledJobsModalOpen && (');
+    expect(workspaceItemSource).toContain(
+      "const LegacySessionsSection = lazy(() => import('../sessions/SessionsSection'));"
+    );
+    expect(workspaceItemSource).toContain('<WorkbenchSessionsSection');
+    expect(workspaceItemSource).not.toContain('WorkspaceRelatedPathsDialog');
+    expect(workspaceItemSource).not.toContain('WorkspaceSessionBatchModal');
+    expect(workspaceItemSource).not.toContain('ScheduledJobsModal');
 
     expect(sessionsSectionSource).not.toMatch(/import\s+ScheduledJobsModal\s+from/);
     expect(sessionsSectionSource).toContain("lazy(() => import('@/app/components/scheduled-jobs/ScheduledJobsModal'))");
     expect(sessionsSectionSource).toContain('{scheduledJobsSession && (');
 
-    expect(footerActionsSource).not.toMatch(/import\s+\{\s*RemoteConnectDialog\s*\}\s+from/);
-    expect(footerActionsSource).toContain("lazy(() => import('../../RemoteConnectDialog'))");
-    expect(footerActionsSource).toContain('{showRemoteConnect && (');
+    expect(footerActionsSource).not.toMatch(/import\s+\{\s*AboutDialog\s*\}\s+from/);
+    expect(footerActionsSource).toContain('const AboutDialog = lazy(() =>');
+    expect(footerActionsSource).toContain("import('../../AboutDialog')");
+    expect(footerActionsSource).toContain('{showAbout && (');
 
     expect(newProjectDialogSource).not.toMatch(/from\s+['"]@tauri-apps\/plugin-dialog['"]/);
     expect(newProjectDialogSource).not.toContain("await import('@tauri-apps/plugin-dialog')");
     expect(newProjectDialogSource).toContain('@/infrastructure/peer-device/pickWorkspaceDirectory');
-    expect(relatedPathsDialogSource).not.toMatch(/from\s+['"]@tauri-apps\/plugin-dialog['"]/);
-    expect(relatedPathsDialogSource).not.toContain("await import('@tauri-apps/plugin-dialog')");
-    expect(relatedPathsDialogSource).toContain('@/infrastructure/peer-device/pickWorkspaceDirectory');
   });
 
   it('keeps startup session metadata paging on the narrow SessionAPI entrypoint', () => {

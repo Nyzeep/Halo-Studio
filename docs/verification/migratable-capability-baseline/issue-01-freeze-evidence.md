@@ -10,13 +10,15 @@
 
 **分支：** `codex/issue-01-baseline`
 
+> 本证据记录中的 OpenCode 版本、服务和 fake runtime 结果属于迁移前历史基线。当前 P0 不再使用 OpenCode；真实 Pi RPC 原生 UI 验收由迁移工单 14 负责。
+
 ## 判定摘要
 
 | 工单 01 验收项 | 当前判定 | 证据与原因 |
 | --- | --- | --- |
 | MSVC workspace 检查、构建、Rust、Python/QML、Schema 命令与结果 | 满足 | `VsDevCmd.bat`、MSVC linker、`cl.exe`、Windows SDK `rc.exe` 和 target 均正确；在合格非沙箱 Windows 用户会话中 `cargo check --workspace`、`cargo build --workspace`、`cargo test --workspace` 均退出码 0，Python 为 `154 passed, 1 skipped`，QML smoke 和 Schema 结构检查也退出码 0。 |
 | 旧六票的产品定位 | 满足 | GitHub #9–#14 明确记录为旧产品上的可迁移能力基线，不是目标 Tauri 产品验收或 P0 放行。 |
-| 真实 OpenCode 原生 UI 门槛 | 满足 | 目标 Tauri 产品未执行真实 UI 验收；历史 OpenCode 版本阻断和资格验证限制保留在旧基线记录中。 |
+| 历史 OpenCode UI 比较材料与当前 Pi RPC UI 门槛 | 满足（历史归类） | 目标 Tauri 产品尚未执行当前 P0 的真实 Pi RPC UI 验收；历史 OpenCode 版本阻断和资格验证限制仅保留在旧基线记录中。 |
 | 临时产物与用户资产卫生 | 满足（受保护 cache 保留） | 删除了隔离 worktree 中本轮创建的 pytest 临时目录、Python `__pycache__` 和 Cargo 生成的 `sidecar\\target`；`app\\.pytest_cache` 的精确删除在受限 ACL 下返回拒绝访问，因此保留并记录，不修改权限；主工作区的用户改动和候选缓存未触碰。 |
 | 独立审查边界 | 满足，提交待授权 | 代码、测试和状态证据均位于从 `origin/main` 建立的独立 worktree，当前差分未吸收主工作区改动，也未混入工单 02/迁移实现；本轮不提交，独立 Git 提交边界等待用户授权。 |
 
@@ -217,7 +219,7 @@ if ($errorDef.properties.code.enum.Count -ne 42) { throw 'error code enum count 
 
 - 旧基线记录中的任务 05 曾将本机 `opencode --version` 为 `1.18.5`、而实现锁定 `0.4.2` 的不匹配归类为 `BLOCKED`；该失败归类和复现信息保留在 `original-ten-task-acceptance-and-tdd-baseline.md` 与 `traceability.md` 中，不得改写成目标 Tauri 产品验收结论。
 - 受限沙箱中的 `cargo test --workspace` 退出码 `101` 已保留为环境复现证据；在合格非沙箱 Windows 用户会话中同一主命令退出码为 `0`，因此不能把该历史 101 继续写成当前阻断。
-- 真实 OpenCode 原生 UI 验收本轮没有执行。旧基线中的受控 fake runtime 测试不能替代目标 Tauri UI；真实 UI 仍由工单 14 负责，且受工单 12、13 阻断。
+- 当前 P0 的真实 Pi RPC 原生 UI 验收本轮没有执行。旧基线中的受控 fake runtime 测试不能替代目标 Tauri UI；真实 Pi UI 仍由工单 14 负责，且受工单 12、13 阻断。历史 OpenCode UI 记录不再是验收入口。
 - Pi 真实安装版资格和完整 Sidecar 二进制端到端资格继续按旧基线记录保持为发布前门槛；本轮仅验证了授权范围内的合成凭据正向链，不使用真实用户密钥。
 
 ## 最终差分范围
@@ -233,4 +235,4 @@ if ($errorDef.properties.code.enum.Count -ne 42) { throw 'error code enum count 
 
 ## 进入工单 02 的判定
 
-**工单 01 可进入 `ready-for-review`，但不可进入工单 02。** 合格非沙箱 VsDevCmd 子进程中的 `rustc host`、linker 顺序、`cargo check --workspace`、`cargo build --workspace`、`cargo test --workspace`、Python/QML、Schema、凭据清理和 `git diff --check` 均满足验收；受限沙箱的 101 已完成归因并保留为历史环境复现。真实 OpenCode 原生 UI 验收和旧产品删除仍未执行，独立 Git 提交仍等待用户明确授权。
+**工单 01 可进入 `ready-for-review`，但不可进入工单 02。** 合格非沙箱 VsDevCmd 子进程中的 `rustc host`、linker 顺序、`cargo check --workspace`、`cargo build --workspace`、`cargo test --workspace`、Python/QML、Schema、凭据清理和 `git diff --check` 均满足验收；受限沙箱的 101 已完成归因并保留为历史环境复现。当前 P0 的真实 Pi RPC 原生 UI 验收和旧产品删除仍未执行，独立 Git 提交仍等待用户明确授权。

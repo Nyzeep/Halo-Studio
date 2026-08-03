@@ -30,6 +30,17 @@ port-backed `sdk` / `AgentRuntime` facade that can be built and tested without
   execution in `bitfun-core` until a reviewed owner migration proves behavior
   equivalence. Provider-neutral confirmation gate/wait-channel and user-question state
   may live here.
+- Reviewed Halo Workbench Runtime owner exception: `src/halo_workbench.rs` is the
+  deep, product-specific owner for the Halo P0 workspace/task/session lifecycle
+  seam. It may own the lifecycle state machine, Pi RPC event wiring, trust
+  revalidation, and one-time permission projection because the public contract
+  and behavior-equivalence tests live at the same `PiRpcPort` seam. The concrete
+  `PiRpcAdapter` is still selected only by `assembly/core`; this exception must
+  not become a generic multi-executor dispatch layer or a reason to move Tauri,
+  React, or process ownership into this crate. Removing the module would
+  redistribute its state, lifecycle, and permission complexity across those
+  surfaces, so future changes must preserve this deep owner unless a reviewed
+  replacement seam and equivalent tests exist.
 - Prefer pure facts and decisions first: queue policy, background delivery,
   dialog-turn queue state, active-turn facts, cancellation routing and
   suppression state, background running-turn injection construction, steering action

@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { agentAPI } from '@/infrastructure/api';
 import {
   globalEventBus,
   PERMISSION_REQUEST_NOTIFICATION_EVENT,
@@ -9,6 +8,7 @@ import { systemAPI } from '@/infrastructure/api/service-api/SystemAPI';
 import { configManager } from '@/infrastructure/config/services/ConfigManager';
 import { useI18n } from '@/infrastructure/i18n';
 import { createLogger } from '@/shared/utils/logger';
+import { isHaloLocalCodingScope } from '@/infrastructure/runtime';
 import {
   buildPermissionRequestNotificationCopy,
   PermissionRequestNotificationBatcher,
@@ -29,6 +29,8 @@ export const usePermissionRequestNotify = () => {
   const windowFocusedRef = useRef(true);
 
   useEffect(() => {
+    if (isHaloLocalCodingScope()) return;
+
     let disposed = false;
     const handleFocus = () => { windowFocusedRef.current = true; };
     const handleBlur = () => { windowFocusedRef.current = false; };
@@ -67,23 +69,30 @@ export const usePermissionRequestNotify = () => {
     window.addEventListener('focus', handleFocus);
     window.addEventListener('blur', handleBlur);
 
-    const unlistenPermissionRequests = agentAPI.onPermissionRequestEvent((event) => {
-      if (event.event !== 'asked') {
-        return;
-      }
-      enqueueWhenBackground({
-        requestId: event.request.requestId,
-        sessionId: event.request.sessionId,
-        roundId: event.request.roundId,
-      });
-    });
     const unlistenAcpPermissionRequests = globalEventBus.on<PermissionRequestNotificationEvent>(
       PERMISSION_REQUEST_NOTIFICATION_EVENT,
       enqueueWhenBackground,
     );
 
+    let unlistenPermissionRequests = () => {};
     void (async () => {
       try {
+        const { agentAPI } = await import('@/infrastructure/api/service-api/AgentAPI');
+        if (disposed) {
+          return;
+        }
+
+        unlistenPermissionRequests = agentAPI.onPermissionRequestEvent((event) => {
+          if (event.event !== 'asked') {
+            return;
+          }
+          enqueueWhenBackground({
+            requestId: event.request.requestId,
+            sessionId: event.request.sessionId,
+            roundId: event.request.roundId,
+          });
+        });
+
         await agentAPI.subscribePermissionRequests();
         const pendingRequests = await agentAPI.listPendingPermissionRequests();
         if (disposed) {

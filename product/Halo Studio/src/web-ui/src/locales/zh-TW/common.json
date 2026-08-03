@@ -205,6 +205,27 @@
       "needsToolConfirm": "等待確認",
       "badgeNeedsInput": "等待中",
       "badgeNeedsConfirm": "待確認",
+      "workbenchRuntime": {
+        "runtimePhase": {
+          "disconnected": "未連線",
+          "probing": "正在檢查工作區",
+          "starting": "正在啟動",
+          "ready": "就緒",
+          "failed": "無法使用",
+          "stopping": "正在停止"
+        },
+        "sessionPhase": {
+          "creating": "正在建立",
+          "idle": "閒置",
+          "running": "執行中",
+          "waitingDeveloper": "等待你的處理",
+          "interrupted": "已中斷",
+          "stopping": "正在停止",
+          "ended": "已結束",
+          "failed": "失敗"
+        },
+        "error": "Workbench Runtime 無法繼續。請檢查工作區後重試。"
+      },
       "ariaNeedsInput": "有會話需要你的輸入",
       "ariaNeedsInputWithName": "會話 '{{name}}' 需要你的輸入",
       "ariaNeedsInputPlural": "{{count}} 個會話需要你的輸入",

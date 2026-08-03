@@ -19,6 +19,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 vi.mock('@/infrastructure/runtime', () => ({
   isTauriRuntime: () => true,
+  isHaloLocalCodingScope: () => false,
 }));
 
 vi.mock('@/shared/utils/logger', () => ({

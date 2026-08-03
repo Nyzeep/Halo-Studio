@@ -26,6 +26,7 @@ import { gitService } from '@/tools/git/services';
 import { createGitDiffEditorTab, createGitCodeEditorTab } from '@/shared/utils/tabUtils';
 import { useNotification } from '@/shared/notification-system';
 import { createLogger } from '@/shared/utils/logger';
+import { isHaloLocalCodingScope } from '@/infrastructure/runtime';
 import './WorkingCopyView.scss';
 
 const log = createLogger('WorkingCopyView');
@@ -62,6 +63,7 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
 }) => {
   const { t } = useTranslation('panels/git');
   const notification = useNotification();
+  const legacyGitAiEnabled = !isHaloLocalCodingScope();
 
   const [quickCommitMessage, setQuickCommitMessage] = useState('');
   const [expandedFileGroups, setExpandedFileGroups] = useState<Set<string>>(new Set(['unstaged', 'staged', 'untracked']));
@@ -100,6 +102,7 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
   });
   const { commitMessage: aiCommitMessage, isGeneratingCommit, quickGenerateCommit, cancelCommitGeneration } = useGitAgent({
     repoPath: workspacePath ?? '',
+    enabled: legacyGitAiEnabled,
   });
 
   useEffect(() => {
@@ -180,12 +183,13 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
   }, [quickCommitMessage, status, commit, handleRefresh, notification, t]);
 
   const handleAIGenerateCommit = useCallback(async () => {
+    if (!legacyGitAiEnabled) return;
     if (!status?.staged?.length && !status?.unstaged?.length && !status?.untracked?.length) {
       notification.warning(t('notifications.noFilesToGenerate'));
       return;
     }
     await quickGenerateCommit();
-  }, [status, quickGenerateCommit, notification, t]);
+  }, [legacyGitAiEnabled, status, quickGenerateCommit, notification, t]);
 
   const handleDiscardFile = useCallback(
     async (filePath: string, fileType: 'staged' | 'unstaged' | 'untracked') => {
@@ -433,13 +437,13 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
             }}
             disabled={isOperating || isGeneratingCommit}
           />
-          {isGeneratingCommit ? (
+          {legacyGitAiEnabled && (isGeneratingCommit ? (
             <IconButton size="xs" variant="ghost" onClick={cancelCommitGeneration} tooltip={t('actions.cancelGenerate')} />
           ) : (
             <IconButton size="xs" variant="ghost" onClick={handleAIGenerateCommit} disabled={isOperating} tooltip={t('actions.aiGenerateCommit')}>
               <Sparkles size={14} />
             </IconButton>
-          )}
+          ))}
         </div>
         <div className="bitfun-git-scene-working-copy__commit-actions">
           <Button

@@ -1,20 +1,26 @@
-import React, { useCallback, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useState } from 'react';
 import { Copy, Folder, FolderOpen, FolderSearch, MoreHorizontal, Pencil, Plus } from 'lucide-react';
 import { InputDialog, Tooltip } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n';
 import { useWorkspaceContext } from '@/infrastructure/contexts/WorkspaceContext';
 import { systemAPI } from '@/infrastructure/api/service-api/SystemAPI';
 import { notificationService } from '@/shared/notification-system';
-import { flowChatManager } from '@/flow_chat/services/FlowChatManager';
-import { openMainSession } from '@/flow_chat/services/sessionActivation';
-import { flowChatSessionConfigForWorkspace } from '@/app/utils/projectSessionWorkspace';
-import { useSessionModeStore } from '@/app/stores/sessionModeStore';
+import { createLogger } from '@/shared/utils/logger';
+import type { WorkspaceInfo } from '@/shared/types';
+import WorkbenchSessionsSection from '../sessions/WorkbenchSessionsSection';
 import { useApp } from '@/app/hooks/useApp';
 import { useSceneManager } from '@/app/hooks/useSceneManager';
-import type { WorkspaceInfo } from '@/shared/types';
-import SessionsSection from '../sessions/SessionsSection';
+import { useSessionModeStore } from '@/app/stores/sessionModeStore';
+import { isHaloLocalCodingScope } from '@/infrastructure/runtime';
+import { useStore } from 'zustand';
+import {
+  createWorkbenchRuntimeRequestId,
+  workbenchRuntimeStore,
+} from '@/infrastructure/workbench-runtime';
 
 const MAX_WORKSPACE_NAME_CHARS = 80;
+const log = createLogger('WorkspaceItem');
+const LegacySessionsSection = lazy(() => import('../sessions/SessionsSection'));
 
 function containsWorkspaceNameControlCharacter(value: string): boolean {
   return Array.from(value).some((character) => {
@@ -46,9 +52,13 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
   const { switchLeftPanelTab } = useApp();
   const { openScene } = useSceneManager();
   const setSessionMode = useSessionModeStore(s => s.setMode);
+  const runtimeSnapshot = useStore(workbenchRuntimeStore, state => state.snapshot);
+  const legacyNavigationEnabled = !isHaloLocalCodingScope();
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
+  const canCreateWorkbenchSession = runtimeSnapshot?.phase === 'ready'
+    && runtimeSnapshot.workspace?.workspaceId === workspace.id;
 
   const activateWorkspace = useCallback(async () => {
     if (!isActive) {
@@ -81,25 +91,37 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
   const handleCreateCodeSession = useCallback(async () => {
     setMenuOpen(false);
     try {
-      await activateWorkspace();
-      setSessionMode('code');
-      openScene('session');
-      switchLeftPanelTab('sessions');
-      const sessionId = await flowChatManager.createChatSession(
-        flowChatSessionConfigForWorkspace(workspace),
-        'agentic'
-      );
-      await openMainSession(sessionId, {
-        workspaceId: workspace.id,
-        activateWorkspace: setActiveWorkspace,
-      });
-    } catch (error) {
-      notificationService.error(
-        error instanceof Error ? error.message : t('nav.sessions.createFailed'),
-        { duration: 4000 }
-      );
+      if (legacyNavigationEnabled) {
+        const { createLegacyWorkspaceItemCodeSession } = await import('../../legacyCodeSession');
+        await createLegacyWorkspaceItemCodeSession({
+          workspace,
+          activateWorkspace,
+          setActiveWorkspace,
+          setSessionMode,
+          openSessionScene: () => openScene('session'),
+          switchToSessions: () => switchLeftPanelTab('sessions'),
+        });
+        return;
+      }
+
+      if (!canCreateWorkbenchSession) return;
+      await workbenchRuntimeStore.getState().submitIntent({
+          requestId: createWorkbenchRuntimeRequestId('create-session'),
+          intent: { type: 'createSession', mode: 'standard' },
+        });
+    } catch {
+      log.error('Failed to create code session');
     }
-  }, [activateWorkspace, openScene, setActiveWorkspace, setSessionMode, switchLeftPanelTab, t, workspace]);
+  }, [
+    activateWorkspace,
+    canCreateWorkbenchSession,
+    legacyNavigationEnabled,
+    openScene,
+    setActiveWorkspace,
+    setSessionMode,
+    switchLeftPanelTab,
+    workspace,
+  ]);
 
   const handleCopyWorkspacePath = useCallback(async () => {
     setMenuOpen(false);
@@ -252,6 +274,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
                   type="button"
                   className="bitfun-nav-panel__workspace-item-menu-item"
                   onClick={() => { void handleCreateCodeSession(); }}
+                  disabled={!legacyNavigationEnabled && !canCreateWorkbenchSession}
                   data-testid="nav-workspace-menu-create-code-session"
                 >
                   <Plus size={13} />
@@ -310,14 +333,23 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
         data-testid="nav-workspace-session-region"
         data-workspace-id={workspace.id}
       >
-        <SessionsSection
-          workspaceId={workspace.id}
-          workspacePath={workspace.rootPath}
-          remoteConnectionId={null}
-          remoteSshHost={null}
-          isActiveWorkspace={isActive}
-          isVisible={!sessionsCollapsed}
-        />
+        {legacyNavigationEnabled ? (
+          <Suspense fallback={null}>
+            <LegacySessionsSection
+              workspaceId={workspace.id}
+              workspacePath={workspace.rootPath}
+              remoteConnectionId={null}
+              remoteSshHost={null}
+              isActiveWorkspace={isActive}
+              isVisible={!sessionsCollapsed}
+            />
+          </Suspense>
+        ) : (
+          <WorkbenchSessionsSection
+            workspaceId={workspace.id}
+            isActiveWorkspace={isActive}
+          />
+        )}
       </div>
 
       <InputDialog

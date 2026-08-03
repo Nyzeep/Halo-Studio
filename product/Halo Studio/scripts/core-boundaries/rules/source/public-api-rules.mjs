@@ -5,6 +5,7 @@ export const publicApiContractSlices = [
   'bitfun-plugin-extension-contract',
   'plugin-runtime-internal-abi',
   'opencode-adapter-boundary',
+  'halo-workbench-pi-rpc-execution-seam',
   'external-source-control-contract',
   'external-source-command-contract',
   'external-source-tool-contract',
@@ -19,6 +20,7 @@ const contractSlices = {
   bitfunPluginExtension: 'bitfun-plugin-extension-contract',
   pluginRuntimeInternalAbi: 'plugin-runtime-internal-abi',
   opencodeAdapterBoundary: 'opencode-adapter-boundary',
+  haloWorkbenchPiRpcExecutionSeam: 'halo-workbench-pi-rpc-execution-seam',
   externalSourceControlContract: 'external-source-control-contract',
   externalSourceCommandContract: 'external-source-command-contract',
   externalSourceToolContract: 'external-source-tool-contract',
@@ -243,6 +245,31 @@ export const opencodeAdapterPublicApiEntries = [
     'OpenCodeHookProviderOptions',
     'OpenCode static Hook fixture tests and explicit environment injection',
   ),
+];
+
+function piRpcAdapterEntry(symbol) {
+  return {
+    symbol,
+    owner: 'pi-rpc-adapter Pi RPC projection owner',
+    consumer: 'bitfun-core Halo Workbench product assembly',
+    verification:
+      'Pi RPC adapter framing, lifecycle, fail-closed extension tests, Workbench runtime contract tests, and core-boundary public API budget checks',
+    p0: 'local pi --mode rpc execution projection for the Halo Workbench Runtime',
+    contractSlice: contractSlices.haloWorkbenchPiRpcExecutionSeam,
+    wireImpact: false,
+    rationale:
+      'ADR-0072 keeps one Pi RPC production adapter behind PiRpcPort without exposing a generic executor selector or raw Pi protocol',
+    exit:
+      'remove only after a reviewed replacement for the accepted Pi RPC production adapter and equivalent Workbench seam tests',
+  };
+}
+
+export const piRpcAdapterPublicApiEntries = [
+  piRpcAdapterEntry('HALO_PI_EXTENSION_ID'),
+  piRpcAdapterEntry('HALO_PI_EXTENSION_VERSION'),
+  piRpcAdapterEntry('HALO_PI_EXTENSION_PERMISSIONS'),
+  piRpcAdapterEntry('PiRpcConfig'),
+  piRpcAdapterEntry('PiRpcAdapter'),
 ];
 
 function staticHookAdapterEntry(symbol, owner, consumer) {
@@ -1064,6 +1091,12 @@ export const publicApiAllowlistRules = [
     reason:
       'OpenCode adapter public API must stay limited to source and candidate mapping through the PluginRuntimeClient adapter boundary',
     allowedSymbolEntries: opencodeAdapterPublicApiEntries,
+  },
+  {
+    path: 'src/crates/adapters/pi-rpc-adapter/src/lib.rs',
+    reason:
+      'Pi RPC adapter public API must stay limited to the audited Workbench process configuration, extension audit facts, and sole adapter type',
+    allowedSymbolEntries: piRpcAdapterPublicApiEntries,
   },
   {
     path: 'src/crates/adapters/claude-code-adapter/src/lib.rs',

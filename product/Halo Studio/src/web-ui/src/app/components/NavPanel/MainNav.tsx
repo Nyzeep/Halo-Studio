@@ -2,7 +2,7 @@
  * MainNav - Halo local-coding navigation sidebar.
  */
 
-import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
+import React, { lazy, Suspense, useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, FolderOpen, FolderPlus, History, Check, Search, FileCode2, GitBranch } from 'lucide-react';
 import { Tooltip } from '@/component-library';
@@ -12,29 +12,29 @@ import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 import type { SceneTabId } from '../SceneBar/types';
 import SectionHeader from './components/SectionHeader';
 import WorkspaceListSection from './sections/workspaces/WorkspaceListSection';
-import SessionsSection from './sections/sessions/SessionsSection';
+import WorkbenchSessionsSection from './sections/sessions/WorkbenchSessionsSection';
+import { useSessionModeStore } from '../../stores/sessionModeStore';
 import { useSceneStore } from '../../stores/sceneStore';
-import { flowChatManager } from '@/flow_chat/services/FlowChatManager';
-import { resolveAgentTypeForSessionCreation } from '@/flow_chat/services/flow-chat-manager';
 import { workspaceManager } from '@/infrastructure/services/business/workspaceManager';
 import { useWorkspaceContext } from '@/infrastructure/contexts/WorkspaceContext';
 import { createLogger } from '@/shared/utils/logger';
 import { notificationService } from '@/shared/notification-system';
 import { isRemoteWorkspace } from '@/shared/types';
-import {
-  findReusableEmptySessionId,
-  flowChatSessionConfigForWorkspace,
-  pickWorkspaceForProjectChatSession,
-} from '@/app/utils/projectSessionWorkspace';
+import { isHaloLocalCodingScope } from '@/infrastructure/runtime';
 import { getRecentWorkspaceLineParts } from '@/shared/utils/recentWorkspaceDisplay';
 import { computeFixedPopoverPosition } from '@/shared/utils/fixedPopoverViewport';
-import { useSessionModeStore } from '../../stores/sessionModeStore';
-import NavSearchDialog from './NavSearchDialog';
 import { useShortcut } from '@/infrastructure/hooks/useShortcut';
 import { ALL_SHORTCUTS } from '@/shared/constants/shortcuts';
+import { useStore } from 'zustand';
+import {
+  createWorkbenchRuntimeRequestId,
+  workbenchRuntimeStore,
+} from '@/infrastructure/workbench-runtime';
 
 import './NavPanel.scss';
 
+const NavSearchDialog = lazy(() => import('./NavSearchDialog'));
+const LegacySessionsSection = lazy(() => import('./sections/sessions/SessionsSection'));
 const NAV_TOGGLE_SEARCH_DEF = ALL_SHORTCUTS.find((d) => d.id === 'nav.toggleSearch')!;
 
 const log = createLogger('MainNav');
@@ -57,6 +57,7 @@ const MainNav: React.FC<MainNavProps> = ({
     loading: workspaceLoading,
     recentWorkspaces,
     normalWorkspacesList,
+    openWorkspace,
     switchWorkspace,
     setActiveWorkspace,
   } = useWorkspaceContext();
@@ -72,6 +73,8 @@ const MainNav: React.FC<MainNavProps> = ({
   const [workspaceMenuPos, setWorkspaceMenuPos] = useState({ top: 0, left: 0 });
   const [searchOpen, setSearchOpen] = useState(false);
   const setSessionMode = useSessionModeStore(s => s.setMode);
+  const runtimeSnapshot = useStore(workbenchRuntimeStore, state => state.snapshot);
+  const legacyNavigationEnabled = !isHaloLocalCodingScope();
 
   const localProjectWorkspaces = useMemo(
     () => normalWorkspacesList.filter(workspace => !isRemoteWorkspace(workspace)),
@@ -81,6 +84,13 @@ const MainNav: React.FC<MainNavProps> = ({
     () => recentWorkspaces.filter(workspace => !isRemoteWorkspace(workspace)),
     [recentWorkspaces]
   );
+  const sessionTargetWorkspace = useMemo(
+    () => localProjectWorkspaces.find(workspace => workspace.id === currentWorkspace?.id)
+      ?? localProjectWorkspaces[0],
+    [currentWorkspace?.id, localProjectWorkspaces],
+  );
+  const canCreateWorkbenchSession = runtimeSnapshot?.phase === 'ready'
+    && runtimeSnapshot.workspace?.workspaceId === sessionTargetWorkspace?.id;
 
   const toggleSection = useCallback((id: string) => {
     setExpandedSections(prev => {
@@ -144,8 +154,9 @@ const MainNav: React.FC<MainNavProps> = ({
   }, [closeWorkspaceMenu, openWorkspaceMenu, workspaceMenuOpen]);
 
   const toggleNavSearch = useCallback(() => {
+    if (!legacyNavigationEnabled) return;
     setSearchOpen((v) => !v);
-  }, []);
+  }, [legacyNavigationEnabled]);
 
   useShortcut(
     NAV_TOGGLE_SEARCH_DEF.id,
@@ -155,6 +166,8 @@ const MainNav: React.FC<MainNavProps> = ({
   );
 
   useEffect(() => {
+    if (!legacyNavigationEnabled) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         !e.altKey ||
@@ -170,35 +183,42 @@ const MainNav: React.FC<MainNavProps> = ({
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNavSearch]);
+  }, [legacyNavigationEnabled, toggleNavSearch]);
 
   const handleCreateCodeSession = useCallback(async () => {
-    const target = pickWorkspaceForProjectChatSession(currentWorkspace, localProjectWorkspaces);
+    const target = sessionTargetWorkspace;
     if (!target) {
       notificationService.warning(t('nav.sessions.needProjectWorkspaceForSession'), { duration: 4500 });
       return;
     }
-    setSessionMode('code');
-    openScene('session');
-    switchLeftPanelTab('sessions');
     try {
-      if (target.id !== currentWorkspace?.id) {
-        await setActiveWorkspace(target.id);
-      }
-      const effectiveMode = await resolveAgentTypeForSessionCreation('agentic', target);
-      const reusableId = findReusableEmptySessionId(target, effectiveMode);
-      if (reusableId) {
-        await flowChatManager.switchChatSession(reusableId);
+      if (legacyNavigationEnabled) {
+        const { createLegacyMainNavCodeSession } = await import('./legacyCodeSession');
+        await createLegacyMainNavCodeSession({
+          target,
+          currentWorkspaceId: currentWorkspace?.id,
+          setActiveWorkspace,
+          setSessionMode,
+          openSessionScene: () => openScene('session'),
+          switchToSessions: () => switchLeftPanelTab('sessions'),
+        });
         return;
       }
-      await flowChatManager.createChatSession(flowChatSessionConfigForWorkspace(target), effectiveMode);
-    } catch (err) {
-      log.error('Failed to create code session', { error: err });
+
+      const snapshot = workbenchRuntimeStore.getState().snapshot;
+      if (snapshot?.phase !== 'ready' || snapshot.workspace?.workspaceId !== target.id) return;
+      await workbenchRuntimeStore.getState().submitIntent({
+          requestId: createWorkbenchRuntimeRequestId('create-session'),
+          intent: { type: 'createSession', mode: 'standard' },
+        });
+    } catch {
+      log.error('Failed to create code session');
     }
   }, [
-    currentWorkspace,
-    localProjectWorkspaces,
+    currentWorkspace?.id,
+    legacyNavigationEnabled,
     openScene,
+    sessionTargetWorkspace,
     setActiveWorkspace,
     setSessionMode,
     switchLeftPanelTab,
@@ -224,12 +244,12 @@ const MainNav: React.FC<MainNavProps> = ({
         title: t('header.selectProjectDirectory'),
       });
       if (selected) {
-        await workspaceManager.openWorkspace(selected);
+        await openWorkspace(selected);
       }
     } catch (err) {
       log.error('Failed to open project', { error: err });
     }
-  }, [t]);
+  }, [openWorkspace, t]);
 
   const handleNewProject = useCallback(() => {
     window.dispatchEvent(new Event('nav:new-project'));
@@ -353,29 +373,33 @@ const MainNav: React.FC<MainNavProps> = ({
 
   return (
     <>
-      <div className="bitfun-nav-panel__brand-header">
-        <div className="bitfun-nav-panel__brand-search">
-          <Tooltip content={t('nav.search.triggerTooltip')} placement="right" followCursor>
-            <button
-              type="button"
-              className="bitfun-nav-panel__search-trigger"
-              onClick={() => setSearchOpen(true)}
-              aria-label={t('nav.search.triggerTooltip')}
-              data-testid="nav-search-trigger"
-            >
-              <span className="bitfun-nav-panel__search-trigger__icon" aria-hidden="true">
-                <span className="bitfun-nav-panel__search-trigger__icon-inner">
-                  <Search size={13} />
+      {legacyNavigationEnabled ? (
+        <div className="bitfun-nav-panel__brand-header">
+          <div className="bitfun-nav-panel__brand-search">
+            <Tooltip content={t('nav.search.triggerTooltip')} placement="right" followCursor>
+              <button
+                type="button"
+                className="bitfun-nav-panel__search-trigger"
+                onClick={() => setSearchOpen(true)}
+                aria-label={t('nav.search.triggerTooltip')}
+                data-testid="nav-search-trigger"
+              >
+                <span className="bitfun-nav-panel__search-trigger__icon" aria-hidden="true">
+                  <span className="bitfun-nav-panel__search-trigger__icon-inner">
+                    <Search size={13} />
+                  </span>
                 </span>
-              </span>
-              <span className="bitfun-nav-panel__search-trigger__label">
-                {t('nav.search.triggerPlaceholder')}
-              </span>
-            </button>
-          </Tooltip>
-          <NavSearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
+                <span className="bitfun-nav-panel__search-trigger__label">
+                  {t('nav.search.triggerPlaceholder')}
+                </span>
+              </button>
+            </Tooltip>
+            <Suspense fallback={null}>
+              <NavSearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
+            </Suspense>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="bitfun-nav-panel__top-actions">
         <Tooltip content={createCodeTooltip} placement="right" followCursor>
@@ -383,6 +407,7 @@ const MainNav: React.FC<MainNavProps> = ({
             type="button"
             className="bitfun-nav-panel__top-action-btn"
             onClick={() => { void handleCreateCodeSession(); }}
+            disabled={!legacyNavigationEnabled && !canCreateWorkbenchSession}
             aria-label={createCodeTooltip}
             data-testid="nav-new-code-session-btn"
           >
@@ -436,14 +461,24 @@ const MainNav: React.FC<MainNavProps> = ({
             <div className="bitfun-nav-panel__collapsible-inner">
               <div className="bitfun-nav-panel__items bitfun-nav-panel__items--session-blocks">
                 {localProjectWorkspaces.map(workspace => (
-                  <SessionsSection
-                    key={workspace.id}
-                    workspaceId={workspace.id}
-                    workspacePath={workspace.rootPath}
-                    remoteConnectionId={null}
-                    isActiveWorkspace={workspace.id === currentWorkspace?.id}
-                    isVisible={expandedSections.has('sessions') && !workspaceLoading}
-                  />
+                  legacyNavigationEnabled ? (
+                    <Suspense key={workspace.id} fallback={null}>
+                      <LegacySessionsSection
+                        key={workspace.id}
+                        workspaceId={workspace.id}
+                        workspacePath={workspace.rootPath}
+                        remoteConnectionId={null}
+                        isActiveWorkspace={workspace.id === currentWorkspace?.id}
+                        isVisible={expandedSections.has('sessions') && !workspaceLoading}
+                      />
+                    </Suspense>
+                  ) : (
+                    <WorkbenchSessionsSection
+                      key={workspace.id}
+                      workspaceId={workspace.id}
+                      isActiveWorkspace={workspace.id === currentWorkspace?.id}
+                    />
+                  )
                 ))}
               </div>
             </div>

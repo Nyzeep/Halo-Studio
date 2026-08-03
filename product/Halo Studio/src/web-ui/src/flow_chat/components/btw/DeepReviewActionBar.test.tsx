@@ -536,7 +536,7 @@ describeWithJsdom('DeepReviewActionBar', () => {
     });
 
     expect(container.textContent).toContain('Waiting for model capacity');
-    expect(container.textContent).toContain('BitFun is waiting for temporary model capacity.');
+    expect(container.textContent).toContain('Halo Studio is waiting for temporary model capacity.');
     expect(container.textContent).toContain('Reason: model concurrency limit');
     expect(container.textContent).toContain('Waited 12s of 1m 0s');
     expect(container.textContent).toContain('Your active session is busy.');

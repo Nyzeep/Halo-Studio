@@ -24,6 +24,17 @@
 
 ## 维护规则
 
+## Worktree document synchronization
+
+- `D:\Halo Studio\.worktrees\` is the implementation isolation area; root
+  `D:\Halo Studio\docs\` is the shared documentation mirror and handoff entry.
+- When an authoritative document or ticket changes in a worktree, the same
+  relative path must be synchronized to root `docs/` before handoff.
+- Historical OpenCode, old protocols, and superseded decisions may remain, but
+  they must be labeled historical, comparison material, or superseded.
+- Recheck relative links, `git diff --check`, and the active OpenCode scan
+  allowlist after synchronization.
+
 - 根目录只保留 `README.md` 与 `CONTEXT.md` 两个项目级文档入口。
 - 新的长期文档必须进入上述目录之一，不得只保存在 `.scratch/`。
 - `.scratch/` 只存可删除的临时产物；Git 工作树由 `git worktree` 管理，不作为文档存储。

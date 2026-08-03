@@ -1,19 +1,39 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
+use bitfun_agent_runtime::halo_workbench::{
+    HaloWorkbenchError, HaloWorkbenchIntent, HaloWorkbenchIntentRequest, HaloWorkbenchRuntime,
+};
 use bitfun_agent_runtime::sdk::{AgentRuntime, PermissionRequestEvent};
 use bitfun_core::agentic::coordination::{ConversationCoordinator, DialogScheduler};
 use bitfun_core::product_runtime::CoreLocalWorkspaceSnapshot;
 use bitfun_core::service::remote_ssh::SSHConnectionManager;
 use bitfun_core::service::token_usage::TokenUsageService;
-use bitfun_core::service::workspace::WorkspaceService;
-use bitfun_runtime_ports::LocalWorkspaceSnapshotPort;
+use bitfun_core::service::workspace::{WorkspaceKind, WorkspaceService};
+use bitfun_runtime_ports::{
+    LocalWorkspaceSnapshotPort, PiCredentialStorePort, PiRuntimeConfigurationManagementPort,
+};
 use tokio::sync::RwLock;
 
 mod session_application;
 mod session_host_effects;
 
 use session_host_effects::ProductionDesktopSessionHostEffects;
+
+const HALO_LOCAL_CODING_WIRING_UNAVAILABLE: &str =
+    "Halo local coding runtime wiring is unavailable";
+
+fn validate_halo_local_coding_wiring(
+    has_workbench: bool,
+    has_configuration: bool,
+    has_credential_store: bool,
+) -> Result<(), &'static str> {
+    if has_workbench && has_configuration && has_credential_store {
+        Ok(())
+    } else {
+        Err(HALO_LOCAL_CODING_WIRING_UNAVAILABLE)
+    }
+}
 
 pub(crate) use session_application::{
     DesktopSessionApplication, DesktopSessionApplicationError, DesktopSessionScopeRequest,
@@ -22,49 +42,198 @@ pub(crate) use session_application::{
 
 /// Desktop-owned access to the Agent Runtime SDK interaction facade.
 ///
-/// Core remains the sole owner of the coordinator, scheduler, sessions, tool
-/// pipeline, and Agentic event queue. This context exposes only the interaction
-/// ports used by current Tauri commands; it does not claim that the complete
-/// Desktop delivery profile or its product services have been assembled.
+/// Core remains the sole owner of the legacy coordinator, scheduler, sessions,
+/// tool pipeline, and Agentic event queue. The injected Halo Workbench Runtime
+/// owns its own portable state and policy. This context only retains both owner
+/// handles, projects events, and delegates host lifecycle transitions.
 pub struct DesktopRuntimeContext {
-    session_application: DesktopSessionApplication,
+    session_application: Option<DesktopSessionApplication>,
     local_workspace_snapshot: Arc<dyn LocalWorkspaceSnapshotPort>,
+    workspace_service: Arc<WorkspaceService>,
     permission_events_started: AtomicBool,
+    #[cfg(feature = "halo-local-coding")]
+    halo_workbench: HaloWorkbenchRuntime,
+    #[cfg(not(feature = "halo-local-coding"))]
+    halo_workbench: Option<HaloWorkbenchRuntime>,
+    #[cfg(feature = "halo-local-coding")]
+    pi_configuration: Arc<dyn PiRuntimeConfigurationManagementPort>,
+    #[cfg(not(feature = "halo-local-coding"))]
+    pi_configuration: Option<Arc<dyn PiRuntimeConfigurationManagementPort>>,
+    #[cfg(feature = "halo-local-coding")]
+    pi_credential_store: Arc<dyn PiCredentialStorePort>,
+    #[cfg(not(feature = "halo-local-coding"))]
+    pi_credential_store: Option<Arc<dyn PiCredentialStorePort>>,
+    halo_workbench_events_started: AtomicBool,
+    halo_workbench_event_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
 }
 
 impl DesktopRuntimeContext {
     pub(crate) fn build(
-        coordinator: Arc<ConversationCoordinator>,
-        scheduler: Arc<DialogScheduler>,
+        coordinator: Option<Arc<ConversationCoordinator>>,
+        scheduler: Option<Arc<DialogScheduler>>,
         token_usage_service: Arc<TokenUsageService>,
         workspace_service: Arc<WorkspaceService>,
         ssh_manager: Arc<RwLock<Option<SSHConnectionManager>>>,
         acp_client_service: Option<Arc<bitfun_acp::AcpClientService>>,
+        halo_workbench: Option<HaloWorkbenchRuntime>,
+        pi_configuration: Option<Arc<dyn PiRuntimeConfigurationManagementPort>>,
+        pi_credential_store: Option<Arc<dyn PiCredentialStorePort>>,
     ) -> Result<Self, String> {
-        let host_effects = Arc::new(ProductionDesktopSessionHostEffects::new(acp_client_service));
-        let session_application = DesktopSessionApplication::build(
-            coordinator,
-            scheduler,
-            token_usage_service,
-            workspace_service,
-            ssh_manager,
-            host_effects,
-        )?;
+        #[cfg(feature = "halo-local-coding")]
+        validate_halo_local_coding_wiring(
+            halo_workbench.is_some(),
+            pi_configuration.is_some(),
+            pi_credential_store.is_some(),
+        )
+        .map_err(str::to_owned)?;
+
+        #[cfg(feature = "halo-local-coding")]
+        let (halo_workbench, pi_configuration, pi_credential_store) =
+            match (halo_workbench, pi_configuration, pi_credential_store) {
+                (Some(halo_workbench), Some(pi_configuration), Some(pi_credential_store)) => {
+                    (halo_workbench, pi_configuration, pi_credential_store)
+                }
+                _ => return Err(HALO_LOCAL_CODING_WIRING_UNAVAILABLE.to_owned()),
+            };
+
+        let session_application = match (coordinator, scheduler) {
+            (Some(coordinator), Some(scheduler)) => {
+                let host_effects =
+                    Arc::new(ProductionDesktopSessionHostEffects::new(acp_client_service));
+                Some(DesktopSessionApplication::build(
+                    coordinator,
+                    scheduler,
+                    token_usage_service,
+                    workspace_service.clone(),
+                    ssh_manager,
+                    host_effects,
+                )?)
+            }
+            (None, None) => None,
+            _ => return Err("legacy runtime handles must be provided together".to_string()),
+        };
         let local_workspace_snapshot = CoreLocalWorkspaceSnapshot::build();
 
         Ok(Self {
             session_application,
             local_workspace_snapshot,
+            workspace_service,
             permission_events_started: AtomicBool::new(false),
+            halo_workbench,
+            pi_configuration,
+            pi_credential_store,
+            halo_workbench_events_started: AtomicBool::new(false),
+            halo_workbench_event_task: Mutex::new(None),
         })
     }
 
+    #[cfg(feature = "halo-local-coding")]
+    pub(crate) fn halo_workbench(&self) -> &HaloWorkbenchRuntime {
+        &self.halo_workbench
+    }
+
+    #[cfg(feature = "halo-local-coding")]
+    pub(crate) fn pi_configuration(&self) -> &dyn PiRuntimeConfigurationManagementPort {
+        self.pi_configuration.as_ref()
+    }
+
+    #[cfg(feature = "halo-local-coding")]
+    pub(crate) fn pi_configuration_store(&self) -> &dyn PiCredentialStorePort {
+        self.pi_credential_store.as_ref()
+    }
+
+    #[cfg(feature = "halo-local-coding")]
+    pub(crate) fn start_halo_workbench_event_forwarding(
+        &self,
+        app: tauri::AppHandle,
+    ) -> Result<(), String> {
+        if self
+            .halo_workbench_events_started
+            .swap(true, Ordering::AcqRel)
+        {
+            return Ok(());
+        }
+
+        let mut receiver = self.halo_workbench().subscribe();
+        let task = tauri::async_runtime::spawn(async move {
+            use tauri::Emitter;
+
+            loop {
+                match receiver.recv().await {
+                    Ok(event) => {
+                        if let Err(error) = app.emit(
+                            crate::api::workbench_runtime_api::HALO_WORKBENCH_EVENT,
+                            event,
+                        ) {
+                            log::warn!("Failed to emit Halo Workbench Runtime event: {error}");
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                        log::warn!(
+                            "Halo Workbench Runtime event projection lagged: skipped={skipped}"
+                        );
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        });
+
+        match self.halo_workbench_event_task.lock() {
+            Ok(mut slot) => {
+                *slot = Some(task);
+                Ok(())
+            }
+            Err(_) => {
+                task.abort();
+                self.halo_workbench_events_started
+                    .store(false, Ordering::Release);
+                Err("Halo Workbench Runtime event task lock is poisoned".to_string())
+            }
+        }
+    }
+
+    #[cfg(feature = "halo-local-coding")]
+    pub(crate) async fn close_halo_workbench_workspace(&self) -> Result<(), HaloWorkbenchError> {
+        if self
+            .workspace_service
+            .get_current_workspace()
+            .await
+            .is_some_and(|workspace| workspace.workspace_kind == WorkspaceKind::Remote)
+        {
+            return Ok(());
+        }
+
+        self.halo_workbench()
+            .submit(HaloWorkbenchIntentRequest {
+                request_id: format!("desktop-workspace-close-{}", uuid::Uuid::new_v4()),
+                intent: HaloWorkbenchIntent::CloseWorkspace,
+            })
+            .await?;
+        Ok(())
+    }
+
+    #[cfg(feature = "halo-local-coding")]
+    pub(crate) async fn shutdown_halo_workbench_once(&self) -> Result<(), HaloWorkbenchError> {
+        let result = self.halo_workbench().shutdown().await;
+        if let Ok(mut slot) = self.halo_workbench_event_task.lock() {
+            if let Some(task) = slot.take() {
+                task.abort();
+            }
+        }
+        result
+    }
+
     pub(crate) fn agent_runtime(&self) -> &AgentRuntime {
-        self.session_application.agent_runtime()
+        self.session_application
+            .as_ref()
+            .expect("legacy Agent Runtime is unavailable in Halo local coding")
+            .agent_runtime()
     }
 
     pub(crate) fn session_application(&self) -> &DesktopSessionApplication {
-        &self.session_application
+        self.session_application
+            .as_ref()
+            .expect("legacy session application is unavailable in Halo local coding")
     }
 
     pub(crate) fn local_workspace_snapshot(&self) -> &dyn LocalWorkspaceSnapshotPort {
@@ -146,8 +315,47 @@ impl DesktopRuntimeContext {
     }
 }
 
+impl Drop for DesktopRuntimeContext {
+    fn drop(&mut self) {
+        if let Ok(slot) = self.halo_workbench_event_task.get_mut() {
+            if let Some(task) = slot.take() {
+                task.abort();
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn halo_local_coding_wiring_fails_closed_when_any_required_seam_is_missing() {
+        for (has_workbench, has_configuration, has_credential_store) in [
+            (false, true, true),
+            (true, false, true),
+            (true, true, false),
+            (false, false, false),
+        ] {
+            let result = super::validate_halo_local_coding_wiring(
+                has_workbench,
+                has_configuration,
+                has_credential_store,
+            );
+            assert_eq!(
+                result,
+                Err(super::HALO_LOCAL_CODING_WIRING_UNAVAILABLE),
+                "missing Halo Pi seam must be rejected before command access"
+            );
+        }
+    }
+
+    #[test]
+    fn halo_local_coding_wiring_accepts_the_complete_seam_set() {
+        assert_eq!(
+            super::validate_halo_local_coding_wiring(true, true, true),
+            Ok(())
+        );
+    }
+
     #[test]
     fn desktop_runtime_wiring_reuses_existing_core_owners() {
         let runtime_source = include_str!("mod.rs");

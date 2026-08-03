@@ -2013,7 +2013,9 @@ mod tests {
     fn browser_guard_hints_offer_an_executable_way_out() {
         let error = ComputerUseActions::desktop_browser_guard_error("click", None);
         assert!(
-            error.message.contains("not because your task is browser-related"),
+            error
+                .message
+                .contains("not because your task is browser-related"),
             "{}",
             error.message
         );
