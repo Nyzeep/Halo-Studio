@@ -26,7 +26,9 @@ enum CommandKind {
     Start,
     CreateSession,
     SendUserInput,
+    FollowUp,
     StopSession,
+    AbortSession,
     EndSession,
     ResolveOperation,
     Shutdown,
@@ -39,7 +41,9 @@ impl CommandKind {
             PiRpcCommand::Start { .. } => Some(Self::Start),
             PiRpcCommand::CreateSession { .. } => Some(Self::CreateSession),
             PiRpcCommand::SendUserInput { .. } => Some(Self::SendUserInput),
+            PiRpcCommand::FollowUp { .. } => Some(Self::FollowUp),
             PiRpcCommand::StopSession { .. } => Some(Self::StopSession),
+            PiRpcCommand::AbortSession { .. } => Some(Self::AbortSession),
             PiRpcCommand::EndSession { .. } => Some(Self::EndSession),
             PiRpcCommand::ResolveOperation { .. } => Some(Self::ResolveOperation),
             PiRpcCommand::Shutdown { .. } => Some(Self::Shutdown),
@@ -175,7 +179,9 @@ impl DeterministicPiRpc {
             Some(CommandKind::Start) => self.start_gate.wait_if_enabled().await,
             Some(CommandKind::CreateSession) => self.create_session_gate.wait_if_enabled().await,
             Some(CommandKind::SendUserInput) => self.send_user_input_gate.wait_if_enabled().await,
+            Some(CommandKind::FollowUp) => self.send_user_input_gate.wait_if_enabled().await,
             Some(CommandKind::StopSession) => self.stop_session_gate.wait_if_enabled().await,
+            Some(CommandKind::AbortSession) => self.stop_session_gate.wait_if_enabled().await,
             Some(CommandKind::EndSession) => self.end_session_gate.wait_if_enabled().await,
             Some(CommandKind::ResolveOperation) => self.resolve_gate.wait_if_enabled().await,
             Some(CommandKind::Shutdown) => self.shutdown_gate.wait_if_enabled().await,
@@ -409,6 +415,7 @@ async fn create_idle_session(
         .submit(HaloWorkbenchIntentRequest {
             request_id: request_id.to_string(),
             intent: HaloWorkbenchIntent::CreateSession {
+                task_id: request_id.to_string(),
                 mode: HaloWorkbenchSessionMode::Standard,
             },
         })
@@ -677,6 +684,270 @@ async fn trust_revoke_closes_the_runtime_before_forwarding_session_input() {
 }
 
 #[tokio::test]
+async fn session_snapshot_binds_workspace_task_and_session_and_rejects_duplicate_task() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-explicit-binding",
+        "explicit-binding",
+    )
+    .await;
+    let session_id =
+        create_idle_session(&runtime, &adapter, generation, "task-explicit-binding").await;
+
+    let session = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("created session is projected");
+    assert_eq!(session.workspace_id, "explicit-binding");
+    assert_eq!(session.task_id, "task-explicit-binding");
+    assert_eq!(session.session_id, session_id);
+
+    let error = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "duplicate-task-binding".to_string(),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "task-explicit-binding".to_string(),
+                mode: HaloWorkbenchSessionMode::Standard,
+            },
+        })
+        .await
+        .expect_err("one active session is allowed per workspace/task binding");
+    assert_eq!(error.code, "task_already_active");
+    assert_eq!(adapter.count(CommandKind::CreateSession), 1);
+}
+
+#[tokio::test]
+async fn prompt_settled_follow_up_and_abort_obey_non_replay_lifecycle() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-session-lifecycle",
+        "session-lifecycle",
+    )
+    .await;
+    let session_id =
+        create_idle_session(&runtime, &adapter, generation, "task-session-lifecycle").await;
+
+    let premature_follow_up = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "follow-up-before-settled".to_string(),
+            intent: HaloWorkbenchIntent::FollowUp {
+                session_id: session_id.clone(),
+                content: "must wait".to_string(),
+            },
+        })
+        .await
+        .expect_err("follow-up cannot be sent before the first settlement");
+    assert_eq!(premature_follow_up.code, "session_not_ready");
+    assert_eq!(adapter.count(CommandKind::FollowUp), 0);
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "first-prompt-lifecycle".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "first prompt".to_string(),
+            },
+        })
+        .await
+        .expect("first prompt is accepted");
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Running).await;
+
+    let repeated_prompt = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "repeated-prompt-lifecycle".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "must not replay".to_string(),
+            },
+        })
+        .await
+        .expect_err("a running session cannot accept a second prompt");
+    assert_eq!(repeated_prompt.code, "session_busy");
+    assert_eq!(adapter.count(CommandKind::SendUserInput), 1);
+
+    adapter.emit(PiRpcEvent::AgentSettled {
+        generation,
+        session_id: session_id.clone(),
+    });
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::WaitingDeveloper,
+    )
+    .await;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "follow-up-after-settled".to_string(),
+            intent: HaloWorkbenchIntent::FollowUp {
+                session_id: session_id.clone(),
+                content: "continue explicitly".to_string(),
+            },
+        })
+        .await
+        .expect("follow-up is accepted only after agent_settled");
+    assert_eq!(adapter.count(CommandKind::FollowUp), 1);
+    adapter.emit(PiRpcEvent::AgentSettled {
+        generation,
+        session_id: session_id.clone(),
+    });
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::WaitingDeveloper,
+    )
+    .await;
+
+    let abort_before_running = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "abort-after-settlement".to_string(),
+            intent: HaloWorkbenchIntent::AbortSession {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect_err("abort is only for a running turn");
+    assert_eq!(abort_before_running.code, "session_not_ready");
+    assert_eq!(adapter.count(CommandKind::AbortSession), 0);
+
+    let abort_target =
+        create_idle_session(&runtime, &adapter, generation, "task-abort-lifecycle").await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "abort-prompt".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: abort_target.clone(),
+                content: "abort me".to_string(),
+            },
+        })
+        .await
+        .expect("abort target prompt is accepted");
+    wait_for_session_phase(&runtime, &abort_target, HaloWorkbenchSessionPhase::Running).await;
+
+    adapter.stop_session_gate.block();
+    let abort_runtime = runtime.clone();
+    let abort_session_id = abort_target.clone();
+    let abort = tokio::spawn(async move {
+        abort_runtime
+            .submit(HaloWorkbenchIntentRequest {
+                request_id: "abort-running".to_string(),
+                intent: HaloWorkbenchIntent::AbortSession {
+                    session_id: abort_session_id,
+                },
+            })
+            .await
+    });
+    adapter.stop_session_gate.wait_until_started().await;
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if runtime.snapshot().sessions.iter().any(|session| {
+                session.session_id == abort_target
+                    && session.phase == HaloWorkbenchSessionPhase::Stopping
+            }) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("abort marks the session stopping before crossing the port");
+    let stopping_snapshot = runtime.snapshot();
+    let stopping = stopping_snapshot
+        .sessions
+        .iter()
+        .find(|session| session.session_id == abort_target)
+        .expect("abort target remains projected while abort is in flight");
+    assert_eq!(stopping.phase, HaloWorkbenchSessionPhase::Stopping);
+
+    adapter.emit(PiRpcEvent::AgentSettled {
+        generation,
+        session_id: abort_target.clone(),
+    });
+    tokio::task::yield_now().await;
+    assert_eq!(
+        runtime
+            .snapshot()
+            .sessions
+            .iter()
+            .find(|session| session.session_id == abort_target)
+            .expect("abort target remains projected")
+            .phase,
+        HaloWorkbenchSessionPhase::Stopping,
+        "late settlement cannot reopen a stopping session"
+    );
+    adapter.stop_session_gate.release();
+    abort
+        .await
+        .expect("abort task")
+        .expect("abort command is accepted");
+    adapter.emit(PiRpcEvent::SessionStopped {
+        generation,
+        session_id: abort_target.clone(),
+    });
+    wait_for_session_phase(
+        &runtime,
+        &abort_target,
+        HaloWorkbenchSessionPhase::Interrupted,
+    )
+    .await;
+
+    let repeated_abort = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "abort-interrupted".to_string(),
+            intent: HaloWorkbenchIntent::AbortSession {
+                session_id: abort_target.clone(),
+            },
+        })
+        .await
+        .expect_err("interrupted sessions cannot replay abort");
+    assert_eq!(repeated_abort.code, "session_not_ready");
+    let replayed_input = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "input-interrupted".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: abort_target,
+                content: "must not replay after abort".to_string(),
+            },
+        })
+        .await
+        .expect_err("interrupted sessions cannot replay input");
+    assert_eq!(replayed_input.code, "session_not_ready");
+}
+
+#[tokio::test]
+async fn end_session_accepts_adapter_removal_before_the_runtime_event_arrives() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(&runtime, &adapter, "open-end-session", "end-session").await;
+    let session_id = create_idle_session(&runtime, &adapter, generation, "task-end-session").await;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "end-session-command".to_string(),
+            intent: HaloWorkbenchIntent::EndSession {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("end is accepted after the adapter removes its owned process");
+    assert_eq!(adapter.count(CommandKind::EndSession), 1);
+
+    adapter.emit(PiRpcEvent::SessionEnded {
+        generation,
+        session_id: session_id.clone(),
+    });
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Ended).await;
+}
+
+#[tokio::test]
 async fn repeated_open_and_close_reuses_only_current_generation_cleanup() {
     let adapter = Arc::new(DeterministicPiRpc::new());
     let runtime = build_runtime(adapter.clone());
@@ -852,11 +1123,12 @@ async fn concurrent_session_inputs_are_serialized_at_the_workbench_seam() {
         .await
         .expect("first input task")
         .expect("first input accepted");
-    second
+    let second_error = second
         .await
         .expect("second input task")
-        .expect("second input accepted");
-    assert_eq!(adapter.count(CommandKind::SendUserInput), 2);
+        .expect_err("a second prompt cannot replay a running task");
+    assert_eq!(second_error.code, "session_busy");
+    assert_eq!(adapter.count(CommandKind::SendUserInput), 1);
 }
 
 #[tokio::test]
@@ -929,6 +1201,7 @@ async fn operation_decision_remains_pending_until_the_adapter_confirms_it() {
         .submit(HaloWorkbenchIntentRequest {
             request_id: "create-operation-session".to_string(),
             intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "operation-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Standard,
             },
         })
@@ -1124,6 +1397,7 @@ async fn concurrent_operation_decisions_cross_the_seam_exactly_once() {
         .submit(HaloWorkbenchIntentRequest {
             request_id: "create-decision-race-session".to_string(),
             intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "decision-race-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Managed,
             },
         })
@@ -1187,6 +1461,7 @@ async fn operation_decisions_are_limited_to_one_time_allow_or_deny() {
         .submit(HaloWorkbenchIntentRequest {
             request_id: "create-decision-kind-session".to_string(),
             intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "decision-kind-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Managed,
             },
         })

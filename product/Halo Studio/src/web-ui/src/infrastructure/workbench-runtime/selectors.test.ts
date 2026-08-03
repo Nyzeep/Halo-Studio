@@ -23,7 +23,13 @@ const snapshot = (phase: WorkbenchRuntimeSnapshot['phase']): WorkbenchRuntimeSna
     trusted: true,
     gitRepository: true,
   },
-  sessions: [{ sessionId: 'session-1', mode: 'standard', phase: 'idle' }],
+  sessions: [{
+    workspaceId: 'workspace-1',
+    taskId: 'task-1',
+    sessionId: 'session-1',
+    mode: 'standard',
+    phase: 'idle',
+  }],
   pendingOperations: [],
   lastSequence: 1,
   stateVersion: 1,
@@ -55,8 +61,33 @@ describe('workbench runtime selectors', () => {
     const runtimeState = state(snapshot('ready'));
 
     expect(selectWorkbenchRuntimeSessionsForWorkspace(runtimeState, 'workspace-1'))
-      .toEqual([{ sessionId: 'session-1', mode: 'standard', phase: 'idle' }]);
+      .toEqual([{
+        workspaceId: 'workspace-1',
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        mode: 'standard',
+        phase: 'idle',
+      }]);
     expect(selectWorkbenchRuntimeSessionsForWorkspace(runtimeState, 'workspace-2')).toEqual([]);
+  });
+
+  it('does not project a session whose Halo workspace binding disagrees with the snapshot', () => {
+    const runtimeState = state({
+      ...snapshot('ready'),
+      sessions: [
+        ...snapshot('ready').sessions,
+        {
+          workspaceId: 'workspace-2',
+          taskId: 'task-2',
+          sessionId: 'session-2',
+          mode: 'managed',
+          phase: 'idle',
+        },
+      ],
+    });
+
+    expect(selectWorkbenchRuntimeSessionsForWorkspace(runtimeState, 'workspace-1'))
+      .toEqual([snapshot('ready').sessions[0]]);
   });
 
   it('recognizes only an awaiting decision as a confirmation request', () => {
@@ -64,6 +95,7 @@ describe('workbench runtime selectors', () => {
       ...snapshot('ready'),
       pendingOperations: [{
         operationId: 'operation-1',
+        taskId: 'task-1',
         sessionId: 'session-1',
         kind: 'permission',
         phase: 'decisionSubmitted',

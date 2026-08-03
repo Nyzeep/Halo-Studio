@@ -133,6 +133,10 @@ pub struct PiRpcConfig {
     /// Test/deployment root for adapter-owned config/session directories. The
     /// directory itself is never exposed through the Workbench public seam.
     pub temporary_root: Option<PathBuf>,
+    /// Stable adapter-owned root for standard session history. When omitted,
+    /// the adapter derives an application-local data root; tests should set
+    /// this or `temporary_root` to keep storage isolated.
+    pub persistent_session_root: Option<PathBuf>,
     pub response_timeout: Duration,
     pub operation_timeout: Duration,
     pub abort_grace_period: Duration,
@@ -149,6 +153,7 @@ impl Default for PiRpcConfig {
             credential_store: None,
             provider_capabilities: None,
             temporary_root: None,
+            persistent_session_root: None,
             response_timeout: DEFAULT_RESPONSE_TIMEOUT,
             operation_timeout: DEFAULT_OPERATION_TIMEOUT,
             abort_grace_period: DEFAULT_ABORT_GRACE_PERIOD,
@@ -239,7 +244,9 @@ struct PiSession {
     is_prepared: AtomicBool,
     adapter_state: Weak<Mutex<AdapterState>>,
     _config_dir: tempfile::TempDir,
-    _session_dir: Option<tempfile::TempDir>,
+    /// Standard session directories are intentionally persistent. Managed
+    /// sessions use `--no-session` and therefore keep this field `None`.
+    _session_dir: Option<PathBuf>,
     events: broadcast::Sender<PiRpcEvent>,
     stdin: Mutex<ChildStdin>,
     child: Mutex<Child>,
@@ -247,6 +254,7 @@ struct PiSession {
     operations: Mutex<HashMap<String, PiOperationBinding>>,
     seen_extension_requests: Mutex<HashSet<String>>,
     prompt_sent: AtomicBool,
+    prompt_accepted: AtomicBool,
     running: AtomicBool,
     terminated: AtomicBool,
     failure_reported: AtomicBool,
@@ -458,6 +466,7 @@ impl PiRpcAdapter {
         prepared: bool,
         mode: PiRpcSessionMode,
         workspace: &PiRpcWorkspace,
+        session_dir: Option<PathBuf>,
         executable: &Path,
         extension_path: &Path,
         runtime_configuration: Option<&PiRuntimeConfiguration>,
@@ -468,10 +477,6 @@ impl PiRpcAdapter {
         if let Some(configuration) = runtime_configuration {
             write_pi_config_projection(config_dir.path(), configuration, runtime_capability)?;
         }
-        let session_dir = match mode {
-            PiRpcSessionMode::Standard => Some(self.create_private_directory("session")?),
-            PiRpcSessionMode::Managed => None,
-        };
         if mode == PiRpcSessionMode::Standard && session_dir.is_none() {
             return Err(PiRpcFailureKind::CapabilityMismatch);
         }
@@ -482,7 +487,7 @@ impl PiRpcAdapter {
                 &pi_rpc_args(
                     extension_path,
                     mode,
-                    session_dir.as_ref().map(|directory| directory.path()),
+                    session_dir.as_deref(),
                     runtime_configuration
                         .map(|configuration| configuration.provider_id.as_str())
                         .or(self.config.provider.as_deref()),
@@ -523,6 +528,7 @@ impl PiRpcAdapter {
             operations: Mutex::new(HashMap::new()),
             seen_extension_requests: Mutex::new(HashSet::new()),
             prompt_sent: AtomicBool::new(false),
+            prompt_accepted: AtomicBool::new(false),
             running: AtomicBool::new(false),
             terminated: AtomicBool::new(false),
             failure_reported: AtomicBool::new(false),
@@ -552,6 +558,42 @@ impl PiRpcAdapter {
             }
             None => builder.tempdir().map_err(|_| PiRpcFailureKind::Internal),
         }
+    }
+
+    fn standard_session_directory(
+        &self,
+        workspace: &PiRpcWorkspace,
+        task_id: &str,
+    ) -> Result<PathBuf, PiRpcFailureKind> {
+        let root = self
+            .config
+            .persistent_session_root
+            .clone()
+            .or_else(|| {
+                self.config
+                    .temporary_root
+                    .as_ref()
+                    .map(|root| root.join("pi-sessions"))
+            })
+            .unwrap_or_else(default_persistent_session_root);
+        let workspace_key = stable_digest(&format!(
+            "{}:{}",
+            workspace.workspace_id,
+            workspace.canonical_root.to_string_lossy()
+        ));
+        let task_key = stable_digest(task_id);
+        let workspace_root = root.join("workspaces").join(workspace_key);
+        std::fs::create_dir_all(&workspace_root).map_err(|_| PiRpcFailureKind::Internal)?;
+        let canonical_root =
+            std::fs::canonicalize(&workspace_root).map_err(|_| PiRpcFailureKind::Internal)?;
+        let session_dir = workspace_root.join(task_key);
+        std::fs::create_dir_all(&session_dir).map_err(|_| PiRpcFailureKind::Internal)?;
+        let canonical_session_dir =
+            std::fs::canonicalize(&session_dir).map_err(|_| PiRpcFailureKind::Internal)?;
+        if !canonical_session_dir.starts_with(&canonical_root) {
+            return Err(PiRpcFailureKind::CapabilityMismatch);
+        }
+        Ok(canonical_session_dir)
     }
 
     async fn resolve_runtime_configuration(
@@ -829,6 +871,7 @@ impl PiRpcAdapter {
                 true,
                 PiRpcSessionMode::Managed,
                 &workspace,
+                None,
                 &executable,
                 &extension_path,
                 runtime_configuration
@@ -956,13 +999,26 @@ impl PiRpcAdapter {
         };
 
         let was_prepared = prepared_session.is_some();
+        let standard_session_dir = (mode == PiRpcSessionMode::Standard)
+            .then(|| self.standard_session_directory(&workspace, &task_id))
+            .transpose()?;
+        let cleanup_session_dir = standard_session_dir.clone();
         let session = match prepared_session {
             Some(session) if !session.terminated.load(Ordering::Acquire) => session,
             None => {
-                let credential = self
+                let credential = match self
                     .read_runtime_credential(runtime_configuration.as_ref())
-                    .await?;
-                let session = self
+                    .await
+                {
+                    Ok(credential) => credential,
+                    Err(reason) => {
+                        if let Some(session_dir) = cleanup_session_dir.as_deref() {
+                            remove_empty_standard_session_directory(session_dir);
+                        }
+                        return Err(reason);
+                    }
+                };
+                let session = match self
                     .spawn_session_process(
                         generation,
                         task_id.clone(),
@@ -970,15 +1026,28 @@ impl PiRpcAdapter {
                         false,
                         mode,
                         &workspace,
+                        standard_session_dir,
                         &executable,
                         &extension_path,
                         runtime_configuration.as_ref(),
                         runtime_capability.as_ref(),
                         credential,
                     )
-                    .await?;
+                    .await
+                {
+                    Ok(session) => session,
+                    Err(reason) => {
+                        if let Some(session_dir) = cleanup_session_dir.as_deref() {
+                            remove_empty_standard_session_directory(session_dir);
+                        }
+                        return Err(reason);
+                    }
+                };
                 if let Err(reason) = self.handshake(&session).await {
                     session.terminate().await;
+                    if let Some(session_dir) = cleanup_session_dir.as_deref() {
+                        remove_empty_standard_session_directory(session_dir);
+                    }
                     return Err(reason);
                 }
                 session
@@ -992,6 +1061,9 @@ impl PiRpcAdapter {
 
         if session.terminated.load(Ordering::Acquire) || session.has_exited().await {
             session.fail_closed(PiRpcFailureKind::Transport).await;
+            if let Some(session_dir) = cleanup_session_dir.as_deref() {
+                remove_empty_standard_session_directory(session_dir);
+            }
             if was_prepared {
                 let mut state = self.state.lock().await;
                 if state.generation == Some(generation) {
@@ -1012,6 +1084,9 @@ impl PiRpcAdapter {
             }
             drop(state);
             session.terminate().await;
+            if let Some(session_dir) = cleanup_session_dir.as_deref() {
+                remove_empty_standard_session_directory(session_dir);
+            }
             return Err(PiRpcFailureKind::Transport);
         }
         state.sessions.insert(session_id.clone(), session);
@@ -1027,21 +1102,34 @@ impl PiRpcAdapter {
         Ok(())
     }
 
-    async fn session(&self, generation: u64, session_id: &str) -> PortResult<Arc<PiSession>> {
-        let state = self.state.lock().await;
-        if state.generation != Some(generation) {
-            return Err(PortError::new(
-                PortErrorKind::NotAvailable,
-                "Pi RPC generation is no longer active",
-            ));
-        }
-        let session = state.sessions.get(session_id).cloned().ok_or_else(|| {
-            PortError::new(PortErrorKind::NotFound, "Pi RPC session is not available")
-        })?;
+    async fn session(
+        &self,
+        generation: u64,
+        task_id: &str,
+        session_id: &str,
+    ) -> PortResult<Arc<PiSession>> {
+        let session = {
+            let state = self.state.lock().await;
+            if state.generation != Some(generation) {
+                return Err(PortError::new(
+                    PortErrorKind::NotAvailable,
+                    "Pi RPC generation is no longer active",
+                ));
+            }
+            state.sessions.get(session_id).cloned().ok_or_else(|| {
+                PortError::new(PortErrorKind::NotFound, "Pi RPC session is not available")
+            })?
+        };
         if session.terminated.load(Ordering::Acquire) {
             return Err(PortError::new(
                 PortErrorKind::NotAvailable,
                 "Pi RPC session has failed closed",
+            ));
+        }
+        if session.current_task_id().await != task_id {
+            return Err(PortError::new(
+                PortErrorKind::PermissionDenied,
+                "Pi RPC session task scope did not match",
             ));
         }
         Ok(session)
@@ -1126,13 +1214,41 @@ impl PiRpcPort for PiRpcAdapter {
             },
             PiRpcCommand::SendUserInput {
                 generation,
+                task_id,
                 session_id,
                 content,
             } => {
-                let session = self.session(generation, &session_id).await?;
+                let session = self.session(generation, &task_id, &session_id).await?;
                 let command = next_input_command(&session.prompt_sent);
                 session
                     .request(command, json!({ "type": command, "message": content }))
+                    .await?;
+                session.prompt_accepted.store(true, Ordering::Release);
+                session.running.store(true, Ordering::Release);
+                self.emit(PiRpcEvent::SessionRunning {
+                    generation,
+                    session_id,
+                });
+                Ok(PiRpcReply::Accepted)
+            }
+            PiRpcCommand::FollowUp {
+                generation,
+                task_id,
+                session_id,
+                content,
+            } => {
+                let session = self.session(generation, &task_id, &session_id).await?;
+                if !session.prompt_accepted.load(Ordering::Acquire) {
+                    return Err(PortError::new(
+                        PortErrorKind::InvalidRequest,
+                        "Pi RPC follow-up requires an accepted prompt",
+                    ));
+                }
+                session
+                    .request(
+                        "follow_up",
+                        json!({ "type": "follow_up", "message": content }),
+                    )
                     .await?;
                 session.running.store(true, Ordering::Release);
                 self.emit(PiRpcEvent::SessionRunning {
@@ -1143,9 +1259,15 @@ impl PiRpcPort for PiRpcAdapter {
             }
             PiRpcCommand::StopSession {
                 generation,
+                task_id,
+                session_id,
+            }
+            | PiRpcCommand::AbortSession {
+                generation,
+                task_id,
                 session_id,
             } => {
-                let session = self.session(generation, &session_id).await?;
+                let session = self.session(generation, &task_id, &session_id).await?;
                 session.abort_with_grace().await?;
                 self.emit(PiRpcEvent::SessionStopped {
                     generation,
@@ -1155,9 +1277,10 @@ impl PiRpcPort for PiRpcAdapter {
             }
             PiRpcCommand::EndSession {
                 generation,
+                task_id,
                 session_id,
             } => {
-                let session = self.session(generation, &session_id).await?;
+                let session = self.session(generation, &task_id, &session_id).await?;
                 if session.running.load(Ordering::Acquire) {
                     let _ = session.abort_with_grace().await;
                 }
@@ -1176,7 +1299,7 @@ impl PiRpcPort for PiRpcAdapter {
                 operation_id,
                 decision,
             } => {
-                let session = self.session(generation, &session_id).await?;
+                let session = self.session(generation, &task_id, &session_id).await?;
                 let confirmed = match decision {
                     PiRpcOperationDecision::AllowOnce => true,
                     PiRpcOperationDecision::Deny => false,
@@ -1772,6 +1895,47 @@ fn stable_digest(value: &str) -> String {
         let _ = write!(&mut encoded, "{byte:02x}");
     }
     encoded
+}
+
+fn default_persistent_session_root() -> PathBuf {
+    #[cfg(windows)]
+    if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+        return PathBuf::from(local_app_data)
+            .join("Halo Studio")
+            .join("pi-sessions");
+    }
+
+    #[cfg(not(windows))]
+    if let Some(data_home) = std::env::var_os("XDG_DATA_HOME") {
+        return PathBuf::from(data_home)
+            .join("halo-studio")
+            .join("pi-sessions");
+    }
+
+    std::env::temp_dir().join("halo-studio").join("pi-sessions")
+}
+
+/// Failed standard-session startup must not leave an empty task directory, but
+/// a directory containing prior Pi history is persistent by contract. Only
+/// remove directories that are provably empty and remain below the adapter's
+/// task-scoped path; never recursively delete a session root.
+fn remove_empty_standard_session_directory(path: &Path) {
+    let is_empty = std::fs::read_dir(path)
+        .map(|mut entries| entries.next().is_none())
+        .unwrap_or(false);
+    if !is_empty || std::fs::remove_dir(path).is_err() {
+        return;
+    }
+
+    let Some(workspace_root) = path.parent() else {
+        return;
+    };
+    let workspace_is_empty = std::fs::read_dir(workspace_root)
+        .map(|mut entries| entries.next().is_none())
+        .unwrap_or(false);
+    if workspace_is_empty {
+        let _ = std::fs::remove_dir(workspace_root);
+    }
 }
 
 fn next_input_command(prompt_sent: &AtomicBool) -> &'static str {

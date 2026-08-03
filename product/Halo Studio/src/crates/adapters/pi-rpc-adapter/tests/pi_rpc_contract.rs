@@ -67,6 +67,7 @@ fn make_adapter_with_selection(
         credential_store: None,
         provider_capabilities: None,
         temporary_root: None,
+        persistent_session_root: None,
         response_timeout,
         operation_timeout,
         abort_grace_period,
@@ -119,6 +120,7 @@ fn configured_adapter(
         credential_store: Some(credentials),
         provider_capabilities: None,
         temporary_root: Some(storage_root.to_path_buf()),
+        persistent_session_root: None,
         response_timeout: Duration::from_secs(1),
         operation_timeout: Duration::from_secs(1),
         abort_grace_period: Duration::from_millis(100),
@@ -372,6 +374,7 @@ async fn agent_end_never_substitutes_for_agent_settled_during_abort() {
         adapter
             .execute(PiRpcCommand::StopSession {
                 generation,
+                task_id: "session-contract".to_string(),
                 session_id: "session-contract".to_string(),
             })
             .await
@@ -382,6 +385,7 @@ async fn agent_end_never_substitutes_for_agent_settled_during_abort() {
         adapter
             .execute(PiRpcCommand::SendUserInput {
                 generation,
+                task_id: "session-contract".to_string(),
                 session_id: "session-contract".to_string(),
                 content: "after agent_end".to_string(),
             })
@@ -653,11 +657,24 @@ async fn send_input(adapter: &PiRpcAdapter, generation: u64, content: &str) -> P
     adapter
         .execute(PiRpcCommand::SendUserInput {
             generation,
+            task_id: "session-contract".to_string(),
             session_id: "session-contract".to_string(),
             content: content.to_string(),
         })
         .await
         .expect("send input crosses the port without a transport error")
+}
+
+async fn send_follow_up(adapter: &PiRpcAdapter, generation: u64, content: &str) -> PiRpcReply {
+    adapter
+        .execute(PiRpcCommand::FollowUp {
+            generation,
+            task_id: "session-contract".to_string(),
+            session_id: "session-contract".to_string(),
+            content: content.to_string(),
+        })
+        .await
+        .expect("follow-up crosses the port without a transport error")
 }
 
 async fn shutdown(adapter: &PiRpcAdapter, generation: u64) {
@@ -861,7 +878,7 @@ async fn standard_and_managed_sessions_use_adapter_owned_storage_and_clean_it_up
     let storage_root = tempfile::tempdir().expect("temporary adapter root");
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let extension_path = manifest_dir.join("src").join("halo_permission_gate.ts");
-    let adapter = PiRpcAdapter::with_config(PiRpcConfig {
+    let config = PiRpcConfig {
         executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_pi_rpc_fixture"))),
         extension_path: Some(extension_path),
         provider: None,
@@ -870,10 +887,12 @@ async fn standard_and_managed_sessions_use_adapter_owned_storage_and_clean_it_up
         credential_store: None,
         provider_capabilities: None,
         temporary_root: Some(storage_root.path().to_path_buf()),
+        persistent_session_root: None,
         response_timeout: Duration::from_secs(1),
         operation_timeout: Duration::from_secs(1),
         abort_grace_period: Duration::from_millis(100),
-    });
+    };
+    let adapter = PiRpcAdapter::with_config(config.clone());
 
     assert_eq!(start(&adapter, 126).await, PiRpcReply::Accepted);
     assert_eq!(
@@ -906,9 +925,78 @@ async fn standard_and_managed_sessions_use_adapter_owned_storage_and_clean_it_up
         std::fs::read_dir(storage_root.path())
             .expect("storage root remains inspectable")
             .count(),
-        0,
-        "adapter-owned config/session directories must be removed after shutdown"
+        1,
+        "only the persistent standard-session root may remain after shutdown"
     );
+    assert!(storage_root.path().join("pi-sessions").is_dir());
+
+    drop(adapter);
+    let reopened = PiRpcAdapter::with_config(config);
+    assert_eq!(start(&reopened, 127).await, PiRpcReply::Accepted);
+    assert_eq!(
+        reopened
+            .execute(PiRpcCommand::CreateSession {
+                generation: 127,
+                task_id: "standard-task".to_string(),
+                session_id: "reopened-standard-session".to_string(),
+                mode: PiRpcSessionMode::Standard,
+            })
+            .await
+            .expect("standard session can be reopened for the same task"),
+        PiRpcReply::Accepted
+    );
+    shutdown(&reopened, 127).await;
+    assert_eq!(
+        std::fs::read_dir(storage_root.path())
+            .expect("persistent root remains after reopen")
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn failed_standard_session_start_removes_only_the_new_empty_task_directory() {
+    let _environment = fixture_environment("happy");
+    let storage_root = tempfile::tempdir().expect("temporary adapter root");
+    let adapter = PiRpcAdapter::with_config(PiRpcConfig {
+        executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_pi_rpc_fixture"))),
+        extension_path: Some(fixture_extension_path()),
+        temporary_root: Some(storage_root.path().to_path_buf()),
+        response_timeout: Duration::from_millis(250),
+        operation_timeout: Duration::from_millis(100),
+        abort_grace_period: Duration::from_millis(50),
+        ..PiRpcConfig::default()
+    });
+
+    assert_eq!(start(&adapter, 128).await, PiRpcReply::Accepted);
+    std::env::set_var("HALO_PI_RPC_FIXTURE_MODE", "bad_json");
+    assert_eq!(
+        adapter
+            .execute(PiRpcCommand::CreateSession {
+                generation: 128,
+                task_id: "failed-standard-task".to_string(),
+                session_id: "failed-standard-session".to_string(),
+                mode: PiRpcSessionMode::Standard,
+            })
+            .await
+            .expect("failed standard create crosses the port"),
+        PiRpcReply::Unavailable {
+            reason: PiRpcFailureKind::Protocol,
+        }
+    );
+
+    let workspace_root = storage_root.path().join("pi-sessions").join("workspaces");
+    assert_eq!(
+        std::fs::read_dir(&workspace_root)
+            .expect("persistent workspace root remains inspectable")
+            .count(),
+        0,
+        "failed startup must not leave an empty task directory"
+    );
+
+    std::env::set_var("HALO_PI_RPC_FIXTURE_MODE", "happy");
+    shutdown(&adapter, 128).await;
+    std::env::remove_var("HALO_PI_RPC_FIXTURE_MODE");
 }
 
 #[tokio::test]
@@ -944,6 +1032,64 @@ async fn response_ids_allow_out_of_order_prompt_and_follow_up_replies() {
     let (first_reply, second_reply) = tokio::join!(first, second);
     assert_eq!(first_reply, PiRpcReply::Accepted);
     assert_eq!(second_reply, PiRpcReply::Accepted);
+    shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn follow_up_requires_a_prompt_and_abort_variant_crosses_the_same_seam() {
+    let _environment = fixture_environment("graceful_abort");
+    let generation = 15;
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+    let mut events = adapter.subscribe();
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+
+    let error = adapter
+        .execute(PiRpcCommand::FollowUp {
+            generation,
+            task_id: "session-contract".to_string(),
+            session_id: "session-contract".to_string(),
+            content: "must not replay before prompt".to_string(),
+        })
+        .await
+        .expect_err("follow-up before a prompt is rejected at the adapter seam");
+    assert_eq!(error.kind, PortErrorKind::InvalidRequest);
+
+    assert_eq!(
+        send_input(&adapter, generation, "first").await,
+        PiRpcReply::Accepted
+    );
+    wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::SessionRunning { .. })
+    })
+    .await;
+    assert_eq!(
+        send_follow_up(&adapter, generation, "continue explicitly").await,
+        PiRpcReply::Accepted
+    );
+
+    assert_eq!(
+        adapter
+            .execute(PiRpcCommand::AbortSession {
+                generation,
+                task_id: "session-contract".to_string(),
+                session_id: "session-contract".to_string(),
+            })
+            .await
+            .expect("explicit abort crosses the port"),
+        PiRpcReply::Accepted
+    );
+    wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::SessionStopped { .. })
+    })
+    .await;
     shutdown(&adapter, generation).await;
 }
 
@@ -1061,6 +1207,34 @@ async fn repeated_start_is_idempotent_and_repeated_create_is_rejected_safely() {
 }
 
 #[tokio::test]
+async fn session_commands_fail_closed_when_the_task_scope_does_not_match() {
+    let _environment = fixture_environment("happy");
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+    let generation = 24;
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+
+    let error = adapter
+        .execute(PiRpcCommand::SendUserInput {
+            generation,
+            task_id: "another-task".to_string(),
+            session_id: "session-contract".to_string(),
+            content: "must not cross task boundary".to_string(),
+        })
+        .await
+        .expect_err("cross-task input is denied at the adapter seam");
+    assert_eq!(error.kind, PortErrorKind::PermissionDenied);
+    shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
 async fn graceful_abort_waits_for_agent_settled_and_stuck_abort_reclaims_child() {
     let _environment = fixture_environment("graceful_abort");
     let generation = 30;
@@ -1087,6 +1261,7 @@ async fn graceful_abort_waits_for_agent_settled_and_stuck_abort_reclaims_child()
         adapter
             .execute(PiRpcCommand::StopSession {
                 generation,
+                task_id: "session-contract".to_string(),
                 session_id: "session-contract".to_string(),
             })
             .await
@@ -1124,6 +1299,7 @@ async fn graceful_abort_waits_for_agent_settled_and_stuck_abort_reclaims_child()
         adapter
             .execute(PiRpcCommand::StopSession {
                 generation,
+                task_id: "session-contract".to_string(),
                 session_id: "session-contract".to_string(),
             })
             .await
@@ -1133,6 +1309,7 @@ async fn graceful_abort_waits_for_agent_settled_and_stuck_abort_reclaims_child()
     assert!(adapter
         .execute(PiRpcCommand::SendUserInput {
             generation,
+            task_id: "session-contract".to_string(),
             session_id: "session-contract".to_string(),
             content: "after stop".to_string(),
         })
@@ -1169,6 +1346,7 @@ async fn abort_response_timeout_cannot_extend_the_forced_reclaim_grace_period() 
     let result = adapter
         .execute(PiRpcCommand::StopSession {
             generation,
+            task_id: "session-contract".to_string(),
             session_id: "session-contract".to_string(),
         })
         .await;

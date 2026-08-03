@@ -302,7 +302,7 @@ describe('WorkbenchRuntimeStore', () => {
 
     await store.getState().submitIntent({
       requestId: 'request-create',
-      intent: { type: 'createSession', mode: 'standard' },
+      intent: { type: 'createSession', taskId: 'task-1', mode: 'standard' },
     });
 
     expect(store.getState().snapshot).toBe(before);
@@ -531,8 +531,20 @@ describe('WorkbenchRuntimeStore', () => {
     const initial = {
       ...snapshot(1, 1, 'ready'),
       sessions: [
-        { sessionId: 'session-1', mode: 'managed' as const, phase: 'waitingDeveloper' as const },
-        { sessionId: 'session-2', mode: 'standard' as const, phase: 'interrupted' as const },
+        {
+          workspaceId: 'workspace-1',
+          taskId: 'task-1',
+          sessionId: 'session-1',
+          mode: 'managed' as const,
+          phase: 'waitingDeveloper' as const,
+        },
+        {
+          workspaceId: 'workspace-1',
+          taskId: 'task-2',
+          sessionId: 'session-2',
+          mode: 'standard' as const,
+          phase: 'interrupted' as const,
+        },
       ],
     };
     const client: WorkbenchRuntimeClient = {

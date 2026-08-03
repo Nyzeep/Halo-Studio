@@ -506,15 +506,35 @@ pub enum PiRpcCommand {
     },
     SendUserInput {
         generation: u64,
+        task_id: String,
+        session_id: String,
+        content: String,
+    },
+    /// Explicit continuation after the Workbench has observed `agent_settled`.
+    /// The adapter owns the Pi `follow_up` payload; this command only carries
+    /// the Halo-local session and user content.
+    FollowUp {
+        generation: u64,
+        task_id: String,
         session_id: String,
         content: String,
     },
     StopSession {
         generation: u64,
+        task_id: String,
+        session_id: String,
+    },
+    /// Abort the currently running turn. `StopSession` remains as the legacy
+    /// name at the port boundary; the Workbench uses this explicit command
+    /// for new abort intents.
+    AbortSession {
+        generation: u64,
+        task_id: String,
         session_id: String,
     },
     EndSession {
         generation: u64,
+        task_id: String,
         session_id: String,
     },
     ResolveOperation {
@@ -562,28 +582,56 @@ impl fmt::Debug for PiRpcCommand {
                 .finish(),
             Self::SendUserInput {
                 generation,
+                task_id,
                 session_id,
                 ..
             } => formatter
                 .debug_struct("SendUserInput")
                 .field("generation", generation)
+                .field("task_id", task_id)
+                .field("session_id", session_id)
+                .field("content", &"<redacted>")
+                .finish(),
+            Self::FollowUp {
+                generation,
+                task_id,
+                session_id,
+                ..
+            } => formatter
+                .debug_struct("FollowUp")
+                .field("generation", generation)
+                .field("task_id", task_id)
                 .field("session_id", session_id)
                 .field("content", &"<redacted>")
                 .finish(),
             Self::StopSession {
                 generation,
+                task_id,
                 session_id,
             } => formatter
                 .debug_struct("StopSession")
                 .field("generation", generation)
+                .field("task_id", task_id)
+                .field("session_id", session_id)
+                .finish(),
+            Self::AbortSession {
+                generation,
+                task_id,
+                session_id,
+            } => formatter
+                .debug_struct("AbortSession")
+                .field("generation", generation)
+                .field("task_id", task_id)
                 .field("session_id", session_id)
                 .finish(),
             Self::EndSession {
                 generation,
+                task_id,
                 session_id,
             } => formatter
                 .debug_struct("EndSession")
                 .field("generation", generation)
+                .field("task_id", task_id)
                 .field("session_id", session_id)
                 .finish(),
             Self::ResolveOperation {

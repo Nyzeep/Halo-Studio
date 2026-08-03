@@ -49,9 +49,16 @@ const makeState = (operationPhase: 'awaitingDecision' | 'decisionSubmitted') => 
   syncStatus: 'ready',
   snapshot: {
     workspace: { workspaceId: 'workspace-1' },
-    sessions: [{ sessionId: 'session-1', mode: 'managed', phase: 'waitingDeveloper' }],
+    sessions: [{
+      workspaceId: 'workspace-1',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      mode: 'managed',
+      phase: 'waitingDeveloper',
+    }],
     pendingOperations: [{
       operationId: 'operation-1',
+      taskId: 'task-1',
       sessionId: 'session-1',
       kind: 'permission',
       phase: operationPhase,
