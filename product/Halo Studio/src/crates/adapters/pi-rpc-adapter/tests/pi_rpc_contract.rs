@@ -1117,7 +1117,10 @@ async fn extension_error_is_a_protocol_failure_and_timeout_decision_is_deny_path
     let generation = 51;
     let adapter = make_adapter(
         Duration::from_secs(1),
-        Duration::from_millis(40),
+        // Keep the timeout path deterministic on Windows: the fixture still
+        // exercises the bounded deny response, without making the assertion
+        // depend on a sub-50ms child-process scheduling window.
+        Duration::from_millis(250),
         Duration::from_millis(100),
     );
     let mut events = adapter.subscribe();
@@ -1134,13 +1137,33 @@ async fn extension_error_is_a_protocol_failure_and_timeout_decision_is_deny_path
         matches!(event, PiRpcEvent::OperationRequested { .. })
     })
     .await;
-    wait_for_event(&mut events, |event| {
-        matches!(event, PiRpcEvent::OperationResolved { .. })
+    // The timeout worker emits OperationResolved after writing the deny
+    // response, while the fixture emits AgentSettled in response to that
+    // write. Either event may win the broadcast race; retain both instead of
+    // discarding the first one while waiting for the second.
+    let first = wait_for_event(&mut events, |event| {
+        matches!(
+            event,
+            PiRpcEvent::OperationResolved { .. } | PiRpcEvent::AgentSettled { .. }
+        )
     })
     .await;
-    wait_for_event(&mut events, |event| {
-        matches!(event, PiRpcEvent::AgentSettled { .. })
+    let second = wait_for_event(&mut events, |event| {
+        matches!(
+            event,
+            PiRpcEvent::OperationResolved { .. } | PiRpcEvent::AgentSettled { .. }
+        )
     })
     .await;
+    assert!(matches!(
+        (&first, &second),
+        (
+            PiRpcEvent::OperationResolved { .. },
+            PiRpcEvent::AgentSettled { .. }
+        ) | (
+            PiRpcEvent::AgentSettled { .. },
+            PiRpcEvent::OperationResolved { .. }
+        )
+    ));
     shutdown(&adapter, generation).await;
 }
