@@ -50,6 +50,20 @@ const DEFAULT_ABORT_GRACE_PERIOD: Duration = Duration::from_secs(3);
 // The compatibility profile is intentionally explicit. A successful
 // `--version` process exit is not evidence that its RPC schema is known.
 const SUPPORTED_PI_RPC_VERSIONS: &[&str] = &["0.81.1"];
+const SUPPORTED_ASSISTANT_MESSAGE_EVENT_TYPES: &[&str] = &[
+    "start",
+    "text_start",
+    "text_delta",
+    "text_end",
+    "thinking_start",
+    "thinking_delta",
+    "thinking_end",
+    "toolcall_start",
+    "toolcall_delta",
+    "toolcall_end",
+    "done",
+    "error",
+];
 const SAFE_CHILD_ENVIRONMENT: &[&str] = &[
     "PATH",
     "PATHEXT",
@@ -904,6 +918,7 @@ impl PiRpcAdapter {
             )
         };
 
+        let was_prepared = prepared_session.is_some();
         let session = match prepared_session {
             Some(session) if !session.terminated.load(Ordering::Acquire) => session,
             None => {
@@ -932,7 +947,7 @@ impl PiRpcAdapter {
                 session
             }
             Some(session) => {
-                session.terminate().await;
+                session.fail_closed(PiRpcFailureKind::Transport).await;
                 return Err(PiRpcFailureKind::Transport);
             }
         };
@@ -940,6 +955,12 @@ impl PiRpcAdapter {
 
         if session.terminated.load(Ordering::Acquire) || session.has_exited().await {
             session.fail_closed(PiRpcFailureKind::Transport).await;
+            if was_prepared {
+                let mut state = self.state.lock().await;
+                if state.generation == Some(generation) {
+                    state.readiness_failed = true;
+                }
+            }
             return Err(PiRpcFailureKind::Transport);
         }
 
@@ -949,6 +970,9 @@ impl PiRpcAdapter {
             || session.terminated.load(Ordering::Acquire)
             || state.sessions.contains_key(&session_id)
         {
+            if was_prepared && state.generation == Some(generation) {
+                state.readiness_failed = true;
+            }
             drop(state);
             session.terminate().await;
             return Err(PiRpcFailureKind::Transport);
@@ -1698,7 +1722,7 @@ fn valid_message_update(value: &Value) -> bool {
             .and_then(Value::as_object)
             .and_then(|event| event.get("type"))
             .and_then(Value::as_str)
-            .is_some_and(|event_type| !event_type.is_empty())
+            .is_some_and(|event_type| SUPPORTED_ASSISTANT_MESSAGE_EVENT_TYPES.contains(&event_type))
 }
 
 fn stable_digest(value: &str) -> String {

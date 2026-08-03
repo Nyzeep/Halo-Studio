@@ -560,7 +560,11 @@ async fn port_projects_crlf_tail_unicode_message_and_tool_events_without_raw_ids
 
 #[tokio::test]
 async fn malformed_event_schema_fails_closed_without_projecting_public_events() {
-    for mode in ["malformed_message_update", "malformed_tool_execution_end"] {
+    for mode in [
+        "malformed_message_update",
+        "unsupported_message_update",
+        "malformed_tool_execution_end",
+    ] {
         let _environment = fixture_environment(mode);
         let generation = 115;
         let adapter = make_adapter(

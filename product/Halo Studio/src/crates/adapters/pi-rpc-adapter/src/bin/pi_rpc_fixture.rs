@@ -275,6 +275,24 @@ fn main() {
                         json!({ "type": "message_update", "text": "invalid" }),
                     );
                 }
+                "unsupported_message_update" => {
+                    respond(
+                        &mut stdout,
+                        request.get("id").and_then(Value::as_str),
+                        command,
+                        true,
+                        Value::Null,
+                    );
+                    send_event(&mut stdout, json!({ "type": "agent_start" }));
+                    send_event(
+                        &mut stdout,
+                        json!({
+                            "type": "message_update",
+                            "message": {},
+                            "assistantMessageEvent": { "type": "future_delta" }
+                        }),
+                    );
+                }
                 "malformed_tool_execution_end" => {
                     respond(
                         &mut stdout,
