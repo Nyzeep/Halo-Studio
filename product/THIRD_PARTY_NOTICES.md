@@ -42,6 +42,7 @@ project `.pi` directory or the user-wide Pi extension directory.
 - Source: `product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts`
 - Fixed version: `1.0.0`
 - Source commit: `e8c445d6a81d90851ac03d6aac7a4f11b6b749a3`
+- Source commit tree: `f50918b6bdebc6067f409f248cc9182ff5bcdec3`
 - Git object hash: `15d6908cc30e45f8812a87c591e58799d2f7ae69`
 - SHA-256: `A6F704110E56BE3C1C0754DADDE1BE2B27F65C76EE03F2C19A1E43CD06848C0B`
 - License and copyright evidence: `product/Halo Studio/LICENSE`, MIT License,
@@ -56,6 +57,20 @@ closure are not bundled by Halo P0. Their licenses and source provenance are
 therefore not inferred from this entry; an exact host source commit/tag,
 complete dependency closure, or future bundled distribution keeps the issue 13
 release gate blocked until separately audited.
+
+## Pi host, Provider, Core, Session, and built-in boundary
+
+The Halo extension MIT notice above applies only to the Halo-owned source file.
+It is not a license or provenance declaration for the user-installed Pi host,
+Pi Provider packages, Pi Core/Agent implementation, Pi Session/runtime files,
+or Pi's inline `llama.cpp` built-in. Those surfaces remain separate release
+inputs and require their own exact source commit/tag, complete direct and
+transitive dependency closure, license texts/notices, and an exact release
+artifact before they can become release-eligible.
+
+No exact desktop distribution artifact is currently recorded for that check.
+The absence of a bundled host artifact is a blocked evidence state, not proof
+that the host or its built-ins are covered by Halo's license notice.
 
 ## Pi host built-in capability excluded from Halo release
 

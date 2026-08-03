@@ -41,6 +41,7 @@
 
 - 源文件：`product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts`
 - 来源 commit：`e8c445d6a81d90851ac03d6aac7a4f11b6b749a3`
+- 来源 commit tree：`f50918b6bdebc6067f409f248cc9182ff5bcdec3`
 - `git hash-object`：`15d6908cc30e45f8812a87c591e58799d2f7ae69`
 - SHA-256：`A6F704110E56BE3C1C0754DADDE1BE2B27F65C76EE03F2C19A1E43CD06848C0B`
 - 能力：`tool_call` 前置拦截、`ctx.ui.confirm`，通过 Pi RPC
@@ -106,24 +107,39 @@ RPC、不发送模型请求、不读取真实凭据、不下载依赖。
 | 命令/检查 | 状态 | 退出码 | 结果摘要 |
 | --- | --- | ---: | --- |
 | extension SHA-256 | `PASS` | 0 | `A6F704110E56BE3C1C0754DADDE1BE2B27F65C76EE03F2C19A1E43CD06848C0B` |
+| extension source commit/tree/blob | `PASS` | 0 | commit `e8c445d6a81d90851ac03d6aac7a4f11b6b749a3`, tree `f50918b6bdebc6067f409f248cc9182ff5bcdec3`, blob `15d6908cc30e45f8812a87c591e58799d2f7ae69` |
 | extension `git hash-object` | `PASS` | 0 | `15d6908cc30e45f8812a87c591e58799d2f7ae69` |
 | `cargo tree --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter` | `PASS` | 0 | 依赖树可解析；workspace member 重复仍由审计 gate 单独阻断 |
 | `pnpm --dir "product/Halo Studio" run check:repo-hygiene` | `PASS` | 0 | repository hygiene passed |
 | `pnpm --dir "product/Halo Studio" run product:check` | `PASS` | 0 | product assembly check passed |
 | `pnpm --dir "product/Halo Studio" run product:test` | `PASS` | 0 | 17/17 passed |
 | `pnpm --dir "product/Halo Studio" run type-check:web` | `PASS` | 0 | `tsc --noEmit` passed |
-| `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter` | `BLOCKED` | 1 | 16/17；`extension_error_is_a_protocol_failure_and_timeout_decision_is_deny_path` fails with `fake Pi event arrived before the contract timeout`; the isolated focused test passes. No runtime test or source was changed. |
-| `HALO_BITFUN_REFERENCE_ROOT=<local read-only checkout>; node "product/Halo Studio/scripts/pi-extension-audit.mjs" --json` | `BLOCKED` | 1 | `blocked`，11 项 finding；包含 base/tree provenance、shallow ancestry、host/license、workspace 与 artifact 缺口 |
-| `node --test "product/Halo Studio/scripts/pi-extension-audit.test.mjs"` | `PASS` | 0 | 33/33 audit contract tests passed |
+| `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter` | `PASS` | 0 | Serial rerun passed 17/17 (exit 0); a parallel invocation transiently reported 16/17 on `unknown_event` as `Transport` instead of `Protocol`, with no source change. |
+| `node --check "product/Halo Studio/scripts/pi-extension-audit.mjs"` | `PASS` | 0 | Audit CLI syntax check passed after the fail-closed scan/metadata changes. |
+| `$env:HALO_BITFUN_REFERENCE_ROOT='<matching read-only checkout for readonly-evidence://bitfun-latest>'; node "product/Halo Studio/scripts/pi-extension-audit.mjs" --json` | `BLOCKED` | 1 | Matching locator produced 11 findings: `release-gate-declared-blocked`, `upstream-history-boundary-untrusted`, `upstream-base-commit-unresolved`, `upstream-ancestry-unproven`, `upstream-initial-import-tree-mismatch`, `workspace-member-duplicate`, `built-in-extension-provenance-missing`, `host-source-provenance-missing`, `host-license-evidence-not-release`, `host-dependency-closure-incomplete`, and `release-artifact-evidence-missing`. |
+| `Remove-Item Env:HALO_BITFUN_REFERENCE_ROOT; node "product/Halo Studio/scripts/pi-extension-audit.mjs" --json` | `BLOCKED` | 1 | Missing locator is reported as `upstream-reference-tree-unavailable`; it is not interpreted as candidate provenance or a pass. |
+| `node --test "product/Halo Studio/scripts/pi-extension-audit.test.mjs"` | `PASS` | 0 | 61/61 audit contract tests passed, including external re-export rejection, computed global property/optional-call capability scanning with root aliases, canonical separation of host license paths from extension evidence/distribution/release-artifact paths, recorded `HEAD^`/clean-status evidence, source commit/tree/blob provenance, path-policy/permission validation, and host closure/license text claims. |
 | Tauri candidate build against the Halo product tree | `NOT_RUN` | — | Candidate was not applied; automatic merge is prohibited, so no candidate build claim is made. |
-| 工单 04 Workbench Runtime contract checks: `pnpm --dir "product/Halo Studio/src/web-ui" run test:run -- src/infrastructure/workbench-runtime/formalPath.contract.test.ts src/infrastructure/workbench-runtime/client.test.ts` | `NOT_RUN` | — | Candidate was not applied to the product tree; no candidate contract claim is made. |
-| 工单 07 Pi RPC contract and source-inventory checks | `PASS` | 0 | Adapter crate tests and the fixed extension hash/source inventory checks passed on the Halo base tree; candidate delta remains unvalidated. |
-| `pnpm --dir "product/Halo Studio" run desktop:build:fast` | `BLOCKED` | 1 | Existing vendor checksum mismatch：`allocator-api2/src/stable/slice.rs` expected `089263…`/actual `14d6eb…`（the build also previously observed `src/lib.rs` and `LICENSE-APACHE` mismatches）；未修改 vendor 或系统环境 |
+| Base-tree Workbench Runtime Rust contracts: `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-agent-runtime --test workbench_runtime_contracts` | `PASS` | 0 | 16/16 passed on the existing Halo base tree; this is not candidate validation. |
+| Base-tree Web UI suite: `pnpm --dir "product/Halo Studio/src/web-ui" run test:run` | `PASS` | 0 | Fresh rerun: 362 files / 2,373 tests passed. This is still base-tree evidence, not candidate validation; no test source was changed. |
+| Candidate Workbench Runtime focused checks: `pnpm --dir "product/Halo Studio/src/web-ui" run test:run -- src/infrastructure/workbench-runtime/formalPath.contract.test.ts src/infrastructure/workbench-runtime/client.test.ts` | `NOT_RUN` | — | Candidate was not applied to the product tree; no candidate contract claim is made. |
+| 工单 07 Pi RPC contract and source-inventory checks | `PASS` | 0 | Fixed extension hash/source inventory checks passed on the Halo base tree; the candidate delta remains unvalidated. The current full adapter crate matrix is also `PASS` above. |
+| `pnpm --dir "product/Halo Studio" run desktop:build:fast` | `BLOCKED` | 1 | Vendor checksum failure: first observed `allocator-api2/src/stable/vec/splice.rs` expected SHA-256 `95A460B3A7B4AF60FDC9BA04D3A719B61A0C11786CD2D8823D022E22C397F9C9`, actual `7CE9FA74764C36AB9043F7339548E96B0B68F7D1A16769C9CB066B9A538DCB14`; vendor and system environment were not modified. |
 | `git diff --check` | `PASS` | 0 | 本轮 tracked diff 无 whitespace error |
 | 精确 desktop distribution artifact 的 LICENSE/notice 内容核对 | `NOT_RUN` | — | 没有可核对的 exact release artifact；因此 release gate 保持 blocked |
 | 真实 Pi RPC、真实凭据、真实模型请求、真实 Pi UI 验收 | `NOT_RUN` | — | 按任务禁止项未执行 |
 
-`desktop:build:fast` 同时观察到 `allocator-api2/LICENSE-APACHE` 的现有实际 SHA-256
-为 `62C7A1E35F56406896D7AA7CA52D0CC0D272AC022B5D2796E7D6905DB8A3636A`，而 vendor
-checksum 文件声明 `20fe7b00e904ed690e3b9fd6073784d3fc428141dbd10b81c01fd143d0797f58`；
-这些 vendor 差异只作为环境阻断证据记录。
+`desktop:build:fast` 的 vendor 校验在当前运行首个报告为 `src/stable/vec/splice.rs`；
+vendor checksum 文件仍记录其声明值而实际文件不同。这些 vendor 差异只作为环境阻断
+证据记录，未修改 vendor 或系统环境。
+
+## 本轮 owned 审计变化
+
+本轮只修改 `pi-extension-audit.mjs`、其 Node contract test、架构审计说明、工单
+13 说明和第三方 notice。CLI 仍是独立只读审计入口，不是已接入 product/package
+release gate 的命令；测试通过只证明审计规则本身，不能把 base-tree 测试写成
+candidate validation。脚本新增的静态检查覆盖动态外部 import/require、网络能力、
+无扩展名文本输入、根式 Windows 路径脱敏、fail-closed extension metadata，以及
+完整 host closure/发行文件 evidence；computed `globalThis`/`window` property access
+（含 alias 与 optional computed call）和 extension-owned distribution/release-artifact
+路径复用也 fail closed；它们不会执行 Pi、模型、联网安装或凭据读取。

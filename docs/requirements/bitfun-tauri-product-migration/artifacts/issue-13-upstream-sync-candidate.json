@@ -36,6 +36,12 @@
       "exitCode": 128,
       "result": "candidate parent is unavailable locally; no ancestry claim is made"
     },
+    "statusEvidence": {
+      "command": "git -c safe.directory=<HALO_BITFUN_REFERENCE_ROOT> -C <HALO_BITFUN_REFERENCE_ROOT> status --porcelain=v2 --branch",
+      "exitCode": 0,
+      "clean": true,
+      "result": "clean; branch main is synchronized with origin/main"
+    },
     "resolution": {
       "status": "resolved",
       "resolvedCommit": "1616ccaf73c0dabc50783344e583d304dd77622b",

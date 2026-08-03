@@ -17,6 +17,7 @@ const GIT_OBJECT_PATTERN = /^[0-9a-f]{40}$/i;
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/i;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const READ_ONLY_EVIDENCE_REFERENCE_PATTERN = /^readonly-evidence:\/\/[A-Za-z0-9._-]+(?:\/[^\s]*)?$/;
+const COMPUTED_GLOBAL_CAPABILITY_PATTERN = /\b(?:globalThis|window)\s*(?:\?\.)?\s*\[[^\]]+\]/i;
 const TEXT_EXTENSIONS = new Set([
   ".cjs",
   ".bat",
@@ -54,7 +55,7 @@ function normalizeRelativePath(value) {
 }
 
 function isAbsolutePath(value) {
-  return /^(?:[A-Za-z]:[\\/]|[\\/]{2}|\/)/.test(String(value));
+  return /^(?:[A-Za-z]:[\\/]|[\\/]{1,2})/.test(String(value));
 }
 
 function isExternalEvidenceReference(value) {
@@ -95,8 +96,30 @@ function resolveRepoPath(repoRoot, relativePath) {
   return resolved;
 }
 
+function canonicalRepoRelativePath(repoRoot, relativePath) {
+  const resolved = resolveRepoPath(repoRoot, relativePath);
+  if (!resolved) return null;
+  const realRoot = realpathSync(repoRoot);
+  const realCandidate = existsSync(resolved) ? realpathSync(resolved) : resolved;
+  if (!inside(realRoot, realCandidate)) return null;
+  return normalizeRelativePath(path.relative(realRoot, realCandidate)).toLowerCase();
+}
+
 function addFinding(findings, code, message, evidence = {}) {
   findings.push({ code, message, evidence: sanitizeEvidence(evidence) });
+}
+
+function regexEscape(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasAliasedComputedGlobalCapability(sourceContents) {
+  const aliases = [...sourceContents.matchAll(/\b(?:const|let|var)\s+([$_\p{ID_Start}][$_\p{ID_Continue}]*)\s*=\s*(?:globalThis|window)\b/gu)]
+    .map((match) => match[1]);
+  return aliases.some((alias) => new RegExp(
+    `(?:^|[^$_\\p{ID_Continue}])${regexEscape(alias)}\\s*(?:\\?\\.)?\\s*\\[[^\\]]+\\]`,
+    "u",
+  ).test(sourceContents));
 }
 
 function readJson(filePath, findings) {
@@ -150,9 +173,27 @@ function gitBlobAtCommit(repoRoot, commit, relativePath) {
   return type.ok && type.stdout.trim() === "blob" ? blob : null;
 }
 
+function gitTreeAtCommit(repoRoot, commit) {
+  const resolvedCommit = runGit(repoRoot, ["rev-parse", "--verify", `${commit}^{commit}`]);
+  if (!resolvedCommit.ok || resolvedCommit.stdout.trim().toLowerCase() !== String(commit).toLowerCase()) return null;
+  const result = runGit(repoRoot, ["rev-parse", "--verify", `${commit}^{tree}`]);
+  if (!result.ok) return null;
+  const tree = result.stdout.trim();
+  const type = runGit(repoRoot, ["cat-file", "-t", tree]);
+  return type.ok && type.stdout.trim() === "tree" ? tree : null;
+}
+
 function isRegularFile(filePath) {
   try {
     return statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isTextLikeFile(filePath) {
+  try {
+    return !readFileSync(filePath).subarray(0, 8192).includes(0);
   } catch {
     return false;
   }
@@ -176,7 +217,7 @@ function collectTextFiles(repoRoot, relativePath, findings) {
       files.push(...collectTextFiles(repoRoot, path.relative(repoRoot, entryPath), findings));
       continue;
     }
-    if (entry.isFile() && TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+    if (entry.isFile() && (TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase()) || path.extname(entry.name) === "") && isTextLikeFile(entryPath)) {
       files.push(entryPath);
     }
   }
@@ -197,6 +238,29 @@ function checkFileFingerprint(filePath, descriptor, codePrefix, label, findings)
   }
   if (actualSize !== expectedSize) {
     addFinding(findings, `${codePrefix}-size-mismatch`, `${label} byte size does not match the audited file`);
+  }
+}
+
+function checkRequiredTextClaims(filePath, claims, codePrefix, label, findings) {
+  if (!Array.isArray(claims) || claims.length === 0) {
+    addFinding(findings, `${codePrefix}-claims-missing`, `${label} must declare exact text claims`);
+    return;
+  }
+  const contents = readFileSync(filePath, "utf8");
+  for (const claim of claims) {
+    if (typeof claim !== "string" || claim.trim() === "" || !contents.includes(claim)) {
+      addFinding(findings, `${codePrefix}-text-missing`, `${label} does not contain a declared text claim`);
+    }
+  }
+}
+
+function checkSpdxTextClaims(contents, spdx, codePrefix, label, findings) {
+  const markers = {
+    MIT: [/MIT License/i, /Permission is hereby granted/i],
+    "Apache-2.0": [/Apache License/i, /Version 2\.0/i],
+  }[spdx];
+  if (!markers || !markers.every((marker) => marker.test(contents))) {
+    addFinding(findings, `${codePrefix}-spdx-text-missing`, `${label} does not contain the complete text for its declared SPDX license`);
   }
 }
 
@@ -249,7 +313,7 @@ function checkEvidenceFiles(repoRoot, extension, findings) {
   if (!notice) {
     addFinding(findings, "license-notice-evidence-missing", `${extension.id} must cite product/THIRD_PARTY_NOTICES.md as notice evidence`);
   } else {
-    for (const claim of [extension.id, extension.sourcePath, extension.sourceCommit, extension.gitHashObject, extension.sha256]) {
+    for (const claim of [extension.id, extension.sourcePath, extension.sourceCommit, extension.sourceTree, extension.gitHashObject, extension.sha256]) {
       if (typeof claim !== "string" || !notice.contents.toLowerCase().includes(claim.toLowerCase())) {
         addFinding(findings, "license-notice-provenance-missing", `${extension.id} notice does not contain an audited provenance claim`);
       }
@@ -385,6 +449,51 @@ function checkDependencies(repoRoot, extension, findings) {
       `${extension.id} host package license evidence is observed outside Halo release files and cannot pass the release gate`,
       { evidencePath: hostLicense.evidencePath, releaseStatus: hostLicense.releaseStatus ?? null },
     );
+  } else {
+    const extensionLicenseEvidencePaths = new Set(
+      (extension.license?.evidence ?? [])
+        .map((item) => canonicalRepoRelativePath(repoRoot, typeof item === "string" ? item : item?.path))
+        .filter(Boolean),
+    );
+    const extensionLicenseDistributionPaths = (extension.license?.distributionFiles ?? [])
+      .map((item) => canonicalRepoRelativePath(repoRoot, typeof item === "string" ? item : item?.path))
+      .filter(Boolean);
+    const extensionLicenseReleaseArtifactPath = canonicalRepoRelativePath(repoRoot, extension.license?.releaseArtifactEvidence?.path);
+    const extensionOwnedLicensePaths = new Set([
+      ...extensionLicenseEvidencePaths,
+      ...extensionLicenseDistributionPaths,
+      extensionLicenseReleaseArtifactPath,
+    ].filter(Boolean));
+    const haloLicensePath = canonicalRepoRelativePath(repoRoot, "product/Halo Studio/LICENSE");
+    const hostLicenseEvidenceLabel = canonicalRepoRelativePath(repoRoot, hostLicense.evidencePath);
+    if (hostLicenseEvidenceLabel && (extensionOwnedLicensePaths.has(hostLicenseEvidenceLabel) || hostLicenseEvidenceLabel === haloLicensePath)) {
+      addFinding(findings, "host-license-evidence-misclassified", `${extension.id} host license evidence must not reuse Halo extension license files`);
+    }
+    const hostLicenseEvidencePath = resolveRepoPath(repoRoot, hostLicense.evidencePath);
+    if (!hostLicenseEvidencePath || !isRegularFile(hostLicenseEvidencePath)) {
+      addFinding(findings, "host-license-evidence-file-missing", `${extension.id} host license evidence must point to a repository-local file`);
+    } else {
+      const hostLicenseContents = readFileSync(hostLicenseEvidencePath, "utf8");
+      checkRequiredTextClaims(hostLicenseEvidencePath, hostLicense.requiredText, "host-license-evidence", `${extension.id} host license evidence`, findings);
+      checkSpdxTextClaims(hostLicenseContents, hostLicense.observedSpdx, "host-license", `${extension.id} host license evidence`, findings);
+      if (typeof hostLicense.copyright !== "string" || hostLicense.copyright.trim() === "" || !hostLicenseContents.includes(hostLicense.copyright)) {
+        addFinding(findings, "host-license-copyright-missing", `${extension.id} host license evidence does not contain its declared attribution text`);
+      }
+    }
+    for (const releaseFile of hostLicense.releaseFiles) {
+      const descriptor = typeof releaseFile === "string" ? { path: releaseFile } : releaseFile;
+      const releaseLabel = canonicalRepoRelativePath(repoRoot, descriptor?.path);
+      if (releaseLabel && (extensionOwnedLicensePaths.has(releaseLabel) || releaseLabel === haloLicensePath)) {
+        addFinding(findings, "host-license-release-file-misclassified", `${extension.id} host license release evidence must not reuse Halo extension license files`);
+      }
+      const releasePath = resolveRepoPath(repoRoot, descriptor?.path);
+      if (!releasePath || !isRegularFile(releasePath)) {
+        addFinding(findings, "host-license-release-file-missing", `${extension.id} host license release evidence file is missing: ${safePathLabel(descriptor?.path)}`);
+      } else {
+        checkFileFingerprint(releasePath, descriptor, "host-license-release", `${extension.id} host license release evidence ${safePathLabel(descriptor.path)}`, findings);
+        checkRequiredTextClaims(releasePath, descriptor?.requiredText, "host-license-release", `${extension.id} host license release evidence ${safePathLabel(descriptor.path)}`, findings);
+      }
+    }
   }
   const closure = host?.dependencyClosure;
   if (!closure || closure.status !== "complete" || !Array.isArray(closure.direct) || !Array.isArray(closure.transitive)) {
@@ -393,6 +502,28 @@ function checkDependencies(repoRoot, extension, findings) {
       "host-dependency-closure-incomplete",
       `${extension.id} host package direct/transitive dependency closure is not complete evidence; do not infer it from the package name`,
     );
+  } else {
+    const entries = [...closure.direct, ...closure.transitive];
+    if (entries.length === 0) {
+      addFinding(findings, "host-dependency-closure-empty", `${extension.id} host package dependency closure must enumerate direct and transitive entries`);
+    }
+    const validEntries = entries.filter((entry) => entry && typeof entry === "object" && ["name", "version", "source", "license"].every(
+      (key) => typeof entry[key] === "string" && entry[key].trim() !== "",
+    ));
+    if (validEntries.length !== entries.length) {
+      addFinding(findings, "host-dependency-entry-invalid", `${extension.id} host dependency closure entries must include name, version, source, and license`);
+    }
+    const closureEvidencePath = resolveRepoPath(repoRoot, closure.evidencePath);
+    if (!closureEvidencePath || !isRegularFile(closureEvidencePath)) {
+      addFinding(findings, "host-dependency-closure-evidence-missing", `${extension.id} host dependency closure must point to a repository-local evidence file`);
+    } else {
+      const closureContents = readFileSync(closureEvidencePath, "utf8");
+      for (const entry of validEntries) {
+        if (![entry.name, entry.version, entry.source, entry.license].every((claim) => closureContents.includes(claim))) {
+          addFinding(findings, "host-dependency-closure-evidence-mismatch", `${extension.id} host dependency closure evidence does not contain an exact entry claim`);
+        }
+      }
+    }
   }
 }
 
@@ -401,17 +532,40 @@ function checkExtensionSource(extension, sourceContents, findings) {
     addFinding(findings, "runtime-import-not-type-only", `${extension.id} must import the Pi API as a type-only import`);
   }
 
-  const externalImports = [...sourceContents.matchAll(/^\s*import\s+(?!type\b).*?from\s+["']([^"']+)["']/gm)]
-    .map((match) => match[1])
+  const staticImports = [
+    ...sourceContents.matchAll(/^\s*import\s+(?!type\b).*?from\s+["']([^"']+)["']/gm),
+    ...sourceContents.matchAll(/^\s*import\s+(?!type\b)["']([^"']+)["'];?/gm),
+    ...sourceContents.matchAll(/^\s*export\s+(?:\*\s+as\s+[$_\p{ID_Start}][$_\p{ID_Continue}]*|\*|\{[^}]*\})\s+from\s+["']([^"']+)["']/gmu),
+  ].map((match) => match[1]);
+  const dynamicImports = [];
+  const unresolvedDynamicImports = [];
+  for (const match of sourceContents.matchAll(/\b(?:require|import)\s*\(([^)]*)\)/g)) {
+    const argument = match[1].trim();
+    const literal = argument.match(/^(['"`])([\s\S]*)\1$/);
+    if (!literal || (literal[1] === "`" && literal[2].includes("${"))) {
+      unresolvedDynamicImports.push("dynamic import/require");
+      continue;
+    }
+    dynamicImports.push(literal[2]);
+  }
+  const externalImports = [...new Set([...staticImports, ...dynamicImports])]
     .filter((specifier) => !specifier.startsWith("."));
   if (externalImports.length > 0) {
     addFinding(findings, "extension-runtime-import-present", `${extension.id} declares runtime package imports; extension runtime dependencies are not admitted`, {
       imports: externalImports,
     });
   }
+  if (unresolvedDynamicImports.length > 0) {
+    addFinding(findings, "extension-runtime-import-unresolved", `${extension.id} uses a computed or unresolved runtime import; extension dependencies cannot be proven`, {
+      count: unresolvedDynamicImports.length,
+    });
+  }
 
   const forbiddenExtensionPatterns = [
     /from\s+["']node:(?:fs|fs\/promises|child_process|net|http|https|os)["']/i,
+    /\b(?:require|import)\s*\(\s*["'](?:node:)?(?:fs|fs\/promises|child_process|net|http|https|os)["']\s*\)/i,
+    /\b(?:globalThis\.)?fetch\s*\(/i,
+    COMPUTED_GLOBAL_CAPABILITY_PATTERN,
     /\b(?:fetch|exec|spawn|fork|readFile|writeFile|mkdir|unlink|rm|createReadStream|createWriteStream)\s*\(/,
     /\b(?:process\.env|credential|apiKey|authorization)\b/i,
   ];
@@ -421,6 +575,64 @@ function checkExtensionSource(extension, sourceContents, findings) {
         pattern: String(pattern),
       });
     }
+  }
+  if (hasAliasedComputedGlobalCapability(sourceContents)) {
+    addFinding(findings, "extension-host-capability", `${extension.id} uses a forbidden aliased computed global capability`, {
+      pattern: "aliased computed global/window property access",
+    });
+  }
+}
+
+function checkExtensionContractMetadata(extension, findings) {
+  const capabilities = extension.capabilities;
+  const requiredArrays = ["tools", "events", "ui", "cleanup"];
+  if (!capabilities || typeof capabilities !== "object") {
+    addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare structured capabilities`);
+  } else {
+    for (const key of requiredArrays) {
+      if (!Array.isArray(capabilities[key])) {
+        addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id}.capabilities.${key} must be an array`);
+      }
+    }
+    if (Array.isArray(capabilities.events) && !capabilities.events.includes("tool_call")) {
+      addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare the tool_call pre-execution gate`);
+    }
+    for (const uiCapability of ["ctx.ui.confirm", "extension_ui_request", "extension_ui_response"]) {
+      if (Array.isArray(capabilities.ui) && !capabilities.ui.includes(uiCapability)) {
+        addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare ${uiCapability}`);
+      }
+    }
+    for (const cleanupEvent of ["stop", "abort", "eof", "failure", "application-exit"]) {
+      if (Array.isArray(capabilities.cleanup) && !capabilities.cleanup.includes(cleanupEvent)) {
+        addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare cleanup for ${cleanupEvent}`);
+      }
+    }
+    if (Array.isArray(capabilities.tools) && capabilities.tools.length > 0) {
+      addFinding(findings, "extension-custom-tool-present", `${extension.id} must not declare custom tools on the Halo P0 seam`);
+    }
+  }
+
+  const impact = extension.impact;
+  if (!impact || typeof impact !== "object" || ["files", "network", "process", "credentials", "git", "renderer"].some(
+    (key) => typeof impact[key] !== "string" || impact[key].trim() === "",
+  )) {
+    addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare all host-impact fields`);
+  }
+  const hostPermissions = typeof extension.hostPermissions === "string" ? extension.hostPermissions.trim() : "";
+  const hasInheritedPiPermissions = /\binherits\s+(?:(?:the\s+)?launching\s+user(?:'s)?|pi\s+process)\b/i.test(hostPermissions);
+  const hasNoSandboxClaim = /\b(?:not|no)\s+(?:a\s+)?sandbox\b/i.test(hostPermissions);
+  if (!hasInheritedPiPermissions || !hasNoSandboxClaim) {
+    addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must describe inherited host permissions and sandbox status`);
+    if (hostPermissions !== "") {
+      addFinding(findings, "extension-host-permission-claim-invalid", `${extension.id} must state that it inherits Pi process permissions and is not a sandbox`);
+    }
+  }
+  if (typeof extension.load?.pathPolicy !== "string" || extension.load.pathPolicy.trim() === "") {
+    addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare its adapter-owned extension path policy`);
+  } else if (!["adapter-owned", "temporary", "embedded", "hash-verified", "--extension"].every(
+    (fragment) => extension.load.pathPolicy.toLowerCase().includes(fragment),
+  )) {
+    addFinding(findings, "extension-path-policy-claim-invalid", `${extension.id} path policy must bind an adapter-owned temporary copy of embedded, hash-verified source to --extension`);
   }
 }
 
@@ -487,6 +699,18 @@ function checkLoadBoundary(extension, adapterSource, findings) {
 
 function checkSourceProvenance(repoRoot, extension, findings) {
   if (!COMMIT_PATTERN.test(extension.sourceCommit ?? "")) return;
+  const declaredTree = gitTreeAtCommit(repoRoot, extension.sourceCommit);
+  if (!declaredTree) {
+    addFinding(findings, "source-commit-tree-unavailable", `${extension.id} source commit tree is not available in the Halo Git object database`, {
+      commit: extension.sourceCommit,
+    });
+  } else if (declaredTree.toLowerCase() !== String(extension.sourceTree).toLowerCase()) {
+    addFinding(findings, "source-commit-tree-mismatch", `${extension.id} sourceCommit does not contain the declared Git tree`, {
+      commit: extension.sourceCommit,
+      expectedTree: extension.sourceTree,
+      actualTree: declaredTree,
+    });
+  }
   const declaredBlob = gitBlobAtCommit(repoRoot, extension.sourceCommit, extension.sourcePath);
   if (!declaredBlob) {
     addFinding(findings, "source-commit-provenance-unavailable", `${extension.id} source commit or path is not available in the Halo Git object database`, {
@@ -534,11 +758,18 @@ function checkRuntimeScan(repoRoot, runtime, findings) {
     /(?:^|[\r\n;&|{}])\s*(?:Invoke-WebRequest|Invoke-RestMethod|iwr|irm|Start-BitsTransfer)\b/im,
     /\b(?:WebClient\.(?:DownloadFile|DownloadString|DownloadData)|DownloadFile\s*\()\b/i,
   ];
+  const networkCapability = [
+    /\b(?:globalThis|window)\.fetch\s*\(/i,
+    /\b(?:globalThis|window)\s*\[\s*["']fetch["']\s*\]\s*\(/i,
+    COMPUTED_GLOBAL_CAPABILITY_PATTERN,
+    /\bfetch\s*\(/i,
+    /\bhttps?\.(?:get|request)\s*\(/i,
+  ];
   const projectDiscovery = /(?:\.pi[\\/]extensions|\.pi[\\/]packages|PI_CODING_AGENT_DIR\s*.*(?:workspace|project))/i;
   const isAllowlisted = (relativePath, code, file) => (runtime.allowlistedFindings ?? []).some(
     (entry) => entry?.path === relativePath
       && entry?.code === code
-      && code !== "runtime-download-capability"
+      && !["runtime-download-capability", "runtime-network-capability"].includes(code)
       && typeof entry.reason === "string"
       && entry.reason.trim() !== ""
       && SHA256_PATTERN.test(entry.sha256 ?? "")
@@ -546,8 +777,8 @@ function checkRuntimeScan(repoRoot, runtime, findings) {
   );
 
   for (const entry of runtime.allowlistedFindings ?? []) {
-    if (entry?.code === "runtime-download-capability") {
-      addFinding(findings, "runtime-download-allowlist-forbidden", "Runtime download capabilities cannot be allowlisted; remove the capability or keep the release gate blocked");
+    if (["runtime-download-capability", "runtime-network-capability"].includes(entry?.code)) {
+      addFinding(findings, "runtime-capability-allowlist-forbidden", "Runtime download and network capabilities cannot be allowlisted; remove the capability or keep the release gate blocked");
     }
     if (!entry?.path || !entry?.code || !entry?.reason || isAbsolutePath(entry.path)) {
       addFinding(findings, "runtime-allowlist-invalid", "Runtime scan allowlist entries require a relative path, code, and reason");
@@ -569,6 +800,10 @@ function checkRuntimeScan(repoRoot, runtime, findings) {
     }
     if (downloadCapability.some((pattern) => pattern.test(contents)) && !isAllowlisted(relativePath, "runtime-download-capability", file)) {
       addFinding(findings, "runtime-download-capability", `Runtime/build input contains a download or package installation capability: ${relativePath}`);
+    }
+    if ((networkCapability.some((pattern) => pattern.test(contents)) || hasAliasedComputedGlobalCapability(contents))
+      && !isAllowlisted(relativePath, "runtime-network-capability", file)) {
+      addFinding(findings, "runtime-network-capability", `Runtime/build input contains a network capability: ${relativePath}`);
     }
     if (projectDiscovery.test(contents)) {
       addFinding(findings, "project-extension-discovery-capability", `Runtime/build input can discover project/user Pi extensions: ${relativePath}`);
@@ -908,8 +1143,29 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
       actual: actualBranch.stdout.trim(),
     });
   }
-  if (!actualStatus.ok || actualStatus.stdout.split(/\r?\n/).some((line) => line.trim() !== "" && !line.startsWith("#"))) {
+  const actualStatusExitCode = actualStatus.ok ? 0 : actualStatus.status;
+  const actualClean = actualStatus.ok
+    && !actualStatus.stdout.split(/\r?\n/).some((line) => line.trim() !== "" && !line.startsWith("#"));
+  if (!actualClean) {
     addFinding(findings, "upstream-reference-tree-dirty", "The upstream candidate reference tree is not clean");
+  }
+  const statusEvidence = candidate.statusEvidence;
+  if (!statusEvidence || typeof statusEvidence !== "object"
+    || typeof statusEvidence.command !== "string"
+    || !/status\s+--porcelain=v2\s+--branch/.test(statusEvidence.command)
+    || typeof statusEvidence.exitCode !== "number"
+    || typeof statusEvidence.clean !== "boolean") {
+    addFinding(findings, "upstream-status-evidence-missing", "Upstream candidate evidence must record the clean-status command, exit code, and clean result");
+  } else {
+    for (const [key, expected] of [["exitCode", actualStatusExitCode], ["clean", actualClean]]) {
+      if (statusEvidence[key] !== expected) {
+        addFinding(findings, "upstream-status-evidence-mismatch", "Upstream candidate clean-status evidence does not match a fresh reference-tree check", {
+          key,
+          expected,
+          recorded: statusEvidence[key],
+        });
+      }
+    }
   }
 
   const baseResolution = checkCommitResolution("base", candidateEvidence.base?.commit, candidateEvidence.base?.resolution);
@@ -947,16 +1203,21 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
     addFinding(findings, "upstream-operation-invalid", "Upstream candidate evidence must identify an incremental_sync operation");
   }
 
-  if (candidate.parentEvidence && typeof candidate.parentEvidence.exitCode === "number") {
-    const parent = git(["rev-parse", "HEAD^"]);
-    if (candidate.parentEvidence.exitCode === 128 && parent.ok) {
-      addFinding(findings, "upstream-parent-evidence-mismatch", "Candidate parent evidence says HEAD^ is unavailable, but it is locally resolvable");
-    } else if (candidate.parentEvidence.exitCode !== (parent.ok ? 0 : parent.status)) {
-      addFinding(findings, "upstream-parent-evidence-mismatch", "Candidate parent evidence does not match a fresh local HEAD^ check", {
-        expectedExitCode: candidate.parentEvidence.exitCode,
-        actualExitCode: parent.ok ? 0 : parent.status,
-      });
-    }
+  const parent = git(["rev-parse", "HEAD^"]);
+  const parentEvidence = candidate.parentEvidence;
+  const parentExitCode = parent.ok ? 0 : parent.status;
+  if (!parentEvidence || typeof parentEvidence !== "object"
+    || typeof parentEvidence.command !== "string"
+    || !/rev-parse\s+HEAD\^/.test(parentEvidence.command)
+    || typeof parentEvidence.exitCode !== "number"
+    || typeof parentEvidence.result !== "string"
+    || parentEvidence.result.trim() === "") {
+    addFinding(findings, "upstream-parent-evidence-missing", "Upstream candidate evidence must record the HEAD^ command, exit code, and result");
+  } else if (parentEvidence.exitCode !== parentExitCode) {
+    addFinding(findings, "upstream-parent-evidence-mismatch", "Candidate parent evidence does not match a fresh local HEAD^ check", {
+      expectedExitCode: parentExitCode,
+      recordedExitCode: parentEvidence.exitCode,
+    });
   }
 
   const initialImportManifest = resolveRepoPath(repoRoot, candidateEvidence.base?.initialImportManifest);
@@ -1185,6 +1446,7 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
       "fixedVersion",
       "sourcePath",
       "sourceCommit",
+      "sourceTree",
       "gitHashObject",
       "sha256",
       "load",
@@ -1201,6 +1463,7 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
     ids.add(extension?.id);
     if (!VERSION_PATTERN.test(extension?.fixedVersion ?? "")) addFinding(findings, "extension-version-unpinned", `${label}.fixedVersion must be a fixed semantic version`);
     if (!COMMIT_PATTERN.test(extension?.sourceCommit ?? "")) addFinding(findings, "extension-source-commit-unpinned", `${label}.sourceCommit must be a full commit SHA`);
+    if (!GIT_OBJECT_PATTERN.test(extension?.sourceTree ?? "")) addFinding(findings, "extension-source-tree-unpinned", `${label}.sourceTree must be a full Git tree hash`);
     if (!GIT_OBJECT_PATTERN.test(extension?.gitHashObject ?? "")) addFinding(findings, "git-hash-object-unpinned", `${label}.gitHashObject must be a full Git object hash`);
     if (!SHA256_PATTERN.test(extension?.sha256 ?? "")) addFinding(findings, "sha256-unpinned", `${label}.sha256 must be a full SHA-256`);
 
@@ -1224,6 +1487,7 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
     const sourceContents = readFileSync(sourcePath, "utf8");
     checkSourceProvenance(repoRoot, extension, findings);
     checkExtensionSource(extension, sourceContents, findings);
+    checkExtensionContractMetadata(extension, findings);
     checkDependencies(repoRoot, extension, findings);
     checkEvidenceFiles(repoRoot, extension, findings);
 

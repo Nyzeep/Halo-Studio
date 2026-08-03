@@ -17,7 +17,7 @@ Provider extensions, or runtime downloads.
 | Extension ID | `halo-workbench-permission-gate` |
 | Fixed version | `1.0.0` (`HALO_PI_EXTENSION_VERSION`) |
 | Source file | `product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts` |
-| Source binding | The Adapter embeds the audited source with `include_str!`; the source last changed in `e8c445d6a81d90851ac03d6aac7a4f11b6b749a3` and its current `git hash-object` is `15d6908cc30e45f8812a87c591e58799d2f7ae69`. |
+| Source binding | The Adapter embeds the audited source with `include_str!`; the source last changed in `e8c445d6a81d90851ac03d6aac7a4f11b6b749a3`, whose commit tree is `f50918b6bdebc6067f409f248cc9182ff5bcdec3`; the current `git hash-object` is `15d6908cc30e45f8812a87c591e58799d2f7ae69`. |
 | SHA-256 | `A6F704110E56BE3C1C0754DADDE1BE2B27F65C76EE03F2C19A1E43CD06848C0B` |
 | Load boundary | The Adapter copies the verified source to its own task/process temporary directory and loads only the exact path with `--no-extensions --extension <exact-path>`. It must not load from the project `.pi` tree or the user-wide Pi directory. |
 | Cleanup | The task/process temporary extension directory is removed during normal stop, abort, EOF, failure, and application exit cleanup. A cleanup failure is a failed gate, not a successful release result. |
@@ -81,6 +81,7 @@ they do not start Pi, send a prompt, or read real credentials.
 $extension = "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts"
 Get-FileHash -Algorithm SHA256 $extension
 git hash-object -- $extension
+git rev-parse e8c445d6a81d90851ac03d6aac7a4f11b6b749a3^{tree}
 rg -n 'HALO_PI_EXTENSION_ID|HALO_PI_EXTENSION_VERSION|HALO_PI_EXTENSION_PERMISSIONS|include_str!|--no-extensions|--extension' "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/lib.rs"
 cargo tree --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter
 cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter extension_decision_is_redacted_one_shot_and_duplicate_request_fails_closed
@@ -91,8 +92,8 @@ new runtime dependency, or unreviewed license is a blocking difference.
 
 The machine-readable inventory is
 `docs/architecture/pi-first-party-extension-inventory.json`. It records the
-fixed source version, source commit/tag, Git object hash, SHA-256, load
-arguments, tool/event surface, host permissions, direct/transitive dependency
+fixed source version, source commit/tree/blob, SHA-256, load arguments,
+tool/event surface, host permissions, direct/transitive dependency
 boundary, license evidence, and update responsibility. The audit CLI is
 `product/Halo Studio/scripts/pi-extension-audit.mjs`; it is intentionally
 fail-closed and returns exit code `1` while the release gate is blocked.
@@ -108,6 +109,27 @@ artifact has yet been recorded for the license/notice inclusion check. The Pi
 package license is not inferred from its name; any future bundled Pi
 distribution requires its own license, attribution, source provenance, and
 complete dependency review.
+
+## Audit CLI contract
+
+The audit CLI is a read-only evidence checker, not a runtime gate that starts
+Pi. It only reads the manifest, repository files, Git objects, and explicitly
+provided read-only evidence trees; it does not write files, install packages,
+open network connections, read credentials, send prompts, or execute a Pi
+binary. It returns exit code `0` only for a complete passing fixture and exit
+code `1` for blocked evidence, invalid arguments, or an audit exception.
+
+The contract tests cover the real CLI process (`--help`, blocked/pass `--json`,
+unknown and missing arguments), rooted Windows path redaction, dynamic
+extension imports/host capabilities, extensionless runtime inputs, computed
+`globalThis`/`window` property access (including aliases and optional computed
+calls), including aliases bound from `const g = globalThis`, structured fail-closed
+extension metadata, and host closure/release-file evidence. Host license evidence and release files are canonicalized against all
+extension-owned license evidence, `distributionFiles`, and
+`releaseArtifactEvidence` paths, so reuse is blocked. The current source
+contains 61 audit contract tests; upstream evidence also requires recorded
+`HEAD^` and clean-status command results. The release matrix must be updated
+only from the command's actual exit code and test count.
 
 ## Pi host built-in boundary
 
@@ -150,3 +172,16 @@ In the recorded environment `where.exe pi` exits `1`, while
 `0.83.0`. This is executable discovery evidence only, not RPC readiness; the
 readiness gate remains the fake/fixture handshake for `get_state` and
 `get_entries`/`since`.
+
+## Primary-source research note
+
+The first-party sources materially confirm the release boundary and separate
+host, provider, and license provenance:
+
+- **Explicit loading is not extension-free.** `<PI_REFERENCE_ROOT>/packages/coding-agent/src/cli/args.ts:151-155,281-282` parses `--extension`/`-e` separately and documents `--no-extensions` as “Disable extension discovery (explicit -e paths still work).” `<PI_REFERENCE_ROOT>/packages/coding-agent/src/core/resource-loader.ts:451-455,555-565` keeps only CLI-enabled paths when discovery is disabled, but `:577-581,609-615` still appends inline factories. `<PI_REFERENCE_ROOT>/packages/coding-agent/src/main.ts:521-523` supplies the host factories, and `<PI_REFERENCE_ROOT>/packages/coding-agent/src/extensions/index.ts:1-4` defines hidden inline `llama.cpp`. Thus `--no-extensions --extension <exact-path>` suppresses discovered project/user/package paths while retaining the exact explicit path and host inline built-ins.
+
+- **Host provenance is visible, but it is not license provenance.** `<PI_REFERENCE_ROOT>/packages/coding-agent/src/core/extensions/loader.ts:446-455` gives inline factories synthetic paths such as `<inline:...>` and `<PI_REFERENCE_ROOT>/packages/coding-agent/src/core/source-info.ts:3-10,24-30` models their source/scope/origin. The built-in `<PI_REFERENCE_ROOT>/packages/coding-agent/src/extensions/llama/index.ts:42-44` registers a provider whose ID/name are `llama.cpp` in `<PI_REFERENCE_ROOT>/packages/coding-agent/src/extensions/llama/provider.ts:13,65-68`.
+
+- **Provider IDs do not prove ownership.** `<PI_REFERENCE_ROOT>/packages/coding-agent/src/core/model-runtime.ts:32,99-103,145-148,193-217` keeps Pi-ai built-ins, native extension providers, named extension configs, and `models.json` provider IDs as separate inputs, then recomposes them. `<PI_REFERENCE_ROOT>/packages/coding-agent/src/core/provider-composer.ts:411-435` states and implements the built-in → `models.json` → extension → model-override layering. The first-party docs likewise say an extension can preserve an existing provider endpoint (`<PI_REFERENCE_ROOT>/packages/coding-agent/docs/custom-provider.md:33,119-119`), replace its model list (`:184-184`), and that `models.json` overrides apply to both built-in and extension-registered models (`<PI_REFERENCE_ROOT>/packages/coding-agent/docs/models.md:143-145,313-320,362-366`). The RPC/session formats record runtime provider/model identity (`<PI_REFERENCE_ROOT>/packages/coding-agent/docs/rpc.md:1367-1375`; `<PI_REFERENCE_ROOT>/packages/coding-agent/docs/session-format.md:85-86,218`), not a source-owner or license field.
+
+- **License evidence remains a separate gate.** `<PI_REFERENCE_ROOT>/LICENSE:1` and the `license` fields in `<PI_REFERENCE_ROOT>/packages/coding-agent/package.json:98` and `<PI_REFERENCE_ROOT>/packages/ai/package.json:86` declare MIT for the Pi source/packages. Separately, `<PI_REFERENCE_ROOT>/packages/coding-agent/docs/llama-cpp.md:5,79` directs users to an external llama.cpp build and says the llama.cpp server performs Hugging Face model downloads. Those declarations do not establish the license/notice/source closure for a future bundled Pi artifact, the external llama.cpp executable, provider services, model repositories/GGUFs, or the complete dependency closure. The existing release conclusion remains **BLOCKED**.
