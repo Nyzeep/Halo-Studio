@@ -47,6 +47,7 @@ fn main() {
     let mut stdout = BufWriter::new(io::stdout().lock());
     let mut out_of_order_requests = Vec::new();
     let mut awaiting_since = false;
+    let mut abort_requests = 0usize;
 
     for line in stdin.lock().lines() {
         let Ok(line) = line else { return };
@@ -132,6 +133,16 @@ fn main() {
                 );
                 continue;
             }
+            "missing_abort_capability" if command == "abort" => {
+                respond(
+                    &mut stdout,
+                    request.get("id").and_then(Value::as_str),
+                    command,
+                    false,
+                    Value::Null,
+                );
+                continue;
+            }
             "model_mismatch" if command == "get_available_models" => {
                 respond(
                     &mut stdout,
@@ -190,10 +201,6 @@ fn main() {
                         true,
                         data,
                     );
-                    if mode == "ready_then_eof" {
-                        std::thread::sleep(Duration::from_millis(500));
-                        return;
-                    }
                 } else {
                     awaiting_since = mode == "require_since";
                     respond(
@@ -376,9 +383,12 @@ fn main() {
                 }
             },
             "abort" => {
+                abort_requests += 1;
                 if mode == "hang_abort_response" {
-                    std::thread::sleep(Duration::from_secs(5));
-                    return;
+                    if abort_requests > 1 {
+                        std::thread::sleep(Duration::from_secs(5));
+                        return;
+                    }
                 }
                 respond(
                     &mut stdout,
@@ -387,6 +397,10 @@ fn main() {
                     true,
                     Value::Null,
                 );
+                if mode == "ready_then_eof" {
+                    std::thread::sleep(Duration::from_millis(500));
+                    return;
+                }
                 if mode != "hang_abort" && mode != "agent_end_without_settled" {
                     send_event(&mut stdout, json!({ "type": "agent_settled" }));
                 }

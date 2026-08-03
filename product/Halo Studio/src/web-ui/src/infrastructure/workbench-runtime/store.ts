@@ -9,10 +9,10 @@ import {
 import {
   HALO_WORKBENCH_SCHEMA_VERSION,
   PI_RPC_ADAPTER_IDENTITY,
-  type WorkbenchPiRpcCapability,
   type WorkbenchPiRpcCompatibilityProfile,
   type WorkbenchPiRpcVersion,
   type WorkbenchPiRpcVersionEvidenceSource,
+  type WorkbenchRuntimeCapability,
   type WorkbenchRuntimeEvent,
   type WorkbenchRuntimeIntentReceipt,
   type WorkbenchRuntimeIntentRequest,
@@ -47,25 +47,40 @@ const PI_RPC_COMPATIBILITY_PROFILES = new Set([
   'pi-rpc-0.81.1-p0',
   'pi-rpc-0.83.0-p0',
 ]);
+const PI_RPC_PROFILE_BY_VERSION: Record<
+  WorkbenchPiRpcVersion,
+  WorkbenchPiRpcCompatibilityProfile
+> = {
+  '0.81.1': 'pi-rpc-0.81.1-p0',
+  '0.83.0': 'pi-rpc-0.83.0-p0',
+};
 const PI_RPC_VERSION_EVIDENCE_SOURCES = new Set(['local_version_probe']);
-const PI_RPC_REQUIRED_CAPABILITIES = [
-  'prompt',
-  'follow_up',
-  'abort',
-  'get_state',
-  'get_entries',
-  'get_entries.entries',
-  'get_entries.leaf_id',
-  'get_entries.since',
-  'message_update',
-  'tool_execution_start',
-  'tool_execution_update',
-  'tool_execution_end',
-  'agent_settled',
-  'extension_ui_request',
-  'extension_ui_response',
+const WORKBENCH_REQUIRED_CAPABILITIES = [
+  'userInput',
+  'followUpInput',
+  'sessionAbort',
+  'sessionState',
+  'sessionEntries',
+  'sessionEntryCollection',
+  'sessionEntryCursor',
+  'sessionEntryIncremental',
+  'assistantMessageStream',
+  'toolExecutionStart',
+  'toolExecutionUpdate',
+  'toolExecutionEnd',
+  'agentSettled',
+  'permissionUiRequest',
+  'permissionUiResponse',
 ] as const;
-const PI_RPC_CAPABILITIES = new Set<string>(PI_RPC_REQUIRED_CAPABILITIES);
+const WORKBENCH_READINESS_VERIFIED_CAPABILITIES = [
+  'sessionAbort',
+  'sessionState',
+  'sessionEntries',
+  'sessionEntryCollection',
+  'sessionEntryCursor',
+  'sessionEntryIncremental',
+] as const;
+const WORKBENCH_CAPABILITIES = new Set<string>(WORKBENCH_REQUIRED_CAPABILITIES);
 const EVENT_KINDS = new Set([
   'runtimeStateChanged',
   'workspaceChanged',
@@ -76,6 +91,7 @@ const EVENT_KINDS = new Set([
 const EVENT_SUMMARIES = new Set([
   'Workbench Runtime is ready',
   'Workbench Runtime adapter profile was verified',
+  'Workbench Runtime adapter readiness handshake was verified',
   'Workbench Runtime is starting',
   'Workbench Runtime is stopping',
   'Workbench Runtime failed',
@@ -213,28 +229,49 @@ const sanitizeAdapterReadiness = (
     || typeof input.version.evidenceSource !== 'string'
     || !PI_RPC_VERSION_EVIDENCE_SOURCES.has(input.version.evidenceSource)
     || !Array.isArray(input.capabilities.required)
-    || input.capabilities.required.length !== PI_RPC_REQUIRED_CAPABILITIES.length
+    || input.capabilities.required.length !== WORKBENCH_REQUIRED_CAPABILITIES.length
+    || !Array.isArray(input.capabilities.verified)
+    || ![0, WORKBENCH_READINESS_VERIFIED_CAPABILITIES.length].includes(
+      input.capabilities.verified.length,
+    )
   ) {
     return contractMismatch();
   }
 
+  const version = input.version.version as WorkbenchPiRpcVersion;
+  const profile = input.version.profile as WorkbenchPiRpcCompatibilityProfile;
+  if (PI_RPC_PROFILE_BY_VERSION[version] !== profile) return contractMismatch();
+
   const required = input.capabilities.required.map(capability => {
-    if (typeof capability !== 'string' || !PI_RPC_CAPABILITIES.has(capability)) {
+    if (typeof capability !== 'string' || !WORKBENCH_CAPABILITIES.has(capability)) {
       return contractMismatch();
     }
-    return capability as WorkbenchPiRpcCapability;
+    return capability as WorkbenchRuntimeCapability;
   });
-  if (required.some((capability, index) => capability !== PI_RPC_REQUIRED_CAPABILITIES[index])) {
+  if (required.some((capability, index) => capability !== WORKBENCH_REQUIRED_CAPABILITIES[index])) {
+    return contractMismatch();
+  }
+
+  const verified = input.capabilities.verified.map(capability => {
+    if (typeof capability !== 'string' || !WORKBENCH_CAPABILITIES.has(capability)) {
+      return contractMismatch();
+    }
+    return capability as WorkbenchRuntimeCapability;
+  });
+  const expectedVerified = verified.length === 0
+    ? []
+    : WORKBENCH_READINESS_VERIFIED_CAPABILITIES;
+  if (verified.some((capability, index) => capability !== expectedVerified[index])) {
     return contractMismatch();
   }
 
   return {
     version: {
-      version: input.version.version as WorkbenchPiRpcVersion,
-      profile: input.version.profile as WorkbenchPiRpcCompatibilityProfile,
+      version,
+      profile,
       evidenceSource: input.version.evidenceSource as WorkbenchPiRpcVersionEvidenceSource,
     },
-    capabilities: { required },
+    capabilities: { required, verified },
   };
 };
 

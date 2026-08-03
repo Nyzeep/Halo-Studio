@@ -1154,7 +1154,9 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
     || typeof statusEvidence.command !== "string"
     || !/status\s+--porcelain=v2\s+--branch/.test(statusEvidence.command)
     || typeof statusEvidence.exitCode !== "number"
-    || typeof statusEvidence.clean !== "boolean") {
+    || typeof statusEvidence.clean !== "boolean"
+    || typeof statusEvidence.result !== "string"
+    || statusEvidence.result.trim() === "") {
     addFinding(findings, "upstream-status-evidence-missing", "Upstream candidate evidence must record the clean-status command, exit code, and clean result");
   } else {
     for (const [key, expected] of [["exitCode", actualStatusExitCode], ["clean", actualClean]]) {

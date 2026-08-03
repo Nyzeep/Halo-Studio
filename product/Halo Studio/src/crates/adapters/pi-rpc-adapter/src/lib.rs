@@ -174,6 +174,7 @@ struct AdapterState {
     runtime_configuration: Option<PiRuntimeConfiguration>,
     runtime_capability: Option<PiProviderCapability>,
     prepared_session: Option<Arc<PiSession>>,
+    readiness_summary: Option<PiRpcAvailabilitySummary>,
     readiness_failed: bool,
     sessions: HashMap<String, Arc<PiSession>>,
 }
@@ -729,6 +730,15 @@ impl PiRpcAdapter {
                 return Err(PiRpcFailureKind::Protocol);
             }
         }
+
+        // An idle abort is side-effect free and proves the command path used
+        // by StopSession without sending a prompt or triggering a model
+        // request. Prompt/follow-up and event capabilities remain profile
+        // declarations until the real-RPC acceptance owned by issue 14.
+        session
+            .request("abort", json!({ "type": "abort" }))
+            .await
+            .map_err(map_handshake_error)?;
         Ok(())
     }
 
@@ -755,7 +765,13 @@ impl PiRpcAdapter {
                 && state.workspace.as_ref() == Some(&workspace)
                 && !state.readiness_failed
             {
-                return PiRpcReply::Accepted;
+                return state
+                    .readiness_summary
+                    .clone()
+                    .map(|summary| PiRpcReply::Ready { summary })
+                    .unwrap_or(PiRpcReply::Unavailable {
+                        reason: PiRpcFailureKind::CapabilityMismatch,
+                    });
             }
             if state.generation == Some(generation)
                 && state.workspace.as_ref() == Some(&workspace)
@@ -782,13 +798,14 @@ impl PiRpcAdapter {
             Err(reason) => return PiRpcReply::Unavailable { reason },
         };
         let extension_path = extension.path.clone();
-        let executable = match self.probe_pi().await {
-            Ok(resolved) => resolved.path,
+        let resolved = match self.probe_pi().await {
+            Ok(resolved) => resolved,
             Err(reason) => {
                 let reason = extension.cleanup().err().unwrap_or(reason);
                 return PiRpcReply::Unavailable { reason };
             }
         };
+        let executable = resolved.path.clone();
         let credential = match self
             .read_runtime_credential(
                 runtime_configuration
@@ -846,6 +863,8 @@ impl PiRpcAdapter {
             }
         }
 
+        let readiness_summary = resolved.summary.with_readiness_handshake_verified();
+
         let mut state = self.state.lock().await;
         // The reader can observe EOF immediately after the final handshake
         // response. Check while holding the same state lock used by the
@@ -876,11 +895,14 @@ impl PiRpcAdapter {
             .as_ref()
             .and_then(|resolved| resolved.capability.clone());
         state.prepared_session = Some(prepared_session);
+        state.readiness_summary = Some(readiness_summary.clone());
         state.readiness_failed = false;
         drop(state);
 
         self.emit(PiRpcEvent::Ready { generation });
-        PiRpcReply::Accepted
+        PiRpcReply::Ready {
+            summary: readiness_summary,
+        }
     }
 
     async fn create_session(
@@ -1042,6 +1064,7 @@ impl PiRpcAdapter {
             state.extension_path = None;
             state.runtime_configuration = None;
             state.runtime_capability = None;
+            state.readiness_summary = None;
             state.readiness_failed = false;
             let owned_extension_dir = state.owned_extension_dir.clone();
             let mut sessions = state

@@ -6,15 +6,15 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bitfun_agent_runtime::halo_workbench::{
-    HaloWorkbenchIntent, HaloWorkbenchIntentRequest, HaloWorkbenchOperationDecision,
-    HaloWorkbenchPendingOperationPhase, HaloWorkbenchPhase, HaloWorkbenchRuntime,
-    HaloWorkbenchSessionMode, HaloWorkbenchSessionPhase, HaloWorkbenchWorkspaceInput,
-    HALO_WORKBENCH_SCHEMA_VERSION,
+    HaloWorkbenchCapability, HaloWorkbenchIntent, HaloWorkbenchIntentRequest,
+    HaloWorkbenchOperationDecision, HaloWorkbenchPendingOperationPhase, HaloWorkbenchPhase,
+    HaloWorkbenchRuntime, HaloWorkbenchSessionMode, HaloWorkbenchSessionPhase,
+    HaloWorkbenchWorkspaceInput, HALO_WORKBENCH_SCHEMA_VERSION,
 };
 use bitfun_runtime_ports::{
     ClockPort, PiProviderReadiness, PiProviderReadinessPort, PiRpcAvailabilitySummary,
-    PiRpcCapability, PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationKind, PiRpcPort,
-    PiRpcReply, PiRpcVersion, PiRpcVersionEvidenceSource, PortError, PortErrorKind, PortResult,
+    PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationKind, PiRpcPort, PiRpcReply,
+    PiRpcVersion, PiRpcVersionEvidenceSource, PortError, PortErrorKind, PortResult,
     RuntimeServiceCapability, RuntimeServicePort, WorkbenchWorkspaceFacts,
     WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, PI_RPC_ADAPTER_IDENTITY,
 };
@@ -190,6 +190,13 @@ impl DeterministicPiRpc {
                     PiRpcVersion::V0_83_0,
                     PiRpcVersionEvidenceSource::LocalVersionProbe,
                 ),
+            },
+            PiRpcCommand::Start { .. } => PiRpcReply::Ready {
+                summary: PiRpcAvailabilitySummary::new(
+                    PiRpcVersion::V0_83_0,
+                    PiRpcVersionEvidenceSource::LocalVersionProbe,
+                )
+                .with_readiness_handshake_verified(),
             },
             _ => PiRpcReply::Accepted,
         }
@@ -499,7 +506,11 @@ async fn public_snapshot_projects_safe_probe_profile_without_pi_private_identifi
     assert_eq!(readiness.version.version, PiRpcVersion::V0_83_0);
     assert_eq!(
         readiness.capabilities.required,
-        PiRpcCapability::required_p0().to_vec()
+        HaloWorkbenchCapability::required_p0().to_vec()
+    );
+    assert_eq!(
+        readiness.capabilities.verified,
+        HaloWorkbenchCapability::verified_by_readiness_handshake().to_vec()
     );
     let wire = serde_json::to_string(&snapshot).expect("snapshot serializes");
     assert!(wire.len() < 4096, "snapshot remains bounded");
@@ -731,7 +742,13 @@ async fn prepared_handshake_failure_can_be_recovered_by_a_new_open() {
             PiRpcVersionEvidenceSource::LocalVersionProbe,
         ),
     }));
-    adapter.push_reply(Ok(PiRpcReply::Accepted));
+    adapter.push_reply(Ok(PiRpcReply::Ready {
+        summary: PiRpcAvailabilitySummary::new(
+            PiRpcVersion::V0_81_1,
+            PiRpcVersionEvidenceSource::LocalVersionProbe,
+        )
+        .with_readiness_handshake_verified(),
+    }));
     runtime
         .submit(open_request("open-handshake-retry", "handshake-retry"))
         .await

@@ -282,6 +282,33 @@ async fn audited_0830_profile_is_allowed_by_start_readiness() {
 }
 
 #[tokio::test]
+async fn start_projects_only_safe_runtime_handshake_capabilities_as_verified() {
+    let _environment = fixture_environment("version_probe_0830");
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+
+    let reply = adapter
+        .execute(PiRpcCommand::Start {
+            generation: 835,
+            workspace: workspace(),
+        })
+        .await
+        .expect("readiness start crosses the port");
+    let summary = match reply {
+        PiRpcReply::Ready { summary } => summary,
+        other => panic!("readiness handshake must return a summary, got {other:?}"),
+    };
+    assert_eq!(
+        summary.capabilities.verified,
+        PiRpcCapability::verified_by_readiness_handshake().to_vec()
+    );
+    shutdown(&adapter, 835).await;
+}
+
+#[tokio::test]
 async fn start_fails_closed_when_a_required_readiness_capability_is_missing() {
     let _environment = fixture_environment("missing_get_entries_capability");
     let adapter = make_adapter(
@@ -297,6 +324,24 @@ async fn start_fails_closed_when_a_required_readiness_capability_is_missing() {
         }
     );
     shutdown(&adapter, 832).await;
+}
+
+#[tokio::test]
+async fn start_fails_closed_when_abort_capability_is_missing() {
+    let _environment = fixture_environment("missing_abort_capability");
+    let adapter = make_adapter(
+        Duration::from_millis(250),
+        Duration::from_millis(100),
+        Duration::from_millis(50),
+    );
+
+    assert_eq!(
+        start(&adapter, 836).await,
+        PiRpcReply::Unavailable {
+            reason: PiRpcFailureKind::Protocol,
+        }
+    );
+    shutdown(&adapter, 836).await;
 }
 
 #[tokio::test]
@@ -371,7 +416,7 @@ async fn configured_start_projects_authority_into_isolated_pi_process_and_cleans
     let adapter = configured_adapter(configuration, credentials, storage_root.path());
     let workspace = configured_workspace(workspace_root.path());
 
-    assert_eq!(
+    assert!(matches!(
         adapter
             .execute(PiRpcCommand::Start {
                 generation: 127,
@@ -379,8 +424,8 @@ async fn configured_start_projects_authority_into_isolated_pi_process_and_cleans
             })
             .await
             .expect("configured start crosses the port"),
-        PiRpcReply::Accepted
-    );
+        PiRpcReply::Ready { .. }
+    ));
     shutdown(&adapter, 127).await;
 
     assert_eq!(
@@ -579,13 +624,17 @@ fn workspace() -> PiRpcWorkspace {
 }
 
 async fn start(adapter: &PiRpcAdapter, generation: u64) -> PiRpcReply {
-    adapter
+    let reply = adapter
         .execute(PiRpcCommand::Start {
             generation,
             workspace: workspace(),
         })
         .await
-        .expect("start crosses the port without a transport error")
+        .expect("start crosses the port without a transport error");
+    match reply {
+        PiRpcReply::Ready { .. } => PiRpcReply::Accepted,
+        other => other,
+    }
 }
 
 async fn create_session(adapter: &PiRpcAdapter, generation: u64) -> PiRpcReply {

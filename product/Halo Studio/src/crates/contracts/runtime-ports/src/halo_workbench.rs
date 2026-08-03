@@ -379,6 +379,19 @@ impl PiRpcCapability {
             Self::ExtensionUiResponse,
         ]
     }
+
+    /// Capabilities that the controlled readiness handshake can verify
+    /// without sending a prompt, follow-up, or model request.
+    pub const fn verified_by_readiness_handshake() -> &'static [Self] {
+        &[
+            Self::Abort,
+            Self::GetState,
+            Self::GetEntries,
+            Self::GetEntriesEntries,
+            Self::GetEntriesLeafId,
+            Self::GetEntriesSince,
+        ]
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -393,6 +406,7 @@ pub struct PiRpcVersionSummary {
 #[serde(rename_all = "camelCase")]
 pub struct PiRpcCapabilitySummary {
     pub required: Vec<PiRpcCapability>,
+    pub verified: Vec<PiRpcCapability>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -412,8 +426,14 @@ impl PiRpcAvailabilitySummary {
             },
             capabilities: PiRpcCapabilitySummary {
                 required: PiRpcCapability::required_p0().to_vec(),
+                verified: Vec::new(),
             },
         }
+    }
+
+    pub fn with_readiness_handshake_verified(mut self) -> Self {
+        self.capabilities.verified = PiRpcCapability::verified_by_readiness_handshake().to_vec();
+        self
     }
 }
 
@@ -540,6 +560,7 @@ impl fmt::Debug for PiRpcCommand {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PiRpcReply {
     Available { summary: PiRpcAvailabilitySummary },
+    Ready { summary: PiRpcAvailabilitySummary },
     Accepted,
     Unavailable { reason: PiRpcFailureKind },
 }

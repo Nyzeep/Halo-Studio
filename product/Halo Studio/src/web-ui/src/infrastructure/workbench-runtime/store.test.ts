@@ -308,22 +308,23 @@ describe('WorkbenchRuntimeStore', () => {
           },
           capabilities: {
             required: [
-              'prompt',
-              'follow_up',
-              'abort',
-              'get_state',
-              'get_entries',
-              'get_entries.entries',
-              'get_entries.leaf_id',
-              'get_entries.since',
-              'message_update',
-              'tool_execution_start',
-              'tool_execution_update',
-              'tool_execution_end',
-              'agent_settled',
-              'extension_ui_request',
-              'extension_ui_response',
+              'userInput',
+              'followUpInput',
+              'sessionAbort',
+              'sessionState',
+              'sessionEntries',
+              'sessionEntryCollection',
+              'sessionEntryCursor',
+              'sessionEntryIncremental',
+              'assistantMessageStream',
+              'toolExecutionStart',
+              'toolExecutionUpdate',
+              'toolExecutionEnd',
+              'agentSettled',
+              'permissionUiRequest',
+              'permissionUiResponse',
             ],
+            verified: [],
           },
         },
         endpoint: secretCanary,
@@ -379,7 +380,62 @@ describe('WorkbenchRuntimeStore', () => {
               profile: 'pi-rpc-0.83.0-p0',
               evidenceSource: 'local_version_probe',
             },
-            capabilities: { required: ['prompt'] },
+            capabilities: { required: ['userInput'], verified: [] },
+          },
+        },
+      } as unknown as WorkbenchRuntimeSnapshot)),
+      submitIntent: vi.fn(),
+    };
+    const store = createWorkbenchRuntimeStore(client);
+
+    await store.getState().start();
+
+    expect(store.getState().syncStatus).toBe('failed');
+    expect(store.getState().stableErrorCode).toBe('runtime_contract_mismatch');
+    expect(store.getState().snapshot).toBeNull();
+  });
+
+  it('fails closed when adapter readiness version and profile disagree', async () => {
+    const client: WorkbenchRuntimeClient = {
+      subscribe: vi.fn(async () => vi.fn()),
+      readSnapshot: vi.fn(async () => ({
+        ...snapshot(0, 0, 'ready'),
+        adapter: {
+          identity: 'pi-rpc-p0',
+          available: true,
+          readiness: {
+            version: {
+              version: '0.83.0',
+              profile: 'pi-rpc-0.81.1-p0',
+              evidenceSource: 'local_version_probe',
+            },
+            capabilities: {
+              required: [
+                'userInput',
+                'followUpInput',
+                'sessionAbort',
+                'sessionState',
+                'sessionEntries',
+                'sessionEntryCollection',
+                'sessionEntryCursor',
+                'sessionEntryIncremental',
+                'assistantMessageStream',
+                'toolExecutionStart',
+                'toolExecutionUpdate',
+                'toolExecutionEnd',
+                'agentSettled',
+                'permissionUiRequest',
+                'permissionUiResponse',
+              ],
+              verified: [
+                'sessionAbort',
+                'sessionState',
+                'sessionEntries',
+                'sessionEntryCollection',
+                'sessionEntryCursor',
+                'sessionEntryIncremental',
+              ],
+            },
           },
         },
       } as unknown as WorkbenchRuntimeSnapshot)),

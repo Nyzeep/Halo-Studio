@@ -68,22 +68,22 @@ export type WorkbenchPiRpcCompatibilityProfile =
 
 export type WorkbenchPiRpcVersionEvidenceSource = 'local_version_probe';
 
-export type WorkbenchPiRpcCapability =
-  | 'prompt'
-  | 'follow_up'
-  | 'abort'
-  | 'get_state'
-  | 'get_entries'
-  | 'get_entries.entries'
-  | 'get_entries.leaf_id'
-  | 'get_entries.since'
-  | 'message_update'
-  | 'tool_execution_start'
-  | 'tool_execution_update'
-  | 'tool_execution_end'
-  | 'agent_settled'
-  | 'extension_ui_request'
-  | 'extension_ui_response';
+export type WorkbenchRuntimeCapability =
+  | 'userInput'
+  | 'followUpInput'
+  | 'sessionAbort'
+  | 'sessionState'
+  | 'sessionEntries'
+  | 'sessionEntryCollection'
+  | 'sessionEntryCursor'
+  | 'sessionEntryIncremental'
+  | 'assistantMessageStream'
+  | 'toolExecutionStart'
+  | 'toolExecutionUpdate'
+  | 'toolExecutionEnd'
+  | 'agentSettled'
+  | 'permissionUiRequest'
+  | 'permissionUiResponse';
 
 export interface WorkbenchRuntimeAdapterReadiness {
   version: {
@@ -92,7 +92,8 @@ export interface WorkbenchRuntimeAdapterReadiness {
     evidenceSource: WorkbenchPiRpcVersionEvidenceSource;
   };
   capabilities: {
-    required: WorkbenchPiRpcCapability[];
+    required: WorkbenchRuntimeCapability[];
+    verified: WorkbenchRuntimeCapability[];
   };
 }
 

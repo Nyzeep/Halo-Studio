@@ -12,8 +12,9 @@ use std::sync::{Arc, Mutex, Weak};
 use bitfun_runtime_ports::{
     ClockPort, PiProviderReadinessPort, PiRpcAvailabilitySummary, PiRpcCapability, PiRpcCommand,
     PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind, PiRpcPort,
-    PiRpcReply, PiRpcSessionMode, PiRpcVersionEvidenceSource, PiRpcWorkspace, PortErrorKind,
-    WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, PI_RPC_ADAPTER_IDENTITY,
+    PiRpcReply, PiRpcSessionMode, PiRpcVersionEvidenceSource, PiRpcVersionSummary, PiRpcWorkspace,
+    PortErrorKind, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
+    PI_RPC_ADAPTER_IDENTITY,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -38,10 +39,123 @@ pub enum HaloWorkbenchPhase {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub enum HaloWorkbenchCapability {
+    UserInput,
+    FollowUpInput,
+    SessionAbort,
+    SessionState,
+    SessionEntries,
+    SessionEntryCollection,
+    SessionEntryCursor,
+    SessionEntryIncremental,
+    AssistantMessageStream,
+    ToolExecutionStart,
+    ToolExecutionUpdate,
+    ToolExecutionEnd,
+    AgentSettled,
+    PermissionUiRequest,
+    PermissionUiResponse,
+}
+
+impl HaloWorkbenchCapability {
+    pub const fn required_p0() -> &'static [Self] {
+        &[
+            Self::UserInput,
+            Self::FollowUpInput,
+            Self::SessionAbort,
+            Self::SessionState,
+            Self::SessionEntries,
+            Self::SessionEntryCollection,
+            Self::SessionEntryCursor,
+            Self::SessionEntryIncremental,
+            Self::AssistantMessageStream,
+            Self::ToolExecutionStart,
+            Self::ToolExecutionUpdate,
+            Self::ToolExecutionEnd,
+            Self::AgentSettled,
+            Self::PermissionUiRequest,
+            Self::PermissionUiResponse,
+        ]
+    }
+
+    pub const fn verified_by_readiness_handshake() -> &'static [Self] {
+        &[
+            Self::SessionAbort,
+            Self::SessionState,
+            Self::SessionEntries,
+            Self::SessionEntryCollection,
+            Self::SessionEntryCursor,
+            Self::SessionEntryIncremental,
+        ]
+    }
+}
+
+impl From<PiRpcCapability> for HaloWorkbenchCapability {
+    fn from(capability: PiRpcCapability) -> Self {
+        match capability {
+            PiRpcCapability::Prompt => Self::UserInput,
+            PiRpcCapability::FollowUp => Self::FollowUpInput,
+            PiRpcCapability::Abort => Self::SessionAbort,
+            PiRpcCapability::GetState => Self::SessionState,
+            PiRpcCapability::GetEntries => Self::SessionEntries,
+            PiRpcCapability::GetEntriesEntries => Self::SessionEntryCollection,
+            PiRpcCapability::GetEntriesLeafId => Self::SessionEntryCursor,
+            PiRpcCapability::GetEntriesSince => Self::SessionEntryIncremental,
+            PiRpcCapability::MessageUpdate => Self::AssistantMessageStream,
+            PiRpcCapability::ToolExecutionStart => Self::ToolExecutionStart,
+            PiRpcCapability::ToolExecutionUpdate => Self::ToolExecutionUpdate,
+            PiRpcCapability::ToolExecutionEnd => Self::ToolExecutionEnd,
+            PiRpcCapability::AgentSettled => Self::AgentSettled,
+            PiRpcCapability::ExtensionUiRequest => Self::PermissionUiRequest,
+            PiRpcCapability::ExtensionUiResponse => Self::PermissionUiResponse,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HaloWorkbenchCapabilitySummary {
+    pub required: Vec<HaloWorkbenchCapability>,
+    pub verified: Vec<HaloWorkbenchCapability>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HaloWorkbenchAdapterReadiness {
+    pub version: PiRpcVersionSummary,
+    pub capabilities: HaloWorkbenchCapabilitySummary,
+}
+
+impl From<&PiRpcAvailabilitySummary> for HaloWorkbenchAdapterReadiness {
+    fn from(summary: &PiRpcAvailabilitySummary) -> Self {
+        Self {
+            version: summary.version.clone(),
+            capabilities: HaloWorkbenchCapabilitySummary {
+                required: summary
+                    .capabilities
+                    .required
+                    .iter()
+                    .copied()
+                    .map(HaloWorkbenchCapability::from)
+                    .collect(),
+                verified: summary
+                    .capabilities
+                    .verified
+                    .iter()
+                    .copied()
+                    .map(HaloWorkbenchCapability::from)
+                    .collect(),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HaloWorkbenchAdapterSnapshot {
     pub identity: String,
     pub available: bool,
-    pub readiness: Option<PiRpcAvailabilitySummary>,
+    pub readiness: Option<HaloWorkbenchAdapterReadiness>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -430,7 +544,7 @@ enum CleanupRecord {
 struct RuntimeState {
     phase: HaloWorkbenchPhase,
     adapter_available: bool,
-    adapter_readiness: Option<PiRpcAvailabilitySummary>,
+    adapter_readiness: Option<HaloWorkbenchAdapterReadiness>,
     workspace: Option<HaloWorkbenchWorkspaceSnapshot>,
     sessions: BTreeMap<String, HaloWorkbenchSessionSnapshot>,
     pending_operations: BTreeMap<String, HaloWorkbenchPendingOperationSnapshot>,
@@ -1229,7 +1343,7 @@ impl HaloWorkbenchRuntime {
         }
         let adapter_readiness = match probe {
             Ok(PiRpcReply::Available { summary }) => {
-                if !valid_adapter_readiness_summary(&summary) {
+                if !valid_adapter_profile_summary(&summary) {
                     let error = adapter_failure(PiRpcFailureKind::CapabilityMismatch);
                     self.inner
                         .fail_generation(generation, Some(request_id), error.clone());
@@ -1238,6 +1352,12 @@ impl HaloWorkbenchRuntime {
                 summary
             }
             Ok(PiRpcReply::Accepted) => {
+                let error = adapter_failure(PiRpcFailureKind::CapabilityMismatch);
+                self.inner
+                    .fail_generation(generation, Some(request_id), error.clone());
+                return Err(error);
+            }
+            Ok(PiRpcReply::Ready { .. }) => {
                 let error = adapter_failure(PiRpcFailureKind::CapabilityMismatch);
                 self.inner
                     .fail_generation(generation, Some(request_id), error.clone());
@@ -1255,7 +1375,8 @@ impl HaloWorkbenchRuntime {
                 return Err(error);
             }
         };
-        let public_adapter_readiness = adapter_readiness.clone();
+        let public_profile_readiness = HaloWorkbenchAdapterReadiness::from(&adapter_readiness);
+        let public_profile_readiness_for_event = public_profile_readiness.clone();
         self.inner.publish_transition(
             Some(request_id),
             HaloWorkbenchEventKind::RuntimeStateChanged,
@@ -1269,7 +1390,7 @@ impl HaloWorkbenchRuntime {
                 {
                     return false;
                 }
-                state.adapter_readiness = Some(public_adapter_readiness);
+                state.adapter_readiness = Some(public_profile_readiness_for_event);
                 true
             },
         );
@@ -1314,7 +1435,7 @@ impl HaloWorkbenchRuntime {
                 }
                 state.phase = HaloWorkbenchPhase::Starting;
                 state.adapter_available = true;
-                state.adapter_readiness = Some(adapter_readiness);
+                state.adapter_readiness = Some(public_profile_readiness);
                 state.error = None;
                 true
             },
@@ -1337,8 +1458,38 @@ impl HaloWorkbenchRuntime {
             return Ok(self.inner.receipt(request_id, None));
         }
         match start {
-            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) => {
+            Ok(PiRpcReply::Ready { summary }) => {
+                if !valid_adapter_ready_summary(&summary) {
+                    let error = adapter_failure(PiRpcFailureKind::CapabilityMismatch);
+                    self.inner
+                        .fail_generation(generation, Some(request_id), error.clone());
+                    return Err(error);
+                }
+                let public_adapter_readiness = HaloWorkbenchAdapterReadiness::from(&summary);
+                self.inner.publish_transition(
+                    Some(request_id),
+                    HaloWorkbenchEventKind::RuntimeStateChanged,
+                    "Workbench Runtime adapter readiness handshake was verified",
+                    None,
+                    None,
+                    move |state| {
+                        if state.generation != generation
+                            || state.phase != HaloWorkbenchPhase::Starting
+                            || state.terminated
+                        {
+                            return false;
+                        }
+                        state.adapter_readiness = Some(public_adapter_readiness);
+                        true
+                    },
+                );
                 Ok(self.inner.receipt(request_id, None))
+            }
+            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) => {
+                let error = adapter_failure(PiRpcFailureKind::CapabilityMismatch);
+                self.inner
+                    .fail_generation(generation, Some(request_id), error.clone());
+                Err(error)
             }
             Ok(PiRpcReply::Unavailable { reason }) => {
                 let error = adapter_failure(reason);
@@ -1499,7 +1650,9 @@ impl HaloWorkbenchRuntime {
                                 .execute(PiRpcCommand::Shutdown { generation })
                                 .await
                         } {
-                            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) => Ok(()),
+                            Ok(PiRpcReply::Accepted)
+                            | Ok(PiRpcReply::Available { .. })
+                            | Ok(PiRpcReply::Ready { .. }) => Ok(()),
                             Ok(PiRpcReply::Unavailable { .. }) => Err(HaloWorkbenchError::new(
                                 "cleanup_failed",
                                 "Workbench Runtime cleanup did not complete",
@@ -1766,7 +1919,9 @@ impl HaloWorkbenchRuntime {
         failure_phase: HaloWorkbenchSessionPhase,
     ) -> Result<(), HaloWorkbenchError> {
         let error = match result {
-            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) => return Ok(()),
+            Ok(PiRpcReply::Accepted)
+            | Ok(PiRpcReply::Available { .. })
+            | Ok(PiRpcReply::Ready { .. }) => return Ok(()),
             Ok(PiRpcReply::Unavailable { reason }) => adapter_failure(reason),
             Err(error) => error,
         };
@@ -1878,9 +2033,9 @@ impl HaloWorkbenchRuntime {
         self.ensure_workspace_trusted(generation).await?;
         self.ensure_session_action_allowed(generation, &session_id)?;
         match result {
-            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) => {
-                Ok(self.inner.receipt(request_id, Some(session_id)))
-            }
+            Ok(PiRpcReply::Accepted)
+            | Ok(PiRpcReply::Available { .. })
+            | Ok(PiRpcReply::Ready { .. }) => Ok(self.inner.receipt(request_id, Some(session_id))),
             Ok(PiRpcReply::Unavailable { reason }) => {
                 let error = adapter_failure(reason);
                 self.restore_operation(generation, request_id, operation_id, &session_id);
@@ -2026,10 +2181,19 @@ fn request_fingerprint(intent: &HaloWorkbenchIntent) -> Result<[u8; 32], HaloWor
     Ok(Sha256::digest(encoded).into())
 }
 
-fn valid_adapter_readiness_summary(summary: &PiRpcAvailabilitySummary) -> bool {
+fn valid_adapter_profile_summary(summary: &PiRpcAvailabilitySummary) -> bool {
     summary.version.profile == summary.version.version.compatibility_profile()
         && summary.version.evidence_source == PiRpcVersionEvidenceSource::LocalVersionProbe
         && summary.capabilities.required.as_slice() == PiRpcCapability::required_p0()
+        && summary.capabilities.verified.is_empty()
+}
+
+fn valid_adapter_ready_summary(summary: &PiRpcAvailabilitySummary) -> bool {
+    summary.version.profile == summary.version.version.compatibility_profile()
+        && summary.version.evidence_source == PiRpcVersionEvidenceSource::LocalVersionProbe
+        && summary.capabilities.required.as_slice() == PiRpcCapability::required_p0()
+        && summary.capabilities.verified.as_slice()
+            == PiRpcCapability::verified_by_readiness_handshake()
 }
 
 fn port_failure(kind: PortErrorKind) -> HaloWorkbenchError {

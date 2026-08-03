@@ -286,6 +286,7 @@ fn snapshot_and_event_wire_shapes_are_camel_case_and_redacted() {
         adapter: HaloWorkbenchAdapterSnapshot {
             identity: "pi-rpc-p0".to_string(),
             available: false,
+            readiness: None,
         },
         workspace: None,
         sessions: Vec::new(),

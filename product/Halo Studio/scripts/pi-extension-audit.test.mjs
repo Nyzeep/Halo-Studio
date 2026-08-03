@@ -302,7 +302,12 @@ function createUpstreamFixture({ invalidRecord = true } = {}) {
         resolution: { status: "resolved", resolvedCommit: candidateCommit, objectType: "commit", exitCode: 0 },
         repositoryState: { isShallow: false, shallowFilePresent: false, graftsFilePresent: false, replaceRefs: [] },
         parentEvidence: { command: "git rev-parse HEAD^", exitCode: 0, result: baseCommit },
-        statusEvidence: { command: "git status --porcelain=v2 --branch", exitCode: 0, clean: true },
+        statusEvidence: {
+          command: "git status --porcelain=v2 --branch",
+          exitCode: 0,
+          clean: true,
+          result: "clean; branch main is synchronized with origin/main",
+        },
       },
       ancestry: { status: "proven", exitCode: 0 },
       comparison: {
@@ -1068,6 +1073,18 @@ test("upstream evidence must record HEAD^ and clean-status results", () => {
   const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
 
   assert.ok(report.findings.some((finding) => finding.code === "upstream-parent-evidence-missing"));
+  assert.ok(report.findings.some((finding) => finding.code === "upstream-status-evidence-missing"));
+});
+
+test("upstream status evidence must retain a non-empty command result", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const candidateEvidencePath = path.join(fixture.root, fixture.manifest.upstreamCandidateEvidence.path);
+  const candidateEvidence = JSON.parse(readFileSync(candidateEvidencePath, "utf8"));
+  delete candidateEvidence.candidate.statusEvidence.result;
+  writeFileSync(candidateEvidencePath, JSON.stringify(candidateEvidence, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
   assert.ok(report.findings.some((finding) => finding.code === "upstream-status-evidence-missing"));
 });
 

@@ -9,18 +9,18 @@ fixture coverage, and this validation note only.
 
 - `where.exe pi`: exit code 1, `INFO: Could not find files for the given pattern(s).`
 - `Get-Command pi -All`:
-  - `C:\Users\Nyzee\AppData\Roaming\npm\pi.ps1`
-  - `C:\Users\Nyzee\AppData\Roaming\npm\pi.cmd`
-  - `C:\Users\Nyzee\AppData\Roaming\npm\pi`
+  - `<LOCAL_PI_BIN_DIR>\pi.ps1`
+  - `<LOCAL_PI_BIN_DIR>\pi.cmd`
+  - `<LOCAL_PI_BIN_DIR>\pi`
 - `pi --version`: exit code 0, `0.83.0`
 
 Read-only static source evidence:
 
-- `D:\pi-main\packages\coding-agent\package.json` declares
+- `<PI_REFERENCE_ROOT>/packages/coding-agent/package.json` declares
   `@earendil-works/pi-coding-agent` version `0.83.0`.
-- `D:\pi-main\packages\coding-agent\docs\rpc.md` documents the P1 command and
+- `<PI_REFERENCE_ROOT>/packages/coding-agent/docs/rpc.md` documents the P1 command and
   event names used by Halo.
-- `D:\pi-main\packages\coding-agent\src\modes\rpc\rpc-types.ts` defines the
+- `<PI_REFERENCE_ROOT>/packages/coding-agent/src/modes/rpc/rpc-types.ts` defines the
   same command/response and extension UI protocol surface for version 0.83.0.
 
 ## Compatibility Conclusion
@@ -35,12 +35,13 @@ real-RPC acceptance remains owned by issue 14.
 
 ## Public Seam
 
-`PiRpcReply::Available` now carries a bounded `PiRpcAvailabilitySummary`.
-Workbench Runtime snapshots project the same summary through
-`adapter.readiness`.
+`PiRpcReply::Available` carries a bounded `PiRpcAvailabilitySummary` inside the
+Pi adapter port. Workbench Runtime snapshots project a Halo-local readiness
+summary through `adapter.readiness`; raw Pi capability identifiers do not cross
+the Tauri/Renderer seam.
 
-The public summary exposes only enumerated version/profile/evidence and the
-fixed P0 required capability set:
+The adapter-port summary exposes only enumerated version/profile/evidence and
+the fixed P0 required capability set:
 
 - `prompt`
 - `follow_up`
@@ -57,6 +58,12 @@ fixed P0 required capability set:
 - `agent_settled`
 - `extension_ui_request`
 - `extension_ui_response`
+
+The Halo-local snapshot additionally separates `required` (the audited profile
+contract) from `verified` (the controlled no-model readiness handshake). The
+verified set is limited to `abort`, `get_state`, `get_entries`, `entries`,
+`leafId`, and `since`; prompt/follow-up, streamed events, and extension UI are
+not falsely presented as live probes before issue 14's real-RPC acceptance.
 
 Pi session IDs, entry IDs, raw tool-call IDs, command output, provider/model
 objects, credentials, Authorization values, base URLs, environment variables,
