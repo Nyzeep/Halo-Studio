@@ -81,14 +81,28 @@ function createFixture(overrides = {}) {
     `${EXTENSION_ID}\\nMIT License\\n${extensionPath}\\n${sourceCommit}\\n${gitHashObject}\\n${sha256.toUpperCase()}\\n`,
   );
   const releaseArtifactContents = `${EXTENSION_ID}\\nMIT License\\n${sourceCommit}\\n${sha256}\\n`;
-  writeFileSync(path.join(root, releaseArtifactPath), releaseArtifactContents);
-  const releaseArtifactSha256 = createHash("sha256").update(releaseArtifactContents).digest("hex");
+  const hostClosureReleaseArtifactContents = `${releaseArtifactContents}@earendil-works/pi-agent-core 0.83.0 MIT \\n` + `npm:@earendil-works/pi-agent-core@0.83.0 \\n@earendil-works/pi-ai 0.83.0 MIT \\n` + `npm:@earendil-works/pi-ai@0.83.0 \\n`;
+  writeFileSync(path.join(root, releaseArtifactPath), hostClosureReleaseArtifactContents);
+  const releaseArtifactSha256 = createHash("sha256").update(hostClosureReleaseArtifactContents).digest("hex");
 
   const fileFingerprint = (relativePath) => ({
     path: relativePath,
     sha256: createHash("sha256").update(readFileSync(path.join(root, relativePath))).digest("hex"),
     size: readFileSync(path.join(root, relativePath)).length,
   });
+
+  const hostDirectDependency = {
+    name: "@earendil-works/pi-agent-core",
+    version: "0.83.0",
+    source: "npm:@earendil-works/pi-agent-core@0.83.0",
+    license: "MIT",
+  };
+  const hostTransitiveDependency = {
+    name: "@earendil-works/pi-ai",
+    version: "0.83.0",
+    source: "npm:@earendil-works/pi-ai@0.83.0",
+    license: "MIT",
+  };
 
   const manifest = {
     schemaVersion: 1,
@@ -174,12 +188,21 @@ function createFixture(overrides = {}) {
             sourceCommit,
             sourceTag: null,
             bundled: false,
-            dependencyClosure: { status: "complete", direct: [], transitive: [], evidencePath: releaseArtifactPath },
+            dependencyClosure: {
+              status: "complete",
+              direct: [hostDirectDependency],
+              transitive: [hostTransitiveDependency],
+              evidencePath: releaseArtifactPath,
+            },
             licenseEvidence: {
               observedSpdx: "MIT",
               evidencePath: licensePath,
+              requiredText: ["MIT License"],
               releaseStatus: "included",
-              releaseFiles: [fileFingerprint(releaseArtifactPath)],
+              releaseFiles: [{
+                ...fileFingerprint(releaseArtifactPath),
+                requiredText: [EXTENSION_ID, "MIT License", hostDirectDependency.name, hostTransitiveDependency.name],
+              }],
             },
           },
           lockfiles: lockPaths,
@@ -196,10 +219,10 @@ function createFixture(overrides = {}) {
             { ...fileFingerprint(noticePath), requiredText: [EXTENSION_ID, "MIT License"] },
           ],
           lockfileEvidence: lockPaths.map(fileFingerprint),
-          releaseArtifactEvidence: {
+            releaseArtifactEvidence: {
             path: releaseArtifactPath,
             sha256: releaseArtifactSha256,
-            size: Buffer.byteLength(releaseArtifactContents),
+            size: Buffer.byteLength(hostClosureReleaseArtifactContents),
             requiredText: [EXTENSION_ID, "MIT License"],
           },
         },
@@ -482,6 +505,19 @@ test("runtime scanning catches network calls in extensionless text inputs", () =
   assert.ok(report.findings.some((finding) => finding.code === "runtime-network-capability"));
 });
 
+test("runtime scanning catches bare fetch calls", () => {
+  const fixture = createFixture();
+  const runtimePath = "product/Halo Studio/scripts/runtime-bare-fetch";
+  mkdirSync(path.dirname(path.join(fixture.root, runtimePath)), { recursive: true });
+  writeFileSync(path.join(fixture.root, runtimePath), 'fetch("https://example.invalid");\n');
+  fixture.manifest.runtime.scanPaths.push(runtimePath);
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "runtime-network-capability"));
+});
+
 test("shell download variants and script module inputs are blocked", () => {
   const fixture = createFixture();
   const runtimeDirectory = "product/Halo Studio/scripts/runtime-inputs";
@@ -560,6 +596,19 @@ test("dynamic extension imports and host capabilities are rejected", () => {
   assert.ok(report.findings.some((finding) => finding.code === "extension-host-capability"));
 });
 
+test("side-effect and unresolved dynamic extension imports fail closed", () => {
+  const fixture = createFixture();
+  writeFileSync(
+    path.join(fixture.root, fixture.extensionPath),
+    `${EXTENSION_SOURCE}import "@unreviewed/side-effect";\nconst packageName = "@unreviewed/computed";\nrequire(packageName);\n` + "import(`@unreviewed/template/${packageName}`);\n",
+  );
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "extension-runtime-import-present"));
+  assert.ok(report.findings.some((finding) => finding.code === "extension-runtime-import-unresolved"));
+});
+
 test("extension metadata must describe the fail-closed permission seam", () => {
   const fixture = createFixture();
   fixture.manifest.extensions[0].capabilities = { tools: [], events: [], ui: [], cleanup: [] };
@@ -570,6 +619,18 @@ test("extension metadata must describe the fail-closed permission seam", () => {
   const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
 
   assert.ok(report.findings.some((finding) => finding.code === "extension-contract-metadata-incomplete"));
+});
+
+test("extension metadata rejects custom tools and sandbox claims", () => {
+  const fixture = createFixture();
+  fixture.manifest.extensions[0].capabilities.tools = ["shell"];
+  fixture.manifest.extensions[0].hostPermissions = "sandboxed";
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "extension-custom-tool-present"));
+  assert.ok(report.findings.some((finding) => finding.code === "extension-host-permission-claim-invalid"));
 });
 
 test("audit reports never expose the caller's absolute workspace path", () => {
@@ -751,6 +812,21 @@ test("complete host closure and included host license claims require release evi
 
   assert.ok(report.findings.some((finding) => finding.code === "host-dependency-closure-evidence-missing"));
   assert.ok(report.findings.some((finding) => finding.code === "host-license-release-file-missing"));
+});
+
+test("host closure entries and license claims cannot be empty or ungrounded", () => {
+  const fixture = createFixture();
+  fixture.manifest.extensions[0].dependencies.host.dependencyClosure.direct = [];
+  fixture.manifest.extensions[0].dependencies.host.dependencyClosure.transitive = [];
+  fixture.manifest.extensions[0].dependencies.host.licenseEvidence.requiredText = [];
+  fixture.manifest.extensions[0].dependencies.host.licenseEvidence.releaseFiles[0].requiredText = [];
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "host-dependency-closure-empty"));
+  assert.ok(report.findings.some((finding) => finding.code === "host-license-evidence-claims-missing"));
+  assert.ok(report.findings.some((finding) => finding.code === "host-license-release-claims-missing"));
 });
 
 test("floating version and incomplete provenance are blocked", () => {

@@ -208,6 +208,19 @@ function checkFileFingerprint(filePath, descriptor, codePrefix, label, findings)
   }
 }
 
+function checkRequiredTextClaims(filePath, claims, codePrefix, label, findings) {
+  if (!Array.isArray(claims) || claims.length === 0) {
+    addFinding(findings, `${codePrefix}-claims-missing`, `${label} must declare exact text claims`);
+    return;
+  }
+  const contents = readFileSync(filePath, "utf8");
+  for (const claim of claims) {
+    if (typeof claim !== "string" || claim.trim() === "" || !contents.includes(claim)) {
+      addFinding(findings, `${codePrefix}-text-missing`, `${label} does not contain a declared text claim`);
+    }
+  }
+}
+
 function checkEvidenceFiles(repoRoot, extension, findings) {
   const license = extension.license;
   const evidence = license?.evidence;
@@ -394,15 +407,20 @@ function checkDependencies(repoRoot, extension, findings) {
       { evidencePath: hostLicense.evidencePath, releaseStatus: hostLicense.releaseStatus ?? null },
     );
   } else {
+    const hostLicenseEvidencePath = resolveRepoPath(repoRoot, hostLicense.evidencePath);
+    if (!hostLicenseEvidencePath || !isRegularFile(hostLicenseEvidencePath)) {
+      addFinding(findings, "host-license-evidence-file-missing", `${extension.id} host license evidence must point to a repository-local file`);
+    } else {
+      checkRequiredTextClaims(hostLicenseEvidencePath, hostLicense.requiredText, "host-license-evidence", `${extension.id} host license evidence`, findings);
+    }
     for (const releaseFile of hostLicense.releaseFiles) {
       const descriptor = typeof releaseFile === "string" ? { path: releaseFile } : releaseFile;
       const releasePath = resolveRepoPath(repoRoot, descriptor?.path);
       if (!releasePath || !isRegularFile(releasePath)) {
         addFinding(findings, "host-license-release-file-missing", `${extension.id} host license release evidence file is missing: ${safePathLabel(descriptor?.path)}`);
-      } else if (!SHA256_PATTERN.test(descriptor?.sha256 ?? "") || !Number.isInteger(descriptor?.size)) {
-        addFinding(findings, "host-license-release-fingerprint-missing", `${extension.id} host license release evidence must include a SHA-256 and byte size`);
       } else {
         checkFileFingerprint(releasePath, descriptor, "host-license-release", `${extension.id} host license release evidence ${safePathLabel(descriptor.path)}`, findings);
+        checkRequiredTextClaims(releasePath, descriptor?.requiredText, "host-license-release", `${extension.id} host license release evidence ${safePathLabel(descriptor.path)}`, findings);
       }
     }
   }
@@ -414,9 +432,26 @@ function checkDependencies(repoRoot, extension, findings) {
       `${extension.id} host package direct/transitive dependency closure is not complete evidence; do not infer it from the package name`,
     );
   } else {
+    const entries = [...closure.direct, ...closure.transitive];
+    if (entries.length === 0) {
+      addFinding(findings, "host-dependency-closure-empty", `${extension.id} host package dependency closure must enumerate direct and transitive entries`);
+    }
+    const validEntries = entries.filter((entry) => entry && typeof entry === "object" && ["name", "version", "source", "license"].every(
+      (key) => typeof entry[key] === "string" && entry[key].trim() !== "",
+    ));
+    if (validEntries.length !== entries.length) {
+      addFinding(findings, "host-dependency-entry-invalid", `${extension.id} host dependency closure entries must include name, version, source, and license`);
+    }
     const closureEvidencePath = resolveRepoPath(repoRoot, closure.evidencePath);
     if (!closureEvidencePath || !isRegularFile(closureEvidencePath)) {
       addFinding(findings, "host-dependency-closure-evidence-missing", `${extension.id} host dependency closure must point to a repository-local evidence file`);
+    } else {
+      const closureContents = readFileSync(closureEvidencePath, "utf8");
+      for (const entry of validEntries) {
+        if (![entry.name, entry.version, entry.source, entry.license].every((claim) => closureContents.includes(claim))) {
+          addFinding(findings, "host-dependency-closure-evidence-mismatch", `${extension.id} host dependency closure evidence does not contain an exact entry claim`);
+        }
+      }
     }
   }
 }
@@ -426,15 +461,31 @@ function checkExtensionSource(extension, sourceContents, findings) {
     addFinding(findings, "runtime-import-not-type-only", `${extension.id} must import the Pi API as a type-only import`);
   }
 
-  const staticImports = [...sourceContents.matchAll(/^\s*import\s+(?!type\b).*?from\s+["']([^"']+)["']/gm)]
-    .map((match) => match[1]);
-  const dynamicImports = [...sourceContents.matchAll(/\b(?:require|import)\s*\(\s*["']([^"']+)["']\s*\)/g)]
-    .map((match) => match[1]);
+  const staticImports = [
+    ...sourceContents.matchAll(/^\s*import\s+(?!type\b).*?from\s+["']([^"']+)["']/gm),
+    ...sourceContents.matchAll(/^\s*import\s+(?!type\b)["']([^"']+)["'];?/gm),
+  ].map((match) => match[1]);
+  const dynamicImports = [];
+  const unresolvedDynamicImports = [];
+  for (const match of sourceContents.matchAll(/\b(?:require|import)\s*\(([^)]*)\)/g)) {
+    const argument = match[1].trim();
+    const literal = argument.match(/^(['"`])([\s\S]*)\1$/);
+    if (!literal || (literal[1] === "`" && literal[2].includes("${"))) {
+      unresolvedDynamicImports.push("dynamic import/require");
+      continue;
+    }
+    dynamicImports.push(literal[2]);
+  }
   const externalImports = [...new Set([...staticImports, ...dynamicImports])]
     .filter((specifier) => !specifier.startsWith("."));
   if (externalImports.length > 0) {
     addFinding(findings, "extension-runtime-import-present", `${extension.id} declares runtime package imports; extension runtime dependencies are not admitted`, {
       imports: externalImports,
+    });
+  }
+  if (unresolvedDynamicImports.length > 0) {
+    addFinding(findings, "extension-runtime-import-unresolved", `${extension.id} uses a computed or unresolved runtime import; extension dependencies cannot be proven`, {
+      count: unresolvedDynamicImports.length,
     });
   }
 
@@ -478,6 +529,9 @@ function checkExtensionContractMetadata(extension, findings) {
         addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare cleanup for ${cleanupEvent}`);
       }
     }
+    if (Array.isArray(capabilities.tools) && capabilities.tools.length > 0) {
+      addFinding(findings, "extension-custom-tool-present", `${extension.id} must not declare custom tools on the Halo P0 seam`);
+    }
   }
 
   const impact = extension.impact;
@@ -486,8 +540,12 @@ function checkExtensionContractMetadata(extension, findings) {
   )) {
     addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare all host-impact fields`);
   }
-  if (typeof extension.hostPermissions !== "string" || extension.hostPermissions.trim() === "") {
+  const hostPermissions = typeof extension.hostPermissions === "string" ? extension.hostPermissions.trim() : "";
+  if (!/\binherit(?:s|ed)?\b/i.test(hostPermissions) || !/(?:not|no)\s+(?:a\s+)?sandbox\b/i.test(hostPermissions)) {
     addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must describe inherited host permissions and sandbox status`);
+    if (hostPermissions !== "") {
+      addFinding(findings, "extension-host-permission-claim-invalid", `${extension.id} must state that it inherits Pi process permissions and is not a sandbox`);
+    }
   }
   if (typeof extension.load?.pathPolicy !== "string" || extension.load.pathPolicy.trim() === "") {
     addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare its adapter-owned extension path policy`);
@@ -606,6 +664,7 @@ function checkRuntimeScan(repoRoot, runtime, findings) {
   ];
   const networkCapability = [
     /\b(?:globalThis|window)\.fetch\s*\(/i,
+    /\bfetch\s*\(/i,
     /\bhttps?\.request\s*\(/i,
   ];
   const projectDiscovery = /(?:\.pi[\\/]extensions|\.pi[\\/]packages|PI_CODING_AGENT_DIR\s*.*(?:workspace|project))/i;
