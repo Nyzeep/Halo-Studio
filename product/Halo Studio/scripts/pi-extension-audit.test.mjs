@@ -279,7 +279,11 @@ function createUpstreamFixture({ invalidRecord = true } = {}) {
         retainedHaloBrand: ["product/Halo Studio/"],
         retainedWorkbenchRuntime: ["Workbench Runtime public contract"],
         retainedPiRpcPort: ["PiRpcPort and Pi RPC adapter seam"],
-        prohibitedActions: ["No automatic merge or upstream write"],
+        prohibitedActions: [
+          "No automatic merge or cherry-pick was performed.",
+          "No commit, push, fetch, or file write was performed in the reference tree.",
+          "No Pi source was copied and no npm/Git dependency was added.",
+        ],
       },
       representativeChangedPaths: {},
       releaseGate: { status: "blocked", evidenceGaps: ["test"] },
@@ -701,6 +705,18 @@ test("upstream evidence must validate Halo retention and conflict decisions", ()
   const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
 
   assert.ok(report.findings.some((finding) => finding.code === "upstream-retention-decision-missing"));
+});
+
+test("upstream evidence must enumerate each prohibited action category", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const evidencePath = path.join(fixture.root, "docs", "issue-13-upstream-sync-candidate.json");
+  const evidence = JSON.parse(readFileSync(evidencePath, "utf8"));
+  evidence.conflictsAndDecisions.prohibitedActions = ["No automatic merge was performed."];
+  writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "upstream-prohibited-action-detail-missing"));
 });
 
 test("an unresolved upstream base cannot pass an incremental-sync audit", () => {
