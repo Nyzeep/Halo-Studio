@@ -92,6 +92,7 @@
       "fixedVersion": "1.0.0",
       "sourcePath": "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts",
       "sourceCommit": "e8c445d6a81d90851ac03d6aac7a4f11b6b749a3",
+      "sourceTree": "f50918b6bdebc6067f409f248cc9182ff5bcdec3",
       "sourceTag": null,
       "gitHashObject": "15d6908cc30e45f8812a87c591e58799d2f7ae69",
       "sha256": "a6f704110e56be3c1c0754dadde1be2b27f65c76ee03f2c19a1e43cd06848c0b",
@@ -178,8 +179,8 @@
           },
           {
             "path": "product/THIRD_PARTY_NOTICES.md",
-            "sha256": "6e4ce56aa7340437b0ddc4d6971e10335475ed098c42fb5550c4fe83da7bacdd",
-            "size": 4754,
+            "sha256": "43e2110c8be7ffd62263b6d7561f802855d07b440dd7308046d290e9c9cb9b2a",
+            "size": 4819,
             "requiredText": ["halo-workbench-permission-gate", "MIT License", "halo_permission_gate.ts"]
           }
         ],
@@ -213,8 +214,8 @@
           },
           {
             "path": "product/THIRD_PARTY_NOTICES.md",
-            "sha256": "6e4ce56aa7340437b0ddc4d6971e10335475ed098c42fb5550c4fe83da7bacdd",
-            "size": 4754,
+            "sha256": "43e2110c8be7ffd62263b6d7561f802855d07b440dd7308046d290e9c9cb9b2a",
+            "size": 4819,
             "requiredText": [
               "# BitFun third-party attribution index",
               "MIT license and the upstream copyright notice",

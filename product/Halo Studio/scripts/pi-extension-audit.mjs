@@ -17,6 +17,7 @@ const GIT_OBJECT_PATTERN = /^[0-9a-f]{40}$/i;
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/i;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const READ_ONLY_EVIDENCE_REFERENCE_PATTERN = /^readonly-evidence:\/\/[A-Za-z0-9._-]+(?:\/[^\s]*)?$/;
+const COMPUTED_GLOBAL_CAPABILITY_PATTERN = /\b(?:globalThis|window)\s*(?:\?\.)?\s*\[[^\]]+\]/i;
 const TEXT_EXTENSIONS = new Set([
   ".cjs",
   ".bat",
@@ -95,8 +96,30 @@ function resolveRepoPath(repoRoot, relativePath) {
   return resolved;
 }
 
+function canonicalRepoRelativePath(repoRoot, relativePath) {
+  const resolved = resolveRepoPath(repoRoot, relativePath);
+  if (!resolved) return null;
+  const realRoot = realpathSync(repoRoot);
+  const realCandidate = existsSync(resolved) ? realpathSync(resolved) : resolved;
+  if (!inside(realRoot, realCandidate)) return null;
+  return normalizeRelativePath(path.relative(realRoot, realCandidate)).toLowerCase();
+}
+
 function addFinding(findings, code, message, evidence = {}) {
   findings.push({ code, message, evidence: sanitizeEvidence(evidence) });
+}
+
+function regexEscape(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasAliasedComputedGlobalCapability(sourceContents) {
+  const aliases = [...sourceContents.matchAll(/\b(?:const|let|var)\s+([$_\p{ID_Start}][$_\p{ID_Continue}]*)\s*=\s*(?:globalThis|window)\b/gu)]
+    .map((match) => match[1]);
+  return aliases.some((alias) => new RegExp(
+    `(?:^|[^$_\\p{ID_Continue}])${regexEscape(alias)}\\s*(?:\\?\\.)?\\s*\\[[^\\]]+\\]`,
+    "u",
+  ).test(sourceContents));
 }
 
 function readJson(filePath, findings) {
@@ -148,6 +171,16 @@ function gitBlobAtCommit(repoRoot, commit, relativePath) {
   const blob = result.stdout.trim();
   const type = runGit(repoRoot, ["cat-file", "-t", blob]);
   return type.ok && type.stdout.trim() === "blob" ? blob : null;
+}
+
+function gitTreeAtCommit(repoRoot, commit) {
+  const resolvedCommit = runGit(repoRoot, ["rev-parse", "--verify", `${commit}^{commit}`]);
+  if (!resolvedCommit.ok || resolvedCommit.stdout.trim().toLowerCase() !== String(commit).toLowerCase()) return null;
+  const result = runGit(repoRoot, ["rev-parse", "--verify", `${commit}^{tree}`]);
+  if (!result.ok) return null;
+  const tree = result.stdout.trim();
+  const type = runGit(repoRoot, ["cat-file", "-t", tree]);
+  return type.ok && type.stdout.trim() === "tree" ? tree : null;
 }
 
 function isRegularFile(filePath) {
@@ -280,7 +313,7 @@ function checkEvidenceFiles(repoRoot, extension, findings) {
   if (!notice) {
     addFinding(findings, "license-notice-evidence-missing", `${extension.id} must cite product/THIRD_PARTY_NOTICES.md as notice evidence`);
   } else {
-    for (const claim of [extension.id, extension.sourcePath, extension.sourceCommit, extension.gitHashObject, extension.sha256]) {
+    for (const claim of [extension.id, extension.sourcePath, extension.sourceCommit, extension.sourceTree, extension.gitHashObject, extension.sha256]) {
       if (typeof claim !== "string" || !notice.contents.toLowerCase().includes(claim.toLowerCase())) {
         addFinding(findings, "license-notice-provenance-missing", `${extension.id} notice does not contain an audited provenance claim`);
       }
@@ -417,9 +450,23 @@ function checkDependencies(repoRoot, extension, findings) {
       { evidencePath: hostLicense.evidencePath, releaseStatus: hostLicense.releaseStatus ?? null },
     );
   } else {
-    const extensionLicenseEvidencePaths = new Set((extension.license?.evidence ?? []).map((item) => normalizeRelativePath(typeof item === "string" ? item : item?.path)));
-    const hostLicenseEvidenceLabel = normalizeRelativePath(hostLicense.evidencePath);
-    if (extensionLicenseEvidencePaths.has(hostLicenseEvidenceLabel) || hostLicenseEvidenceLabel === "product/Halo Studio/LICENSE") {
+    const extensionLicenseEvidencePaths = new Set(
+      (extension.license?.evidence ?? [])
+        .map((item) => canonicalRepoRelativePath(repoRoot, typeof item === "string" ? item : item?.path))
+        .filter(Boolean),
+    );
+    const extensionLicenseDistributionPaths = (extension.license?.distributionFiles ?? [])
+      .map((item) => canonicalRepoRelativePath(repoRoot, typeof item === "string" ? item : item?.path))
+      .filter(Boolean);
+    const extensionLicenseReleaseArtifactPath = canonicalRepoRelativePath(repoRoot, extension.license?.releaseArtifactEvidence?.path);
+    const extensionOwnedLicensePaths = new Set([
+      ...extensionLicenseEvidencePaths,
+      ...extensionLicenseDistributionPaths,
+      extensionLicenseReleaseArtifactPath,
+    ].filter(Boolean));
+    const haloLicensePath = canonicalRepoRelativePath(repoRoot, "product/Halo Studio/LICENSE");
+    const hostLicenseEvidenceLabel = canonicalRepoRelativePath(repoRoot, hostLicense.evidencePath);
+    if (hostLicenseEvidenceLabel && (extensionOwnedLicensePaths.has(hostLicenseEvidenceLabel) || hostLicenseEvidenceLabel === haloLicensePath)) {
       addFinding(findings, "host-license-evidence-misclassified", `${extension.id} host license evidence must not reuse Halo extension license files`);
     }
     const hostLicenseEvidencePath = resolveRepoPath(repoRoot, hostLicense.evidencePath);
@@ -435,6 +482,10 @@ function checkDependencies(repoRoot, extension, findings) {
     }
     for (const releaseFile of hostLicense.releaseFiles) {
       const descriptor = typeof releaseFile === "string" ? { path: releaseFile } : releaseFile;
+      const releaseLabel = canonicalRepoRelativePath(repoRoot, descriptor?.path);
+      if (releaseLabel && (extensionOwnedLicensePaths.has(releaseLabel) || releaseLabel === haloLicensePath)) {
+        addFinding(findings, "host-license-release-file-misclassified", `${extension.id} host license release evidence must not reuse Halo extension license files`);
+      }
       const releasePath = resolveRepoPath(repoRoot, descriptor?.path);
       if (!releasePath || !isRegularFile(releasePath)) {
         addFinding(findings, "host-license-release-file-missing", `${extension.id} host license release evidence file is missing: ${safePathLabel(descriptor?.path)}`);
@@ -484,7 +535,7 @@ function checkExtensionSource(extension, sourceContents, findings) {
   const staticImports = [
     ...sourceContents.matchAll(/^\s*import\s+(?!type\b).*?from\s+["']([^"']+)["']/gm),
     ...sourceContents.matchAll(/^\s*import\s+(?!type\b)["']([^"']+)["'];?/gm),
-    ...sourceContents.matchAll(/^\s*export\s+(?:\*\s+as\s+\w+|\*|\{[^}]*\})\s+from\s+["']([^"']+)["']/gm),
+    ...sourceContents.matchAll(/^\s*export\s+(?:\*\s+as\s+[$_\p{ID_Start}][$_\p{ID_Continue}]*|\*|\{[^}]*\})\s+from\s+["']([^"']+)["']/gmu),
   ].map((match) => match[1]);
   const dynamicImports = [];
   const unresolvedDynamicImports = [];
@@ -514,6 +565,7 @@ function checkExtensionSource(extension, sourceContents, findings) {
     /from\s+["']node:(?:fs|fs\/promises|child_process|net|http|https|os)["']/i,
     /\b(?:require|import)\s*\(\s*["'](?:node:)?(?:fs|fs\/promises|child_process|net|http|https|os)["']\s*\)/i,
     /\b(?:globalThis\.)?fetch\s*\(/i,
+    COMPUTED_GLOBAL_CAPABILITY_PATTERN,
     /\b(?:fetch|exec|spawn|fork|readFile|writeFile|mkdir|unlink|rm|createReadStream|createWriteStream)\s*\(/,
     /\b(?:process\.env|credential|apiKey|authorization)\b/i,
   ];
@@ -523,6 +575,11 @@ function checkExtensionSource(extension, sourceContents, findings) {
         pattern: String(pattern),
       });
     }
+  }
+  if (hasAliasedComputedGlobalCapability(sourceContents)) {
+    addFinding(findings, "extension-host-capability", `${extension.id} uses a forbidden aliased computed global capability`, {
+      pattern: "aliased computed global/window property access",
+    });
   }
 }
 
@@ -642,6 +699,18 @@ function checkLoadBoundary(extension, adapterSource, findings) {
 
 function checkSourceProvenance(repoRoot, extension, findings) {
   if (!COMMIT_PATTERN.test(extension.sourceCommit ?? "")) return;
+  const declaredTree = gitTreeAtCommit(repoRoot, extension.sourceCommit);
+  if (!declaredTree) {
+    addFinding(findings, "source-commit-tree-unavailable", `${extension.id} source commit tree is not available in the Halo Git object database`, {
+      commit: extension.sourceCommit,
+    });
+  } else if (declaredTree.toLowerCase() !== String(extension.sourceTree).toLowerCase()) {
+    addFinding(findings, "source-commit-tree-mismatch", `${extension.id} sourceCommit does not contain the declared Git tree`, {
+      commit: extension.sourceCommit,
+      expectedTree: extension.sourceTree,
+      actualTree: declaredTree,
+    });
+  }
   const declaredBlob = gitBlobAtCommit(repoRoot, extension.sourceCommit, extension.sourcePath);
   if (!declaredBlob) {
     addFinding(findings, "source-commit-provenance-unavailable", `${extension.id} source commit or path is not available in the Halo Git object database`, {
@@ -692,6 +761,7 @@ function checkRuntimeScan(repoRoot, runtime, findings) {
   const networkCapability = [
     /\b(?:globalThis|window)\.fetch\s*\(/i,
     /\b(?:globalThis|window)\s*\[\s*["']fetch["']\s*\]\s*\(/i,
+    COMPUTED_GLOBAL_CAPABILITY_PATTERN,
     /\bfetch\s*\(/i,
     /\bhttps?\.(?:get|request)\s*\(/i,
   ];
@@ -731,7 +801,8 @@ function checkRuntimeScan(repoRoot, runtime, findings) {
     if (downloadCapability.some((pattern) => pattern.test(contents)) && !isAllowlisted(relativePath, "runtime-download-capability", file)) {
       addFinding(findings, "runtime-download-capability", `Runtime/build input contains a download or package installation capability: ${relativePath}`);
     }
-    if (networkCapability.some((pattern) => pattern.test(contents)) && !isAllowlisted(relativePath, "runtime-network-capability", file)) {
+    if ((networkCapability.some((pattern) => pattern.test(contents)) || hasAliasedComputedGlobalCapability(contents))
+      && !isAllowlisted(relativePath, "runtime-network-capability", file)) {
       addFinding(findings, "runtime-network-capability", `Runtime/build input contains a network capability: ${relativePath}`);
     }
     if (projectDiscovery.test(contents)) {
@@ -1072,8 +1143,29 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
       actual: actualBranch.stdout.trim(),
     });
   }
-  if (!actualStatus.ok || actualStatus.stdout.split(/\r?\n/).some((line) => line.trim() !== "" && !line.startsWith("#"))) {
+  const actualStatusExitCode = actualStatus.ok ? 0 : actualStatus.status;
+  const actualClean = actualStatus.ok
+    && !actualStatus.stdout.split(/\r?\n/).some((line) => line.trim() !== "" && !line.startsWith("#"));
+  if (!actualClean) {
     addFinding(findings, "upstream-reference-tree-dirty", "The upstream candidate reference tree is not clean");
+  }
+  const statusEvidence = candidate.statusEvidence;
+  if (!statusEvidence || typeof statusEvidence !== "object"
+    || typeof statusEvidence.command !== "string"
+    || !/status\s+--porcelain=v2\s+--branch/.test(statusEvidence.command)
+    || typeof statusEvidence.exitCode !== "number"
+    || typeof statusEvidence.clean !== "boolean") {
+    addFinding(findings, "upstream-status-evidence-missing", "Upstream candidate evidence must record the clean-status command, exit code, and clean result");
+  } else {
+    for (const [key, expected] of [["exitCode", actualStatusExitCode], ["clean", actualClean]]) {
+      if (statusEvidence[key] !== expected) {
+        addFinding(findings, "upstream-status-evidence-mismatch", "Upstream candidate clean-status evidence does not match a fresh reference-tree check", {
+          key,
+          expected,
+          recorded: statusEvidence[key],
+        });
+      }
+    }
   }
 
   const baseResolution = checkCommitResolution("base", candidateEvidence.base?.commit, candidateEvidence.base?.resolution);
@@ -1111,16 +1203,21 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
     addFinding(findings, "upstream-operation-invalid", "Upstream candidate evidence must identify an incremental_sync operation");
   }
 
-  if (candidate.parentEvidence && typeof candidate.parentEvidence.exitCode === "number") {
-    const parent = git(["rev-parse", "HEAD^"]);
-    if (candidate.parentEvidence.exitCode === 128 && parent.ok) {
-      addFinding(findings, "upstream-parent-evidence-mismatch", "Candidate parent evidence says HEAD^ is unavailable, but it is locally resolvable");
-    } else if (candidate.parentEvidence.exitCode !== (parent.ok ? 0 : parent.status)) {
-      addFinding(findings, "upstream-parent-evidence-mismatch", "Candidate parent evidence does not match a fresh local HEAD^ check", {
-        expectedExitCode: candidate.parentEvidence.exitCode,
-        actualExitCode: parent.ok ? 0 : parent.status,
-      });
-    }
+  const parent = git(["rev-parse", "HEAD^"]);
+  const parentEvidence = candidate.parentEvidence;
+  const parentExitCode = parent.ok ? 0 : parent.status;
+  if (!parentEvidence || typeof parentEvidence !== "object"
+    || typeof parentEvidence.command !== "string"
+    || !/rev-parse\s+HEAD\^/.test(parentEvidence.command)
+    || typeof parentEvidence.exitCode !== "number"
+    || typeof parentEvidence.result !== "string"
+    || parentEvidence.result.trim() === "") {
+    addFinding(findings, "upstream-parent-evidence-missing", "Upstream candidate evidence must record the HEAD^ command, exit code, and result");
+  } else if (parentEvidence.exitCode !== parentExitCode) {
+    addFinding(findings, "upstream-parent-evidence-mismatch", "Candidate parent evidence does not match a fresh local HEAD^ check", {
+      expectedExitCode: parentExitCode,
+      recordedExitCode: parentEvidence.exitCode,
+    });
   }
 
   const initialImportManifest = resolveRepoPath(repoRoot, candidateEvidence.base?.initialImportManifest);
@@ -1349,6 +1446,7 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
       "fixedVersion",
       "sourcePath",
       "sourceCommit",
+      "sourceTree",
       "gitHashObject",
       "sha256",
       "load",
@@ -1365,6 +1463,7 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
     ids.add(extension?.id);
     if (!VERSION_PATTERN.test(extension?.fixedVersion ?? "")) addFinding(findings, "extension-version-unpinned", `${label}.fixedVersion must be a fixed semantic version`);
     if (!COMMIT_PATTERN.test(extension?.sourceCommit ?? "")) addFinding(findings, "extension-source-commit-unpinned", `${label}.sourceCommit must be a full commit SHA`);
+    if (!GIT_OBJECT_PATTERN.test(extension?.sourceTree ?? "")) addFinding(findings, "extension-source-tree-unpinned", `${label}.sourceTree must be a full Git tree hash`);
     if (!GIT_OBJECT_PATTERN.test(extension?.gitHashObject ?? "")) addFinding(findings, "git-hash-object-unpinned", `${label}.gitHashObject must be a full Git object hash`);
     if (!SHA256_PATTERN.test(extension?.sha256 ?? "")) addFinding(findings, "sha256-unpinned", `${label}.sha256 must be a full SHA-256`);
 

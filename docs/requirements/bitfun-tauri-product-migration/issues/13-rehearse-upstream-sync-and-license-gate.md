@@ -30,7 +30,7 @@
 | 字段 | 当前 P0 事实与审计要求 |
 | --- | --- |
 | ID/版本 | `halo-workbench-permission-gate`, `HALO_PI_EXTENSION_VERSION = 1.0.0`；版本变更必须重新建候选并重新验收。 |
-| 源码与来源 | `product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts`，由 Rust `include_str!` 固定进 Adapter；记录来源 commit、`git hash-object` 和 SHA-256，不接受只记录文件名。 |
+| 源码与来源 | `product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts`，由 Rust `include_str!` 固定进 Adapter；记录来源 commit、commit tree、`git hash-object` 和 SHA-256，不接受只记录文件名。 |
 | 安装与加载 | Adapter 在每个受控进程独立的 `%TEMP%\\halo-studio\\pi-extensions\\<extension-id>-<uuid>\\` 目录写入 `<extension-id>-<sha256>.ts`，校验固定源码后以 `--no-extensions --extension <exact-path>` 加载，退出时清理；不得写入用户全局、项目 `.pi` 或 Pi `settings.json`。 |
 | 可访问能力 | 仅注册 `tool_call` 前置拦截并调用 `ctx.ui.confirm`，由 Pi RPC 的 `extension_ui_request/response` 传递一次性决议；源码不得直接调用文件、网络、进程、凭据或 Git API。 |
 | 宿主权限 | extension 与 Pi 进程仍继承启动用户权限；Halo 的工作区信任、任务状态和 fail-closed 决议是外部边界，不能声称 extension 提供沙箱。 |
@@ -63,10 +63,11 @@ P0 extension 集合只有 Halo permission gate。
   `node "product/Halo Studio/scripts/pi-extension-audit.mjs" --json`；测试入口：
   `node --test "product/Halo Studio/scripts/pi-extension-audit.test.mjs"`。
 
-本任务不修改 `package.json`、Cargo/PNPM lockfile、PiRpcAdapter Runtime、
-Workbench Runtime 或共享启动参数；因此 audit script 以独立 CLI 存在，不能假装
-已经成为现有产品命令的 release gate。当前 gate 保持 `blocked`，直到主集成流程
-明确接入并重新记录完整验证矩阵。
+本票允许修改 13-owned 的 audit CLI/test、extension inventory、upstream/release
+evidence、审计说明、工单说明和第三方 notice；不允许修改 `package.json`、Cargo/PNPM
+lockfile、PiRpcAdapter Runtime、Workbench Runtime、runtime-ports、desktop/runtime
+API 或共享启动参数。因此 audit script 以独立 CLI 存在，不能假装已经成为现有产品命令
+的 release gate。当前 gate 保持 `blocked`，直到主集成流程明确接入并重新记录完整验证矩阵。
 
 ## 本轮审计脚本收口
 
@@ -74,14 +75,19 @@ Workbench Runtime 或共享启动参数；因此 audit script 以独立 CLI 存�
   未知参数与缺失参数 fail closed；`--help` 是唯一返回 `0` 的非审计路径。
 - 扩展源码扫描同时拒绝静态/动态外部 runtime import、`require`/动态
   `import()` 的宿主能力和 `fetch`；runtime/build 输入扫描覆盖无扩展名文本文件、
-  网络能力、下载/安装能力和根式 Windows 绝对路径，并禁止 capability allowlist
-  绕过检查。
+  网络能力、下载/安装能力和根式 Windows 绝对路径，并把 computed
+  `globalThis`/`window` property access（包括从 `globalThis`/`window` 绑定出来的
+  alias 与 optional computed call）视为 capability，禁止 capability allowlist 绕过检查。
 - 清单现在必须结构化声明 `tool_call`、`ctx.ui.confirm`、
   `extension_ui_request/response`、stop/abort/EOF/failure/application-exit 清理、
   完整 impact 字段、继承宿主权限及 adapter-owned path policy；完整 host closure
-  和已纳入发行物的 host license claim 还必须指向仓库内可校验的证据文件。
+  和已纳入发行物的 host license claim 还必须指向仓库内可校验的证据文件；host
+  license evidence/release files 不能复用 extension 的 evidence、distributionFiles
+  或 releaseArtifactEvidence 路径。
 - 这些检查仍只审计 Halo base tree 和外部只读证据；候选没有自动应用，不能把
   base-tree audit tests 写成 candidate validation，也不能改变当前 `blocked` gate。
+- upstream evidence 现在还必须结构化记录只读参考树的 `HEAD^` command/exit/result
+  与 clean-status command/exit/clean 结果；缺失或与 fresh check 不一致时 fail closed。
 
 ## 跨工单收口约束
 
