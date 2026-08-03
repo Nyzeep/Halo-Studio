@@ -1088,6 +1088,30 @@ test("upstream status evidence must retain a non-empty command result", () => {
   assert.ok(report.findings.some((finding) => finding.code === "upstream-status-evidence-missing"));
 });
 
+test("upstream status evidence result must match the clean flag", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const candidateEvidencePath = path.join(fixture.root, fixture.manifest.upstreamCandidateEvidence.path);
+  const candidateEvidence = JSON.parse(readFileSync(candidateEvidencePath, "utf8"));
+  candidateEvidence.candidate.statusEvidence.result = "dirty; stale result";
+  writeFileSync(candidateEvidencePath, JSON.stringify(candidateEvidence, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "upstream-status-evidence-result-mismatch"));
+});
+
+test("upstream parent evidence result must match a resolved HEAD^ check", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const candidateEvidencePath = path.join(fixture.root, fixture.manifest.upstreamCandidateEvidence.path);
+  const candidateEvidence = JSON.parse(readFileSync(candidateEvidencePath, "utf8"));
+  candidateEvidence.candidate.parentEvidence.result = "stale result";
+  writeFileSync(candidateEvidencePath, JSON.stringify(candidateEvidence, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "upstream-parent-evidence-result-mismatch"));
+});
+
 test("upstream evidence must validate Halo retention and conflict decisions", () => {
   const fixture = createUpstreamFixture({ invalidRecord: false });
   const evidencePath = path.join(fixture.root, "docs", "issue-13-upstream-sync-candidate.json");

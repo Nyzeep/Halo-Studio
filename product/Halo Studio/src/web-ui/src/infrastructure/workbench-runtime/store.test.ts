@@ -12,17 +12,55 @@ const snapshot = (
   lastSequence = 0,
   stateVersion = lastSequence,
   phase: WorkbenchRuntimeSnapshot['phase'] = 'disconnected',
-): WorkbenchRuntimeSnapshot => ({
-  schemaVersion: 1,
-  phase,
-  adapter: { identity: 'pi-rpc-p0', available: phase === 'ready', readiness: null },
-  workspace: null,
-  sessions: [],
-  pendingOperations: [],
-  lastSequence,
-  stateVersion,
-  error: null,
-});
+): WorkbenchRuntimeSnapshot => {
+  const readiness = phase === 'ready'
+    ? {
+        version: {
+          version: '0.83.0' as const,
+          profile: 'pi-rpc-0.83.0-p0' as const,
+          evidenceSource: 'local_version_probe' as const,
+        },
+        capabilities: {
+          required: [
+            'userInput',
+            'followUpInput',
+            'sessionAbort',
+            'sessionState',
+            'sessionEntries',
+            'sessionEntryCollection',
+            'sessionEntryCursor',
+            'sessionEntryIncremental',
+            'assistantMessageStream',
+            'toolExecutionStart',
+            'toolExecutionUpdate',
+            'toolExecutionEnd',
+            'agentSettled',
+            'permissionUiRequest',
+            'permissionUiResponse',
+          ],
+          verified: [
+            'sessionAbort',
+            'sessionState',
+            'sessionEntries',
+            'sessionEntryCollection',
+            'sessionEntryCursor',
+            'sessionEntryIncremental',
+          ],
+        },
+      }
+    : null;
+  return {
+    schemaVersion: 1,
+    phase,
+    adapter: { identity: 'pi-rpc-p0', available: phase === 'ready', readiness },
+    workspace: null,
+    sessions: [],
+    pendingOperations: [],
+    lastSequence,
+    stateVersion,
+    error: null,
+  };
+};
 
 const event = (sequence: number): WorkbenchRuntimeEvent => ({
   sequence,
@@ -324,7 +362,14 @@ describe('WorkbenchRuntimeStore', () => {
               'permissionUiRequest',
               'permissionUiResponse',
             ],
-            verified: [],
+            verified: [
+              'sessionAbort',
+              'sessionState',
+              'sessionEntries',
+              'sessionEntryCollection',
+              'sessionEntryCursor',
+              'sessionEntryIncremental',
+            ],
           },
         },
         endpoint: secretCanary,
@@ -364,6 +409,23 @@ describe('WorkbenchRuntimeStore', () => {
 
     expect(JSON.stringify(store.getState().lastEvent)).not.toContain(secretCanary);
     expect(store.getState().lastEvent).toBeNull();
+  });
+
+  it('fails closed when a ready snapshot lacks handshake verification evidence', async () => {
+    const invalidReady = snapshot(0, 0, 'ready');
+    invalidReady.adapter.readiness!.capabilities.verified = [];
+    const client: WorkbenchRuntimeClient = {
+      subscribe: vi.fn(async () => vi.fn()),
+      readSnapshot: vi.fn(async () => invalidReady),
+      submitIntent: vi.fn(),
+    };
+    const store = createWorkbenchRuntimeStore(client);
+
+    await store.getState().start();
+
+    expect(store.getState().syncStatus).toBe('failed');
+    expect(store.getState().stableErrorCode).toBe('runtime_contract_mismatch');
+    expect(store.getState().snapshot).toBeNull();
   });
 
   it('fails closed when adapter readiness contains non-enumerated public fields', async () => {

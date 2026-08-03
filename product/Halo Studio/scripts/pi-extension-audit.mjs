@@ -1168,6 +1168,12 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
         });
       }
     }
+    if (/^clean\b/i.test(statusEvidence.result.trim()) !== actualClean) {
+      addFinding(findings, "upstream-status-evidence-result-mismatch", "Upstream candidate clean-status result does not match the fresh clean-status check", {
+        expectedClean: actualClean,
+        recordedResult: statusEvidence.result,
+      });
+    }
   }
 
   const baseResolution = checkCommitResolution("base", candidateEvidence.base?.commit, candidateEvidence.base?.resolution);
@@ -1215,11 +1221,23 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
     || typeof parentEvidence.result !== "string"
     || parentEvidence.result.trim() === "") {
     addFinding(findings, "upstream-parent-evidence-missing", "Upstream candidate evidence must record the HEAD^ command, exit code, and result");
-  } else if (parentEvidence.exitCode !== parentExitCode) {
-    addFinding(findings, "upstream-parent-evidence-mismatch", "Candidate parent evidence does not match a fresh local HEAD^ check", {
-      expectedExitCode: parentExitCode,
-      recordedExitCode: parentEvidence.exitCode,
-    });
+  } else {
+    if (parentEvidence.exitCode !== parentExitCode) {
+      addFinding(findings, "upstream-parent-evidence-mismatch", "Candidate parent evidence does not match a fresh local HEAD^ check", {
+        expectedExitCode: parentExitCode,
+        recordedExitCode: parentEvidence.exitCode,
+      });
+    }
+    const parentResult = parentEvidence.result.trim();
+    const resultMatches = parent.ok
+      ? parentResult === parent.stdout.trim()
+      : /(?:unavailable|unresolved|failed|error|not found|cannot)/i.test(parentResult);
+    if (!resultMatches) {
+      addFinding(findings, "upstream-parent-evidence-result-mismatch", "Candidate parent evidence result does not match a fresh local HEAD^ check", {
+        resolved: parent.ok,
+        recordedResult: parentEvidence.result,
+      });
+    }
   }
 
   const initialImportManifest = resolveRepoPath(repoRoot, candidateEvidence.base?.initialImportManifest);

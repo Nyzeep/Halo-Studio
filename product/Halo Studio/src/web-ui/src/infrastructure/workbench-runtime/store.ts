@@ -348,15 +348,26 @@ const sanitizeSnapshot = (input: unknown): WorkbenchRuntimeSnapshot => {
     };
   });
 
+  const phase = input.phase as WorkbenchRuntimeSnapshot['phase'];
+  const readiness = sanitizeAdapterReadiness(input.adapter.readiness);
+  if (
+    phase === 'ready'
+    && (!input.adapter.available
+      || readiness === null
+      || readiness.capabilities.verified.length !== WORKBENCH_READINESS_VERIFIED_CAPABILITIES.length)
+  ) {
+    return contractMismatch();
+  }
+
   const runtimeError = input.error === null ? null : sanitizeRuntimeError(input.error);
 
   return {
     schemaVersion: HALO_WORKBENCH_SCHEMA_VERSION,
-    phase: input.phase as WorkbenchRuntimeSnapshot['phase'],
+    phase,
     adapter: {
       identity: PI_RPC_ADAPTER_IDENTITY,
       available: input.adapter.available,
-      readiness: sanitizeAdapterReadiness(input.adapter.readiness),
+      readiness,
     },
     workspace,
     sessions,
