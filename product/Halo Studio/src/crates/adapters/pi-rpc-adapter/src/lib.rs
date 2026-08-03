@@ -27,10 +27,11 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use bitfun_runtime_ports::{
     PiCredentialSecret, PiCredentialStorePort, PiProviderCapability, PiProviderCapabilityPort,
-    PiProviderCapabilityRequest, PiRpcCommand, PiRpcEvent, PiRpcFailureKind,
-    PiRpcOperationDecision, PiRpcOperationKind, PiRpcPort, PiRpcReply, PiRpcSessionMode,
-    PiRpcWorkspace, PiRuntimeConfiguration, PiRuntimeConfigurationPort, PortError, PortErrorKind,
-    PortResult, PI_RPC_ADAPTER_IDENTITY,
+    PiProviderCapabilityRequest, PiRpcAvailabilitySummary, PiRpcCommand, PiRpcEvent,
+    PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind, PiRpcPort, PiRpcReply,
+    PiRpcSessionMode, PiRpcVersion, PiRpcVersionEvidenceSource, PiRpcWorkspace,
+    PiRuntimeConfiguration, PiRuntimeConfigurationPort, PortError, PortErrorKind, PortResult,
+    PI_RPC_ADAPTER_IDENTITY,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -49,7 +50,10 @@ const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_ABORT_GRACE_PERIOD: Duration = Duration::from_secs(3);
 // The compatibility profile is intentionally explicit. A successful
 // `--version` process exit is not evidence that its RPC schema is known.
-const SUPPORTED_PI_RPC_VERSIONS: &[&str] = &["0.81.1"];
+const SUPPORTED_PI_RPC_PROFILES: &[(&str, PiRpcVersion)] = &[
+    ("0.81.1", PiRpcVersion::V0_81_1),
+    ("0.83.0", PiRpcVersion::V0_83_0),
+];
 const SUPPORTED_ASSISTANT_MESSAGE_EVENT_TYPES: &[&str] = &[
     "start",
     "text_start",
@@ -178,6 +182,12 @@ struct AdapterState {
 struct ResolvedRuntimeConfiguration {
     configuration: PiRuntimeConfiguration,
     capability: Option<PiProviderCapability>,
+}
+
+#[derive(Clone)]
+struct ResolvedPiExecutable {
+    path: PathBuf,
+    summary: PiRpcAvailabilitySummary,
 }
 
 impl Drop for AdapterState {
@@ -319,7 +329,7 @@ impl PiRpcAdapter {
         output.map_err(|_| PiRpcFailureKind::NotInstalled)
     }
 
-    async fn probe_pi(&self) -> Result<PathBuf, PiRpcFailureKind> {
+    async fn probe_pi(&self) -> Result<ResolvedPiExecutable, PiRpcFailureKind> {
         let executable = self.resolve_executable().await?;
         let output = self.probe_executable_version(&executable).await?;
         if !output.status.success() {
@@ -328,10 +338,12 @@ impl PiRpcAdapter {
         // Version probing is only executable/version readiness. It does not
         // read auth.json/models.json, invoke a provider, or prove RPC/model
         // readiness.
-        if !has_supported_version(&output) {
-            return Err(PiRpcFailureKind::UnsupportedVersion);
-        }
-        Ok(executable)
+        let summary = availability_summary_from_version_output(&output)
+            .ok_or(PiRpcFailureKind::UnsupportedVersion)?;
+        Ok(ResolvedPiExecutable {
+            path: executable,
+            summary,
+        })
     }
 
     async fn resolve_executable(&self) -> Result<PathBuf, PiRpcFailureKind> {
@@ -379,7 +391,10 @@ impl PiRpcAdapter {
                 if self
                     .probe_executable_version(&candidate)
                     .await
-                    .is_ok_and(|output| output.status.success() && has_supported_version(&output))
+                    .is_ok_and(|output| {
+                        output.status.success()
+                            && availability_summary_from_version_output(&output).is_some()
+                    })
                 {
                     return Ok(candidate);
                 }
@@ -768,7 +783,7 @@ impl PiRpcAdapter {
         };
         let extension_path = extension.path.clone();
         let executable = match self.probe_pi().await {
-            Ok(path) => path,
+            Ok(resolved) => resolved.path,
             Err(reason) => {
                 let reason = extension.cleanup().err().unwrap_or(reason);
                 return PiRpcReply::Unavailable { reason };
@@ -1065,7 +1080,9 @@ impl PiRpcPort for PiRpcAdapter {
     async fn execute(&self, command: PiRpcCommand) -> PortResult<PiRpcReply> {
         match command {
             PiRpcCommand::Probe { .. } => match self.probe_pi().await {
-                Ok(_) => Ok(PiRpcReply::Available),
+                Ok(resolved) => Ok(PiRpcReply::Available {
+                    summary: resolved.summary,
+                }),
                 Err(reason) => Ok(PiRpcReply::Unavailable { reason }),
             },
             PiRpcCommand::Start {
@@ -2002,15 +2019,24 @@ fn parse_command_paths(bytes: &[u8]) -> Vec<PathBuf> {
         .collect()
 }
 
-fn has_supported_version(output: &std::process::Output) -> bool {
+fn availability_summary_from_version_output(
+    output: &std::process::Output,
+) -> Option<PiRpcAvailabilitySummary> {
     [output.stdout.as_slice(), output.stderr.as_slice()]
         .into_iter()
-        .any(|bytes| {
-            String::from_utf8(bytes.to_vec()).ok().is_some_and(|value| {
-                SUPPORTED_PI_RPC_VERSIONS
-                    .iter()
-                    .any(|version| value.trim() == *version)
-            })
+        .find_map(|bytes| {
+            let value = String::from_utf8(bytes.to_vec()).ok()?;
+            let value = value.trim();
+            SUPPORTED_PI_RPC_PROFILES
+                .iter()
+                .find_map(|(literal, version)| {
+                    (*literal == value).then(|| {
+                        PiRpcAvailabilitySummary::new(
+                            *version,
+                            PiRpcVersionEvidenceSource::LocalVersionProbe,
+                        )
+                    })
+                })
         })
 }
 

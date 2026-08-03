@@ -15,7 +15,7 @@ const snapshot = (
 ): WorkbenchRuntimeSnapshot => ({
   schemaVersion: 1,
   phase,
-  adapter: { identity: 'pi-rpc-p0', available: phase === 'ready' },
+  adapter: { identity: 'pi-rpc-p0', available: phase === 'ready', readiness: null },
   workspace: null,
   sessions: [],
   pendingOperations: [],
@@ -275,7 +275,7 @@ describe('WorkbenchRuntimeStore', () => {
     const incompatible = {
       ...snapshot(),
       schemaVersion: 2,
-      adapter: { identity: 'another-runtime', available: false },
+      adapter: { identity: 'another-runtime', available: false, readiness: null },
     } as unknown as WorkbenchRuntimeSnapshot;
     const client: WorkbenchRuntimeClient = {
       subscribe: vi.fn(async () => vi.fn()),
@@ -300,6 +300,32 @@ describe('WorkbenchRuntimeStore', () => {
       adapter: {
         identity: 'pi-rpc-p0',
         available: true,
+        readiness: {
+          version: {
+            version: '0.83.0',
+            profile: 'pi-rpc-0.83.0-p0',
+            evidenceSource: 'local_version_probe',
+          },
+          capabilities: {
+            required: [
+              'prompt',
+              'follow_up',
+              'abort',
+              'get_state',
+              'get_entries',
+              'get_entries.entries',
+              'get_entries.leaf_id',
+              'get_entries.since',
+              'message_update',
+              'tool_execution_start',
+              'tool_execution_update',
+              'tool_execution_end',
+              'agent_settled',
+              'extension_ui_request',
+              'extension_ui_response',
+            ],
+          },
+        },
         endpoint: secretCanary,
       },
       error: {
@@ -323,6 +349,7 @@ describe('WorkbenchRuntimeStore', () => {
 
     await store.getState().start();
     expect(JSON.stringify(store.getState().snapshot)).not.toContain(secretCanary);
+    expect(store.getState().snapshot?.adapter.readiness?.version.version).toBe('0.83.0');
     expect(store.getState().snapshot?.error?.summary).toBe(
       'The Halo Workbench Runtime reported an error',
     );
@@ -336,6 +363,35 @@ describe('WorkbenchRuntimeStore', () => {
 
     expect(JSON.stringify(store.getState().lastEvent)).not.toContain(secretCanary);
     expect(store.getState().lastEvent).toBeNull();
+  });
+
+  it('fails closed when adapter readiness contains non-enumerated public fields', async () => {
+    const client: WorkbenchRuntimeClient = {
+      subscribe: vi.fn(async () => vi.fn()),
+      readSnapshot: vi.fn(async () => ({
+        ...snapshot(0, 0, 'ready'),
+        adapter: {
+          identity: 'pi-rpc-p0',
+          available: true,
+          readiness: {
+            version: {
+              version: '0.83.0 C:\\Users\\secret',
+              profile: 'pi-rpc-0.83.0-p0',
+              evidenceSource: 'local_version_probe',
+            },
+            capabilities: { required: ['prompt'] },
+          },
+        },
+      } as unknown as WorkbenchRuntimeSnapshot)),
+      submitIntent: vi.fn(),
+    };
+    const store = createWorkbenchRuntimeStore(client);
+
+    await store.getState().start();
+
+    expect(store.getState().syncStatus).toBe('failed');
+    expect(store.getState().stableErrorCode).toBe('runtime_contract_mismatch');
+    expect(store.getState().snapshot).toBeNull();
   });
 
   it('classifies malformed snapshot payloads as a contract mismatch', async () => {

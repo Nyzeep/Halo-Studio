@@ -10,10 +10,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 
 use bitfun_runtime_ports::{
-    ClockPort, PiProviderReadinessPort, PiRpcCommand, PiRpcEvent, PiRpcFailureKind,
-    PiRpcOperationDecision, PiRpcOperationKind, PiRpcPort, PiRpcReply, PiRpcSessionMode,
-    PiRpcWorkspace, PortErrorKind, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
-    PI_RPC_ADAPTER_IDENTITY,
+    ClockPort, PiProviderReadinessPort, PiRpcAvailabilitySummary, PiRpcCapability, PiRpcCommand,
+    PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind, PiRpcPort,
+    PiRpcReply, PiRpcSessionMode, PiRpcVersionEvidenceSource, PiRpcWorkspace, PortErrorKind,
+    WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, PI_RPC_ADAPTER_IDENTITY,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -41,6 +41,7 @@ pub enum HaloWorkbenchPhase {
 pub struct HaloWorkbenchAdapterSnapshot {
     pub identity: String,
     pub available: bool,
+    pub readiness: Option<PiRpcAvailabilitySummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -429,6 +430,7 @@ enum CleanupRecord {
 struct RuntimeState {
     phase: HaloWorkbenchPhase,
     adapter_available: bool,
+    adapter_readiness: Option<PiRpcAvailabilitySummary>,
     workspace: Option<HaloWorkbenchWorkspaceSnapshot>,
     sessions: BTreeMap<String, HaloWorkbenchSessionSnapshot>,
     pending_operations: BTreeMap<String, HaloWorkbenchPendingOperationSnapshot>,
@@ -446,6 +448,7 @@ impl Default for RuntimeState {
         Self {
             phase: HaloWorkbenchPhase::Disconnected,
             adapter_available: false,
+            adapter_readiness: None,
             workspace: None,
             sessions: BTreeMap::new(),
             pending_operations: BTreeMap::new(),
@@ -484,6 +487,7 @@ impl HaloWorkbenchRuntimeInner {
             adapter: HaloWorkbenchAdapterSnapshot {
                 identity: PI_RPC_ADAPTER_IDENTITY.to_string(),
                 available: state.adapter_available,
+                readiness: state.adapter_readiness.clone(),
             },
             workspace: state.workspace.clone(),
             sessions: state.sessions.values().cloned().collect(),
@@ -1119,6 +1123,7 @@ impl HaloWorkbenchRuntime {
             if cleanup_generation.is_some() || state.phase != HaloWorkbenchPhase::Disconnected {
                 state.phase = HaloWorkbenchPhase::Stopping;
                 state.adapter_available = false;
+                state.adapter_readiness = None;
                 state.error = None;
             }
             (cleanup_generation, state.generation)
@@ -1204,6 +1209,7 @@ impl HaloWorkbenchRuntime {
                 state.pending_operations.clear();
                 state.phase = HaloWorkbenchPhase::Probing;
                 state.adapter_available = false;
+                state.adapter_readiness = None;
                 state.error = None;
                 true
             },
@@ -1221,8 +1227,22 @@ impl HaloWorkbenchRuntime {
         if !self.is_current_generation(generation) {
             return Ok(self.inner.receipt(request_id, None));
         }
-        match probe {
-            Ok(PiRpcReply::Available) | Ok(PiRpcReply::Accepted) => {}
+        let adapter_readiness = match probe {
+            Ok(PiRpcReply::Available { summary }) => {
+                if !valid_adapter_readiness_summary(&summary) {
+                    let error = adapter_failure(PiRpcFailureKind::CapabilityMismatch);
+                    self.inner
+                        .fail_generation(generation, Some(request_id), error.clone());
+                    return Err(error);
+                }
+                summary
+            }
+            Ok(PiRpcReply::Accepted) => {
+                let error = adapter_failure(PiRpcFailureKind::CapabilityMismatch);
+                self.inner
+                    .fail_generation(generation, Some(request_id), error.clone());
+                return Err(error);
+            }
             Ok(PiRpcReply::Unavailable { reason }) => {
                 let error = adapter_failure(reason);
                 self.inner
@@ -1234,7 +1254,25 @@ impl HaloWorkbenchRuntime {
                     .fail_generation(generation, Some(request_id), error.clone());
                 return Err(error);
             }
-        }
+        };
+        let public_adapter_readiness = adapter_readiness.clone();
+        self.inner.publish_transition(
+            Some(request_id),
+            HaloWorkbenchEventKind::RuntimeStateChanged,
+            "Workbench Runtime adapter profile was verified",
+            None,
+            None,
+            move |state| {
+                if state.generation != generation
+                    || state.phase != HaloWorkbenchPhase::Probing
+                    || state.terminated
+                {
+                    return false;
+                }
+                state.adapter_readiness = Some(public_adapter_readiness);
+                true
+            },
+        );
 
         let provider_readiness = self.inner.provider_readiness.check().await;
         if !self.is_current_generation(generation) {
@@ -1270,12 +1308,13 @@ impl HaloWorkbenchRuntime {
             "Workbench Runtime is starting",
             None,
             None,
-            |state| {
+            move |state| {
                 if state.generation != generation || state.terminated {
                     return false;
                 }
                 state.phase = HaloWorkbenchPhase::Starting;
                 state.adapter_available = true;
+                state.adapter_readiness = Some(adapter_readiness);
                 state.error = None;
                 true
             },
@@ -1298,7 +1337,7 @@ impl HaloWorkbenchRuntime {
             return Ok(self.inner.receipt(request_id, None));
         }
         match start {
-            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available) => {
+            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) => {
                 Ok(self.inner.receipt(request_id, None))
             }
             Ok(PiRpcReply::Unavailable { reason }) => {
@@ -1332,6 +1371,7 @@ impl HaloWorkbenchRuntime {
             if cleanup_generation.is_some() || state.phase != HaloWorkbenchPhase::Disconnected {
                 state.phase = HaloWorkbenchPhase::Stopping;
                 state.adapter_available = false;
+                state.adapter_readiness = None;
                 state.error = None;
             }
             (cleanup_generation, state.generation)
@@ -1358,6 +1398,7 @@ impl HaloWorkbenchRuntime {
                     }
                     state.phase = HaloWorkbenchPhase::Disconnected;
                     state.adapter_available = false;
+                    state.adapter_readiness = None;
                     state.workspace = None;
                     state.sessions.clear();
                     state.pending_operations.clear();
@@ -1415,6 +1456,7 @@ impl HaloWorkbenchRuntime {
                 }
                 state.phase = HaloWorkbenchPhase::Disconnected;
                 state.adapter_available = false;
+                state.adapter_readiness = None;
                 if state.adapter_generation == Some(cleanup_generation) {
                     state.adapter_generation = None;
                 }
@@ -1457,7 +1499,7 @@ impl HaloWorkbenchRuntime {
                                 .execute(PiRpcCommand::Shutdown { generation })
                                 .await
                         } {
-                            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available) => Ok(()),
+                            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) => Ok(()),
                             Ok(PiRpcReply::Unavailable { .. }) => Err(HaloWorkbenchError::new(
                                 "cleanup_failed",
                                 "Workbench Runtime cleanup did not complete",
@@ -1724,7 +1766,7 @@ impl HaloWorkbenchRuntime {
         failure_phase: HaloWorkbenchSessionPhase,
     ) -> Result<(), HaloWorkbenchError> {
         let error = match result {
-            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available) => return Ok(()),
+            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) => return Ok(()),
             Ok(PiRpcReply::Unavailable { reason }) => adapter_failure(reason),
             Err(error) => error,
         };
@@ -1836,7 +1878,7 @@ impl HaloWorkbenchRuntime {
         self.ensure_workspace_trusted(generation).await?;
         self.ensure_session_action_allowed(generation, &session_id)?;
         match result {
-            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available) => {
+            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) => {
                 Ok(self.inner.receipt(request_id, Some(session_id)))
             }
             Ok(PiRpcReply::Unavailable { reason }) => {
@@ -1982,6 +2024,12 @@ fn request_fingerprint(intent: &HaloWorkbenchIntent) -> Result<[u8; 32], HaloWor
         )
     })?;
     Ok(Sha256::digest(encoded).into())
+}
+
+fn valid_adapter_readiness_summary(summary: &PiRpcAvailabilitySummary) -> bool {
+    summary.version.profile == summary.version.version.compatibility_profile()
+        && summary.version.evidence_source == PiRpcVersionEvidenceSource::LocalVersionProbe
+        && summary.capabilities.required.as_slice() == PiRpcCapability::required_p0()
 }
 
 fn port_failure(kind: PortErrorKind) -> HaloWorkbenchError {

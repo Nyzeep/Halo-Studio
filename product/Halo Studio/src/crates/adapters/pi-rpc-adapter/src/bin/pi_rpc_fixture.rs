@@ -32,6 +32,10 @@ fn main() {
             println!("pi-development-build");
             return;
         }
+        if mode == "version_probe_0830" {
+            println!("0.83.0");
+            return;
+        }
         println!("0.81.1");
         return;
     }
@@ -115,6 +119,16 @@ fn main() {
                     command,
                     true,
                     json!({ "entries": [] }),
+                );
+                continue;
+            }
+            "missing_get_entries_capability" if command == "get_entries" => {
+                respond(
+                    &mut stdout,
+                    request.get("id").and_then(Value::as_str),
+                    command,
+                    false,
+                    Value::Null,
                 );
                 continue;
             }
@@ -251,7 +265,10 @@ fn main() {
                         }
                     }
                 }
-                "graceful_abort" | "hang_abort" | "hang_abort_response" => {
+                "graceful_abort"
+                | "hang_abort"
+                | "hang_abort_response"
+                | "agent_end_without_settled" => {
                     respond(
                         &mut stdout,
                         request.get("id").and_then(Value::as_str),
@@ -260,6 +277,9 @@ fn main() {
                         Value::Null,
                     );
                     send_event(&mut stdout, json!({ "type": "agent_start" }));
+                    if mode == "agent_end_without_settled" {
+                        send_event(&mut stdout, json!({ "type": "agent_end" }));
+                    }
                 }
                 "malformed_message_update" => {
                     respond(
@@ -311,6 +331,24 @@ fn main() {
                         }),
                     );
                 }
+                "malformed_extension_ui_request" => {
+                    respond(
+                        &mut stdout,
+                        request.get("id").and_then(Value::as_str),
+                        command,
+                        true,
+                        Value::Null,
+                    );
+                    send_event(&mut stdout, json!({ "type": "agent_start" }));
+                    send_event(
+                        &mut stdout,
+                        json!({
+                            "type": "extension_ui_request",
+                            "id": "ui-request-malformed",
+                            "method": "confirm"
+                        }),
+                    );
+                }
                 "extension" | "extension_duplicate" | "extension_timeout" | "extension_error" => {
                     respond(
                         &mut stdout,
@@ -349,7 +387,7 @@ fn main() {
                     true,
                     Value::Null,
                 );
-                if mode != "hang_abort" {
+                if mode != "hang_abort" && mode != "agent_end_without_settled" {
                     send_event(&mut stdout, json!({ "type": "agent_settled" }));
                 }
             }

@@ -50,6 +50,7 @@ export interface WorkbenchRuntimeSnapshot {
   adapter: {
     identity: typeof PI_RPC_ADAPTER_IDENTITY;
     available: boolean;
+    readiness: WorkbenchRuntimeAdapterReadiness | null;
   };
   workspace: WorkbenchRuntimeWorkspace | null;
   sessions: WorkbenchRuntimeSession[];
@@ -57,6 +58,42 @@ export interface WorkbenchRuntimeSnapshot {
   lastSequence: number;
   stateVersion: number;
   error: WorkbenchRuntimeError | null;
+}
+
+export type WorkbenchPiRpcVersion = '0.81.1' | '0.83.0';
+
+export type WorkbenchPiRpcCompatibilityProfile =
+  | 'pi-rpc-0.81.1-p0'
+  | 'pi-rpc-0.83.0-p0';
+
+export type WorkbenchPiRpcVersionEvidenceSource = 'local_version_probe';
+
+export type WorkbenchPiRpcCapability =
+  | 'prompt'
+  | 'follow_up'
+  | 'abort'
+  | 'get_state'
+  | 'get_entries'
+  | 'get_entries.entries'
+  | 'get_entries.leaf_id'
+  | 'get_entries.since'
+  | 'message_update'
+  | 'tool_execution_start'
+  | 'tool_execution_update'
+  | 'tool_execution_end'
+  | 'agent_settled'
+  | 'extension_ui_request'
+  | 'extension_ui_response';
+
+export interface WorkbenchRuntimeAdapterReadiness {
+  version: {
+    version: WorkbenchPiRpcVersion;
+    profile: WorkbenchPiRpcCompatibilityProfile;
+    evidenceSource: WorkbenchPiRpcVersionEvidenceSource;
+  };
+  capabilities: {
+    required: WorkbenchPiRpcCapability[];
+  };
 }
 
 export type WorkbenchRuntimeEventKind =

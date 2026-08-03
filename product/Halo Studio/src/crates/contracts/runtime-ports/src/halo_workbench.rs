@@ -278,6 +278,145 @@ pub enum PiRpcFailureKind {
     Internal,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PiRpcVersion {
+    #[serde(rename = "0.81.1")]
+    V0_81_1,
+    #[serde(rename = "0.83.0")]
+    V0_83_0,
+}
+
+impl PiRpcVersion {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::V0_81_1 => "0.81.1",
+            Self::V0_83_0 => "0.83.0",
+        }
+    }
+
+    pub const fn compatibility_profile(self) -> PiRpcCompatibilityProfile {
+        match self {
+            Self::V0_81_1 => PiRpcCompatibilityProfile::PiRpc0811P0,
+            Self::V0_83_0 => PiRpcCompatibilityProfile::PiRpc0830P0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PiRpcCompatibilityProfile {
+    #[serde(rename = "pi-rpc-0.81.1-p0")]
+    PiRpc0811P0,
+    #[serde(rename = "pi-rpc-0.83.0-p0")]
+    PiRpc0830P0,
+}
+
+impl PiRpcCompatibilityProfile {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::PiRpc0811P0 => "pi-rpc-0.81.1-p0",
+            Self::PiRpc0830P0 => "pi-rpc-0.83.0-p0",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PiRpcVersionEvidenceSource {
+    LocalVersionProbe,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PiRpcCapability {
+    #[serde(rename = "prompt")]
+    Prompt,
+    #[serde(rename = "follow_up")]
+    FollowUp,
+    #[serde(rename = "abort")]
+    Abort,
+    #[serde(rename = "get_state")]
+    GetState,
+    #[serde(rename = "get_entries")]
+    GetEntries,
+    #[serde(rename = "get_entries.entries")]
+    GetEntriesEntries,
+    #[serde(rename = "get_entries.leaf_id")]
+    GetEntriesLeafId,
+    #[serde(rename = "get_entries.since")]
+    GetEntriesSince,
+    #[serde(rename = "message_update")]
+    MessageUpdate,
+    #[serde(rename = "tool_execution_start")]
+    ToolExecutionStart,
+    #[serde(rename = "tool_execution_update")]
+    ToolExecutionUpdate,
+    #[serde(rename = "tool_execution_end")]
+    ToolExecutionEnd,
+    #[serde(rename = "agent_settled")]
+    AgentSettled,
+    #[serde(rename = "extension_ui_request")]
+    ExtensionUiRequest,
+    #[serde(rename = "extension_ui_response")]
+    ExtensionUiResponse,
+}
+
+impl PiRpcCapability {
+    pub const fn required_p0() -> &'static [Self] {
+        &[
+            Self::Prompt,
+            Self::FollowUp,
+            Self::Abort,
+            Self::GetState,
+            Self::GetEntries,
+            Self::GetEntriesEntries,
+            Self::GetEntriesLeafId,
+            Self::GetEntriesSince,
+            Self::MessageUpdate,
+            Self::ToolExecutionStart,
+            Self::ToolExecutionUpdate,
+            Self::ToolExecutionEnd,
+            Self::AgentSettled,
+            Self::ExtensionUiRequest,
+            Self::ExtensionUiResponse,
+        ]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PiRpcVersionSummary {
+    pub version: PiRpcVersion,
+    pub profile: PiRpcCompatibilityProfile,
+    pub evidence_source: PiRpcVersionEvidenceSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PiRpcCapabilitySummary {
+    pub required: Vec<PiRpcCapability>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PiRpcAvailabilitySummary {
+    pub version: PiRpcVersionSummary,
+    pub capabilities: PiRpcCapabilitySummary,
+}
+
+impl PiRpcAvailabilitySummary {
+    pub fn new(version: PiRpcVersion, evidence_source: PiRpcVersionEvidenceSource) -> Self {
+        Self {
+            version: PiRpcVersionSummary {
+                version,
+                profile: version.compatibility_profile(),
+                evidence_source,
+            },
+            capabilities: PiRpcCapabilitySummary {
+                required: PiRpcCapability::required_p0().to_vec(),
+            },
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub enum PiRpcCommand {
     Probe {
@@ -398,9 +537,9 @@ impl fmt::Debug for PiRpcCommand {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PiRpcReply {
-    Available,
+    Available { summary: PiRpcAvailabilitySummary },
     Accepted,
     Unavailable { reason: PiRpcFailureKind },
 }
