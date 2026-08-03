@@ -37,6 +37,14 @@ pub enum HaloWorkbenchPhase {
     Stopping,
 }
 
+/// Halo-local capability names projected from the Pi P0 contract.
+///
+/// Contract owner: `HaloWorkbenchRuntime`; consumers are its Tauri/Web
+/// readiness snapshot and contract tests. Versioning follows
+/// `HALO_WORKBENCH_SCHEMA_VERSION`. Verification is covered by the runtime
+/// contract and Web serialization tests. Delete this enum when the public
+/// Workbench readiness projection has no current consumer and is replaced by
+/// a versioned owner contract.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum HaloWorkbenchCapability {
@@ -112,6 +120,13 @@ impl From<PiRpcCapability> for HaloWorkbenchCapability {
     }
 }
 
+/// Required-versus-verified Halo-local capability facts.
+///
+/// Contract owner: `HaloWorkbenchRuntime`; consumers are the Tauri/Web
+/// readiness view and its contract tests. Versioning follows
+/// `HALO_WORKBENCH_SCHEMA_VERSION`. Verification is covered by Workbench
+/// Runtime and Web store/selector tests. Delete this DTO when no current
+/// public readiness consumer remains.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HaloWorkbenchCapabilitySummary {
@@ -119,6 +134,13 @@ pub struct HaloWorkbenchCapabilitySummary {
     pub verified: Vec<HaloWorkbenchCapability>,
 }
 
+/// Halo-local adapter version and readiness projection.
+///
+/// Contract owner: `HaloWorkbenchRuntime`; consumers are the Tauri/Web
+/// snapshot, startup state, and readiness contract tests. Versioning follows
+/// `HALO_WORKBENCH_SCHEMA_VERSION`; Pi protocol versions remain nested facts.
+/// Delete this DTO when the Workbench adapter readiness view is replaced and
+/// no current consumer depends on this projection.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HaloWorkbenchAdapterReadiness {
@@ -150,6 +172,13 @@ impl From<&PiRpcAvailabilitySummary> for HaloWorkbenchAdapterReadiness {
     }
 }
 
+/// Public adapter snapshot owned and emitted by `HaloWorkbenchRuntime`.
+///
+/// Consumers are the Tauri/Web runtime snapshot and contract tests. Versioning
+/// follows `HALO_WORKBENCH_SCHEMA_VERSION`; verification covers serialization,
+/// readiness transitions, and cleanup. Delete the readiness field/DTO only
+/// when that public snapshot is replaced by a versioned owner contract with no
+/// remaining consumer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HaloWorkbenchAdapterSnapshot {

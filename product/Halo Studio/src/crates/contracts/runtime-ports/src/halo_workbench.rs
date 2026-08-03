@@ -278,6 +278,14 @@ pub enum PiRpcFailureKind {
     Internal,
 }
 
+/// Installed Pi version exposed by the local P0 compatibility contract.
+///
+/// Contract owner: `PiRpcAdapter` through `PiRpcPort`. Consumers are the
+/// Workbench Runtime readiness projection and its Tauri/Web read-only view.
+/// Versioning is additive through a new compatibility profile. Verification
+/// is covered by the Pi RPC contract tests and readiness fixtures. Delete this
+/// type when the Pi RPC port and its versioned readiness profile are replaced
+/// by a different production execution contract with no remaining consumer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PiRpcVersion {
     #[serde(rename = "0.81.1")]
@@ -302,6 +310,13 @@ impl PiRpcVersion {
     }
 }
 
+/// Versioned Pi RPC capability profile selected by `PiRpcVersion`.
+///
+/// Contract owner: `PiRpcAdapter` through `PiRpcPort`; consumers are the
+/// adapter and Workbench Runtime readiness checks. Versioning is additive:
+/// incompatible protocol changes require a new profile. Verification is in
+/// the Pi RPC contract and Workbench Runtime contract tests. Delete this type
+/// when no supported production Pi RPC profile remains in use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PiRpcCompatibilityProfile {
     #[serde(rename = "pi-rpc-0.81.1-p0")]
@@ -319,12 +334,27 @@ impl PiRpcCompatibilityProfile {
     }
 }
 
+/// Evidence source for the version fact in the P0 readiness summary.
+///
+/// Contract owner: `PiRpcAdapter`; the Workbench Runtime is the sole current
+/// consumer. Versioning follows the readiness summary schema. Verification is
+/// covered by the local-version-probe and fail-closed readiness tests. Delete
+/// this type when the adapter no longer exposes version evidence to the
+/// Workbench Runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PiRpcVersionEvidenceSource {
     LocalVersionProbe,
 }
 
+/// Pi RPC capabilities in the fixed P0 compatibility profile.
+///
+/// Contract owner: `PiRpcAdapter`/`PiRpcPort`; consumers are the adapter
+/// handshake, Workbench Runtime projection, and their contract tests.
+/// Versioning is additive through compatibility profiles; `verified` never
+/// means more than the current no-model readiness handshake proves. Delete
+/// this type when the Pi RPC port and all current readiness consumers are
+/// retired in favor of a replacement execution contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PiRpcCapability {
     #[serde(rename = "prompt")]
@@ -394,6 +424,13 @@ impl PiRpcCapability {
     }
 }
 
+/// Version and evidence facts returned by the Pi RPC port.
+///
+/// Contract owner: `PiRpcAdapter`; consumers are `PiRpcAvailabilitySummary`
+/// and the Workbench Runtime's Halo-local projection. Versioning follows the
+/// selected Pi compatibility profile. Verification is covered by the Pi RPC
+/// and Workbench Runtime contract tests. Delete this DTO when no production
+/// readiness projection consumes version facts from `PiRpcPort`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PiRpcVersionSummary {
@@ -402,6 +439,13 @@ pub struct PiRpcVersionSummary {
     pub evidence_source: PiRpcVersionEvidenceSource,
 }
 
+/// Required-versus-verified capability facts for the P0 readiness contract.
+///
+/// Contract owner: `PiRpcAdapter`; consumers are the Workbench Runtime and
+/// its Tauri/Web read-only projection. Versioning follows the fixed P0 profile
+/// and is extended only with an explicit profile change. Verification is in
+/// Pi RPC and Workbench Runtime contract tests. Delete this DTO when that
+/// readiness projection no longer has a current consumer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PiRpcCapabilitySummary {
@@ -409,6 +453,13 @@ pub struct PiRpcCapabilitySummary {
     pub verified: Vec<PiRpcCapability>,
 }
 
+/// Complete adapter availability/readiness facts crossing `PiRpcPort`.
+///
+/// Contract owner: `PiRpcAdapter`; consumers are Workbench Runtime readiness
+/// validation and the Halo-local Tauri/Web snapshot. Versioning is governed by
+/// the Pi compatibility profile and Workbench schema. Verification is covered
+/// by adapter, runtime, and Web serialization tests. Delete this DTO when the
+/// Pi RPC readiness port and all of those consumers are replaced.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PiRpcAvailabilitySummary {
@@ -557,6 +608,13 @@ impl fmt::Debug for PiRpcCommand {
     }
 }
 
+/// Response contract for a controlled Pi RPC command.
+///
+/// Contract owner: `PiRpcPort`; consumers are `PiRpcAdapter` and
+/// `HaloWorkbenchRuntime`. Versioning is tied to the selected Pi compatibility
+/// profile. Verification is covered by adapter and Workbench Runtime contract
+/// tests. Delete this response shape when the P0 Pi RPC port is retired and no
+/// production execution path consumes these replies.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PiRpcReply {
     Available { summary: PiRpcAvailabilitySummary },
