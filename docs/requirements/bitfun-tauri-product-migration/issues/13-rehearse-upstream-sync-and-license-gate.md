@@ -69,6 +69,14 @@ lockfile、PiRpcAdapter Runtime、Workbench Runtime、runtime-ports、desktop/ru
 API 或共享启动参数。因此 audit script 以独立 CLI 存在，不能假装已经成为现有产品命令
 的 release gate。当前 gate 保持 `blocked`，直到主集成流程明确接入并重新记录完整验证矩阵。
 
+本轮收口的 release evidence seam 位于该审计 module：它以 inventory、extension
+source/hash、上游 candidate evidence、加载路径、宿主权限、依赖闭包、许可证和
+发行物证据为输入，统一产出 `blocked` 或 `eligible`。结果必须同时保留结构化
+`findings`、不泄露机器绝对路径的 `evidenceLocators` 和声明/新鲜检查得到的
+`blockingReasons`；`eligible` 只允许在所有证据检查通过且没有声明阻断时出现。
+CLI JSON 是唯一机器可验证结果，Markdown 和本票只解释该结果，不另行维护 release
+状态。当前 inventory 的 `blocked` 结论及其 fail-closed 原因保持不变。
+
 ## 本轮审计脚本收口
 
 - 只改动本票 owned 的 audit CLI/test：CLI 进程退出码和 JSON 输出有回归覆盖，

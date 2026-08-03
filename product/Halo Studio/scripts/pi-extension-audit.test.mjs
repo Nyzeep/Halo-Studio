@@ -7,7 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { auditInventory } from "./pi-extension-audit.mjs";
+import { auditInventory, auditReleaseGate } from "./pi-extension-audit.mjs";
 
 const AUDIT_SCRIPT = fileURLToPath(new URL("./pi-extension-audit.mjs", import.meta.url));
 
@@ -331,7 +331,7 @@ function createUpstreamFixture({ invalidRecord = true } = {}) {
         ],
       },
       representativeChangedPaths: {},
-      releaseGate: { status: "blocked", evidenceGaps: ["test"] },
+      releaseGate: { status: "passed", evidenceGaps: [] },
     }, null, 2),
   );
   fixture.manifest.upstreamCandidateEvidence = {
@@ -353,6 +353,97 @@ function runAuditCli(fixture, args = []) {
     { cwd: fixture.root, encoding: "utf8", windowsHide: true },
   );
 }
+
+test("release-gate seam returns a canonical blocked decision with reasons and safe evidence locators", () => {
+  const fixture = createFixture({
+    releaseGate: { status: "blocked", blockingReasons: ["candidate has not passed the release matrix"] },
+  });
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.equal(report.status, "blocked");
+  assert.ok(report.blockingReasons.includes("candidate has not passed the release matrix"));
+  assert.ok(report.evidenceLocators.some((locator) => (
+    locator.pointer === "manifest.upstreamCandidateEvidence.path"
+      && locator.locator === fixture.manifest.upstreamCandidateEvidence.path
+  )));
+  assert.ok(report.findings.every((finding) => typeof finding.locator === "string" && finding.locator.length > 0));
+  assert.ok(!JSON.stringify(report).includes(fixture.root));
+});
+
+test("release-gate seam returns eligible only when every evidence check passes", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.equal(report.status, "eligible", JSON.stringify(report.findings, null, 2));
+  assert.deepEqual(report.blockingReasons, []);
+  assert.deepEqual(report.findings, []);
+});
+
+test("release-gate findings redact absolute evidence paths", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const candidateEvidencePath = path.join(fixture.root, fixture.manifest.upstreamCandidateEvidence.path);
+  const candidateEvidence = JSON.parse(readFileSync(candidateEvidencePath, "utf8"));
+  candidateEvidence.base.initialImportManifest = path.join(fixture.root, "private-evidence.json");
+  writeFileSync(candidateEvidencePath, JSON.stringify(candidateEvidence, null, 2));
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.equal(report.status, "blocked");
+  const missingManifestFinding = report.findings.find((finding) => finding.code === "upstream-initial-import-manifest-missing");
+  assert.ok(missingManifestFinding);
+  assert.equal(missingManifestFinding.message, "Initial import manifest is missing: <external-path>");
+  assert.ok(!JSON.stringify(report).includes(fixture.root));
+});
+
+test("a declared blocker cannot be hidden behind a passing inventory status", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  fixture.manifest.releaseGate = { status: "passed", blockingReasons: ["release artifact is not validated"] };
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.equal(report.status, "blocked");
+  assert.ok(report.findings.some((finding) => finding.code === "release-gate-reasons-on-passed"));
+  assert.ok(report.blockingReasons.includes("release artifact is not validated"));
+});
+
+test("a blocked upstream candidate cannot make the release gate eligible", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const candidateEvidencePath = path.join(fixture.root, fixture.manifest.upstreamCandidateEvidence.path);
+  const candidateEvidence = JSON.parse(readFileSync(candidateEvidencePath, "utf8"));
+  candidateEvidence.releaseGate = { status: "blocked", evidenceGaps: ["candidate validation is incomplete"] };
+  writeFileSync(candidateEvidencePath, JSON.stringify(candidateEvidence, null, 2));
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.equal(report.status, "blocked");
+  assert.ok(report.findings.some((finding) => finding.code === "upstream-candidate-release-gate-blocked"));
+});
+
+test("audit exceptions return a structured blocked release-gate result", () => {
+  const fixture = createFixture();
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: null });
+
+  assert.equal(report.status, "blocked");
+  assert.ok(report.findings.some((finding) => finding.code === "audit-exception"));
+  assert.ok(report.findings.every((finding) => typeof finding.locator === "string"));
+  assert.ok(report.blockingReasons.length > 0);
+});
+
+test("CLI emits a structured blocked JSON result for argument exceptions", () => {
+  const result = spawnSync(process.execPath, [AUDIT_SCRIPT, "--json", "--root"], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+
+  assert.equal(result.status, 1);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.status, "blocked");
+  assert.ok(report.findings.some((finding) => finding.code === "audit-exception"));
+});
 
 test("local evidence is audited while missing host provenance blocks release", () => {
   const fixture = createFixture();
@@ -479,7 +570,7 @@ test("CLI help, blocked JSON, and passing JSON have explicit exit contracts", ()
   const passingFixture = createUpstreamFixture({ invalidRecord: false });
   const passed = runAuditCli(passingFixture, ["--json"]);
   assert.equal(passed.status, 0, `${passed.stderr}\n${passed.stdout}`);
-  assert.equal(JSON.parse(passed.stdout).status, "passed");
+  assert.equal(JSON.parse(passed.stdout).status, "eligible");
 });
 
 test("CLI rejects unknown arguments and missing option values", () => {

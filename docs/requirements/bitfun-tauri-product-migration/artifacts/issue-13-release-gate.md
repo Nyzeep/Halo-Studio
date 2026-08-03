@@ -66,7 +66,12 @@
 
 ## Release gate
 
-状态：`blocked`。
+以下是审计 CLI JSON 结果的可读快照；机器判定只以
+`node "product/Halo Studio/scripts/pi-extension-audit.mjs" --json` 的
+`status`、`findings`、`evidenceLocators` 和 `blockingReasons` 为准。本快照不
+独立维护另一套 release 状态。
+
+CLI 结果：`blocked`。
 
 逐项原因：
 
@@ -99,6 +104,9 @@ node --test "product/Halo Studio/scripts/pi-extension-audit.test.mjs"
 这些命令只读本地 manifest/source/Git object/许可证和 lockfile，不启动真实 Pi
 RPC、不发送模型请求、不读取真实凭据、不下载依赖。
 
+审计 module 的通过值是 `eligible`；任何声明阻断、缺失 provenance、host license、
+dependency closure、exact artifact 或 candidate validation 都只能返回 `blocked`。
+
 ## 本轮验证矩阵（2026-08-03）
 
 状态定义：`PASS` 表示本轮实际执行且退出码为 `0`；`BLOCKED` 表示命令实际执行
@@ -116,9 +124,9 @@ RPC、不发送模型请求、不读取真实凭据、不下载依赖。
 | `pnpm --dir "product/Halo Studio" run type-check:web` | `PASS` | 0 | `tsc --noEmit` passed |
 | `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter` | `PASS` | 0 | Serial rerun passed 17/17 (exit 0); a parallel invocation transiently reported 16/17 on `unknown_event` as `Transport` instead of `Protocol`, with no source change. |
 | `node --check "product/Halo Studio/scripts/pi-extension-audit.mjs"` | `PASS` | 0 | Audit CLI syntax check passed after the fail-closed scan/metadata changes. |
-| `$env:HALO_BITFUN_REFERENCE_ROOT='<matching read-only checkout for readonly-evidence://bitfun-latest>'; node "product/Halo Studio/scripts/pi-extension-audit.mjs" --json` | `BLOCKED` | 1 | Matching locator produced 11 findings: `release-gate-declared-blocked`, `upstream-history-boundary-untrusted`, `upstream-base-commit-unresolved`, `upstream-ancestry-unproven`, `upstream-initial-import-tree-mismatch`, `workspace-member-duplicate`, `built-in-extension-provenance-missing`, `host-source-provenance-missing`, `host-license-evidence-not-release`, `host-dependency-closure-incomplete`, and `release-artifact-evidence-missing`. |
+| `$env:HALO_BITFUN_REFERENCE_ROOT='<matching read-only checkout for readonly-evidence://bitfun-latest>'; node "product/Halo Studio/scripts/pi-extension-audit.mjs" --json` | `BLOCKED` | 1 | Matching locator produced 12 findings: `release-gate-declared-blocked`, `upstream-candidate-release-gate-blocked`, `upstream-history-boundary-untrusted`, `upstream-base-commit-unresolved`, `upstream-ancestry-unproven`, `upstream-initial-import-tree-mismatch`, `workspace-member-duplicate`, `built-in-extension-provenance-missing`, `host-source-provenance-missing`, `host-license-evidence-not-release`, `host-dependency-closure-incomplete`, and `release-artifact-evidence-missing`. |
 | `Remove-Item Env:HALO_BITFUN_REFERENCE_ROOT; node "product/Halo Studio/scripts/pi-extension-audit.mjs" --json` | `BLOCKED` | 1 | Missing locator is reported as `upstream-reference-tree-unavailable`; it is not interpreted as candidate provenance or a pass. |
-| `node --test "product/Halo Studio/scripts/pi-extension-audit.test.mjs"` | `PASS` | 0 | 61/61 audit contract tests passed, including external re-export rejection, computed global property/optional-call capability scanning with root aliases, canonical separation of host license paths from extension evidence/distribution/release-artifact paths, recorded `HEAD^`/clean-status evidence, source commit/tree/blob provenance, path-policy/permission validation, and host closure/license text claims. |
+| `node --test "product/Halo Studio/scripts/pi-extension-audit.test.mjs"` | `PASS` | 0 | 71/71 audit contract tests passed, including the blocked/eligible release-gate seam, upstream candidate-gate fail-closed behavior, structured exception output, safe evidence locators, declared-blocker fail-closed behavior, absolute-path redaction, external re-export rejection, computed global property/optional-call capability scanning with root aliases, canonical separation of host license paths from extension evidence/distribution/release-artifact paths, recorded `HEAD^`/clean-status evidence, source commit/tree/blob provenance, path-policy/permission validation, and host closure/license text claims. |
 | Tauri candidate build against the Halo product tree | `NOT_RUN` | — | Candidate was not applied; automatic merge is prohibited, so no candidate build claim is made. |
 | Base-tree Workbench Runtime Rust contracts: `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-agent-runtime --test workbench_runtime_contracts` | `PASS` | 0 | 16/16 passed on the existing Halo base tree; this is not candidate validation. |
 | Base-tree Web UI suite: `pnpm --dir "product/Halo Studio/src/web-ui" run test:run` | `PASS` | 0 | Fresh rerun: 362 files / 2,373 tests passed. This is still base-tree evidence, not candidate validation; no test source was changed. |
@@ -135,10 +143,10 @@ vendor checksum 文件仍记录其声明值而实际文件不同。这些 vendor
 
 ## 本轮 owned 审计变化
 
-本轮只修改 `pi-extension-audit.mjs`、其 Node contract test、架构审计说明、工单
-13 说明和第三方 notice。CLI 仍是独立只读审计入口，不是已接入 product/package
-release gate 的命令；测试通过只证明审计规则本身，不能把 base-tree 测试写成
-candidate validation。脚本新增的静态检查覆盖动态外部 import/require、网络能力、
+本轮只修改 `pi-extension-audit.mjs`、其 Node contract test、架构审计说明、release-gate
+artifact 和工单 13 说明。CLI 仍是独立只读审计入口，不是已接入 product/package release gate 的
+命令；测试通过只证明审计规则本身，不能把 base-tree 测试写成 candidate validation。
+脚本新增的 release-gate seam 与静态检查覆盖动态外部 import/require、网络能力、
 无扩展名文本输入、根式 Windows 路径脱敏、fail-closed extension metadata，以及
 完整 host closure/发行文件 evidence；computed `globalThis`/`window` property access
 （含 alias 与 optional computed call）和 extension-owned distribution/release-artifact

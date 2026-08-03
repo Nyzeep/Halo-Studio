@@ -94,9 +94,14 @@ The machine-readable inventory is
 `docs/architecture/pi-first-party-extension-inventory.json`. It records the
 fixed source version, source commit/tree/blob, SHA-256, load arguments,
 tool/event surface, host permissions, direct/transitive dependency
-boundary, license evidence, and update responsibility. The audit CLI is
-`product/Halo Studio/scripts/pi-extension-audit.mjs`; it is intentionally
-fail-closed and returns exit code `1` while the release gate is blocked.
+boundary, license evidence, and update responsibility. The release-gate
+module in `product/Halo Studio/scripts/pi-extension-audit.mjs` consumes that
+inventory and its source, candidate, dependency, load, license, and release
+evidence. Its public result has only two decisions: `blocked` or `eligible`.
+It also retains structured `findings`, safe `evidenceLocators`, and the
+declared plus freshly derived `blockingReasons`. The CLI is the only
+machine-verifiable entry point: it emits this result as JSON and returns exit
+code `1` for `blocked` evidence.
 For a fresh check of the external candidate tree, set the local read-only
 checkout through `HALO_BITFUN_REFERENCE_ROOT`; the committed evidence stores
 only the `readonly-evidence://bitfun-latest` locator and never a machine path.
@@ -110,24 +115,30 @@ package license is not inferred from its name; any future bundled Pi
 distribution requires its own license, attribution, source provenance, and
 complete dependency review.
 
-## Audit CLI contract
+## Audit CLI and release-gate seam contract
 
-The audit CLI is a read-only evidence checker, not a runtime gate that starts
-Pi. It only reads the manifest, repository files, Git objects, and explicitly
-provided read-only evidence trees; it does not write files, install packages,
-open network connections, read credentials, send prompts, or execute a Pi
-binary. It returns exit code `0` only for a complete passing fixture and exit
-code `1` for blocked evidence, invalid arguments, or an audit exception.
+`auditReleaseGate({ manifestPath, repoRoot })` is a read-only evidence checker,
+not a runtime gate that starts Pi. It only reads the manifest, repository
+files, Git objects, and explicitly provided read-only evidence trees; it does
+not write files, install packages, open network connections, read credentials,
+send prompts, or execute a Pi binary. A complete fixture returns
+`{ status: "eligible", findings: [], blockingReasons: [] }`; incomplete,
+declared-blocked, invalid, or exceptional evidence returns
+`status: "blocked"` with structured findings and safe locators. The CLI delegates to
+this seam; a declared blocker remains `blocked` even if an input record says
+`passed`. Markdown records explain the result but do not maintain a second
+release state.
 
-The contract tests cover the real CLI process (`--help`, blocked/pass `--json`,
-unknown and missing arguments), rooted Windows path redaction, dynamic
+The contract tests cover the release-gate seam and real CLI process (`--help`,
+blocked/eligible `--json`, unknown and missing arguments), rooted Windows path
+redaction, dynamic
 extension imports/host capabilities, extensionless runtime inputs, computed
 `globalThis`/`window` property access (including aliases and optional computed
 calls), including aliases bound from `const g = globalThis`, structured fail-closed
 extension metadata, and host closure/release-file evidence. Host license evidence and release files are canonicalized against all
 extension-owned license evidence, `distributionFiles`, and
 `releaseArtifactEvidence` paths, so reuse is blocked. The current source
-contains 61 audit contract tests; upstream evidence also requires recorded
+contains 71 audit contract tests; upstream evidence also requires recorded
 `HEAD^` and clean-status command results. The release matrix must be updated
 only from the command's actual exit code and test count.
 
