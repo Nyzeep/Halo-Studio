@@ -141,4 +141,19 @@ describe('PiConfigurationClient', () => {
     });
     expect(invoke).not.toHaveBeenCalled();
   });
+
+  it('accepts the production-length opaque credential reference', async () => {
+    const invoke = vi.fn(async () => undefined);
+    const client = createPiConfigurationClient({ invoke });
+    const credentialRef = `halo-pi-credential-v1-${'a'.repeat(64)}-${'b'.repeat(36)}`;
+
+    await expect(client.createConfiguration({
+      ...CONFIGURATION,
+      credentialRef,
+    })).resolves.toBeUndefined();
+    expect(invoke).toHaveBeenCalledWith(
+      HALO_PI_CONFIGURATION_CREATE_COMMAND,
+      { request: { configuration: { ...CONFIGURATION, credentialRef } } },
+    );
+  });
 });

@@ -18,6 +18,9 @@ export const HALO_PI_CONFIGURATION_DELETE_COMMAND = 'halo_pi_configuration_delet
 export const HALO_PI_CONFIGURATION_ROLLBACK_COMMAND = 'halo_pi_configuration_rollback';
 export const HALO_PI_CONFIGURATION_READINESS_COMMAND = 'halo_pi_configuration_readiness';
 
+const PI_CREDENTIAL_REF_PREFIX = 'halo-pi-credential-v1-';
+const PI_CREDENTIAL_REF_MAX_LENGTH = 128;
+
 export interface PiConfigurationTransport {
   invoke<T>(command: string, args: Record<string, unknown>): Promise<T>;
 }
@@ -81,6 +84,19 @@ const isSafeBaseUrl = (value: unknown): value is string | null => {
   }
 };
 
+const isSafeCredentialRef = (value: unknown): value is string => {
+  if (
+    typeof value !== 'string'
+    || !value.startsWith(PI_CREDENTIAL_REF_PREFIX)
+    || value.length > PI_CREDENTIAL_REF_MAX_LENGTH
+  ) {
+    return false;
+  }
+  const suffix = value.slice(PI_CREDENTIAL_REF_PREFIX.length);
+  return suffix.length > 0
+    && Array.from(suffix).every(character => /[a-zA-Z0-9-]/u.test(character));
+};
+
 const rejectInvalidInput = (): never => {
   throw new PiConfigurationError('pi_configuration_invalid');
 };
@@ -104,7 +120,7 @@ const validateConfigurationInput = (configuration: PiRuntimeConfigurationWriteIn
     || configuration === null
     || !isSafeSelection(configuration.providerId)
     || !isSafeSelection(configuration.modelId)
-    || !/^halo-pi-credential-v1-[a-zA-Z0-9-]{1,96}$/u.test(configuration.credentialRef)
+    || !isSafeCredentialRef(configuration.credentialRef)
     || !isSafeBaseUrl(configuration.baseUrl)
     || typeof configuration.startupOptions !== 'object'
     || configuration.startupOptions === null
@@ -156,7 +172,7 @@ export interface PiConfigurationClient {
 export const createPiConfigurationClient = (
   transport: PiConfigurationTransport,
 ): PiConfigurationClient => ({
-  writeCredential: (providerId, secret) => {
+  writeCredential: async (providerId, secret) => {
     validateCredentialInput(providerId, secret);
     return invoke<PiCredentialWriteResponse>(
       transport,
@@ -174,7 +190,7 @@ export const createPiConfigurationClient = (
     HALO_PI_CONFIGURATION_SNAPSHOT_COMMAND,
     { request: {} },
   ),
-  createConfiguration: configuration => {
+  createConfiguration: async configuration => {
     validateConfigurationInput(configuration);
     return invoke<void>(
       transport,
@@ -182,7 +198,7 @@ export const createPiConfigurationClient = (
       { request: { configuration } },
     );
   },
-  updateConfiguration: configuration => {
+  updateConfiguration: async configuration => {
     validateConfigurationInput(configuration);
     return invoke<void>(
       transport,
