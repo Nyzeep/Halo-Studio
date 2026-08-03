@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { inflateRawSync } from "node:zlib";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPO_ROOT = path.resolve(SCRIPT_DIR, "..", "..", "..");
@@ -17,7 +18,18 @@ const GIT_OBJECT_PATTERN = /^[0-9a-f]{40}$/i;
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/i;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const READ_ONLY_EVIDENCE_REFERENCE_PATTERN = /^readonly-evidence:\/\/[A-Za-z0-9._-]+(?:\/[^\s]*)?$/;
+const DIRECT_GLOBAL_CAPABILITY_PATTERN = /\b(?:globalThis|window)\s*(?:\?\.\s*|\.\s*)[$_\p{ID_Start}][$_\p{ID_Continue}]*/u;
 const COMPUTED_GLOBAL_CAPABILITY_PATTERN = /\b(?:globalThis|window)\s*(?:\?\.)?\s*\[[^\]]+\]/i;
+const DESKTOP_PAYLOAD_FORMATS = {
+  "windows-pe": {
+    path: /\.exe$/i,
+    magic: (contents) => contents.subarray(0, 2).equals(Buffer.from("MZ", "ascii")),
+  },
+  "windows-msi": {
+    path: /\.msi$/i,
+    magic: (contents) => contents.subarray(0, 8).equals(Buffer.from("D0CF11E0A1B11AE1", "hex")),
+  },
+};
 const TEXT_EXTENSIONS = new Set([
   ".cjs",
   ".bat",
@@ -49,9 +61,20 @@ const READ_ONLY_GIT_ARGS = [
   "-c",
   "core.untrackedCache=false",
 ];
+const REQUIRED_UNIQUE_WORKSPACE_MEMBERS = ["src/crates/adapters/pi-rpc-adapter"];
+const EXPECTED_RUNTIME_ADAPTER_PATH = "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/lib.rs";
+const EXPECTED_AUDIT_SCRIPT_PATH = "product/Halo Studio/scripts/pi-extension-audit.mjs";
 
 function normalizeRelativePath(value) {
   return String(value).replaceAll("\\", "/");
+}
+
+function normalizeArchiveEntryPath(value) {
+  if (typeof value !== "string") return null;
+  const normalized = normalizeRelativePath(value);
+  const parts = normalized.split("/");
+  if (normalized.trim() === "" || isAbsolutePath(normalized) || parts.some((part) => part === "" || part === "." || part === "..")) return null;
+  return normalized;
 }
 
 function isAbsolutePath(value) {
@@ -60,6 +83,13 @@ function isAbsolutePath(value) {
 
 function isExternalEvidenceReference(value) {
   return isAbsolutePath(value) || READ_ONLY_EVIDENCE_REFERENCE_PATTERN.test(String(value));
+}
+
+function isFixedVersionTag(tag, version) {
+  if (typeof version !== "string" || !VERSION_PATTERN.test(version.trim())) return false;
+  if (typeof tag !== "string" || !/^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(tag.trim())) return false;
+  const normalizedTag = tag.trim().replace(/^v/, "");
+  return normalizedTag === version.trim();
 }
 
 function safePathLabel(value) {
@@ -178,10 +208,34 @@ function regexEscape(value) {
 }
 
 function hasAliasedComputedGlobalCapability(sourceContents) {
-  const aliases = [...sourceContents.matchAll(/\b(?:const|let|var)\s+([$_\p{ID_Start}][$_\p{ID_Continue}]*)\s*=\s*(?:globalThis|window)\b/gu)]
+  const aliases = [...sourceContents.matchAll(/\b(?:const|let|var)\s+([$_\p{ID_Start}][$_\p{ID_Continue}]*)\s*=\s*(?:globalThis|window)\b(?!\s*(?:\?\.|\.|\[))/gu)]
     .map((match) => match[1]);
   return aliases.some((alias) => new RegExp(
     `(?:^|[^$_\\p{ID_Continue}])${regexEscape(alias)}\\s*(?:\\?\\.)?\\s*\\[[^\\]]+\\]`,
+    "u",
+  ).test(sourceContents));
+}
+
+function hasAliasedGlobalCapability(sourceContents) {
+  if (hasAliasedComputedGlobalCapability(sourceContents)) return true;
+  const aliases = new Set(
+    [...sourceContents.matchAll(/\b(?:const|let|var)\s+([$_\p{ID_Start}][$_\p{ID_Continue}]*)\s*=\s*(?:globalThis|window)\b(?!\s*(?:\?\.|\.|\[))/gu)]
+      .map((match) => match[1]),
+  );
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const match of sourceContents.matchAll(/\b(?:const|let|var)\s+([$_\p{ID_Start}][$_\p{ID_Continue}]*)\s*=\s*([$_\p{ID_Start}][$_\p{ID_Continue}]*)\b/gu)) {
+      if (aliases.has(match[2]) && !aliases.has(match[1])) {
+        aliases.add(match[1]);
+        changed = true;
+      }
+    }
+  }
+  return [...aliases].some((alias) => new RegExp(
+    "(?:^|[^$_\\p{ID_Continue}])"
+      + regexEscape(alias)
+      + "\\s*(?:\\?\\.)?\\s*(?:\\[[^\\]]+\\]|\\.\\s*[$_\\p{ID_Start}][$_\\p{ID_Continue}]*)",
     "u",
   ).test(sourceContents));
 }
@@ -305,6 +359,204 @@ function checkFileFingerprint(filePath, descriptor, codePrefix, label, findings)
   }
 }
 
+function checkBufferFingerprint(contents, descriptor, codePrefix, label, findings) {
+  const expectedHash = descriptor?.sha256;
+  const expectedSize = descriptor?.size;
+  if (!SHA256_PATTERN.test(expectedHash ?? "") || !Number.isInteger(expectedSize) || expectedSize < 0) {
+    addFinding(findings, `${codePrefix}-fingerprint-missing`, `${label} must declare a SHA-256 and byte size`);
+    return;
+  }
+  const actualHash = createHash("sha256").update(contents).digest("hex");
+  if (actualHash.toLowerCase() !== expectedHash.toLowerCase()) {
+    addFinding(findings, `${codePrefix}-hash-mismatch`, `${label} SHA-256 does not match the audited bytes`);
+  }
+  if (contents.length !== expectedSize) {
+    addFinding(findings, `${codePrefix}-size-mismatch`, `${label} byte size does not match the audited bytes`);
+  }
+}
+
+function checkBufferRequiredTextClaims(contents, claims, codePrefix, label, findings) {
+  if (!Array.isArray(claims) || claims.length === 0) {
+    addFinding(findings, `${codePrefix}-claims-missing`, `${label} must declare exact text claims`);
+    return;
+  }
+  const text = contents.toString("utf8");
+  for (const claim of claims) {
+    if (typeof claim !== "string" || claim.trim() === "" || !text.includes(claim)) {
+      addFinding(findings, `${codePrefix}-text-missing`, `${label} does not contain a declared text claim`);
+    }
+  }
+}
+
+function checkReleaseArtifactArchive(repoRoot, extension, releaseArtifact, artifactPath, findings) {
+  if (releaseArtifact.artifactFormat !== "zip") {
+    addFinding(findings, "release-artifact-format-missing", `${extension.id} release artifact evidence must declare the supported zip format`);
+    return null;
+  }
+  if (typeof releaseArtifact.path !== "string" || !releaseArtifact.path.toLowerCase().endsWith(".zip")) {
+    addFinding(findings, "release-artifact-format-mismatch", `${extension.id} release artifact path must identify a .zip desktop distribution`);
+    return null;
+  }
+  if (!artifactPath || !isRegularFile(artifactPath)) return null;
+
+  let entries;
+  try {
+    entries = readZipEntries(artifactPath);
+  } catch {
+    addFinding(findings, "release-artifact-archive-invalid", `${extension.id} release artifact is not a verifiable zip archive`);
+    return null;
+  }
+
+  const requiredRoles = new Map([
+    ["license", "product/Halo Studio/LICENSE"],
+    ["third-party-notice", "product/THIRD_PARTY_NOTICES.md"],
+  ]);
+  const includedFiles = releaseArtifact.includedFiles;
+  if (!Array.isArray(includedFiles) || includedFiles.length === 0) {
+    addFinding(findings, "release-artifact-inclusion-evidence-missing", `${extension.id} release artifact must enumerate exact included license and notice files`);
+    return entries;
+  }
+
+  const seenRoles = new Set();
+  const seenPaths = new Set();
+  for (const descriptor of includedFiles) {
+    const role = descriptor?.role;
+    const archivePath = normalizeArchiveEntryPath(descriptor?.path);
+    if (!descriptor || typeof descriptor !== "object" || !requiredRoles.has(role) || !archivePath) {
+      addFinding(findings, "release-artifact-inclusion-invalid", `${extension.id} release artifact inclusion entries require a role and safe archive path`);
+      continue;
+    }
+    if (seenRoles.has(role) || seenPaths.has(archivePath)) {
+      addFinding(findings, "release-artifact-inclusion-duplicate", `${extension.id} release artifact inclusion entries must use each required role and archive path once`);
+    }
+    seenRoles.add(role);
+    seenPaths.add(archivePath);
+
+    const expectedSourcePath = requiredRoles.get(role);
+    if (descriptor.sourcePath !== expectedSourcePath) {
+      addFinding(findings, "release-artifact-source-path-invalid", `${extension.id} release artifact ${role} entry must bind the exact product source file`, {
+        expected: expectedSourcePath,
+        recorded: descriptor.sourcePath,
+      });
+    }
+    const archiveContents = entries.get(archivePath);
+    if (!archiveContents) {
+      addFinding(findings, "release-artifact-included-file-missing", `${extension.id} release artifact is missing its declared ${role} file: ${safePathLabel(descriptor.path)}`);
+      continue;
+    }
+    checkBufferFingerprint(archiveContents, descriptor, "release-artifact-entry", `${extension.id} release artifact ${role}`, findings);
+    checkBufferRequiredTextClaims(archiveContents, descriptor.requiredText, "release-artifact-entry", `${extension.id} release artifact ${role}`, findings);
+
+    const sourcePath = resolveRepoPath(repoRoot, descriptor.sourcePath);
+    if (!sourcePath || !isRegularFile(sourcePath)) {
+      addFinding(findings, "release-artifact-source-file-missing", `${extension.id} release artifact source file is missing: ${safePathLabel(descriptor.sourcePath)}`);
+    } else {
+      checkFileFingerprint(sourcePath, descriptor, "release-artifact-source", `${extension.id} release artifact ${role} source`, findings);
+      if (!readFileSync(sourcePath).equals(archiveContents)) {
+        addFinding(findings, "release-artifact-entry-source-mismatch", `${extension.id} release artifact ${role} bytes do not match the exact product source file`);
+      }
+    }
+  }
+  for (const role of requiredRoles.keys()) {
+    if (!seenRoles.has(role)) addFinding(findings, "release-artifact-inclusion-missing", `${extension.id} release artifact must include a ${role} file entry`);
+  }
+  return entries;
+}
+
+function checkReleaseArtifactPayload(extension, releaseArtifact, entries, findings) {
+  const payload = releaseArtifact?.payload;
+  if (!payload || typeof payload !== "object") {
+    addFinding(findings, "release-artifact-payload-evidence-missing", `${extension.id} release artifact must identify a verifiable desktop payload`);
+    return;
+  }
+  const format = DESKTOP_PAYLOAD_FORMATS[payload.format];
+  const payloadPath = normalizeArchiveEntryPath(payload.path);
+  if (!format || !payloadPath || !format.path.test(payloadPath)) {
+    addFinding(findings, "release-artifact-payload-format-invalid", `${extension.id} release artifact payload must use a supported desktop binary format and path`);
+    return;
+  }
+  const payloadContents = entries.get(payloadPath);
+  if (!payloadContents) {
+    addFinding(findings, "release-artifact-payload-missing", `${extension.id} release artifact is missing its declared desktop payload: ${safePathLabel(payload.path)}`);
+    return;
+  }
+  checkBufferFingerprint(payloadContents, payload, "release-artifact-payload", `${extension.id} release artifact payload`, findings);
+  if (!format.magic(payloadContents)) {
+    addFinding(findings, "release-artifact-payload-magic-invalid", `${extension.id} release artifact payload does not match its declared desktop binary format`);
+  }
+}
+
+function crc32(contents) {
+  let value = 0xffffffff;
+  for (const byte of contents) {
+    value ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = (value >>> 1) ^ (value & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (value ^ 0xffffffff) >>> 0;
+}
+
+function readZipEntries(filePath) {
+  const archive = readFileSync(filePath);
+  const minimumEndRecordOffset = Math.max(0, archive.length - 0xffff - 22);
+  let endRecordOffset = -1;
+  for (let offset = archive.length - 22; offset >= minimumEndRecordOffset; offset -= 1) {
+    if (offset >= 0 && archive.readUInt32LE(offset) === 0x06054b50) {
+      endRecordOffset = offset;
+      break;
+    }
+  }
+  if (endRecordOffset < 0) throw new Error("ZIP end record is missing");
+
+  const diskNumber = archive.readUInt16LE(endRecordOffset + 4);
+  const centralDirectoryDisk = archive.readUInt16LE(endRecordOffset + 6);
+  const entriesOnDisk = archive.readUInt16LE(endRecordOffset + 8);
+  const entryCount = archive.readUInt16LE(endRecordOffset + 10);
+  const centralDirectorySize = archive.readUInt32LE(endRecordOffset + 12);
+  const centralDirectoryOffset = archive.readUInt32LE(endRecordOffset + 16);
+  if (diskNumber !== 0 || centralDirectoryDisk !== 0 || entriesOnDisk !== entryCount
+    || centralDirectoryOffset + centralDirectorySize > endRecordOffset) {
+    throw new Error("ZIP archive is multi-disk or has an invalid central directory");
+  }
+
+  const entries = new Map();
+  let cursor = centralDirectoryOffset;
+  for (let index = 0; index < entryCount; index += 1) {
+    if (archive.readUInt32LE(cursor) !== 0x02014b50) throw new Error("ZIP central directory entry is invalid");
+    const compressionMethod = archive.readUInt16LE(cursor + 10);
+    const expectedCrc = archive.readUInt32LE(cursor + 16);
+    const compressedSize = archive.readUInt32LE(cursor + 20);
+    const uncompressedSize = archive.readUInt32LE(cursor + 24);
+    const fileNameLength = archive.readUInt16LE(cursor + 28);
+    const extraLength = archive.readUInt16LE(cursor + 30);
+    const commentLength = archive.readUInt16LE(cursor + 32);
+    const localHeaderOffset = archive.readUInt32LE(cursor + 42);
+    const nameStart = cursor + 46;
+    const name = archive.subarray(nameStart, nameStart + fileNameLength).toString("utf8");
+    const normalizedName = normalizeArchiveEntryPath(name);
+    if (!normalizedName || entries.has(normalizedName)) throw new Error("ZIP archive contains an invalid or duplicate entry");
+
+    if (archive.readUInt32LE(localHeaderOffset) !== 0x04034b50) throw new Error("ZIP local file header is invalid");
+    const localNameLength = archive.readUInt16LE(localHeaderOffset + 26);
+    const localExtraLength = archive.readUInt16LE(localHeaderOffset + 28);
+    const dataStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
+    const compressed = archive.subarray(dataStart, dataStart + compressedSize);
+    if (compressed.length !== compressedSize) throw new Error("ZIP entry data is truncated");
+    let contents;
+    if (compressionMethod === 0) contents = Buffer.from(compressed);
+    else if (compressionMethod === 8) contents = inflateRawSync(compressed);
+    else throw new Error("ZIP entry uses an unsupported compression method");
+    if (contents.length !== uncompressedSize || crc32(contents) !== expectedCrc) {
+      throw new Error("ZIP entry content fingerprint is invalid");
+    }
+    entries.set(normalizedName, contents);
+    cursor += 46 + fileNameLength + extraLength + commentLength;
+  }
+  if (cursor !== centralDirectoryOffset + centralDirectorySize) throw new Error("ZIP central directory size is invalid");
+  return entries;
+}
+
 function checkRequiredTextClaims(filePath, claims, codePrefix, label, findings) {
   if (!Array.isArray(claims) || claims.length === 0) {
     addFinding(findings, `${codePrefix}-claims-missing`, `${label} must declare exact text claims`);
@@ -373,9 +625,12 @@ function checkEvidenceFiles(repoRoot, extension, findings) {
   if (!copyright || !combinedEvidence.includes(copyright)) {
     addFinding(findings, "license-copyright-evidence-missing", `${extension.id} declared copyright is not present in the actual license evidence`);
   }
+  const productNoticePath = canonicalRepoRelativePath(repoRoot, "product/THIRD_PARTY_NOTICES.md");
   const notice = evidenceContents.find(({ path: evidencePath }) => /(^|\/)THIRD_PARTY_NOTICES\.md$/i.test(normalizeRelativePath(evidencePath)));
   if (!notice) {
     addFinding(findings, "license-notice-evidence-missing", `${extension.id} must cite product/THIRD_PARTY_NOTICES.md as notice evidence`);
+  } else if (canonicalRepoRelativePath(repoRoot, notice.path) !== productNoticePath) {
+    addFinding(findings, "license-notice-path-invalid", extension.id + " license notice evidence must be product/THIRD_PARTY_NOTICES.md");
   } else {
     for (const claim of [extension.id, extension.sourcePath, extension.sourceCommit, extension.sourceTree, extension.gitHashObject, extension.sha256]) {
       if (typeof claim !== "string" || !notice.contents.toLowerCase().includes(claim.toLowerCase())) {
@@ -403,6 +658,9 @@ function checkEvidenceFiles(repoRoot, extension, findings) {
   if (!Array.isArray(distributionFiles) || distributionFiles.length === 0) {
     addFinding(findings, "distribution-license-evidence-missing", `${extension.id} has no release-file evidence`);
   } else {
+    if (!distributionFiles.some((item) => canonicalRepoRelativePath(repoRoot, typeof item === "string" ? item : item?.path) === productNoticePath)) {
+      addFinding(findings, "distribution-license-notice-missing", extension.id + " release evidence must include product/THIRD_PARTY_NOTICES.md");
+    }
     for (const distributionFile of distributionFiles) {
       const relativePath = typeof distributionFile === "string" ? distributionFile : distributionFile?.path;
       const distributionPath = resolveRepoPath(repoRoot, relativePath);
@@ -429,19 +687,36 @@ function checkEvidenceFiles(repoRoot, extension, findings) {
     addFinding(findings, "release-artifact-evidence-missing", `${extension.id} has no exact release artifact license/notice evidence`);
   } else {
     const artifactPath = resolveRepoPath(repoRoot, releaseArtifact.path);
+    if (releaseArtifact.artifactType !== "desktop-distribution") {
+      addFinding(findings, "release-artifact-type-missing", extension.id + " release artifact evidence must identify an exact desktop distribution artifact");
+    }
+    const artifactLabel = canonicalRepoRelativePath(repoRoot, releaseArtifact.path);
+    const evidenceOwnedPaths = new Set([
+      ...(license?.evidence ?? []).map((item) => canonicalRepoRelativePath(repoRoot, typeof item === "string" ? item : item?.path)),
+      ...(license?.distributionFiles ?? []).map((item) => canonicalRepoRelativePath(repoRoot, typeof item === "string" ? item : item?.path)),
+      ...(license?.lockfileEvidence ?? []).map((item) => canonicalRepoRelativePath(repoRoot, typeof item === "string" ? item : item?.path)),
+    ].filter(Boolean));
+    if (artifactLabel && evidenceOwnedPaths.has(artifactLabel)) {
+      addFinding(findings, "release-artifact-reuses-license-file", extension.id + " exact release artifact must be distinct from license, notice, and lockfile evidence");
+    }
     if (!artifactPath || !isRegularFile(artifactPath)) {
       addFinding(findings, "release-artifact-file-missing", `${extension.id} release artifact evidence file is missing: ${safePathLabel(releaseArtifact.path)}`);
     } else if (!SHA256_PATTERN.test(releaseArtifact.sha256 ?? "") || hashFile(artifactPath, "sha256") !== releaseArtifact.sha256.toLowerCase()) {
       addFinding(findings, "release-artifact-hash-mismatch", `${extension.id} release artifact evidence does not match its recorded SHA-256`);
     }
+    const artifactEntries = checkReleaseArtifactArchive(repoRoot, extension, releaseArtifact, artifactPath, findings);
+    if (artifactEntries) checkReleaseArtifactPayload(extension, releaseArtifact, artifactEntries, findings);
     if (artifactPath && isRegularFile(artifactPath)) {
       checkFileFingerprint(artifactPath, releaseArtifact, "release-artifact", `${extension.id} release artifact`, findings);
     }
     if (!Array.isArray(releaseArtifact.requiredText) || releaseArtifact.requiredText.length === 0) {
       addFinding(findings, "release-artifact-text-claims-missing", `${extension.id} release artifact evidence must declare exact text claims`);
     }
+    const artifactText = artifactEntries
+      ? [...artifactEntries.values()].map((contents) => contents.toString("utf8")).join("\n")
+      : "";
     for (const requiredText of releaseArtifact.requiredText ?? []) {
-      if (typeof requiredText !== "string" || !artifactPath || !isRegularFile(artifactPath) || !readFileSync(artifactPath, "utf8").includes(requiredText)) {
+      if (typeof requiredText !== "string" || artifactText === "" || !artifactText.includes(requiredText)) {
         addFinding(findings, "release-artifact-text-missing", `${extension.id} release artifact evidence is missing a declared text claim`);
       }
     }
@@ -462,6 +737,9 @@ function checkDependencies(repoRoot, extension, findings) {
   if (!Array.isArray(dependencies?.typeOnly)) addFinding(findings, "dependency-inventory-incomplete", `${extension.id}.dependencies.typeOnly is incomplete`);
   if (!dependencies?.host || typeof dependencies.host !== "object") addFinding(findings, "dependency-inventory-incomplete", `${extension.id}.dependencies.host is incomplete`);
   if (!Array.isArray(dependencies?.lockfiles)) addFinding(findings, "dependency-inventory-incomplete", `${extension.id}.dependencies.lockfiles is incomplete`);
+  if (Array.isArray(dependencies?.typeOnly) && dependencies.typeOnly.some((entry) => typeof entry !== "string" || entry.trim() === "")) {
+    addFinding(findings, "dependency-inventory-incomplete", `${extension.id}.dependencies.typeOnly must contain package names`);
+  }
 
   if (Array.isArray(dependencies?.runtime?.direct) && dependencies.runtime.direct.length > 0) {
     addFinding(findings, "runtime-dependency-present", `${extension.id} declares runtime extension dependencies`, {
@@ -491,7 +769,10 @@ function checkDependencies(repoRoot, extension, findings) {
   }
 
   const host = dependencies?.host;
-  const exactHostTag = typeof host?.sourceTag === "string" && host.sourceTag.trim() !== "" && !/^(?:latest|main|master|next)$/i.test(host.sourceTag.trim());
+  if (host && (typeof host.package !== "string" || host.package.trim() === "" || !VERSION_PATTERN.test(host.version ?? ""))) {
+    addFinding(findings, "host-package-identity-incomplete", `${extension.id} host package must declare a package name and fixed version`);
+  }
+  const exactHostTag = isFixedVersionTag(host?.sourceTag, host?.version);
   if (!COMMIT_PATTERN.test(host?.sourceCommit ?? "") && !exactHostTag) {
     addFinding(
       findings,
@@ -537,6 +818,14 @@ function checkDependencies(repoRoot, extension, findings) {
     if (!hostLicenseEvidencePath || !isRegularFile(hostLicenseEvidencePath)) {
       addFinding(findings, "host-license-evidence-file-missing", `${extension.id} host license evidence must point to a repository-local file`);
     } else {
+      if (!SHA256_PATTERN.test(hostLicense.evidenceSha256 ?? "") || !Number.isInteger(hostLicense.evidenceSize) || hostLicense.evidenceSize < 0) {
+        addFinding(findings, "host-license-evidence-fingerprint-missing", `${extension.id} host license evidence must declare a SHA-256 and byte size`);
+      } else {
+        checkFileFingerprint(hostLicenseEvidencePath, {
+          sha256: hostLicense.evidenceSha256,
+          size: hostLicense.evidenceSize,
+        }, "host-license-evidence", `${extension.id} host license evidence`, findings);
+      }
       const hostLicenseContents = readFileSync(hostLicenseEvidencePath, "utf8");
       checkRequiredTextClaims(hostLicenseEvidencePath, hostLicense.requiredText, "host-license-evidence", `${extension.id} host license evidence`, findings);
       checkSpdxTextClaims(hostLicenseContents, hostLicense.observedSpdx, "host-license", `${extension.id} host license evidence`, findings);
@@ -577,10 +866,27 @@ function checkDependencies(repoRoot, extension, findings) {
     if (validEntries.length !== entries.length) {
       addFinding(findings, "host-dependency-entry-invalid", `${extension.id} host dependency closure entries must include name, version, source, and license`);
     }
+    const entryNames = new Set();
+    for (const entry of validEntries) {
+      if (entryNames.has(entry.name)) {
+        addFinding(findings, "host-dependency-entry-duplicate", `${extension.id} host dependency closure must list each package exactly once`, {
+          name: entry.name,
+        });
+      }
+      entryNames.add(entry.name);
+    }
     const closureEvidencePath = resolveRepoPath(repoRoot, closure.evidencePath);
     if (!closureEvidencePath || !isRegularFile(closureEvidencePath)) {
       addFinding(findings, "host-dependency-closure-evidence-missing", `${extension.id} host dependency closure must point to a repository-local evidence file`);
     } else {
+      if (!SHA256_PATTERN.test(closure.evidenceSha256 ?? "") || !Number.isInteger(closure.evidenceSize) || closure.evidenceSize < 0) {
+        addFinding(findings, "host-dependency-closure-fingerprint-missing", `${extension.id} host dependency closure evidence must declare a SHA-256 and byte size`);
+      } else {
+        checkFileFingerprint(closureEvidencePath, {
+          sha256: closure.evidenceSha256,
+          size: closure.evidenceSize,
+        }, "host-dependency-closure", `${extension.id} host dependency closure`, findings);
+      }
       const closureContents = readFileSync(closureEvidencePath, "utf8");
       for (const entry of validEntries) {
         if (![entry.name, entry.version, entry.source, entry.license].every((claim) => closureContents.includes(claim))) {
@@ -628,6 +934,7 @@ function checkExtensionSource(extension, sourceContents, findings) {
   const forbiddenExtensionPatterns = [
     /from\s+["']node:(?:fs|fs\/promises|child_process|net|http|https|os)["']/i,
     /\b(?:require|import)\s*\(\s*["'](?:node:)?(?:fs|fs\/promises|child_process|net|http|https|os)["']\s*\)/i,
+    DIRECT_GLOBAL_CAPABILITY_PATTERN,
     /\b(?:globalThis\.)?fetch\s*\(/i,
     COMPUTED_GLOBAL_CAPABILITY_PATTERN,
     /\b(?:fetch|exec|spawn|fork|readFile|writeFile|mkdir|unlink|rm|createReadStream|createWriteStream)\s*\(/,
@@ -640,7 +947,7 @@ function checkExtensionSource(extension, sourceContents, findings) {
       });
     }
   }
-  if (hasAliasedComputedGlobalCapability(sourceContents)) {
+  if (hasAliasedGlobalCapability(sourceContents)) {
     addFinding(findings, "extension-host-capability", `${extension.id} uses a forbidden aliased computed global capability`, {
       pattern: "aliased computed global/window property access",
     });
@@ -700,6 +1007,64 @@ function checkExtensionContractMetadata(extension, findings) {
   }
 }
 
+function extractRustFunctionBody(sourceContents, functionName) {
+  const signature = new RegExp("(?:async\\s+)?fn\\s+" + regexEscape(functionName) + "\\s*\\(", "m");
+  const match = signature.exec(sourceContents);
+  if (!match) return null;
+  const openingBrace = sourceContents.indexOf("{", match.index + match[0].length);
+  if (openingBrace < 0) return null;
+  let depth = 0;
+  let quote = null;
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+  for (let index = openingBrace; index < sourceContents.length; index += 1) {
+    const character = sourceContents[index];
+    const next = sourceContents[index + 1];
+    if (lineComment) {
+      if (character === "\n") lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (character === "*" && next === "/") {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (character === "/" && next === "/") {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === "/" && next === "*") {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === "\"" || character === "'") {
+      quote = character;
+      continue;
+    }
+    if (character === "{") depth += 1;
+    if (character === "}") {
+      depth -= 1;
+      if (depth === 0) return sourceContents.slice(openingBrace + 1, index);
+    }
+  }
+  return null;
+}
+
 function checkLoadBoundary(extension, adapterSource, findings) {
   const load = extension.load;
   if (!Array.isArray(load?.arguments)) {
@@ -747,12 +1112,15 @@ function checkLoadBoundary(extension, adapterSource, findings) {
   const hasHashBoundEmbeddedSource = /fn\s+install_embedded_extension[\s\S]*?stable_digest\s*\(\s*HALO_PERMISSION_EXTENSION_SOURCE\s*\)/.test(adapterSource)
     && /fn\s+install_embedded_extension[\s\S]*?HALO_PI_EXTENSION_ID/.test(adapterSource);
   const hasHashBoundRuntimePath = /fn\s+pi_rpc_args[\s\S]*?--extension[\s\S]*?extension_path\.to_string_lossy\s*\(\)/.test(adapterSource);
-  const hasRuntimePathFlow = /pi_rpc_args\s*\(\s*extension_path\s*,/.test(adapterSource)
+  const spawnSessionBody = extractRustFunctionBody(adapterSource, "spawn_session_process");
+  const startBody = extractRustFunctionBody(adapterSource, "start");
+  const hasRuntimePathFlow = Boolean(spawnSessionBody && /pi_rpc_args\s*\(\s*extension_path\s*,/.test(spawnSessionBody)
+    && startBody
     && [
       "let mut extension = match self.install_first_party_extension()",
       "let extension_path = extension.path.clone()",
       "state.extension_path = Some(extension_path)",
-    ].every((token) => adapterSource.includes(token));
+    ].every((token) => startBody.includes(token)));
   if (!hasEmbeddedInstall || !hasHashBoundEmbeddedSource) {
     addFinding(findings, "adapter-extension-source-not-hash-bound", `${extension.id} adapter does not prove that the embedded source is copied under its fixed digest`);
   }
@@ -865,7 +1233,7 @@ function checkRuntimeScan(repoRoot, runtime, findings) {
     if (downloadCapability.some((pattern) => pattern.test(contents)) && !isAllowlisted(relativePath, "runtime-download-capability", file)) {
       addFinding(findings, "runtime-download-capability", `Runtime/build input contains a download or package installation capability: ${relativePath}`);
     }
-    if ((networkCapability.some((pattern) => pattern.test(contents)) || hasAliasedComputedGlobalCapability(contents))
+    if ((networkCapability.some((pattern) => pattern.test(contents)) || hasAliasedGlobalCapability(contents))
       && !isAllowlisted(relativePath, "runtime-network-capability", file)) {
       addFinding(findings, "runtime-network-capability", `Runtime/build input contains a network capability: ${relativePath}`);
     }
@@ -887,7 +1255,7 @@ function checkBuiltInExtensionBoundary(runtime, findings) {
     if (builtIn?.releaseEligible !== false) {
       addFinding(findings, "built-in-extension-release-eligible", `Pi built-in extension ${builtIn?.id ?? "<unknown>"} is not explicitly excluded from the Halo release gate`);
     }
-    if (!COMMIT_PATTERN.test(builtIn?.sourceCommit ?? "") && !(typeof builtIn?.sourceTag === "string" && builtIn.sourceTag.trim() !== "")) {
+    if (!COMMIT_PATTERN.test(builtIn?.sourceCommit ?? "") && !isFixedVersionTag(builtIn?.sourceTag, builtIn?.version)) {
       addFinding(findings, "built-in-extension-provenance-missing", `Pi built-in extension ${builtIn?.id ?? "<unknown>"} has no exact source commit or tag`);
     }
     for (const key of ["tools", "events", "network", "files", "credentials", "process"]) {
@@ -926,6 +1294,19 @@ function checkManifestPathRoles(manifest, findings) {
       host?.licenseEvidence?.evidencePathRole,
       findings,
     );
+  }
+}
+
+function checkManifestScope(manifest, findings) {
+  if (manifest.scope?.runtimeAdapter !== EXPECTED_RUNTIME_ADAPTER_PATH
+    || manifest.runtime?.adapterPath !== EXPECTED_RUNTIME_ADAPTER_PATH) {
+    addFinding(findings, "runtime-adapter-scope-mismatch", "Inventory scope and runtime adapter must bind the fixed Halo PiRpcAdapter source path");
+  }
+  if (manifest.scope?.auditScript !== EXPECTED_AUDIT_SCRIPT_PATH) {
+    addFinding(findings, "audit-script-scope-mismatch", "Inventory scope must bind the fixed Pi extension audit script path");
+  }
+  if (!Array.isArray(manifest.runtime?.scanPaths) || !manifest.runtime.scanPaths.includes(EXPECTED_RUNTIME_ADAPTER_PATH)) {
+    addFinding(findings, "runtime-scan-scope-missing", "Runtime scan paths must include the fixed Halo PiRpcAdapter source path");
   }
 }
 
@@ -1067,6 +1448,86 @@ function compareTreeEntries(baseEntries, candidateEntries) {
   return { identical, modified, added, removed, changed, changedEntries: changed.length };
 }
 
+function checkInitialImportManifest(initialManifest, expectedCommit, findings) {
+  if (initialManifest?.schema_version !== 1) {
+    addFinding(findings, "upstream-initial-import-schema-invalid", "Initial import manifest must declare schema_version 1");
+  }
+  if (!COMMIT_PATTERN.test(initialManifest?.upstream?.commit ?? "")) {
+    addFinding(findings, "upstream-initial-import-commit-invalid", "Initial import manifest must declare a full upstream commit SHA");
+  }
+  const seenPaths = new Set();
+  for (const entry of initialManifest?.entries ?? []) {
+    const normalizedPath = typeof entry?.path === "string" ? normalizeRelativePath(entry.path) : null;
+    const pathParts = normalizedPath?.split("/") ?? [];
+    const validPath = normalizedPath !== null
+      && normalizedPath.trim() !== ""
+      && !isAbsolutePath(normalizedPath)
+      && pathParts.every((part) => part !== "" && part !== "." && part !== "..");
+    const validEntry = entry && typeof entry === "object"
+      && validPath
+      && /^(?:100644|100755|120000)$/.test(String(entry.mode))
+      && entry.type === "blob"
+      && GIT_OBJECT_PATTERN.test(entry.sha ?? entry.blob ?? "")
+      && Number.isInteger(entry.size)
+      && entry.size >= 0;
+    if (!validEntry) {
+      addFinding(findings, "upstream-initial-import-entry-invalid", "Initial import manifest contains an invalid path, mode, blob, type, or size", {
+        path: safePathLabel(entry?.path),
+      });
+      continue;
+    }
+    if (seenPaths.has(normalizedPath)) {
+      addFinding(findings, "upstream-initial-import-entry-duplicate", "Initial import manifest must contain each Git path exactly once", {
+        path: safePathLabel(normalizedPath),
+      });
+    }
+    seenPaths.add(normalizedPath);
+  }
+  if (initialManifest?.upstream?.commit !== expectedCommit) {
+    addFinding(findings, "upstream-initial-import-commit-mismatch", "Initial import manifest does not bind the pinned upstream base commit");
+  }
+}
+
+function hasNonEmptyStringEntries(value) {
+  return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim() !== "");
+}
+
+function checkCandidateReleaseGate(candidateEvidence, findings) {
+  const releaseGate = candidateEvidence?.releaseGate;
+  if (!releaseGate || typeof releaseGate !== "object" || Array.isArray(releaseGate)) {
+    addFinding(findings, "upstream-release-gate-missing", "Upstream candidate evidence must declare a structured release gate result");
+    return;
+  }
+  if (!["passed", "blocked"].includes(releaseGate.status)) {
+    addFinding(findings, "upstream-release-gate-status-invalid", "Upstream candidate evidence release gate must be explicitly passed or blocked");
+  }
+  for (const field of ["evidenceGaps", "blockingReasons"]) {
+    if (releaseGate[field] !== undefined && !Array.isArray(releaseGate[field])) {
+      addFinding(findings, "upstream-release-gate-reasons-invalid", "Upstream candidate release gate " + field + " must be an array");
+    }
+    if (releaseGate.status === "passed" && !Array.isArray(releaseGate[field])) {
+      addFinding(findings, "upstream-release-gate-reasons-missing", "A passing upstream candidate must declare empty evidenceGaps and blockingReasons arrays");
+    }
+  }
+  if (releaseGate.status !== "passed") {
+    addFinding(findings, "upstream-candidate-release-gate-blocked", "Upstream candidate evidence is not validated for release");
+    if (!hasNonEmptyStringEntries(releaseGate.evidenceGaps) && !hasNonEmptyStringEntries(releaseGate.blockingReasons)) {
+      addFinding(findings, "upstream-release-gate-reasons-missing", "A blocked upstream candidate must record evidence gaps or blocking reasons");
+    }
+    return;
+  }
+  if (Array.isArray(releaseGate.evidenceGaps) && releaseGate.evidenceGaps.length > 0) {
+    addFinding(findings, "upstream-release-gate-gaps-on-passed", "A passing upstream candidate cannot retain evidence gaps", {
+      evidenceGaps: releaseGate.evidenceGaps,
+    });
+  }
+  if (Array.isArray(releaseGate.blockingReasons) && releaseGate.blockingReasons.length > 0) {
+    addFinding(findings, "upstream-release-gate-reasons-on-passed", "A passing upstream candidate cannot retain blocking reasons", {
+      blockingReasons: releaseGate.blockingReasons,
+    });
+  }
+}
+
 function checkUpstreamEvidence(repoRoot, evidence, findings) {
   if (!evidence || typeof evidence !== "object") {
     addFinding(findings, "upstream-evidence-missing", "The inventory does not link an upstream candidate evidence record");
@@ -1089,9 +1550,7 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
     addFinding(findings, "upstream-evidence-mismatch", "Inventory upstream commit fields do not match the candidate evidence file");
     return;
   }
-  if (candidateEvidence.releaseGate?.status !== "passed") {
-    addFinding(findings, "upstream-candidate-release-gate-blocked", "Upstream candidate evidence is not validated for release");
-  }
+  checkCandidateReleaseGate(candidateEvidence, findings);
   checkConflictDecisions(candidateEvidence, findings);
 
   const candidate = candidateEvidence.candidate;
@@ -1317,6 +1776,7 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
     addFinding(findings, "upstream-initial-import-evidence-invalid", "Initial import manifest does not prove the pinned upstream base and entries");
     return;
   }
+  checkInitialImportManifest(initialManifest, evidence.baseCommit, findings);
   const declaredInitialImportTree = candidateEvidence.base?.initialImportTree;
   if (!GIT_OBJECT_PATTERN.test(declaredInitialImportTree ?? "")) {
     addFinding(findings, "upstream-initial-import-tree-invalid", "Initial import evidence must declare a full Git tree object hash");
@@ -1476,9 +1936,23 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
 }
 
 function checkWorkspaceBoundary(repoRoot, boundary, findings) {
-  if (!boundary) return;
+  if (!boundary || typeof boundary !== "object" || Array.isArray(boundary)
+    || typeof boundary.workspaceManifest !== "string" || !Array.isArray(boundary.uniqueMembers)
+    || boundary.uniqueMembers.length === 0) {
+    addFinding(findings, "dependency-boundary-incomplete", "The inventory must declare a non-empty unique Cargo dependency boundary");
+    return;
+  }
+  const declaredMembers = new Set(boundary.uniqueMembers);
+  if (declaredMembers.size !== boundary.uniqueMembers.length) {
+    addFinding(findings, "dependency-boundary-incomplete", "The inventory dependency boundary must not repeat a workspace member");
+  }
+  for (const requiredMember of REQUIRED_UNIQUE_WORKSPACE_MEMBERS) {
+    if (!declaredMembers.has(requiredMember)) {
+      addFinding(findings, "dependency-boundary-incomplete", `The inventory dependency boundary must cover ${requiredMember}`);
+    }
+  }
   const manifestPath = resolveRepoPath(repoRoot, boundary.workspaceManifest);
-  if (!manifestPath || !existsSync(manifestPath)) {
+  if (!manifestPath || !isRegularFile(manifestPath)) {
     addFinding(findings, "workspace-manifest-missing", `Workspace dependency manifest is missing: ${safePathLabel(boundary.workspaceManifest)}`);
     return;
   }
@@ -1496,9 +1970,36 @@ function checkWorkspaceBoundary(repoRoot, boundary, findings) {
   }
 }
 
+function manifestPathInsideRepo(repoRoot, manifestPath) {
+  if (typeof repoRoot !== "string" || typeof manifestPath !== "string") return false;
+  try {
+    const realRoot = realpathSync(path.resolve(repoRoot));
+    const absoluteManifestPath = path.resolve(manifestPath);
+    const realManifestPath = existsSync(absoluteManifestPath)
+      ? realpathSync(absoluteManifestPath)
+      : absoluteManifestPath;
+    return inside(realRoot, realManifestPath);
+  } catch {
+    return false;
+  }
+}
+
 export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot = DEFAULT_REPO_ROOT } = {}) {
   const findings = [];
+  if (typeof repoRoot !== "string" || repoRoot.trim() === "") {
+    throw new TypeError("repoRoot must be a non-empty path");
+  }
   const absoluteManifestPath = path.resolve(manifestPath);
+  if (!manifestPathInsideRepo(repoRoot, absoluteManifestPath)) {
+    addFinding(findings, "manifest-path-outside-repo", `Audit manifest must be inside the audited repository: ${safePathLabel(manifestPath)}`);
+    return {
+      status: "blocked",
+      findings,
+      manifestPath: "<manifest>",
+      declaredBlockingReasons: [],
+      evidenceLocators: collectEvidenceLocators(null),
+    };
+  }
   const manifest = readJson(absoluteManifestPath, findings);
   if (!manifest) {
     return {
@@ -1532,6 +2033,7 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
   checkRuntimeScan(repoRoot, manifest.runtime, findings);
   checkBuiltInExtensionBoundary(manifest.runtime, findings);
   checkManifestPathRoles(manifest, findings);
+  checkManifestScope(manifest, findings);
 
   if (!Array.isArray(manifest.extensions) || manifest.extensions.length === 0) {
     addFinding(findings, "extension-inventory-empty", "The Halo first-party extension inventory is empty");

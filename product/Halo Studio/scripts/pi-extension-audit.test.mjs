@@ -19,6 +19,12 @@ export default function haloPermissionGate(pi: ExtensionAPI) {
   });
 }
 `;
+const ADAPTER_START_FLOW = `async fn start() {
+let mut extension = match self.install_first_party_extension() { _ => todo!() };
+let extension_path = extension.path.clone();
+state.extension_path = Some(extension_path);
+}
+`;
 const ADAPTER_SOURCE = `pub const HALO_PI_EXTENSION_VERSION: &str = "1.0.0";
 const source = include_str!("halo_permission_gate.ts");
 const args = vec!["--no-extensions", "--extension", extension_path];
@@ -31,11 +37,70 @@ fn spawn_session_process(extension_path: &Path) { pi_rpc_args(extension_path, mo
 fn pi_rpc_args(extension_path: &Path) {
   args.extend(["--extension".to_string(), extension_path.to_string_lossy().into_owned()]);
 }
-let mut extension = match self.install_first_party_extension() { _ => todo!() };
-let extension_path = extension.path.clone();
-state.extension_path = Some(extension_path);
+${ADAPTER_START_FLOW}
 let config_dir = "adapter-owned";
 `;
+
+function crc32(contents) {
+  let value = 0xffffffff;
+  for (const byte of contents) {
+    value ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = (value >>> 1) ^ (value & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (value ^ 0xffffffff) >>> 0;
+}
+
+function createStoredZip(entries) {
+  const localRecords = [];
+  const centralRecords = [];
+  let offset = 0;
+  for (const [name, value] of entries) {
+    const nameBytes = Buffer.from(name, "utf8");
+    const contents = Buffer.from(value);
+    const checksum = crc32(contents);
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0, 6);
+    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt32LE(checksum, 14);
+    localHeader.writeUInt32LE(contents.length, 18);
+    localHeader.writeUInt32LE(contents.length, 22);
+    localHeader.writeUInt16LE(nameBytes.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+    localRecords.push(Buffer.concat([localHeader, nameBytes, contents]));
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0, 8);
+    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt32LE(checksum, 16);
+    centralHeader.writeUInt32LE(contents.length, 20);
+    centralHeader.writeUInt32LE(contents.length, 24);
+    centralHeader.writeUInt16LE(nameBytes.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+    centralRecords.push(Buffer.concat([centralHeader, nameBytes]));
+    offset += localRecords.at(-1).length;
+  }
+
+  const centralDirectory = Buffer.concat(centralRecords);
+  const endRecord = Buffer.alloc(22);
+  endRecord.writeUInt32LE(0x06054b50, 0);
+  endRecord.writeUInt16LE(0, 4);
+  endRecord.writeUInt16LE(0, 6);
+  endRecord.writeUInt16LE(entries.length, 8);
+  endRecord.writeUInt16LE(entries.length, 10);
+  endRecord.writeUInt32LE(centralDirectory.length, 12);
+  endRecord.writeUInt32LE(offset, 16);
+  return Buffer.concat([...localRecords, centralDirectory, endRecord]);
+}
 
 function createFixture(overrides = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "halo-pi-extension-audit-"));
@@ -45,13 +110,15 @@ function createFixture(overrides = {}) {
   const hostLicensePath = "product/Halo Studio/pi-host-LICENSE.txt";
   const noticePath = "product/THIRD_PARTY_NOTICES.md";
   const releaseArtifactPath = "product/Halo Studio/release-license-bundle.txt";
+  const desktopArtifactPath = "product/Halo Studio/release/halo-studio.zip";
   const lockPaths = [
     "product/Halo Studio/pnpm-lock.yaml",
     "product/Halo Studio/package-lock.json",
     "product/Halo Studio/Cargo.lock",
   ];
+  const workspaceManifestPath = "product/Halo Studio/Cargo.toml";
 
-  for (const file of [extensionPath, adapterPath, licensePath, hostLicensePath, noticePath, releaseArtifactPath, ...lockPaths]) {
+  for (const file of [extensionPath, adapterPath, licensePath, hostLicensePath, noticePath, releaseArtifactPath, desktopArtifactPath, workspaceManifestPath, ...lockPaths]) {
     mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
   }
   writeFileSync(path.join(root, extensionPath), EXTENSION_SOURCE);
@@ -70,10 +137,11 @@ function createFixture(overrides = {}) {
     `${EXTENSION_ID}\\nMIT License\\n${extensionPath}\\n`,
   );
   writeFileSync(path.join(root, releaseArtifactPath), `${EXTENSION_ID}\\nMIT License\\n`);
+  writeFileSync(path.join(root, workspaceManifestPath), "[workspace]\nmembers = [\n  \"src/crates/adapters/pi-rpc-adapter\",\n]\n");
   for (const lockPath of lockPaths) writeFileSync(path.join(root, lockPath), "lockfile\\n");
 
   execFileSync("git", ["init", "--quiet"], { cwd: root, stdio: "ignore" });
-  execFileSync("git", ["add", "--", extensionPath, adapterPath, licensePath, hostLicensePath, noticePath, releaseArtifactPath, ...lockPaths], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["add", "--", extensionPath, adapterPath, licensePath, hostLicensePath, noticePath, releaseArtifactPath, workspaceManifestPath, ...lockPaths], { cwd: root, stdio: "ignore" });
   execFileSync(
     "git",
     ["-c", "user.name=Halo fixture", "-c", "user.email=fixture@example.invalid", "commit", "--quiet", "-m", "fixture"],
@@ -91,6 +159,16 @@ function createFixture(overrides = {}) {
   const hostClosureReleaseArtifactContents = `${releaseArtifactContents}@earendil-works/pi-agent-core 0.83.0 MIT \\n` + `npm:@earendil-works/pi-agent-core@0.83.0 \\n@earendil-works/pi-ai 0.83.0 MIT \\n` + `npm:@earendil-works/pi-ai@0.83.0 \\n`;
   writeFileSync(path.join(root, releaseArtifactPath), hostClosureReleaseArtifactContents);
   const releaseArtifactSha256 = createHash("sha256").update(hostClosureReleaseArtifactContents).digest("hex");
+  const desktopPayloadContents = Buffer.from("MZ\\x90\\x00halo-studio-fixture", "ascii");
+  const desktopArtifactContents = createStoredZip([
+    ["LICENSE", readFileSync(path.join(root, licensePath))],
+    ["THIRD_PARTY_NOTICES.md", readFileSync(path.join(root, noticePath))],
+    ["pi-host-LICENSE.txt", readFileSync(path.join(root, hostLicensePath))],
+    ["Halo Studio.exe", desktopPayloadContents],
+  ]);
+  writeFileSync(path.join(root, desktopArtifactPath), desktopArtifactContents);
+  const desktopArtifactSha256 = createHash("sha256").update(desktopArtifactContents).digest("hex");
+  const desktopPayloadSha256 = createHash("sha256").update(desktopPayloadContents).digest("hex");
 
   const fileFingerprint = (relativePath) => ({
     path: relativePath,
@@ -110,6 +188,22 @@ function createFixture(overrides = {}) {
     source: "npm:@earendil-works/pi-ai@0.83.0",
     license: "MIT",
   };
+  const artifactIncludedFiles = [
+    {
+      role: "license",
+      sourcePath: licensePath,
+      ...fileFingerprint(licensePath),
+      path: "LICENSE",
+      requiredText: ["MIT License", "Copyright (c) 2026 CWing"],
+    },
+    {
+      role: "third-party-notice",
+      sourcePath: noticePath,
+      ...fileFingerprint(noticePath),
+      path: "THIRD_PARTY_NOTICES.md",
+      requiredText: [EXTENSION_ID, "MIT License"],
+    },
+  ];
 
   const manifest = {
     schemaVersion: 1,
@@ -127,6 +221,10 @@ function createFixture(overrides = {}) {
       automatedMerge: false,
       upstreamWrite: false,
     },
+    dependencyBoundary: {
+      workspaceManifest: workspaceManifestPath,
+      uniqueMembers: ["src/crates/adapters/pi-rpc-adapter"],
+    },
     runtime: {
       adapterPath,
       scanPaths: [adapterPath],
@@ -134,7 +232,8 @@ function createFixture(overrides = {}) {
         {
           id: "fixture-built-in",
           sourceCommit: null,
-          sourceTag: "fixture-v1",
+          sourceTag: "v1.0.0",
+          version: "1.0.0",
           releaseEligible: false,
           capabilities: {
             tools: [],
@@ -201,10 +300,14 @@ function createFixture(overrides = {}) {
               direct: [hostDirectDependency],
               transitive: [hostTransitiveDependency],
               evidencePath: releaseArtifactPath,
+              evidenceSha256: releaseArtifactSha256,
+              evidenceSize: Buffer.byteLength(hostClosureReleaseArtifactContents),
             },
             licenseEvidence: {
               observedSpdx: "MIT",
               evidencePath: hostLicensePath,
+              evidenceSha256: fileFingerprint(hostLicensePath).sha256,
+              evidenceSize: fileFingerprint(hostLicensePath).size,
               copyright: "Copyright (c) Pi fixture",
               requiredText: ["MIT License", "Permission is hereby granted", "Copyright (c) Pi fixture"],
               releaseStatus: "included",
@@ -228,10 +331,19 @@ function createFixture(overrides = {}) {
             { ...fileFingerprint(noticePath), requiredText: [EXTENSION_ID, "MIT License"] },
           ],
           lockfileEvidence: lockPaths.map(fileFingerprint),
-            releaseArtifactEvidence: {
-            path: releaseArtifactPath,
-            sha256: releaseArtifactSha256,
-            size: Buffer.byteLength(hostClosureReleaseArtifactContents),
+          releaseArtifactEvidence: {
+            path: desktopArtifactPath,
+            artifactType: "desktop-distribution",
+            artifactFormat: "zip",
+            sha256: desktopArtifactSha256,
+            size: desktopArtifactContents.length,
+            includedFiles: artifactIncludedFiles,
+            payload: {
+              path: "Halo Studio.exe",
+              format: "windows-pe",
+              sha256: desktopPayloadSha256,
+              size: desktopPayloadContents.length,
+            },
             requiredText: [EXTENSION_ID, "MIT License"],
           },
         },
@@ -275,7 +387,7 @@ function createUpstreamFixture({ invalidRecord = true } = {}) {
   mkdirSync(path.join(fixture.root, "docs"), { recursive: true });
   writeFileSync(
     path.join(fixture.root, initialManifestPath),
-    JSON.stringify({ upstream: { commit: baseCommit }, entries: [{ path: "candidate.txt", mode: "100644", type: "blob", sha: candidateBlob, size: candidateSize }] }, null, 2),
+    JSON.stringify({ schema_version: 1, upstream: { commit: baseCommit }, entries: [{ path: "candidate.txt", mode: "100644", type: "blob", sha: candidateBlob, size: candidateSize }] }, null, 2),
   );
   writeFileSync(
     path.join(fixture.root, recordsPath),
@@ -331,7 +443,7 @@ function createUpstreamFixture({ invalidRecord = true } = {}) {
         ],
       },
       representativeChangedPaths: {},
-      releaseGate: { status: "passed", evidenceGaps: [] },
+      releaseGate: { status: "passed", evidenceGaps: [], blockingReasons: [] },
     }, null, 2),
   );
   fixture.manifest.upstreamCandidateEvidence = {
@@ -538,6 +650,37 @@ test("the runtime adapter load path must remain embedded, copied, and hash-bound
   const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
 
   assert.ok(report.findings.some((finding) => finding.code === "adapter-extension-source-not-hash-bound"));
+  assert.ok(report.findings.some((finding) => finding.code === "adapter-runtime-load-path-unproven"));
+});
+
+test("adapter load-path evidence must come from the real spawn flow, not a decoy token", () => {
+  const fixture = createFixture();
+  const decoyAdapter = ADAPTER_SOURCE
+    .replace("pi_rpc_args(extension_path, mode)", "pi_rpc_args(caller_path, mode)")
+    + "\nfn decoy() { pi_rpc_args(extension_path, mode); }\n";
+  writeFileSync(path.join(fixture.root, fixture.adapterPath), decoyAdapter);
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "adapter-runtime-load-path-unproven"));
+});
+
+test("adapter load-path evidence must bind lifecycle tokens to the start flow", () => {
+  const fixture = createFixture();
+  const decoyAdapter = ADAPTER_SOURCE.replace(
+    ADAPTER_START_FLOW,
+    `async fn start() {}
+fn decoy_lifecycle() {
+let mut extension = match self.install_first_party_extension() { _ => todo!() };
+let extension_path = extension.path.clone();
+state.extension_path = Some(extension_path);
+}
+`,
+  );
+  writeFileSync(path.join(fixture.root, fixture.adapterPath), decoyAdapter);
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
   assert.ok(report.findings.some((finding) => finding.code === "adapter-runtime-load-path-unproven"));
 });
 
@@ -1298,6 +1441,241 @@ test("a complete local evidence fixture passes the audit baseline", () => {
 
   assert.equal(report.status, "passed", JSON.stringify(report.findings, null, 2));
   assert.deepEqual(report.findings, []);
+});
+
+test("a passing upstream release record requires explicit empty evidence arrays", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const evidencePath = path.join(fixture.root, fixture.manifest.upstreamCandidateEvidence.path);
+  const evidence = JSON.parse(readFileSync(evidencePath, "utf8"));
+  delete evidence.releaseGate.blockingReasons;
+  writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.equal(report.status, "blocked");
+  assert.ok(report.findings.some((finding) => finding.code === "upstream-release-gate-reasons-missing"));
+});
+
+test("a passing upstream release record cannot retain evidence gaps or blocking reasons", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const evidencePath = path.join(fixture.root, fixture.manifest.upstreamCandidateEvidence.path);
+  const evidence = JSON.parse(readFileSync(evidencePath, "utf8"));
+  evidence.releaseGate = {
+    status: "passed",
+    evidenceGaps: ["manual product review is still missing"],
+    blockingReasons: ["candidate was not built"],
+  };
+  writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.equal(report.status, "blocked");
+  assert.ok(report.findings.some((finding) => finding.code === "upstream-release-gate-gaps-on-passed"));
+  assert.ok(report.findings.some((finding) => finding.code === "upstream-release-gate-reasons-on-passed"));
+});
+
+test("the extension audit requires a declared and unique Cargo dependency boundary", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  delete fixture.manifest.dependencyBoundary;
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "dependency-boundary-incomplete"));
+});
+
+test("host dependency closure rejects duplicate direct or transitive entries", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const closure = fixture.manifest.extensions[0].dependencies.host.dependencyClosure;
+  closure.transitive.push({ ...closure.direct[0] });
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "host-dependency-entry-duplicate"));
+});
+
+test("host dependency closure evidence is fingerprinted as release evidence", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  delete fixture.manifest.extensions[0].dependencies.host.dependencyClosure.evidenceSha256;
+  delete fixture.manifest.extensions[0].dependencies.host.dependencyClosure.evidenceSize;
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "host-dependency-closure-fingerprint-missing"));
+});
+
+test("license evidence must bind the exact product third-party notice file", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const originalPath = "product/THIRD_PARTY_NOTICES.md";
+  const movedPath = "product/other/THIRD_PARTY_NOTICES.md";
+  const contents = readFileSync(path.join(fixture.root, originalPath));
+  mkdirSync(path.dirname(path.join(fixture.root, movedPath)), { recursive: true });
+  writeFileSync(path.join(fixture.root, movedPath), contents);
+  fixture.manifest.extensions[0].license.evidence[1] = {
+    path: movedPath,
+    sha256: createHash("sha256").update(contents).digest("hex"),
+    size: contents.length,
+    requiredText: [EXTENSION_ID, "MIT License"],
+  };
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "license-notice-path-invalid"));
+});
+
+test("distribution evidence must include the exact product third-party notice", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  fixture.manifest.extensions[0].license.distributionFiles = fixture.manifest.extensions[0].license.distributionFiles
+    .filter((item) => item.path !== "product/THIRD_PARTY_NOTICES.md");
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "distribution-license-notice-missing"));
+});
+
+test("an exact release artifact cannot be substituted with a license evidence file", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  fixture.manifest.extensions[0].license.releaseArtifactEvidence = {
+    path: "product/Halo Studio/LICENSE",
+    sha256: fixture.manifest.extensions[0].license.evidence[0].sha256,
+    size: fixture.manifest.extensions[0].license.evidence[0].size,
+    requiredText: ["halo-workbench-permission-gate", "MIT License"],
+  };
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "release-artifact-reuses-license-file"));
+});
+
+test("release artifact evidence must classify the exact desktop distribution artifact", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  delete fixture.manifest.extensions[0].license.releaseArtifactEvidence.artifactType;
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "release-artifact-type-missing"));
+});
+
+test("desktop release artifact evidence must be a verifiable archive", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  writeFileSync(
+    path.join(fixture.root, fixture.manifest.extensions[0].license.releaseArtifactEvidence.path),
+    "not a desktop archive",
+  );
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "release-artifact-archive-invalid"));
+});
+
+test("desktop release artifact evidence must include a verifiable desktop payload", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  delete fixture.manifest.extensions[0].license.releaseArtifactEvidence.payload;
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "release-artifact-payload-evidence-missing"));
+});
+
+test("aliased globalThis or window member access remains a forbidden host capability", () => {
+  const fixture = createFixture();
+  writeFileSync(
+    path.join(fixture.root, fixture.extensionPath),
+    `${EXTENSION_SOURCE}const host = window; host.require("unreviewed");\n`,
+  );
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "extension-host-capability"));
+});
+
+test("an extension cannot stash a direct globalThis or window capability in a variable", () => {
+  const fixture = createFixture();
+  writeFileSync(
+    path.join(fixture.root, fixture.extensionPath),
+    `${EXTENSION_SOURCE}const fetcher = window.fetch; fetcher("https://example.invalid");\n`,
+  );
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "extension-host-capability"));
+});
+
+test("inventory scope must bind the fixed runtime adapter path", () => {
+  const fixture = createFixture();
+  fixture.manifest.scope.runtimeAdapter = "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/other.rs";
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "runtime-adapter-scope-mismatch"));
+});
+
+test("initial-import manifests reject duplicate or malformed tree entries", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const initialImportPath = path.join(fixture.root, "docs", "initial-import.json");
+  const initialImport = JSON.parse(readFileSync(initialImportPath, "utf8"));
+  initialImport.entries.push({ ...initialImport.entries[0] });
+  initialImport.entries.push({ ...initialImport.entries[0], path: "malformed.txt", sha: "not-a-git-blob" });
+  writeFileSync(initialImportPath, JSON.stringify(initialImport, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "upstream-initial-import-entry-duplicate"));
+  assert.ok(report.findings.some((finding) => finding.code === "upstream-initial-import-entry-invalid"));
+});
+
+test("floating host or built-in source tags cannot substitute for fixed provenance", () => {
+  const fixture = createFixture();
+  fixture.manifest.runtime.builtInExtensions[0].sourceTag = "release";
+  fixture.manifest.extensions[0].dependencies.host.sourceCommit = null;
+  fixture.manifest.extensions[0].dependencies.host.sourceTag = "release";
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.filter((finding) => finding.code === "host-source-provenance-missing").length > 0);
+  assert.ok(report.findings.some((finding) => finding.code === "built-in-extension-provenance-missing"));
+});
+
+test("a built-in source tag must have a paired fixed semantic version", () => {
+  const fixture = createFixture();
+  delete fixture.manifest.runtime.builtInExtensions[0].version;
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "built-in-extension-provenance-missing"));
+});
+
+test("host license evidence is fingerprinted before release attribution is accepted", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  delete fixture.manifest.extensions[0].dependencies.host.licenseEvidence.evidenceSha256;
+  delete fixture.manifest.extensions[0].dependencies.host.licenseEvidence.evidenceSize;
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "host-license-evidence-fingerprint-missing"));
+});
+
+test("the release-gate manifest must be loaded from the audited repository", () => {
+  const fixture = createFixture();
+  const outsideRoot = mkdtempSync(path.join(tmpdir(), "halo-pi-extension-outside-"));
+  const outsideManifestPath = path.join(outsideRoot, "inventory.json");
+  writeFileSync(outsideManifestPath, readFileSync(fixture.manifestPath));
+
+  const report = auditInventory({ manifestPath: outsideManifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "manifest-path-outside-repo"));
+  assert.ok(!JSON.stringify(report).includes(outsideRoot));
 });
 
 test("a declared blocked release gate remains blocked even when static evidence is complete", () => {

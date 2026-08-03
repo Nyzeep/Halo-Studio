@@ -133,12 +133,19 @@ The contract tests cover the release-gate seam and real CLI process (`--help`,
 blocked/eligible `--json`, unknown and missing arguments), rooted Windows path
 redaction, dynamic
 extension imports/host capabilities, extensionless runtime inputs, computed
-`globalThis`/`window` property access (including aliases and optional computed
-calls), including aliases bound from `const g = globalThis`, structured fail-closed
-extension metadata, and host closure/release-file evidence. Host license evidence and release files are canonicalized against all
+`globalThis`/`window` property access (including direct members, computed
+members, aliases, and optional calls), including aliases bound from
+`const g = globalThis`, structured fail-closed
+extension metadata, real adapter spawn-flow load-path evidence, initial-import
+manifest `schema_version`, pinned commit and tree entry validation, required Cargo workspace scope, exact product
+notice paths, a verifiable ZIP desktop artifact with a supported desktop payload
+whose license/notice entries bind back to the exact product files, and host
+closure/release-file evidence. A passing
+upstream candidate record must explicitly declare empty `evidenceGaps` and
+`blockingReasons` arrays; a blocked record must explain its gaps. Host license evidence and release files are canonicalized against all
 extension-owned license evidence, `distributionFiles`, and
 `releaseArtifactEvidence` paths, so reuse is blocked. The current source
-contains 71 audit contract tests; upstream evidence also requires recorded
+contains 92 audit contract tests; upstream evidence also requires recorded
 `HEAD^` and clean-status command results. The release matrix must be updated
 only from the command's actual exit code and test count.
 
