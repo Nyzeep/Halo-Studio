@@ -41,6 +41,14 @@ const TEXT_EXTENSIONS = new Set([
   ".yml",
 ]);
 
+const READ_ONLY_GIT_ARGS = [
+  "--no-optional-locks",
+  "-c",
+  "core.fsmonitor=false",
+  "-c",
+  "core.untrackedCache=false",
+];
+
 function normalizeRelativePath(value) {
   return String(value).replaceAll("\\", "/");
 }
@@ -51,6 +59,23 @@ function isAbsolutePath(value) {
 
 function isExternalEvidenceReference(value) {
   return isAbsolutePath(value) || READ_ONLY_EVIDENCE_REFERENCE_PATTERN.test(String(value));
+}
+
+function safePathLabel(value) {
+  if (typeof value !== "string" || value.trim() === "") return "<missing-path>";
+  if (isAbsolutePath(value)) return "<external-path>";
+  if (READ_ONLY_EVIDENCE_REFERENCE_PATTERN.test(value)) return "<read-only-evidence>";
+  return normalizeRelativePath(value);
+}
+
+function sanitizeEvidence(value) {
+  if (Array.isArray(value)) return value.map((entry) => sanitizeEvidence(entry));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, sanitizeEvidence(entry)]));
+  }
+  if (typeof value === "string" && isAbsolutePath(value)) return "<external-path>";
+  if (typeof value === "string" && READ_ONLY_EVIDENCE_REFERENCE_PATTERN.test(value)) return "<read-only-evidence>";
+  return value;
 }
 
 function inside(root, candidate) {
@@ -71,14 +96,14 @@ function resolveRepoPath(repoRoot, relativePath) {
 }
 
 function addFinding(findings, code, message, evidence = {}) {
-  findings.push({ code, message, evidence });
+  findings.push({ code, message, evidence: sanitizeEvidence(evidence) });
 }
 
 function readJson(filePath, findings) {
   try {
     return JSON.parse(readFileSync(filePath, "utf8"));
   } catch (error) {
-    addFinding(findings, "manifest-invalid-json", `Cannot parse ${filePath}: ${error.message}`);
+    addFinding(findings, "manifest-invalid-json", "Cannot parse JSON evidence");
     return null;
   }
 }
@@ -88,15 +113,8 @@ function hashFile(filePath, algorithm) {
 }
 
 function gitHashObject(repoRoot, relativePath) {
-  try {
-    return execFileSync("git", ["hash-object", "--", normalizeRelativePath(relativePath)], {
-      cwd: repoRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    return null;
-  }
+  const result = runGit(repoRoot, ["hash-object", "--", normalizeRelativePath(relativePath)]);
+  return result.ok ? result.stdout.trim() : null;
 }
 
 function runGit(cwd, args) {
@@ -104,9 +122,10 @@ function runGit(cwd, args) {
     return {
       ok: true,
       status: 0,
-      stdout: execFileSync("git", args, {
+      stdout: execFileSync("git", [...READ_ONLY_GIT_ARGS, ...args], {
         cwd,
         encoding: "utf8",
+        env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
         stdio: ["ignore", "pipe", "pipe"],
       }),
       stderr: "",
@@ -142,7 +161,7 @@ function isRegularFile(filePath) {
 function collectTextFiles(repoRoot, relativePath, findings) {
   const absolutePath = resolveRepoPath(repoRoot, relativePath);
   if (!absolutePath || !existsSync(absolutePath)) {
-    addFinding(findings, "runtime-scan-path-missing", `Runtime scan path is missing: ${relativePath}`);
+    addFinding(findings, "runtime-scan-path-missing", `Runtime scan path is missing: ${safePathLabel(relativePath)}`);
     return [];
   }
 
@@ -164,6 +183,23 @@ function collectTextFiles(repoRoot, relativePath, findings) {
   return files;
 }
 
+function checkFileFingerprint(filePath, descriptor, codePrefix, label, findings) {
+  const expectedHash = descriptor?.sha256;
+  const expectedSize = descriptor?.size;
+  if (!SHA256_PATTERN.test(expectedHash ?? "") || !Number.isInteger(expectedSize) || expectedSize < 0) {
+    addFinding(findings, `${codePrefix}-fingerprint-missing`, `${label} must declare a SHA-256 and byte size`);
+    return;
+  }
+  const actualHash = hashFile(filePath, "sha256");
+  const actualSize = statSync(filePath).size;
+  if (actualHash.toLowerCase() !== expectedHash.toLowerCase()) {
+    addFinding(findings, `${codePrefix}-hash-mismatch`, `${label} SHA-256 does not match the audited file`);
+  }
+  if (actualSize !== expectedSize) {
+    addFinding(findings, `${codePrefix}-size-mismatch`, `${label} byte size does not match the audited file`);
+  }
+}
+
 function checkEvidenceFiles(repoRoot, extension, findings) {
   const license = extension.license;
   const evidence = license?.evidence;
@@ -174,20 +210,21 @@ function checkEvidenceFiles(repoRoot, extension, findings) {
     for (const item of evidence) {
       const evidencePath = resolveRepoPath(repoRoot, item?.path);
       if (!evidencePath || !isRegularFile(evidencePath)) {
-        addFinding(findings, "license-evidence-file-missing", `License evidence file is missing: ${item?.path}`);
+        addFinding(findings, "license-evidence-file-missing", `License evidence file is missing: ${safePathLabel(item?.path)}`);
         continue;
       }
+      checkFileFingerprint(evidencePath, item, "license-evidence", `License evidence ${safePathLabel(item.path)}`, findings);
       const contents = readFileSync(evidencePath, "utf8");
       evidenceContents.push({ path: item.path, contents });
       if (!Array.isArray(item.requiredText) || item.requiredText.length === 0) {
-        addFinding(findings, "license-evidence-claims-missing", `License evidence ${item.path} must declare exact file claims`);
+        addFinding(findings, "license-evidence-claims-missing", `License evidence ${safePathLabel(item.path)} must declare exact file claims`);
       }
       for (const requiredText of item.requiredText ?? []) {
         if (typeof requiredText !== "string" || !contents.includes(requiredText)) {
           addFinding(
             findings,
             "license-evidence-text-missing",
-            `License evidence ${item.path} does not contain required text: ${requiredText}`,
+            `License evidence ${safePathLabel(item.path)} does not contain a declared text claim`,
           );
         }
       }
@@ -214,7 +251,7 @@ function checkEvidenceFiles(repoRoot, extension, findings) {
   } else {
     for (const claim of [extension.id, extension.sourcePath, extension.sourceCommit, extension.gitHashObject, extension.sha256]) {
       if (typeof claim !== "string" || !notice.contents.toLowerCase().includes(claim.toLowerCase())) {
-        addFinding(findings, "license-notice-provenance-missing", `${extension.id} notice does not contain the audited provenance claim: ${claim}`);
+        addFinding(findings, "license-notice-provenance-missing", `${extension.id} notice does not contain an audited provenance claim`);
       }
     }
   }
@@ -224,10 +261,13 @@ function checkEvidenceFiles(repoRoot, extension, findings) {
     addFinding(findings, "license-lockfile-evidence-missing", `${extension.id} has no lockfile evidence list`);
   } else {
     for (const lockfile of lockfileEvidence) {
-      const lockfilePath = resolveRepoPath(repoRoot, lockfile);
+      const lockfileDescriptor = typeof lockfile === "string" ? { path: lockfile } : lockfile;
+      const lockfilePath = resolveRepoPath(repoRoot, lockfileDescriptor?.path);
       if (!lockfilePath || !isRegularFile(lockfilePath)) {
-        addFinding(findings, "license-lockfile-file-missing", `${extension.id} lockfile evidence is missing: ${lockfile}`);
+        addFinding(findings, "license-lockfile-file-missing", `${extension.id} lockfile evidence is missing: ${safePathLabel(lockfileDescriptor?.path)}`);
+        continue;
       }
+      checkFileFingerprint(lockfilePath, lockfileDescriptor, "license-lockfile", `${extension.id} lockfile ${safePathLabel(lockfileDescriptor.path)}`, findings);
     }
   }
 
@@ -239,17 +279,18 @@ function checkEvidenceFiles(repoRoot, extension, findings) {
       const relativePath = typeof distributionFile === "string" ? distributionFile : distributionFile?.path;
       const distributionPath = resolveRepoPath(repoRoot, relativePath);
       if (!distributionPath || !isRegularFile(distributionPath)) {
-        addFinding(findings, "distribution-license-file-missing", `Release license/notice file is missing: ${relativePath}`);
+        addFinding(findings, "distribution-license-file-missing", `Release license/notice file is missing: ${safePathLabel(relativePath)}`);
         continue;
       }
+      checkFileFingerprint(distributionPath, distributionFile, "distribution-license", `Release license/notice file ${safePathLabel(relativePath)}`, findings);
       const requiredText = distributionFile && typeof distributionFile === "object" ? distributionFile.requiredText : null;
       if (!Array.isArray(requiredText) || requiredText.length === 0) {
-        addFinding(findings, "distribution-license-text-claims-missing", `Release license/notice file ${relativePath} must declare exact text claims`);
+        addFinding(findings, "distribution-license-text-claims-missing", `Release license/notice file ${safePathLabel(relativePath)} must declare exact text claims`);
       }
       const contents = readFileSync(distributionPath, "utf8");
       for (const claim of requiredText ?? []) {
         if (typeof claim !== "string" || !contents.includes(claim)) {
-          addFinding(findings, "distribution-license-text-missing", `Release license/notice file ${relativePath} does not contain required text: ${claim}`);
+          addFinding(findings, "distribution-license-text-missing", `Release license/notice file ${safePathLabel(relativePath)} does not contain a declared text claim`);
         }
       }
     }
@@ -261,16 +302,19 @@ function checkEvidenceFiles(repoRoot, extension, findings) {
   } else {
     const artifactPath = resolveRepoPath(repoRoot, releaseArtifact.path);
     if (!artifactPath || !isRegularFile(artifactPath)) {
-      addFinding(findings, "release-artifact-file-missing", `${extension.id} release artifact evidence file is missing: ${releaseArtifact.path}`);
+      addFinding(findings, "release-artifact-file-missing", `${extension.id} release artifact evidence file is missing: ${safePathLabel(releaseArtifact.path)}`);
     } else if (!SHA256_PATTERN.test(releaseArtifact.sha256 ?? "") || hashFile(artifactPath, "sha256") !== releaseArtifact.sha256.toLowerCase()) {
       addFinding(findings, "release-artifact-hash-mismatch", `${extension.id} release artifact evidence does not match its recorded SHA-256`);
+    }
+    if (artifactPath && isRegularFile(artifactPath)) {
+      checkFileFingerprint(artifactPath, releaseArtifact, "release-artifact", `${extension.id} release artifact`, findings);
     }
     if (!Array.isArray(releaseArtifact.requiredText) || releaseArtifact.requiredText.length === 0) {
       addFinding(findings, "release-artifact-text-claims-missing", `${extension.id} release artifact evidence must declare exact text claims`);
     }
     for (const requiredText of releaseArtifact.requiredText ?? []) {
       if (typeof requiredText !== "string" || !artifactPath || !isRegularFile(artifactPath) || !readFileSync(artifactPath, "utf8").includes(requiredText)) {
-        addFinding(findings, "release-artifact-text-missing", `${extension.id} release artifact evidence is missing required text: ${requiredText}`);
+        addFinding(findings, "release-artifact-text-missing", `${extension.id} release artifact evidence is missing a declared text claim`);
       }
     }
   }
@@ -305,7 +349,7 @@ function checkDependencies(repoRoot, extension, findings) {
   for (const lockfile of dependencies?.lockfiles ?? []) {
     const lockfilePath = resolveRepoPath(repoRoot, lockfile);
     if (!lockfilePath || !isRegularFile(lockfilePath)) {
-      addFinding(findings, "dependency-lockfile-missing", `Dependency lockfile is missing: ${lockfile}`);
+      addFinding(findings, "dependency-lockfile-missing", `Dependency lockfile is missing: ${safePathLabel(lockfile)}`);
       continue;
     }
     const contents = readFileSync(lockfilePath, "utf8");
@@ -313,7 +357,7 @@ function checkDependencies(repoRoot, extension, findings) {
       addFinding(
         findings,
         "runtime-dependency-in-lockfile",
-        `The Pi host package appears in a Halo lockfile and must not become an extension runtime dependency: ${lockfile}`,
+        `The Pi host package appears in a Halo lockfile and must not become an extension runtime dependency: ${safePathLabel(lockfile)}`,
       );
     }
   }
@@ -726,7 +770,7 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
 
   const evidencePath = resolveRepoPath(repoRoot, evidence.path);
   if (!evidencePath || !existsSync(evidencePath)) {
-    addFinding(findings, "upstream-evidence-file-missing", `Upstream candidate evidence file is missing: ${evidence.path}`);
+    addFinding(findings, "upstream-evidence-file-missing", `Upstream candidate evidence file is missing: ${safePathLabel(evidence.path)}`);
     return;
   }
   const candidateEvidence = readJson(evidencePath, findings);
@@ -745,7 +789,7 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
   );
   const referenceRoot = resolveReferenceRoot(candidate);
   if (!referenceRoot || !existsSync(referenceRoot) || !statSync(referenceRoot).isDirectory()) {
-    addFinding(findings, "upstream-reference-tree-unavailable", `Upstream candidate reference tree is unavailable: ${candidate?.referenceRoot}`);
+    addFinding(findings, "upstream-reference-tree-unavailable", "Upstream candidate reference tree is unavailable");
     return;
   }
   if (inside(path.resolve(repoRoot), referenceRoot)) {
@@ -1024,11 +1068,26 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
       }
       recordCounts[record.status] += 1;
       recordMap.set(record.path, record.status);
-      if (record.status === "added" && record.base !== null) addFinding(findings, "upstream-diff-record-invalid", `Added path has unexpected base entry: ${record.path}`);
-      if (record.status === "removed" && record.candidate !== null) addFinding(findings, "upstream-diff-record-invalid", `Removed path has unexpected candidate entry: ${record.path}`);
-      if (record.status === "modified" && (!record.base || !record.candidate)) addFinding(findings, "upstream-diff-record-invalid", `Modified path must contain both entries: ${record.path}`);
+      if (record.status === "added" && record.base !== null) addFinding(findings, "upstream-diff-record-invalid", `Added path has unexpected base entry: ${safePathLabel(record.path)}`);
+      if (record.status === "removed" && record.candidate !== null) addFinding(findings, "upstream-diff-record-invalid", `Removed path has unexpected candidate entry: ${safePathLabel(record.path)}`);
+      if (record.status === "modified" && (!record.base || !record.candidate)) addFinding(findings, "upstream-diff-record-invalid", `Modified path must contain both entries: ${safePathLabel(record.path)}`);
       if ((record.status === "added" && !validTreeEntry(record.candidate)) || (record.status === "removed" && !validTreeEntry(record.base)) || (record.status === "modified" && (!validTreeEntry(record.base) || !validTreeEntry(record.candidate)))) {
-        addFinding(findings, "upstream-diff-record-entry-invalid", `Upstream path record has an invalid mode/blob/size entry: ${record.path}`);
+        addFinding(findings, "upstream-diff-record-entry-invalid", `Upstream path record has an invalid mode/blob/size entry: ${safePathLabel(record.path)}`);
+      }
+      const expectedBase = baseEntries.get(normalizeRelativePath(record.path)) ?? null;
+      const expectedCandidate = candidateEntries.get(normalizeRelativePath(record.path)) ?? null;
+      const sameTreeEntry = (actual, expected) => actual && expected
+        && actual.mode === expected.mode
+        && actual.type === expected.type
+        && actual.blob === expected.blob
+        && actual.size === expected.size;
+      const entriesMatch = record.status === "added"
+        ? record.base === null && sameTreeEntry(record.candidate, expectedCandidate)
+        : record.status === "removed"
+          ? record.candidate === null && sameTreeEntry(record.base, expectedBase)
+          : sameTreeEntry(record.base, expectedBase) && sameTreeEntry(record.candidate, expectedCandidate);
+      if (!entriesMatch) {
+        addFinding(findings, "upstream-diff-record-entry-mismatch", `Upstream path record does not match the fresh Git tree: ${safePathLabel(record.path)}`);
       }
     }
     for (const [status, count] of Object.entries({ modified: comparison.modified, added: comparison.added, removed: comparison.removed })) {
@@ -1060,7 +1119,7 @@ function checkWorkspaceBoundary(repoRoot, boundary, findings) {
   if (!boundary) return;
   const manifestPath = resolveRepoPath(repoRoot, boundary.workspaceManifest);
   if (!manifestPath || !existsSync(manifestPath)) {
-    addFinding(findings, "workspace-manifest-missing", `Workspace dependency manifest is missing: ${boundary.workspaceManifest}`);
+    addFinding(findings, "workspace-manifest-missing", `Workspace dependency manifest is missing: ${safePathLabel(boundary.workspaceManifest)}`);
     return;
   }
   const contents = readFileSync(manifestPath, "utf8");
@@ -1081,7 +1140,7 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
   const findings = [];
   const absoluteManifestPath = path.resolve(manifestPath);
   const manifest = readJson(absoluteManifestPath, findings);
-  if (!manifest) return { status: "blocked", findings, manifestPath: absoluteManifestPath };
+  if (!manifest) return { status: "blocked", findings, manifestPath: "<manifest>" };
 
   if (manifest.schemaVersion !== 1) addFinding(findings, "manifest-schema-unsupported", "The extension inventory schema version is unsupported");
   if (manifest.scope?.productRoot !== "product/Halo Studio") addFinding(findings, "product-root-policy-mismatch", "The inventory product root must remain product/Halo Studio");
@@ -1090,7 +1149,7 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
   }
   if (manifest.releaseGate?.status === "blocked") {
     addFinding(findings, "release-gate-declared-blocked", "The release gate is explicitly blocked", {
-      reasons: manifest.releaseGate.blockingReasons ?? [],
+      reasonCount: Array.isArray(manifest.releaseGate.blockingReasons) ? manifest.releaseGate.blockingReasons.length : 0,
     });
   }
   if (manifest.releaseGate?.status === "blocked" && (!Array.isArray(manifest.releaseGate.blockingReasons) || manifest.releaseGate.blockingReasons.length === 0)) {
@@ -1140,15 +1199,15 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
       continue;
     }
     if (!existsSync(sourcePath)) {
-      addFinding(findings, "extension-source-missing", `Extension source is missing: ${extension.sourcePath}`);
+      addFinding(findings, "extension-source-missing", `Extension source is missing: ${safePathLabel(extension.sourcePath)}`);
       continue;
     }
 
     const actualGitHash = gitHashObject(repoRoot, extension.sourcePath);
-    if (actualGitHash === null) addFinding(findings, "git-hash-object-unavailable", `git hash-object could not inspect ${extension.sourcePath}`);
-    else if (actualGitHash.toLowerCase() !== extension.gitHashObject.toLowerCase()) addFinding(findings, "git-hash-object-mismatch", `Git object hash mismatch for ${extension.sourcePath}`, { expected: extension.gitHashObject, actual: actualGitHash });
+    if (actualGitHash === null) addFinding(findings, "git-hash-object-unavailable", `git hash-object could not inspect ${safePathLabel(extension.sourcePath)}`);
+    else if (actualGitHash.toLowerCase() !== extension.gitHashObject.toLowerCase()) addFinding(findings, "git-hash-object-mismatch", `Git object hash mismatch for ${safePathLabel(extension.sourcePath)}`, { expected: extension.gitHashObject, actual: actualGitHash });
     const actualSha256 = hashFile(sourcePath, "sha256");
-    if (actualSha256.toLowerCase() !== extension.sha256.toLowerCase()) addFinding(findings, "sha256-mismatch", `SHA-256 mismatch for ${extension.sourcePath}`, { expected: extension.sha256, actual: actualSha256 });
+    if (actualSha256.toLowerCase() !== extension.sha256.toLowerCase()) addFinding(findings, "sha256-mismatch", `SHA-256 mismatch for ${safePathLabel(extension.sourcePath)}`, { expected: extension.sha256, actual: actualSha256 });
 
     const sourceContents = readFileSync(sourcePath, "utf8");
     checkSourceProvenance(repoRoot, extension, findings);
@@ -1157,7 +1216,7 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
     checkEvidenceFiles(repoRoot, extension, findings);
 
     const adapterPath = resolveRepoPath(repoRoot, manifest.runtime?.adapterPath);
-    if (!adapterPath || !existsSync(adapterPath)) addFinding(findings, "adapter-source-missing", `PiRpcAdapter source is missing: ${manifest.runtime?.adapterPath}`);
+    if (!adapterPath || !existsSync(adapterPath)) addFinding(findings, "adapter-source-missing", `PiRpcAdapter source is missing: ${safePathLabel(manifest.runtime?.adapterPath)}`);
     else {
       const adapterSource = readFileSync(adapterPath, "utf8");
       checkLoadBoundary(extension, adapterSource, findings);
@@ -1168,7 +1227,7 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
   return {
     status: findings.length === 0 ? "passed" : "blocked",
     findings,
-    manifestPath: absoluteManifestPath,
+    manifestPath: "<manifest>",
     extensionCount: manifest.extensions?.length ?? 0,
   };
 }
@@ -1181,7 +1240,7 @@ function parseArgs(argv) {
     else if (argument === "--root") options.repoRoot = path.resolve(argv[++index]);
     else if (argument === "--json") options.json = true;
     else if (argument === "--help" || argument === "-h") options.help = true;
-    else throw new Error(`Unknown argument: ${argument}`);
+    else throw new Error("Unknown audit argument");
   }
   return options;
 }
@@ -1205,7 +1264,7 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   try {
     process.exitCode = main();
   } catch (error) {
-    console.error(error.message);
+    console.error("Pi extension audit failed");
     process.exitCode = 1;
   }
 }

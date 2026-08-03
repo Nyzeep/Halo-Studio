@@ -81,6 +81,12 @@ function createFixture(overrides = {}) {
   writeFileSync(path.join(root, releaseArtifactPath), releaseArtifactContents);
   const releaseArtifactSha256 = createHash("sha256").update(releaseArtifactContents).digest("hex");
 
+  const fileFingerprint = (relativePath) => ({
+    path: relativePath,
+    sha256: createHash("sha256").update(readFileSync(path.join(root, relativePath))).digest("hex"),
+    size: readFileSync(path.join(root, relativePath)).length,
+  });
+
   const manifest = {
     schemaVersion: 1,
     scope: {
@@ -176,17 +182,18 @@ function createFixture(overrides = {}) {
           spdx: "MIT",
           copyright: "Copyright (c) 2026 CWing",
           evidence: [
-            { path: licensePath, requiredText: ["MIT License", "Copyright (c) 2026 CWing"] },
-            { path: noticePath, requiredText: [EXTENSION_ID, "MIT License"] },
+            { ...fileFingerprint(licensePath), requiredText: ["MIT License", "Copyright (c) 2026 CWing"] },
+            { ...fileFingerprint(noticePath), requiredText: [EXTENSION_ID, "MIT License"] },
           ],
           distributionFiles: [
-            { path: licensePath, requiredText: ["MIT License", "Copyright (c) 2026 CWing"] },
-            { path: noticePath, requiredText: [EXTENSION_ID, "MIT License"] },
+            { ...fileFingerprint(licensePath), requiredText: ["MIT License", "Copyright (c) 2026 CWing"] },
+            { ...fileFingerprint(noticePath), requiredText: [EXTENSION_ID, "MIT License"] },
           ],
-          lockfileEvidence: lockPaths,
+          lockfileEvidence: lockPaths.map(fileFingerprint),
           releaseArtifactEvidence: {
             path: releaseArtifactPath,
             sha256: releaseArtifactSha256,
+            size: Buffer.byteLength(releaseArtifactContents),
             requiredText: [EXTENSION_ID, "MIT License"],
           },
         },
@@ -462,6 +469,15 @@ test("generic external absolute paths in runtime inputs are blocked", () => {
   assert.ok(report.findings.some((finding) => finding.code === "forbidden-absolute-path" && finding.message.includes("external-path.js")));
 });
 
+test("audit reports never expose the caller's absolute workspace path", () => {
+  const fixture = createFixture();
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.equal(report.manifestPath, "<manifest>");
+  assert.ok(!JSON.stringify(report).includes(fixture.root));
+});
+
 test("POSIX, UNC, and rooted Windows absolute paths are blocked", () => {
   const fixture = createFixture();
   const runtimeDirectory = "product/Halo Studio/scripts/path-matrix";
@@ -553,6 +569,16 @@ test("license evidence must bind declared SPDX and copyright to actual files", (
 
   assert.ok(report.findings.some((finding) => finding.code === "license-spdx-evidence-missing"));
   assert.ok(report.findings.some((finding) => finding.code === "license-copyright-evidence-missing"));
+});
+
+test("license evidence requires a reproducible file fingerprint", () => {
+  const fixture = createFixture();
+  delete fixture.manifest.extensions[0].license.evidence[0].sha256;
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "license-evidence-fingerprint-missing"));
 });
 
 test("an unsupported SPDX identifier remains blocked without an evidence rule", () => {
@@ -722,6 +748,23 @@ test("upstream path records reject invalid tree entry evidence", () => {
   const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
 
   assert.ok(report.findings.some((finding) => finding.code === "upstream-diff-record-entry-invalid"));
+});
+
+test("upstream path records must match the fresh base and candidate tree entries", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const recordsPath = path.join(fixture.root, "docs", "issue-13-upstream-sync-diff.json");
+  const records = JSON.parse(readFileSync(recordsPath, "utf8"));
+  records.records = [{
+    path: "candidate.txt",
+    status: "modified",
+    base: { mode: "100644", type: "blob", blob: "a".repeat(40), size: 0 },
+    candidate: { mode: "100644", type: "blob", blob: "b".repeat(40), size: 0 },
+  }];
+  writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "upstream-diff-record-entry-mismatch"));
 });
 
 test("a complete local evidence fixture passes the audit baseline", () => {
