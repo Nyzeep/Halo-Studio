@@ -658,6 +658,18 @@ function checkConflictDecisions(candidateEvidence, findings) {
   }
   if (!Array.isArray(decisions.prohibitedActions) || decisions.prohibitedActions.length === 0) {
     addFinding(findings, "upstream-prohibited-actions-missing", "Upstream candidate evidence must record prohibited merge, upstream-write, and source-copy actions");
+    return;
+  }
+  const prohibitedActionCategories = [
+    ["merge", /\b(?:merge|cherry[- ]pick)\b/i],
+    ["upstream-write", /\b(?:commit|push|fetch|pull|write)\b/i],
+    ["source-copy", /\b(?:copy|copied|clone|cloned)\b/i],
+  ];
+  const prohibitedActions = decisions.prohibitedActions.filter((value) => typeof value === "string");
+  for (const [category, marker] of prohibitedActionCategories) {
+    if (!prohibitedActions.some((value) => marker.test(value))) {
+      addFinding(findings, "upstream-prohibited-action-detail-missing", `Upstream candidate evidence must enumerate the prohibited ${category} action`, { category });
+    }
   }
 }
 
