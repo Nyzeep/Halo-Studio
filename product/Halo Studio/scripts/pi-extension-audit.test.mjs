@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { auditInventory } from "./pi-extension-audit.mjs";
+
+const AUDIT_SCRIPT = fileURLToPath(new URL("./pi-extension-audit.mjs", import.meta.url));
 
 const EXTENSION_ID = "halo-workbench-permission-gate";
 const EXTENSION_SOURCE = `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -145,11 +148,13 @@ function createFixture(overrides = {}) {
           userAutoDiscovery: false,
           runtimeDownload: false,
           inlineBuiltInsPolicy: "audited-host-built-ins",
+          pathPolicy: "Only the adapter-owned temporary copy of the embedded, hash-verified source may be passed to --extension.",
         },
         capabilities: {
           tools: [],
           events: ["tool_call"],
-          ui: ["extension_ui_request/response via ctx.ui.confirm"],
+          ui: ["ctx.ui.confirm", "extension_ui_request", "extension_ui_response"],
+          cleanup: ["stop", "abort", "eof", "failure", "application-exit"],
         },
         impact: {
           files: "none",
@@ -157,6 +162,7 @@ function createFixture(overrides = {}) {
           process: "none",
           credentials: "none",
           git: "none",
+          renderer: "none",
         },
         hostPermissions: "inherits Pi process user permissions; no sandbox",
         dependencies: {
@@ -168,12 +174,12 @@ function createFixture(overrides = {}) {
             sourceCommit,
             sourceTag: null,
             bundled: false,
-            dependencyClosure: { status: "complete", direct: [], transitive: [] },
+            dependencyClosure: { status: "complete", direct: [], transitive: [], evidencePath: releaseArtifactPath },
             licenseEvidence: {
               observedSpdx: "MIT",
               evidencePath: licensePath,
               releaseStatus: "included",
-              releaseFiles: [releaseArtifactPath],
+              releaseFiles: [fileFingerprint(releaseArtifactPath)],
             },
           },
           lockfiles: lockPaths,
@@ -301,6 +307,14 @@ function createUpstreamFixture({ invalidRecord = true } = {}) {
   return fixture;
 }
 
+function runAuditCli(fixture, args = []) {
+  return spawnSync(
+    process.execPath,
+    [AUDIT_SCRIPT, "--manifest", fixture.manifestPath, "--root", fixture.root, ...args],
+    { cwd: fixture.root, encoding: "utf8", windowsHide: true },
+  );
+}
+
 test("local evidence is audited while missing host provenance blocks release", () => {
   const fixture = createFixture();
   fixture.manifest.extensions[0].dependencies.host.sourceCommit = null;
@@ -411,6 +425,37 @@ test("runtime download commands and forbidden absolute paths fail closed", () =>
   assert.ok(report.findings.some((finding) => finding.code === "forbidden-absolute-path"));
 });
 
+test("CLI help, blocked JSON, and passing JSON have explicit exit contracts", () => {
+  const help = spawnSync(process.execPath, [AUDIT_SCRIPT, "--help"], { encoding: "utf8", windowsHide: true });
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /Usage: node scripts\/pi-extension-audit\.mjs/);
+
+  const blockedFixture = createFixture({
+    releaseGate: { status: "blocked", blockingReasons: ["fixture blocker"] },
+  });
+  const blocked = runAuditCli(blockedFixture, ["--json"]);
+  assert.equal(blocked.status, 1, blocked.stderr);
+  assert.equal(JSON.parse(blocked.stdout).status, "blocked");
+
+  const passingFixture = createUpstreamFixture({ invalidRecord: false });
+  const passed = runAuditCli(passingFixture, ["--json"]);
+  assert.equal(passed.status, 0, `${passed.stderr}\n${passed.stdout}`);
+  assert.equal(JSON.parse(passed.stdout).status, "passed");
+});
+
+test("CLI rejects unknown arguments and missing option values", () => {
+  const fixture = createFixture();
+  const unknown = runAuditCli(fixture, ["--unknown"]);
+  assert.equal(unknown.status, 1);
+
+  const missingValue = spawnSync(process.execPath, [AUDIT_SCRIPT, "--manifest"], {
+    cwd: fixture.root,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  assert.equal(missingValue.status, 1);
+});
+
 test("runtime download invocations in JavaScript build inputs are blocked", () => {
   const fixture = createFixture();
   const runtimePath = "product/Halo Studio/scripts/runtime-danger.js";
@@ -422,6 +467,19 @@ test("runtime download invocations in JavaScript build inputs are blocked", () =
   const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
 
   assert.ok(report.findings.some((finding) => finding.code === "runtime-download-capability"));
+});
+
+test("runtime scanning catches network calls in extensionless text inputs", () => {
+  const fixture = createFixture();
+  const runtimePath = "product/Halo Studio/scripts/runtime-network-check";
+  mkdirSync(path.dirname(path.join(fixture.root, runtimePath)), { recursive: true });
+  writeFileSync(path.join(fixture.root, runtimePath), 'globalThis.fetch("https://example.invalid");\n');
+  fixture.manifest.runtime.scanPaths.push(runtimePath);
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "runtime-network-capability"));
 });
 
 test("shell download variants and script module inputs are blocked", () => {
@@ -471,6 +529,47 @@ test("generic external absolute paths in runtime inputs are blocked", () => {
   const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
 
   assert.ok(report.findings.some((finding) => finding.code === "forbidden-absolute-path" && finding.message.includes("external-path.js")));
+});
+
+test("rooted Windows paths are both blocked and redacted from audit evidence", () => {
+  const fixture = createFixture();
+  const runtimePath = "product/Halo Studio/scripts/rooted-path.js";
+  const rootedWindowsPath = String.raw`\rooted\source`;
+  mkdirSync(path.dirname(path.join(fixture.root, runtimePath)), { recursive: true });
+  writeFileSync(path.join(fixture.root, runtimePath), `const external = "${rootedWindowsPath}";\n`);
+  fixture.manifest.extensions[0].load.arguments[4] = rootedWindowsPath;
+  fixture.manifest.runtime.scanPaths.push(runtimePath);
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "forbidden-absolute-path"));
+  assert.ok(!JSON.stringify(report).includes(rootedWindowsPath));
+});
+
+test("dynamic extension imports and host capabilities are rejected", () => {
+  const fixture = createFixture();
+  writeFileSync(
+    path.join(fixture.root, fixture.extensionPath),
+    `${EXTENSION_SOURCE}const fs = require("node:fs");\nawait import("node:net");\nglobalThis.fetch("https://example.invalid");\n`,
+  );
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "extension-runtime-import-present"));
+  assert.ok(report.findings.some((finding) => finding.code === "extension-host-capability"));
+});
+
+test("extension metadata must describe the fail-closed permission seam", () => {
+  const fixture = createFixture();
+  fixture.manifest.extensions[0].capabilities = { tools: [], events: [], ui: [], cleanup: [] };
+  fixture.manifest.extensions[0].impact = { files: "none" };
+  fixture.manifest.extensions[0].hostPermissions = "";
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "extension-contract-metadata-incomplete"));
 });
 
 test("audit reports never expose the caller's absolute workspace path", () => {
@@ -640,6 +739,18 @@ test("runtime and transitive dependency declarations are not admitted", () => {
   assert.ok(report.findings.some((finding) => finding.code === "runtime-dependency-present"));
   assert.ok(report.findings.some((finding) => finding.code === "transitive-dependency-present"));
   assert.ok(report.findings.some((finding) => finding.code === "runtime-dependency-in-lockfile"));
+});
+
+test("complete host closure and included host license claims require release evidence files", () => {
+  const fixture = createFixture();
+  fixture.manifest.extensions[0].dependencies.host.dependencyClosure.evidencePath = "missing-host-closure.txt";
+  fixture.manifest.extensions[0].dependencies.host.licenseEvidence.releaseFiles = [{ path: "missing-host-license.txt" }];
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "host-dependency-closure-evidence-missing"));
+  assert.ok(report.findings.some((finding) => finding.code === "host-license-release-file-missing"));
 });
 
 test("floating version and incomplete provenance are blocked", () => {

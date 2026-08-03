@@ -54,7 +54,7 @@ function normalizeRelativePath(value) {
 }
 
 function isAbsolutePath(value) {
-  return /^(?:[A-Za-z]:[\\/]|[\\/]{2}|\/)/.test(String(value));
+  return /^(?:[A-Za-z]:[\\/]|[\\/]{1,2})/.test(String(value));
 }
 
 function isExternalEvidenceReference(value) {
@@ -158,6 +158,14 @@ function isRegularFile(filePath) {
   }
 }
 
+function isTextLikeFile(filePath) {
+  try {
+    return !readFileSync(filePath).subarray(0, 8192).includes(0);
+  } catch {
+    return false;
+  }
+}
+
 function collectTextFiles(repoRoot, relativePath, findings) {
   const absolutePath = resolveRepoPath(repoRoot, relativePath);
   if (!absolutePath || !existsSync(absolutePath)) {
@@ -176,7 +184,7 @@ function collectTextFiles(repoRoot, relativePath, findings) {
       files.push(...collectTextFiles(repoRoot, path.relative(repoRoot, entryPath), findings));
       continue;
     }
-    if (entry.isFile() && TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+    if (entry.isFile() && (TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase()) || path.extname(entry.name) === "") && isTextLikeFile(entryPath)) {
       files.push(entryPath);
     }
   }
@@ -385,6 +393,18 @@ function checkDependencies(repoRoot, extension, findings) {
       `${extension.id} host package license evidence is observed outside Halo release files and cannot pass the release gate`,
       { evidencePath: hostLicense.evidencePath, releaseStatus: hostLicense.releaseStatus ?? null },
     );
+  } else {
+    for (const releaseFile of hostLicense.releaseFiles) {
+      const descriptor = typeof releaseFile === "string" ? { path: releaseFile } : releaseFile;
+      const releasePath = resolveRepoPath(repoRoot, descriptor?.path);
+      if (!releasePath || !isRegularFile(releasePath)) {
+        addFinding(findings, "host-license-release-file-missing", `${extension.id} host license release evidence file is missing: ${safePathLabel(descriptor?.path)}`);
+      } else if (!SHA256_PATTERN.test(descriptor?.sha256 ?? "") || !Number.isInteger(descriptor?.size)) {
+        addFinding(findings, "host-license-release-fingerprint-missing", `${extension.id} host license release evidence must include a SHA-256 and byte size`);
+      } else {
+        checkFileFingerprint(releasePath, descriptor, "host-license-release", `${extension.id} host license release evidence ${safePathLabel(descriptor.path)}`, findings);
+      }
+    }
   }
   const closure = host?.dependencyClosure;
   if (!closure || closure.status !== "complete" || !Array.isArray(closure.direct) || !Array.isArray(closure.transitive)) {
@@ -393,6 +413,11 @@ function checkDependencies(repoRoot, extension, findings) {
       "host-dependency-closure-incomplete",
       `${extension.id} host package direct/transitive dependency closure is not complete evidence; do not infer it from the package name`,
     );
+  } else {
+    const closureEvidencePath = resolveRepoPath(repoRoot, closure.evidencePath);
+    if (!closureEvidencePath || !isRegularFile(closureEvidencePath)) {
+      addFinding(findings, "host-dependency-closure-evidence-missing", `${extension.id} host dependency closure must point to a repository-local evidence file`);
+    }
   }
 }
 
@@ -401,8 +426,11 @@ function checkExtensionSource(extension, sourceContents, findings) {
     addFinding(findings, "runtime-import-not-type-only", `${extension.id} must import the Pi API as a type-only import`);
   }
 
-  const externalImports = [...sourceContents.matchAll(/^\s*import\s+(?!type\b).*?from\s+["']([^"']+)["']/gm)]
-    .map((match) => match[1])
+  const staticImports = [...sourceContents.matchAll(/^\s*import\s+(?!type\b).*?from\s+["']([^"']+)["']/gm)]
+    .map((match) => match[1]);
+  const dynamicImports = [...sourceContents.matchAll(/\b(?:require|import)\s*\(\s*["']([^"']+)["']\s*\)/g)]
+    .map((match) => match[1]);
+  const externalImports = [...new Set([...staticImports, ...dynamicImports])]
     .filter((specifier) => !specifier.startsWith("."));
   if (externalImports.length > 0) {
     addFinding(findings, "extension-runtime-import-present", `${extension.id} declares runtime package imports; extension runtime dependencies are not admitted`, {
@@ -412,6 +440,8 @@ function checkExtensionSource(extension, sourceContents, findings) {
 
   const forbiddenExtensionPatterns = [
     /from\s+["']node:(?:fs|fs\/promises|child_process|net|http|https|os)["']/i,
+    /\b(?:require|import)\s*\(\s*["'](?:node:)?(?:fs|fs\/promises|child_process|net|http|https|os)["']\s*\)/i,
+    /\b(?:globalThis\.)?fetch\s*\(/i,
     /\b(?:fetch|exec|spawn|fork|readFile|writeFile|mkdir|unlink|rm|createReadStream|createWriteStream)\s*\(/,
     /\b(?:process\.env|credential|apiKey|authorization)\b/i,
   ];
@@ -421,6 +451,46 @@ function checkExtensionSource(extension, sourceContents, findings) {
         pattern: String(pattern),
       });
     }
+  }
+}
+
+function checkExtensionContractMetadata(extension, findings) {
+  const capabilities = extension.capabilities;
+  const requiredArrays = ["tools", "events", "ui", "cleanup"];
+  if (!capabilities || typeof capabilities !== "object") {
+    addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare structured capabilities`);
+  } else {
+    for (const key of requiredArrays) {
+      if (!Array.isArray(capabilities[key])) {
+        addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id}.capabilities.${key} must be an array`);
+      }
+    }
+    if (Array.isArray(capabilities.events) && !capabilities.events.includes("tool_call")) {
+      addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare the tool_call pre-execution gate`);
+    }
+    for (const uiCapability of ["ctx.ui.confirm", "extension_ui_request", "extension_ui_response"]) {
+      if (Array.isArray(capabilities.ui) && !capabilities.ui.includes(uiCapability)) {
+        addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare ${uiCapability}`);
+      }
+    }
+    for (const cleanupEvent of ["stop", "abort", "eof", "failure", "application-exit"]) {
+      if (Array.isArray(capabilities.cleanup) && !capabilities.cleanup.includes(cleanupEvent)) {
+        addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare cleanup for ${cleanupEvent}`);
+      }
+    }
+  }
+
+  const impact = extension.impact;
+  if (!impact || typeof impact !== "object" || ["files", "network", "process", "credentials", "git", "renderer"].some(
+    (key) => typeof impact[key] !== "string" || impact[key].trim() === "",
+  )) {
+    addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare all host-impact fields`);
+  }
+  if (typeof extension.hostPermissions !== "string" || extension.hostPermissions.trim() === "") {
+    addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must describe inherited host permissions and sandbox status`);
+  }
+  if (typeof extension.load?.pathPolicy !== "string" || extension.load.pathPolicy.trim() === "") {
+    addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare its adapter-owned extension path policy`);
   }
 }
 
@@ -534,11 +604,15 @@ function checkRuntimeScan(repoRoot, runtime, findings) {
     /(?:^|[\r\n;&|{}])\s*(?:Invoke-WebRequest|Invoke-RestMethod|iwr|irm|Start-BitsTransfer)\b/im,
     /\b(?:WebClient\.(?:DownloadFile|DownloadString|DownloadData)|DownloadFile\s*\()\b/i,
   ];
+  const networkCapability = [
+    /\b(?:globalThis|window)\.fetch\s*\(/i,
+    /\bhttps?\.request\s*\(/i,
+  ];
   const projectDiscovery = /(?:\.pi[\\/]extensions|\.pi[\\/]packages|PI_CODING_AGENT_DIR\s*.*(?:workspace|project))/i;
   const isAllowlisted = (relativePath, code, file) => (runtime.allowlistedFindings ?? []).some(
     (entry) => entry?.path === relativePath
       && entry?.code === code
-      && code !== "runtime-download-capability"
+      && !["runtime-download-capability", "runtime-network-capability"].includes(code)
       && typeof entry.reason === "string"
       && entry.reason.trim() !== ""
       && SHA256_PATTERN.test(entry.sha256 ?? "")
@@ -546,8 +620,8 @@ function checkRuntimeScan(repoRoot, runtime, findings) {
   );
 
   for (const entry of runtime.allowlistedFindings ?? []) {
-    if (entry?.code === "runtime-download-capability") {
-      addFinding(findings, "runtime-download-allowlist-forbidden", "Runtime download capabilities cannot be allowlisted; remove the capability or keep the release gate blocked");
+    if (["runtime-download-capability", "runtime-network-capability"].includes(entry?.code)) {
+      addFinding(findings, "runtime-capability-allowlist-forbidden", "Runtime download and network capabilities cannot be allowlisted; remove the capability or keep the release gate blocked");
     }
     if (!entry?.path || !entry?.code || !entry?.reason || isAbsolutePath(entry.path)) {
       addFinding(findings, "runtime-allowlist-invalid", "Runtime scan allowlist entries require a relative path, code, and reason");
@@ -569,6 +643,9 @@ function checkRuntimeScan(repoRoot, runtime, findings) {
     }
     if (downloadCapability.some((pattern) => pattern.test(contents)) && !isAllowlisted(relativePath, "runtime-download-capability", file)) {
       addFinding(findings, "runtime-download-capability", `Runtime/build input contains a download or package installation capability: ${relativePath}`);
+    }
+    if (networkCapability.some((pattern) => pattern.test(contents)) && !isAllowlisted(relativePath, "runtime-network-capability", file)) {
+      addFinding(findings, "runtime-network-capability", `Runtime/build input contains a network capability: ${relativePath}`);
     }
     if (projectDiscovery.test(contents)) {
       addFinding(findings, "project-extension-discovery-capability", `Runtime/build input can discover project/user Pi extensions: ${relativePath}`);
@@ -1224,6 +1301,7 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
     const sourceContents = readFileSync(sourcePath, "utf8");
     checkSourceProvenance(repoRoot, extension, findings);
     checkExtensionSource(extension, sourceContents, findings);
+    checkExtensionContractMetadata(extension, findings);
     checkDependencies(repoRoot, extension, findings);
     checkEvidenceFiles(repoRoot, extension, findings);
 

@@ -109,6 +109,22 @@ package license is not inferred from its name; any future bundled Pi
 distribution requires its own license, attribution, source provenance, and
 complete dependency review.
 
+## Audit CLI contract
+
+The audit CLI is a read-only evidence checker, not a runtime gate that starts
+Pi. It only reads the manifest, repository files, Git objects, and explicitly
+provided read-only evidence trees; it does not write files, install packages,
+open network connections, read credentials, send prompts, or execute a Pi
+binary. It returns exit code `0` only for a complete passing fixture and exit
+code `1` for blocked evidence, invalid arguments, or an audit exception.
+
+The contract tests cover the real CLI process (`--help`, blocked/pass `--json`,
+unknown and missing arguments), rooted Windows path redaction, dynamic
+extension imports/host capabilities, extensionless runtime inputs, structured
+fail-closed extension metadata, and host closure/release-file evidence. The
+current source contains 44 audit contract tests; the release matrix must be
+updated only from the command's actual exit code and test count.
+
 ## Pi host built-in boundary
 
 The candidate host is Pi `0.83.0`. Pi's `builtInExtensions` includes hidden

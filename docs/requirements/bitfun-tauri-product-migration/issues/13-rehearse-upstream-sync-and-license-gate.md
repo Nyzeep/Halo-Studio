@@ -68,6 +68,34 @@ Workbench Runtime 或共享启动参数；因此 audit script 以独立 CLI 存�
 已经成为现有产品命令的 release gate。当前 gate 保持 `blocked`，直到主集成流程
 明确接入并重新记录完整验证矩阵。
 
+## 本轮审计脚本收口
+
+- 只改动本票 owned 的 audit CLI/test：CLI 进程退出码和 JSON 输出有回归覆盖，
+  未知参数与缺失参数 fail closed；`--help` 是唯一返回 `0` 的非审计路径。
+- 扩展源码扫描同时拒绝静态/动态外部 runtime import、`require`/动态
+  `import()` 的宿主能力和 `fetch`；runtime/build 输入扫描覆盖无扩展名文本文件、
+  网络能力、下载/安装能力和根式 Windows 绝对路径，并禁止 capability allowlist
+  绕过检查。
+- 清单现在必须结构化声明 `tool_call`、`ctx.ui.confirm`、
+  `extension_ui_request/response`、stop/abort/EOF/failure/application-exit 清理、
+  完整 impact 字段、继承宿主权限及 adapter-owned path policy；完整 host closure
+  和已纳入发行物的 host license claim 还必须指向仓库内可校验的证据文件。
+- 这些检查仍只审计 Halo base tree 和外部只读证据；候选没有自动应用，不能把
+  base-tree audit tests 写成 candidate validation，也不能改变当前 `blocked` gate。
+
+## 跨工单收口约束
+
+- 工单 09 的 fail-closed 规则继续适用：deny、超时、错任务/turn/toolCall 关联、
+  重复或过期 response、协议错误、`extension_error`、extension 崩溃、应用关闭、
+  任务取消、RPC 断开或 response 发送失败都只能阻止工具并收口为事实状态；不能
+  由 IPC/JSONL 成功、Pi idle、`agent_end` 或 UI 消失推断 allow/完成，也不能在重启
+  后自动重放或批准。
+- 工单 14 的真实 Pi RPC、真实模型请求和 Halo 原生 UI 验收在本票未执行，状态为
+  `NOT_RUN`；本票未读取真实凭据、未启动 `pi --mode rpc`、未发送 prompt，也未把
+  自动化替身或 HTTP smoke 写成真实 UI 结论。
+- 历史 OpenCode 构建、Server/ACP/TUI 或旧 Code Agent 材料仅可作为历史比较或
+  `superseded` 记录，不能作为当前 BitFun/Pi P0 入口、候选验证或 release evidence。
+
 ## 精确验证命令
 
 ```powershell
@@ -80,6 +108,8 @@ pnpm --dir "product/Halo Studio" run check:repo-hygiene
 pnpm --dir "product/Halo Studio" run product:check
 pnpm --dir "product/Halo Studio" run product:test
 pnpm --dir "product/Halo Studio" run type-check:web
+pnpm --dir "product/Halo Studio/src/web-ui" run test:run
+cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-agent-runtime --test workbench_runtime_contracts
 pnpm --dir "product/Halo Studio/src/web-ui" run test:run -- src/infrastructure/workbench-runtime/formalPath.contract.test.ts src/infrastructure/workbench-runtime/client.test.ts
 cargo tree --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter
 cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter extension_decision_is_redacted_one_shot_and_duplicate_request_fails_closed

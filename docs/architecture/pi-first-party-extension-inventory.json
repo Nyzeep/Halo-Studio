@@ -178,8 +178,8 @@
           },
           {
             "path": "product/THIRD_PARTY_NOTICES.md",
-            "sha256": "463c598522b04524cf3e294a076a1eab996c19e2f8692a82828fad16d2b14364",
-            "size": 3957,
+            "sha256": "6e4ce56aa7340437b0ddc4d6971e10335475ed098c42fb5550c4fe83da7bacdd",
+            "size": 4754,
             "requiredText": ["halo-workbench-permission-gate", "MIT License", "halo_permission_gate.ts"]
           }
         ],
@@ -213,8 +213,8 @@
           },
           {
             "path": "product/THIRD_PARTY_NOTICES.md",
-            "sha256": "463c598522b04524cf3e294a076a1eab996c19e2f8692a82828fad16d2b14364",
-            "size": 3957,
+            "sha256": "6e4ce56aa7340437b0ddc4d6971e10335475ed098c42fb5550c4fe83da7bacdd",
+            "size": 4754,
             "requiredText": [
               "# BitFun third-party attribution index",
               "MIT license and the upstream copyright notice",

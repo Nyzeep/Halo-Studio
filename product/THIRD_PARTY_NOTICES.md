@@ -57,6 +57,20 @@ therefore not inferred from this entry; an exact host source commit/tag,
 complete dependency closure, or future bundled distribution keeps the issue 13
 release gate blocked until separately audited.
 
+## Pi host, Provider, Core, Session, and built-in boundary
+
+The Halo extension MIT notice above applies only to the Halo-owned source file.
+It is not a license or provenance declaration for the user-installed Pi host,
+Pi Provider packages, Pi Core/Agent implementation, Pi Session/runtime files,
+or Pi's inline `llama.cpp` built-in. Those surfaces remain separate release
+inputs and require their own exact source commit/tag, complete direct and
+transitive dependency closure, license texts/notices, and an exact release
+artifact before they can become release-eligible.
+
+No exact desktop distribution artifact is currently recorded for that check.
+The absence of a bundled host artifact is a blocked evidence state, not proof
+that the host or its built-ins are covered by Halo's license notice.
+
 ## Pi host built-in capability excluded from Halo release
 
 The locally observed Pi `0.83.0` host registers an inline `llama.cpp` built-in
