@@ -12,9 +12,10 @@ use bitfun_agent_runtime::halo_workbench::{
     HALO_WORKBENCH_SCHEMA_VERSION,
 };
 use bitfun_runtime_ports::{
-    ClockPort, PiProviderReadiness, PiProviderReadinessPort, PiRpcCommand, PiRpcEvent,
-    PiRpcFailureKind, PiRpcOperationKind, PiRpcPort, PiRpcReply, PortError, PortErrorKind,
-    PortResult, RuntimeServiceCapability, RuntimeServicePort, WorkbenchWorkspaceFacts,
+    ClockPort, PiProviderReadiness, PiProviderReadinessPort, PiRpcAvailabilitySummary,
+    PiRpcCapability, PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationKind, PiRpcPort,
+    PiRpcReply, PiRpcVersion, PiRpcVersionEvidenceSource, PortError, PortErrorKind, PortResult,
+    RuntimeServiceCapability, RuntimeServicePort, WorkbenchWorkspaceFacts,
     WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, PI_RPC_ADAPTER_IDENTITY,
 };
 use tokio::sync::{broadcast, Notify, Semaphore};
@@ -184,7 +185,12 @@ impl DeterministicPiRpc {
 
     fn default_reply(command: &PiRpcCommand) -> PiRpcReply {
         match command {
-            PiRpcCommand::Probe { .. } => PiRpcReply::Available,
+            PiRpcCommand::Probe { .. } => PiRpcReply::Available {
+                summary: PiRpcAvailabilitySummary::new(
+                    PiRpcVersion::V0_83_0,
+                    PiRpcVersionEvidenceSource::LocalVersionProbe,
+                ),
+            },
             _ => PiRpcReply::Accepted,
         }
     }
@@ -456,6 +462,7 @@ async fn initial_snapshot_is_disconnected_and_names_only_the_p0_adapter() {
     assert_eq!(snapshot.phase, HaloWorkbenchPhase::Disconnected);
     assert_eq!(snapshot.adapter.identity, PI_RPC_ADAPTER_IDENTITY);
     assert!(!snapshot.adapter.available);
+    assert_eq!(snapshot.adapter.readiness, None);
     assert_eq!(snapshot.workspace, None);
     assert!(snapshot.sessions.is_empty());
     assert!(snapshot.pending_operations.is_empty());
@@ -467,7 +474,79 @@ async fn initial_snapshot_is_disconnected_and_names_only_the_p0_adapter() {
     assert_eq!(wire["schemaVersion"], 1);
     assert_eq!(wire["phase"], "disconnected");
     assert_eq!(wire["adapter"]["identity"], "pi-rpc-p0");
+    assert_eq!(wire["adapter"]["readiness"], serde_json::Value::Null);
     assert_eq!(wire["pendingOperations"], serde_json::json!([]));
+}
+
+#[tokio::test]
+async fn public_snapshot_projects_safe_probe_profile_without_pi_private_identifiers() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    open_ready(
+        &runtime,
+        &adapter,
+        "open-safe-probe-profile",
+        "safe-probe-profile",
+    )
+    .await;
+
+    let snapshot = runtime.snapshot();
+    let readiness = snapshot
+        .adapter
+        .readiness
+        .as_ref()
+        .expect("probe profile is committed to the public snapshot");
+    assert_eq!(readiness.version.version, PiRpcVersion::V0_83_0);
+    assert_eq!(
+        readiness.capabilities.required,
+        PiRpcCapability::required_p0().to_vec()
+    );
+    let wire = serde_json::to_string(&snapshot).expect("snapshot serializes");
+    assert!(wire.len() < 4096, "snapshot remains bounded");
+    for sensitive in [
+        "raw-secret",
+        "toolCallId",
+        "Authorization",
+        "HALO_PI_CREDENTIAL",
+        "PI_CODING_AGENT_DIR",
+        "api.example.test",
+        "models",
+        "provider",
+        "gpt-5",
+        "entry-",
+        "http://",
+        "https://",
+    ] {
+        assert!(
+            !wire.contains(sensitive),
+            "public runtime snapshot leaked sensitive field {sensitive}: {wire}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn runtime_rejects_incomplete_adapter_readiness_summaries_before_projection() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let mut summary = PiRpcAvailabilitySummary::new(
+        PiRpcVersion::V0_83_0,
+        PiRpcVersionEvidenceSource::LocalVersionProbe,
+    );
+    summary.capabilities.required.pop();
+    adapter.push_reply(Ok(PiRpcReply::Available { summary }));
+    let runtime = build_runtime(adapter);
+
+    let error = runtime
+        .submit(open_request(
+            "open-incomplete-readiness",
+            "incomplete-readiness",
+        ))
+        .await
+        .expect_err("incomplete capability summary fails closed");
+
+    assert_eq!(error.code, "pi_capability_mismatch");
+    let snapshot = runtime.snapshot();
+    assert_eq!(snapshot.phase, HaloWorkbenchPhase::Failed);
+    assert_eq!(snapshot.adapter.readiness, None);
 }
 
 #[tokio::test]
@@ -544,6 +623,14 @@ async fn provider_readiness_port_failure_is_committed_to_the_authoritative_snaps
         snapshot.error.as_ref().map(|error| error.code.as_str()),
         Some("provider_readiness_unavailable")
     );
+    assert_eq!(
+        snapshot
+            .adapter
+            .readiness
+            .as_ref()
+            .map(|readiness| readiness.version.version),
+        Some(PiRpcVersion::V0_83_0)
+    );
 }
 
 #[tokio::test]
@@ -619,7 +706,12 @@ async fn repeated_open_and_close_reuses_only_current_generation_cleanup() {
 #[tokio::test]
 async fn prepared_handshake_failure_can_be_recovered_by_a_new_open() {
     let adapter = Arc::new(DeterministicPiRpc::new());
-    adapter.push_reply(Ok(PiRpcReply::Available));
+    adapter.push_reply(Ok(PiRpcReply::Available {
+        summary: PiRpcAvailabilitySummary::new(
+            PiRpcVersion::V0_81_1,
+            PiRpcVersionEvidenceSource::LocalVersionProbe,
+        ),
+    }));
     adapter.push_reply(Ok(PiRpcReply::Unavailable {
         reason: PiRpcFailureKind::Protocol,
     }));
@@ -633,7 +725,12 @@ async fn prepared_handshake_failure_can_be_recovered_by_a_new_open() {
     assert_eq!(runtime.snapshot().phase, HaloWorkbenchPhase::Failed);
 
     adapter.push_reply(Ok(PiRpcReply::Accepted));
-    adapter.push_reply(Ok(PiRpcReply::Available));
+    adapter.push_reply(Ok(PiRpcReply::Available {
+        summary: PiRpcAvailabilitySummary::new(
+            PiRpcVersion::V0_81_1,
+            PiRpcVersionEvidenceSource::LocalVersionProbe,
+        ),
+    }));
     adapter.push_reply(Ok(PiRpcReply::Accepted));
     runtime
         .submit(open_request("open-handshake-retry", "handshake-retry"))

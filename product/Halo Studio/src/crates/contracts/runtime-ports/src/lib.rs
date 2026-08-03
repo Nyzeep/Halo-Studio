@@ -36,9 +36,11 @@ pub use bitfun_product_domains::tool_permissions::{
 };
 pub use halo_workbench::{
     PiCredentialSecret, PiCredentialStorePort, PiProviderCapability, PiProviderCapabilityPort,
-    PiProviderCapabilityRequest, PiProviderReadiness, PiProviderReadinessPort, PiRpcCommand,
-    PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind, PiRpcPort,
-    PiRpcReply, PiRpcSessionMode, PiRpcWorkspace, PiRuntimeConfiguration,
+    PiProviderCapabilityRequest, PiProviderReadiness, PiProviderReadinessPort,
+    PiRpcAvailabilitySummary, PiRpcCapability, PiRpcCapabilitySummary, PiRpcCommand,
+    PiRpcCompatibilityProfile, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision,
+    PiRpcOperationKind, PiRpcPort, PiRpcReply, PiRpcSessionMode, PiRpcVersion,
+    PiRpcVersionEvidenceSource, PiRpcVersionSummary, PiRpcWorkspace, PiRuntimeConfiguration,
     PiRuntimeConfigurationManagementPort, PiRuntimeConfigurationPort, PiRuntimeConfigurationView,
     PiStartupOptions, PiThinkingLevel, WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort,
     WorkbenchWorkspaceFactsRequest, PI_RPC_ADAPTER_IDENTITY,

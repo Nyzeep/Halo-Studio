@@ -15,6 +15,7 @@ const INITIAL_SNAPSHOT: WorkbenchRuntimeSnapshot = {
   adapter: {
     identity: 'pi-rpc-p0',
     available: false,
+    readiness: null,
   },
   workspace: null,
   sessions: [],
@@ -71,5 +72,4 @@ describe('WorkbenchRuntimeClient', () => {
     expect(listen).toHaveBeenCalledWith(HALO_WORKBENCH_RUNTIME_EVENT, onEvent);
   });
 });
-
 

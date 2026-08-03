@@ -9,6 +9,10 @@ import {
 import {
   HALO_WORKBENCH_SCHEMA_VERSION,
   PI_RPC_ADAPTER_IDENTITY,
+  type WorkbenchPiRpcCapability,
+  type WorkbenchPiRpcCompatibilityProfile,
+  type WorkbenchPiRpcVersion,
+  type WorkbenchPiRpcVersionEvidenceSource,
   type WorkbenchRuntimeEvent,
   type WorkbenchRuntimeIntentReceipt,
   type WorkbenchRuntimeIntentRequest,
@@ -38,6 +42,30 @@ const SESSION_PHASES = new Set([
 ]);
 const OPERATION_KINDS = new Set(['permission']);
 const OPERATION_PHASES = new Set(['awaitingDecision', 'decisionSubmitted']);
+const PI_RPC_VERSIONS = new Set(['0.81.1', '0.83.0']);
+const PI_RPC_COMPATIBILITY_PROFILES = new Set([
+  'pi-rpc-0.81.1-p0',
+  'pi-rpc-0.83.0-p0',
+]);
+const PI_RPC_VERSION_EVIDENCE_SOURCES = new Set(['local_version_probe']);
+const PI_RPC_REQUIRED_CAPABILITIES = [
+  'prompt',
+  'follow_up',
+  'abort',
+  'get_state',
+  'get_entries',
+  'get_entries.entries',
+  'get_entries.leaf_id',
+  'get_entries.since',
+  'message_update',
+  'tool_execution_start',
+  'tool_execution_update',
+  'tool_execution_end',
+  'agent_settled',
+  'extension_ui_request',
+  'extension_ui_response',
+] as const;
+const PI_RPC_CAPABILITIES = new Set<string>(PI_RPC_REQUIRED_CAPABILITIES);
 const EVENT_KINDS = new Set([
   'runtimeStateChanged',
   'workspaceChanged',
@@ -47,6 +75,7 @@ const EVENT_KINDS = new Set([
 ]);
 const EVENT_SUMMARIES = new Set([
   'Workbench Runtime is ready',
+  'Workbench Runtime adapter profile was verified',
   'Workbench Runtime is starting',
   'Workbench Runtime is stopping',
   'Workbench Runtime failed',
@@ -169,6 +198,46 @@ const sanitizeRuntimeError = (input: unknown): WorkbenchRuntimeSnapshot['error']
   };
 };
 
+const sanitizeAdapterReadiness = (
+  input: unknown,
+): WorkbenchRuntimeSnapshot['adapter']['readiness'] => {
+  if (input === null || input === undefined) return null;
+  if (
+    !isRecord(input)
+    || !isRecord(input.version)
+    || !isRecord(input.capabilities)
+    || typeof input.version.version !== 'string'
+    || !PI_RPC_VERSIONS.has(input.version.version)
+    || typeof input.version.profile !== 'string'
+    || !PI_RPC_COMPATIBILITY_PROFILES.has(input.version.profile)
+    || typeof input.version.evidenceSource !== 'string'
+    || !PI_RPC_VERSION_EVIDENCE_SOURCES.has(input.version.evidenceSource)
+    || !Array.isArray(input.capabilities.required)
+    || input.capabilities.required.length !== PI_RPC_REQUIRED_CAPABILITIES.length
+  ) {
+    return contractMismatch();
+  }
+
+  const required = input.capabilities.required.map(capability => {
+    if (typeof capability !== 'string' || !PI_RPC_CAPABILITIES.has(capability)) {
+      return contractMismatch();
+    }
+    return capability as WorkbenchPiRpcCapability;
+  });
+  if (required.some((capability, index) => capability !== PI_RPC_REQUIRED_CAPABILITIES[index])) {
+    return contractMismatch();
+  }
+
+  return {
+    version: {
+      version: input.version.version as WorkbenchPiRpcVersion,
+      profile: input.version.profile as WorkbenchPiRpcCompatibilityProfile,
+      evidenceSource: input.version.evidenceSource as WorkbenchPiRpcVersionEvidenceSource,
+    },
+    capabilities: { required },
+  };
+};
+
 const sanitizeSnapshot = (input: unknown): WorkbenchRuntimeSnapshot => {
   if (!isRecord(input) || !isRecord(input.adapter)) return contractMismatch();
   if (
@@ -250,6 +319,7 @@ const sanitizeSnapshot = (input: unknown): WorkbenchRuntimeSnapshot => {
     adapter: {
       identity: PI_RPC_ADAPTER_IDENTITY,
       available: input.adapter.available,
+      readiness: sanitizeAdapterReadiness(input.adapter.readiness),
     },
     workspace,
     sessions,

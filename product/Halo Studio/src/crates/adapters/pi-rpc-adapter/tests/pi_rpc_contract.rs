@@ -7,9 +7,10 @@ use bitfun_pi_rpc_adapter::{
     PiRuntimeConfigurationService,
 };
 use bitfun_runtime_ports::{
-    PiCredentialSecret, PiCredentialStorePort, PiRpcCommand, PiRpcEvent, PiRpcFailureKind,
-    PiRpcOperationDecision, PiRpcPort, PiRpcReply, PiRpcSessionMode, PiRpcWorkspace,
-    PiRuntimeConfiguration, PiStartupOptions, PiThinkingLevel, PortErrorKind,
+    PiCredentialSecret, PiCredentialStorePort, PiRpcAvailabilitySummary, PiRpcCapability,
+    PiRpcCommand, PiRpcCompatibilityProfile, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision,
+    PiRpcPort, PiRpcReply, PiRpcSessionMode, PiRpcVersion, PiRpcVersionEvidenceSource,
+    PiRpcWorkspace, PiRuntimeConfiguration, PiStartupOptions, PiThinkingLevel, PortErrorKind,
 };
 use tokio::sync::broadcast;
 use tokio::time::timeout;
@@ -145,14 +146,26 @@ async fn version_probe_uses_private_config_and_cleans_it_on_success_or_failure()
             })
             .await
             .expect("version probe crosses the public port");
-        let expected = if mode == "version_probe_failure" {
-            PiRpcReply::Unavailable {
-                reason: PiRpcFailureKind::UnsupportedVersion,
-            }
+        if mode == "version_probe_failure" {
+            assert_eq!(
+                reply,
+                PiRpcReply::Unavailable {
+                    reason: PiRpcFailureKind::UnsupportedVersion,
+                },
+                "fixture mode {mode}"
+            );
         } else {
-            PiRpcReply::Available
-        };
-        assert_eq!(reply, expected, "fixture mode {mode}");
+            assert_eq!(
+                reply,
+                PiRpcReply::Available {
+                    summary: PiRpcAvailabilitySummary::new(
+                        PiRpcVersion::V0_81_1,
+                        PiRpcVersionEvidenceSource::LocalVersionProbe,
+                    ),
+                },
+                "fixture mode {mode}"
+            );
+        }
         assert_eq!(
             std::fs::read_dir(storage_root.path())
                 .expect("adapter storage root remains inspectable")
@@ -161,6 +174,177 @@ async fn version_probe_uses_private_config_and_cleans_it_on_success_or_failure()
             "version probe config directory must be cleaned for {mode}"
         );
     }
+}
+
+#[tokio::test]
+async fn version_probe_rejects_unknown_or_malformed_versions() {
+    for mode in ["version_probe_unknown", "version_probe_malformed"] {
+        let _environment = fixture_environment(mode);
+        let storage_root = tempfile::tempdir().expect("adapter storage root");
+        let adapter = PiRpcAdapter::with_config(PiRpcConfig {
+            executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_pi_rpc_fixture"))),
+            temporary_root: Some(storage_root.path().to_path_buf()),
+            ..PiRpcConfig::default()
+        });
+
+        assert_eq!(
+            adapter
+                .execute(PiRpcCommand::Probe {
+                    generation: 200,
+                    workspace: configured_workspace(storage_root.path()),
+                })
+                .await
+                .expect("version probe crosses the public port"),
+            PiRpcReply::Unavailable {
+                reason: PiRpcFailureKind::UnsupportedVersion,
+            },
+            "fixture mode {mode} must fail closed"
+        );
+        assert_eq!(
+            std::fs::read_dir(storage_root.path())
+                .expect("adapter storage root remains inspectable")
+                .count(),
+            0,
+            "version probe directories must be cleaned for {mode}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn public_probe_projects_only_safe_version_and_capability_profile_fields() {
+    let _environment = fixture_environment("version_probe_0830");
+    let storage_root = tempfile::tempdir().expect("adapter storage root");
+    let adapter = PiRpcAdapter::with_config(PiRpcConfig {
+        executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_pi_rpc_fixture"))),
+        temporary_root: Some(storage_root.path().to_path_buf()),
+        ..PiRpcConfig::default()
+    });
+
+    let reply = adapter
+        .execute(PiRpcCommand::Probe {
+            generation: 831,
+            workspace: configured_workspace(storage_root.path()),
+        })
+        .await
+        .expect("safe public probe crosses the port");
+
+    let summary = match reply {
+        PiRpcReply::Available { summary } => summary,
+        other => panic!("0.83.0 profile must be available, got {other:?}"),
+    };
+    assert_eq!(summary.version.version, PiRpcVersion::V0_83_0);
+    assert_eq!(
+        summary.version.profile,
+        PiRpcCompatibilityProfile::PiRpc0830P0
+    );
+    assert_eq!(
+        summary.capabilities.required,
+        PiRpcCapability::required_p0().to_vec()
+    );
+    let wire = serde_json::to_string(&summary).expect("summary serializes");
+    assert!(wire.len() < 2048, "public profile summary stays bounded");
+    for sensitive in [
+        "pi_rpc_fixture",
+        "session-contract",
+        "entry-1",
+        "raw-secret",
+        "toolCallId",
+        "Authorization",
+        "HALO_PI_CREDENTIAL",
+        "PI_CODING_AGENT_DIR",
+        "api.example.test",
+        "models",
+        "provider",
+        "gpt-5",
+        "C:\\",
+        "D:\\",
+        "http://",
+        "https://",
+    ] {
+        assert!(
+            !wire.contains(sensitive),
+            "probe summary leaked sensitive field {sensitive}: {wire}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn audited_0830_profile_is_allowed_by_start_readiness() {
+    let _environment = fixture_environment("version_probe_0830");
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+
+    assert_eq!(start(&adapter, 834).await, PiRpcReply::Accepted);
+    shutdown(&adapter, 834).await;
+}
+
+#[tokio::test]
+async fn start_fails_closed_when_a_required_readiness_capability_is_missing() {
+    let _environment = fixture_environment("missing_get_entries_capability");
+    let adapter = make_adapter(
+        Duration::from_millis(250),
+        Duration::from_millis(100),
+        Duration::from_millis(50),
+    );
+
+    assert_eq!(
+        start(&adapter, 832).await,
+        PiRpcReply::Unavailable {
+            reason: PiRpcFailureKind::Protocol,
+        }
+    );
+    shutdown(&adapter, 832).await;
+}
+
+#[tokio::test]
+async fn agent_end_never_substitutes_for_agent_settled_during_abort() {
+    let _environment = fixture_environment("agent_end_without_settled");
+    let generation = 833;
+    let adapter = make_adapter(
+        Duration::from_millis(250),
+        Duration::from_millis(100),
+        Duration::from_millis(40),
+    );
+    let mut events = adapter.subscribe();
+
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "agent-end-only").await,
+        PiRpcReply::Accepted
+    );
+    wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::SessionRunning { .. })
+    })
+    .await;
+    assert_eq!(
+        adapter
+            .execute(PiRpcCommand::StopSession {
+                generation,
+                session_id: "session-contract".to_string(),
+            })
+            .await
+            .expect("abort crosses the port"),
+        PiRpcReply::Accepted
+    );
+    assert!(
+        adapter
+            .execute(PiRpcCommand::SendUserInput {
+                generation,
+                session_id: "session-contract".to_string(),
+                content: "after agent_end".to_string(),
+            })
+            .await
+            .is_err(),
+        "agent_end must not leave the process reusable as a settled session"
+    );
+    shutdown(&adapter, generation).await;
 }
 
 #[tokio::test]
@@ -525,6 +709,47 @@ async fn port_projects_crlf_tail_unicode_message_and_tool_events_without_raw_ids
 }
 
 #[tokio::test]
+async fn malformed_event_schema_fails_closed_without_projecting_public_events() {
+    for mode in [
+        "malformed_message_update",
+        "unsupported_message_update",
+        "malformed_tool_execution_end",
+        "malformed_extension_ui_request",
+    ] {
+        let _environment = fixture_environment(mode);
+        let generation = 115;
+        let adapter = make_adapter(
+            Duration::from_secs(1),
+            Duration::from_secs(1),
+            Duration::from_millis(100),
+        );
+        let mut events = adapter.subscribe();
+
+        assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+        assert_eq!(
+            create_session(&adapter, generation).await,
+            PiRpcReply::Accepted
+        );
+        assert_eq!(
+            send_input(&adapter, generation, "malformed event").await,
+            PiRpcReply::Accepted
+        );
+        assert!(matches!(
+            wait_for_event(&mut events, |event| matches!(
+                event,
+                PiRpcEvent::SessionFailed {
+                    reason: PiRpcFailureKind::Protocol,
+                    ..
+                }
+            ))
+            .await,
+            PiRpcEvent::SessionFailed { .. }
+        ));
+        shutdown(&adapter, generation).await;
+    }
+}
+
+#[tokio::test]
 async fn handshake_requires_idle_state_and_requests_entries_since_cursor() {
     let _environment = fixture_environment("require_since");
     let generation = 12;
@@ -535,6 +760,35 @@ async fn handshake_requires_idle_state_and_requests_entries_since_cursor() {
     );
     assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
     shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn handshake_rejects_entries_repeated_at_the_since_cursor() {
+    let _environment = fixture_environment("bad_since");
+    let storage_root = tempfile::tempdir().expect("adapter storage root");
+    let adapter = PiRpcAdapter::with_config(PiRpcConfig {
+        executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_pi_rpc_fixture"))),
+        extension_path: Some(fixture_extension_path()),
+        temporary_root: Some(storage_root.path().to_path_buf()),
+        response_timeout: Duration::from_millis(250),
+        operation_timeout: Duration::from_millis(100),
+        abort_grace_period: Duration::from_millis(50),
+        ..PiRpcConfig::default()
+    });
+
+    assert_eq!(
+        adapter
+            .execute(PiRpcCommand::Start {
+                generation: 116,
+                workspace: configured_workspace(storage_root.path()),
+            })
+            .await
+            .expect("readiness crosses the public port"),
+        PiRpcReply::Unavailable {
+            reason: PiRpcFailureKind::Protocol,
+        }
+    );
+    shutdown(&adapter, 116).await;
 }
 
 #[tokio::test]

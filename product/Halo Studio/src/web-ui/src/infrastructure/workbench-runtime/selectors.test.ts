@@ -15,7 +15,7 @@ import type { WorkbenchRuntimeSnapshot } from './types';
 const snapshot = (phase: WorkbenchRuntimeSnapshot['phase']): WorkbenchRuntimeSnapshot => ({
   schemaVersion: 1,
   phase,
-  adapter: { identity: 'pi-rpc-p0', available: phase === 'ready' },
+  adapter: { identity: 'pi-rpc-p0', available: phase === 'ready', readiness: null },
   workspace: {
     workspaceId: 'workspace-1',
     displayName: 'Halo Studio',
@@ -97,4 +97,3 @@ describe('workbench runtime selectors', () => {
     );
   });
 });
-
