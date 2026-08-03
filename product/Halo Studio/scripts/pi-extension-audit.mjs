@@ -221,6 +221,16 @@ function checkRequiredTextClaims(filePath, claims, codePrefix, label, findings) 
   }
 }
 
+function checkSpdxTextClaims(contents, spdx, codePrefix, label, findings) {
+  const markers = {
+    MIT: [/MIT License/i, /Permission is hereby granted/i],
+    "Apache-2.0": [/Apache License/i, /Version 2\.0/i],
+  }[spdx];
+  if (!markers || !markers.every((marker) => marker.test(contents))) {
+    addFinding(findings, `${codePrefix}-spdx-text-missing`, `${label} does not contain the complete text for its declared SPDX license`);
+  }
+}
+
 function checkEvidenceFiles(repoRoot, extension, findings) {
   const license = extension.license;
   const evidence = license?.evidence;
@@ -411,7 +421,12 @@ function checkDependencies(repoRoot, extension, findings) {
     if (!hostLicenseEvidencePath || !isRegularFile(hostLicenseEvidencePath)) {
       addFinding(findings, "host-license-evidence-file-missing", `${extension.id} host license evidence must point to a repository-local file`);
     } else {
+      const hostLicenseContents = readFileSync(hostLicenseEvidencePath, "utf8");
       checkRequiredTextClaims(hostLicenseEvidencePath, hostLicense.requiredText, "host-license-evidence", `${extension.id} host license evidence`, findings);
+      checkSpdxTextClaims(hostLicenseContents, hostLicense.observedSpdx, "host-license", `${extension.id} host license evidence`, findings);
+      if (typeof hostLicense.copyright !== "string" || hostLicense.copyright.trim() === "" || !hostLicenseContents.includes(hostLicense.copyright)) {
+        addFinding(findings, "host-license-copyright-missing", `${extension.id} host license evidence does not contain its declared attribution text`);
+      }
     }
     for (const releaseFile of hostLicense.releaseFiles) {
       const descriptor = typeof releaseFile === "string" ? { path: releaseFile } : releaseFile;
@@ -464,6 +479,7 @@ function checkExtensionSource(extension, sourceContents, findings) {
   const staticImports = [
     ...sourceContents.matchAll(/^\s*import\s+(?!type\b).*?from\s+["']([^"']+)["']/gm),
     ...sourceContents.matchAll(/^\s*import\s+(?!type\b)["']([^"']+)["'];?/gm),
+    ...sourceContents.matchAll(/^\s*export\s+(?:\*|\{[^}]*\})\s+from\s+["']([^"']+)["']/gm),
   ].map((match) => match[1]);
   const dynamicImports = [];
   const unresolvedDynamicImports = [];
@@ -541,7 +557,9 @@ function checkExtensionContractMetadata(extension, findings) {
     addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare all host-impact fields`);
   }
   const hostPermissions = typeof extension.hostPermissions === "string" ? extension.hostPermissions.trim() : "";
-  if (!/\binherit(?:s|ed)?\b/i.test(hostPermissions) || !/(?:not|no)\s+(?:a\s+)?sandbox\b/i.test(hostPermissions)) {
+  const hasInheritedPiPermissions = /\binherits\s+(?:(?:the\s+)?launching\s+user(?:'s)?|pi\s+process)\b/i.test(hostPermissions);
+  const hasNoSandboxClaim = /\b(?:not|no)\s+(?:a\s+)?sandbox\b/i.test(hostPermissions);
+  if (!hasInheritedPiPermissions || !hasNoSandboxClaim) {
     addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must describe inherited host permissions and sandbox status`);
     if (hostPermissions !== "") {
       addFinding(findings, "extension-host-permission-claim-invalid", `${extension.id} must state that it inherits Pi process permissions and is not a sandbox`);
@@ -549,6 +567,10 @@ function checkExtensionContractMetadata(extension, findings) {
   }
   if (typeof extension.load?.pathPolicy !== "string" || extension.load.pathPolicy.trim() === "") {
     addFinding(findings, "extension-contract-metadata-incomplete", `${extension.id} must declare its adapter-owned extension path policy`);
+  } else if (!["adapter-owned", "temporary", "embedded", "hash-verified", "--extension"].every(
+    (fragment) => extension.load.pathPolicy.toLowerCase().includes(fragment),
+  )) {
+    addFinding(findings, "extension-path-policy-claim-invalid", `${extension.id} path policy must bind an adapter-owned temporary copy of embedded, hash-verified source to --extension`);
   }
 }
 
@@ -665,7 +687,7 @@ function checkRuntimeScan(repoRoot, runtime, findings) {
   const networkCapability = [
     /\b(?:globalThis|window)\.fetch\s*\(/i,
     /\bfetch\s*\(/i,
-    /\bhttps?\.request\s*\(/i,
+    /\bhttps?\.(?:get|request)\s*\(/i,
   ];
   const projectDiscovery = /(?:\.pi[\\/]extensions|\.pi[\\/]packages|PI_CODING_AGENT_DIR\s*.*(?:workspace|project))/i;
   const isAllowlisted = (relativePath, code, file) => (runtime.allowlistedFindings ?? []).some(

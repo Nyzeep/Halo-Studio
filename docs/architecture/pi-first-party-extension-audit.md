@@ -122,7 +122,7 @@ The contract tests cover the real CLI process (`--help`, blocked/pass `--json`,
 unknown and missing arguments), rooted Windows path redaction, dynamic
 extension imports/host capabilities, extensionless runtime inputs, structured
 fail-closed extension metadata, and host closure/release-file evidence. The
-current source contains 48 audit contract tests; the release matrix must be
+current source contains 50 audit contract tests; the release matrix must be
 updated only from the command's actual exit code and test count.
 
 ## Pi host built-in boundary

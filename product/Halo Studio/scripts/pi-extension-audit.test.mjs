@@ -197,7 +197,8 @@ function createFixture(overrides = {}) {
             licenseEvidence: {
               observedSpdx: "MIT",
               evidencePath: licensePath,
-              requiredText: ["MIT License"],
+              copyright: "Copyright (c) 2026 CWing",
+              requiredText: ["MIT License", "Permission is hereby granted", "Copyright (c) 2026 CWing"],
               releaseStatus: "included",
               releaseFiles: [{
                 ...fileFingerprint(releaseArtifactPath),
@@ -518,6 +519,19 @@ test("runtime scanning catches bare fetch calls", () => {
   assert.ok(report.findings.some((finding) => finding.code === "runtime-network-capability"));
 });
 
+test("runtime scanning catches http get calls", () => {
+  const fixture = createFixture();
+  const runtimePath = "product/Halo Studio/scripts/runtime-http-get";
+  mkdirSync(path.dirname(path.join(fixture.root, runtimePath)), { recursive: true });
+  writeFileSync(path.join(fixture.root, runtimePath), 'http.get("https://example.invalid");\n');
+  fixture.manifest.runtime.scanPaths.push(runtimePath);
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "runtime-network-capability"));
+});
+
 test("shell download variants and script module inputs are blocked", () => {
   const fixture = createFixture();
   const runtimeDirectory = "product/Halo Studio/scripts/runtime-inputs";
@@ -600,7 +614,7 @@ test("side-effect and unresolved dynamic extension imports fail closed", () => {
   const fixture = createFixture();
   writeFileSync(
     path.join(fixture.root, fixture.extensionPath),
-    `${EXTENSION_SOURCE}import "@unreviewed/side-effect";\nconst packageName = "@unreviewed/computed";\nrequire(packageName);\n` + "import(`@unreviewed/template/${packageName}`);\n",
+    `${EXTENSION_SOURCE}import "@unreviewed/side-effect";\nexport * from "@unreviewed/re-export";\nconst packageName = "@unreviewed/computed";\nrequire(packageName);\n` + "import(`@unreviewed/template/${packageName}`);\n",
   );
 
   const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
@@ -624,13 +638,15 @@ test("extension metadata must describe the fail-closed permission seam", () => {
 test("extension metadata rejects custom tools and sandbox claims", () => {
   const fixture = createFixture();
   fixture.manifest.extensions[0].capabilities.tools = ["shell"];
-  fixture.manifest.extensions[0].hostPermissions = "sandboxed";
+  fixture.manifest.extensions[0].hostPermissions = "does not inherit Pi process permissions; not a sandbox";
+  fixture.manifest.extensions[0].load.pathPolicy = "Any extension path is accepted";
   writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
 
   const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
 
   assert.ok(report.findings.some((finding) => finding.code === "extension-custom-tool-present"));
   assert.ok(report.findings.some((finding) => finding.code === "extension-host-permission-claim-invalid"));
+  assert.ok(report.findings.some((finding) => finding.code === "extension-path-policy-claim-invalid"));
 });
 
 test("audit reports never expose the caller's absolute workspace path", () => {
@@ -827,6 +843,16 @@ test("host closure entries and license claims cannot be empty or ungrounded", ()
   assert.ok(report.findings.some((finding) => finding.code === "host-dependency-closure-empty"));
   assert.ok(report.findings.some((finding) => finding.code === "host-license-evidence-claims-missing"));
   assert.ok(report.findings.some((finding) => finding.code === "host-license-release-claims-missing"));
+});
+
+test("host license claims require SPDX markers and attribution text", () => {
+  const fixture = createFixture();
+  fixture.manifest.extensions[0].dependencies.host.licenseEvidence.observedSpdx = "Apache-2.0";
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "host-license-spdx-text-missing"));
 });
 
 test("floating version and incomplete provenance are blocked", () => {
