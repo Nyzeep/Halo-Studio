@@ -1,11 +1,15 @@
-use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use bitfun_pi_rpc_adapter::{PiRpcAdapter, PiRpcConfig};
+use bitfun_pi_rpc_adapter::{
+    MemoryPiCredentialStore, MemoryPiRuntimeConfigurationRepository, PiRpcAdapter, PiRpcConfig,
+    PiRuntimeConfigurationService,
+};
 use bitfun_runtime_ports::{
-    PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcPort, PiRpcReply,
-    PiRpcSessionMode, PiRpcWorkspace, PortErrorKind,
+    PiCredentialSecret, PiCredentialStorePort, PiRpcCommand, PiRpcEvent, PiRpcFailureKind,
+    PiRpcOperationDecision, PiRpcPort, PiRpcReply, PiRpcSessionMode, PiRpcWorkspace,
+    PiRuntimeConfiguration, PiStartupOptions, PiThinkingLevel, PortErrorKind,
 };
 use tokio::sync::broadcast;
 use tokio::time::timeout;
@@ -58,11 +62,296 @@ fn make_adapter_with_selection(
         extension_path: Some(extension_path),
         provider: provider.map(str::to_string),
         model: model.map(str::to_string),
+        runtime_configuration: None,
+        credential_store: None,
+        provider_capabilities: None,
         temporary_root: None,
         response_timeout,
         operation_timeout,
         abort_grace_period,
     })
+}
+
+fn fixture_extension_path() -> PathBuf {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    [
+        manifest_dir.join("src").join("halo_permission_gate.ts"),
+        manifest_dir
+            .join("..")
+            .join("src")
+            .join("halo_permission_gate.ts"),
+    ]
+    .into_iter()
+    .find(|path| path.is_file())
+    .expect("first-party permission extension is present")
+}
+
+fn configured_workspace(root: &Path) -> PiRpcWorkspace {
+    PiRpcWorkspace {
+        workspace_id: "configured-workspace".to_string(),
+        canonical_root: root.to_path_buf(),
+    }
+}
+
+fn configured_configuration(credential_ref: String) -> PiRuntimeConfiguration {
+    PiRuntimeConfiguration {
+        provider_id: "openai".to_string(),
+        base_url: Some("https://api.example.test/v1".to_string()),
+        model_id: "gpt-5".to_string(),
+        thinking_level: PiThinkingLevel::Medium,
+        startup_options: PiStartupOptions::default(),
+        credential_ref,
+    }
+}
+
+fn configured_adapter(
+    configuration: Arc<PiRuntimeConfigurationService>,
+    credentials: Arc<MemoryPiCredentialStore>,
+    storage_root: &Path,
+) -> PiRpcAdapter {
+    PiRpcAdapter::with_config(PiRpcConfig {
+        executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_pi_rpc_fixture"))),
+        extension_path: Some(fixture_extension_path()),
+        provider: None,
+        model: None,
+        runtime_configuration: Some(configuration),
+        credential_store: Some(credentials),
+        provider_capabilities: None,
+        temporary_root: Some(storage_root.to_path_buf()),
+        response_timeout: Duration::from_secs(1),
+        operation_timeout: Duration::from_secs(1),
+        abort_grace_period: Duration::from_millis(100),
+    })
+}
+
+#[tokio::test]
+async fn version_probe_uses_private_config_and_cleans_it_on_success_or_failure() {
+    for (index, mode) in ["version_probe_requires_isolation", "version_probe_failure"]
+        .into_iter()
+        .enumerate()
+    {
+        let _environment = fixture_environment(mode);
+        let storage_root = tempfile::tempdir().expect("adapter storage root");
+        let adapter = PiRpcAdapter::with_config(PiRpcConfig {
+            executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_pi_rpc_fixture"))),
+            temporary_root: Some(storage_root.path().to_path_buf()),
+            ..PiRpcConfig::default()
+        });
+
+        let reply = adapter
+            .execute(PiRpcCommand::Probe {
+                generation: index as u64,
+                workspace: configured_workspace(storage_root.path()),
+            })
+            .await
+            .expect("version probe crosses the public port");
+        let expected = if mode == "version_probe_failure" {
+            PiRpcReply::Unavailable {
+                reason: PiRpcFailureKind::UnsupportedVersion,
+            }
+        } else {
+            PiRpcReply::Available
+        };
+        assert_eq!(reply, expected, "fixture mode {mode}");
+        assert_eq!(
+            std::fs::read_dir(storage_root.path())
+                .expect("adapter storage root remains inspectable")
+                .count(),
+            0,
+            "version probe config directory must be cleaned for {mode}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn configured_start_projects_authority_into_isolated_pi_process_and_cleans_up() {
+    let _environment = fixture_environment("credential_projection");
+    let workspace_root = tempfile::tempdir().expect("workspace root");
+    let storage_root = tempfile::tempdir().expect("adapter storage root");
+    let credentials = Arc::new(MemoryPiCredentialStore::new());
+    let credential_ref = credentials
+        .write(
+            "openai",
+            PiCredentialSecret::new("synthetic-credential-canary"),
+        )
+        .await
+        .expect("fixture credential is written through the port");
+    let repository = Arc::new(MemoryPiRuntimeConfigurationRepository::new());
+    let configuration = Arc::new(PiRuntimeConfigurationService::new_without_capabilities(
+        repository,
+    ));
+    configuration
+        .create(configured_configuration(credential_ref))
+        .await
+        .expect("fixture configuration is written through the port");
+    let adapter = configured_adapter(configuration, credentials, storage_root.path());
+    let workspace = configured_workspace(workspace_root.path());
+
+    assert_eq!(
+        adapter
+            .execute(PiRpcCommand::Start {
+                generation: 127,
+                workspace,
+            })
+            .await
+            .expect("configured start crosses the port"),
+        PiRpcReply::Accepted
+    );
+    shutdown(&adapter, 127).await;
+
+    assert_eq!(
+        std::fs::read_dir(storage_root.path())
+            .expect("adapter storage root remains inspectable")
+            .count(),
+        0,
+        "config, session, and extension directories must be cleaned up"
+    );
+}
+
+#[tokio::test]
+async fn configured_start_fails_closed_before_child_creation_for_credential_errors() {
+    let _environment = fixture_environment("happy");
+
+    let cases = ["missing", "read_failure", "provider_mismatch"];
+    for (index, case) in cases.into_iter().enumerate() {
+        let workspace_root = tempfile::tempdir().expect("workspace root");
+        let storage_root = tempfile::tempdir().expect("adapter storage root");
+        let credentials = Arc::new(MemoryPiCredentialStore::new());
+        let credential_ref = if case == "provider_mismatch" {
+            credentials
+                .write("anthropic", PiCredentialSecret::new("synthetic-secret"))
+                .await
+                .expect("mismatch fixture credential")
+        } else if case == "read_failure" {
+            let reference = credentials
+                .write("openai", PiCredentialSecret::new("synthetic-secret"))
+                .await
+                .expect("read failure fixture credential");
+            credentials.set_read_failure(true);
+            reference
+        } else {
+            "halo-pi-credential-v1-missing".to_string()
+        };
+        let repository = Arc::new(MemoryPiRuntimeConfigurationRepository::new());
+        let configuration = Arc::new(PiRuntimeConfigurationService::new_without_capabilities(
+            repository,
+        ));
+        configuration
+            .create(configured_configuration(credential_ref))
+            .await
+            .expect("fixture configuration is valid before credential lookup");
+        let adapter = configured_adapter(configuration, credentials, storage_root.path());
+
+        assert_eq!(
+            adapter
+                .execute(PiRpcCommand::Start {
+                    generation: 128 + index as u64,
+                    workspace: configured_workspace(workspace_root.path()),
+                })
+                .await
+                .expect("credential failure crosses the port"),
+            PiRpcReply::Unavailable {
+                reason: PiRpcFailureKind::Authentication,
+            },
+            "credential case {case} must fail closed"
+        );
+        assert_eq!(
+            std::fs::read_dir(storage_root.path())
+                .expect("failed-start storage root remains inspectable")
+                .count(),
+            0,
+            "credential failure must not leave adapter-owned directories"
+        );
+    }
+}
+
+#[tokio::test]
+async fn fake_pi_native_model_and_thinking_readiness_mismatches_fail_closed() {
+    let _environment = fixture_environment("model_mismatch");
+    for (index, mode) in ["model_mismatch", "thinking_mismatch"]
+        .into_iter()
+        .enumerate()
+    {
+        std::env::set_var("HALO_PI_RPC_FIXTURE_MODE", mode);
+        let workspace_root = tempfile::tempdir().expect("workspace root");
+        let storage_root = tempfile::tempdir().expect("adapter storage root");
+        let credentials = Arc::new(MemoryPiCredentialStore::new());
+        let credential_ref = credentials
+            .write("openai", PiCredentialSecret::new("synthetic-secret"))
+            .await
+            .expect("native readiness fixture credential");
+        let repository = Arc::new(MemoryPiRuntimeConfigurationRepository::new());
+        let configuration = Arc::new(PiRuntimeConfigurationService::new_without_capabilities(
+            repository,
+        ));
+        configuration
+            .create(configured_configuration(credential_ref))
+            .await
+            .expect("native readiness fixture configuration");
+        let adapter = configured_adapter(configuration, credentials, storage_root.path());
+
+        assert_eq!(
+            adapter
+                .execute(PiRpcCommand::Start {
+                    generation: 140 + index as u64,
+                    workspace: configured_workspace(workspace_root.path()),
+                })
+                .await
+                .expect("native readiness failure crosses the port"),
+            PiRpcReply::Unavailable {
+                reason: PiRpcFailureKind::CapabilityMismatch,
+            },
+            "fake Pi mode {mode} must fail closed"
+        );
+        assert_eq!(
+            std::fs::read_dir(storage_root.path())
+                .expect("readiness-failure storage root remains inspectable")
+                .count(),
+            0,
+            "native readiness failure must clean adapter-owned directories"
+        );
+    }
+}
+
+#[tokio::test]
+async fn configured_start_rejects_a_project_pi_directory_before_spawn() {
+    let _environment = fixture_environment("happy");
+    let workspace_root = tempfile::tempdir().expect("workspace root");
+    std::fs::create_dir(workspace_root.path().join(".pi")).expect("project Pi directory");
+    let storage_root = tempfile::tempdir().expect("adapter storage root");
+    let credentials = Arc::new(MemoryPiCredentialStore::new());
+    let credential_ref = credentials
+        .write("openai", PiCredentialSecret::new("synthetic-secret"))
+        .await
+        .expect("project Pi fixture credential");
+    let repository = Arc::new(MemoryPiRuntimeConfigurationRepository::new());
+    let configuration = Arc::new(PiRuntimeConfigurationService::new_without_capabilities(
+        repository,
+    ));
+    configuration
+        .create(configured_configuration(credential_ref))
+        .await
+        .expect("project Pi fixture configuration");
+    let adapter = configured_adapter(configuration, credentials, storage_root.path());
+
+    assert_eq!(
+        adapter
+            .execute(PiRpcCommand::Start {
+                generation: 143,
+                workspace: configured_workspace(workspace_root.path()),
+            })
+            .await
+            .expect("project Pi rejection crosses the port"),
+        PiRpcReply::Unavailable {
+            reason: PiRpcFailureKind::CapabilityMismatch,
+        }
+    );
+    assert_eq!(
+        std::fs::read_dir(storage_root.path())
+            .expect("project rejection storage root remains inspectable")
+            .count(),
+        0
+    );
 }
 
 #[tokio::test]
@@ -274,6 +563,9 @@ async fn standard_and_managed_sessions_use_adapter_owned_storage_and_clean_it_up
         extension_path: Some(extension_path),
         provider: None,
         model: None,
+        runtime_configuration: None,
+        credential_store: None,
+        provider_capabilities: None,
         temporary_root: Some(storage_root.path().to_path_buf()),
         response_timeout: Duration::from_secs(1),
         operation_timeout: Duration::from_secs(1),

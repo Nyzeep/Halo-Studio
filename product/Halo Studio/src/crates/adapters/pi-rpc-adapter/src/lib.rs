@@ -6,7 +6,15 @@
 //! credentials, command output, and raw protocol records never leave this
 //! module.
 
+mod configuration;
 mod framing;
+
+pub use bitfun_runtime_ports::PiRuntimeConfigurationView;
+pub use configuration::{
+    validate_runtime_configuration_shape, JsonFilePiRuntimeConfigurationRepository,
+    MemoryPiCredentialStore, MemoryPiRuntimeConfigurationRepository,
+    PiRuntimeConfigurationRepository, PiRuntimeConfigurationService, StaticPiProviderCapabilities,
+};
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
@@ -18,9 +26,11 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use bitfun_runtime_ports::{
-    PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind,
-    PiRpcPort, PiRpcReply, PiRpcSessionMode, PiRpcWorkspace, PortError, PortErrorKind, PortResult,
-    PI_RPC_ADAPTER_IDENTITY,
+    PiCredentialSecret, PiCredentialStorePort, PiProviderCapability, PiProviderCapabilityPort,
+    PiProviderCapabilityRequest, PiRpcCommand, PiRpcEvent, PiRpcFailureKind,
+    PiRpcOperationDecision, PiRpcOperationKind, PiRpcPort, PiRpcReply, PiRpcSessionMode,
+    PiRpcWorkspace, PiRuntimeConfiguration, PiRuntimeConfigurationPort, PortError, PortErrorKind,
+    PortResult, PI_RPC_ADAPTER_IDENTITY,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -58,6 +68,8 @@ const SAFE_CHILD_ENVIRONMENT: &[&str] = &[
 ];
 
 const HALO_PERMISSION_EXTENSION_SOURCE: &str = include_str!("halo_permission_gate.ts");
+const HALO_PI_CREDENTIAL_ENV: &str = "HALO_PI_CREDENTIAL";
+const HALO_PI_CREDENTIAL_ENV_REFERENCE: &str = "$HALO_PI_CREDENTIAL";
 
 /// Fixed first-party extension identity. The source digest is exposed for the
 /// audit record, never as a renderer or evidence payload.
@@ -76,7 +88,7 @@ pub const HALO_PI_EXTENSION_UPDATE_OWNER: &str =
 pub const HALO_PI_EXTENSION_LICENSE: &str =
     "Halo Studio repository license policy; host Pi package license must remain separately audited";
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PiRpcConfig {
     /// Explicit executable used by tests or a reviewed deployment.
     pub executable: Option<PathBuf>,
@@ -88,6 +100,15 @@ pub struct PiRpcConfig {
     /// this structure.
     pub provider: Option<String>,
     pub model: Option<String>,
+    /// Halo's non-secret configuration authority. When present, the adapter
+    /// must load it before a controlled RPC child is created.
+    pub runtime_configuration: Option<Arc<dyn PiRuntimeConfigurationPort>>,
+    /// OS-backed credential store. The adapter reads from it only at the
+    /// controlled child creation boundary and never exposes the value.
+    pub credential_store: Option<Arc<dyn PiCredentialStorePort>>,
+    /// Pi-native capability/readiness source used to validate the selected
+    /// provider, model, base URL and thinking level.
+    pub provider_capabilities: Option<Arc<dyn PiProviderCapabilityPort>>,
     /// Test/deployment root for adapter-owned config/session directories. The
     /// directory itself is never exposed through the Workbench public seam.
     pub temporary_root: Option<PathBuf>,
@@ -103,6 +124,9 @@ impl Default for PiRpcConfig {
             extension_path: None,
             provider: None,
             model: None,
+            runtime_configuration: None,
+            credential_store: None,
+            provider_capabilities: None,
             temporary_root: None,
             response_timeout: DEFAULT_RESPONSE_TIMEOUT,
             operation_timeout: DEFAULT_OPERATION_TIMEOUT,
@@ -126,9 +150,17 @@ struct AdapterState {
     executable: Option<PathBuf>,
     extension_path: Option<PathBuf>,
     owned_extension_dir: Option<PathBuf>,
+    runtime_configuration: Option<PiRuntimeConfiguration>,
+    runtime_capability: Option<PiProviderCapability>,
     prepared_session: Option<Arc<PiSession>>,
     readiness_failed: bool,
     sessions: HashMap<String, Arc<PiSession>>,
+}
+
+#[derive(Clone)]
+struct ResolvedRuntimeConfiguration {
+    configuration: PiRuntimeConfiguration,
+    capability: Option<PiProviderCapability>,
 }
 
 impl Drop for AdapterState {
@@ -249,16 +281,30 @@ impl PiRpcAdapter {
         let _ = self.events.send(event);
     }
 
-    async fn probe_pi(&self) -> Result<PathBuf, PiRpcFailureKind> {
-        let executable = self.resolve_executable().await?;
+    async fn probe_executable_version(
+        &self,
+        executable: &Path,
+    ) -> Result<std::process::Output, PiRpcFailureKind> {
+        let config_dir = self.create_private_directory("version-probe")?;
         let output = configure_child_command(
-            build_pi_command(&executable, &["--version".to_string()]),
-            &executable,
+            build_pi_command(executable, &["--version".to_string()]),
+            executable,
+            Some(config_dir.path()),
             None,
         )
         .output()
-        .await
-        .map_err(|_| PiRpcFailureKind::NotInstalled)?;
+        .await;
+
+        // Keep the probe's config lifetime independent from the returned
+        // process output. This also makes failed probes fail closed if their
+        // adapter-owned directory cannot be removed.
+        config_dir.close().map_err(|_| PiRpcFailureKind::Internal)?;
+        output.map_err(|_| PiRpcFailureKind::NotInstalled)
+    }
+
+    async fn probe_pi(&self) -> Result<PathBuf, PiRpcFailureKind> {
+        let executable = self.resolve_executable().await?;
+        let output = self.probe_executable_version(&executable).await?;
         if !output.status.success() {
             return Err(PiRpcFailureKind::UnsupportedVersion);
         }
@@ -312,14 +358,10 @@ impl PiRpcAdapter {
                 if fallback.is_none() {
                     fallback = Some(candidate.clone());
                 }
-                if configure_child_command(
-                    build_pi_command(&candidate, &["--version".to_string()]),
-                    &candidate,
-                    None,
-                )
-                .output()
-                .await
-                .is_ok_and(|output| output.status.success())
+                if self
+                    .probe_executable_version(&candidate)
+                    .await
+                    .is_ok_and(|output| output.status.success())
                 {
                     return Ok(candidate);
                 }
@@ -384,12 +426,22 @@ impl PiRpcAdapter {
         workspace: &PiRpcWorkspace,
         executable: &Path,
         extension_path: &Path,
+        runtime_configuration: Option<&PiRuntimeConfiguration>,
+        runtime_capability: Option<&PiProviderCapability>,
+        credential: Option<PiCredentialSecret>,
     ) -> Result<Arc<PiSession>, PiRpcFailureKind> {
         let config_dir = self.create_private_directory("config")?;
+        if let Some(configuration) = runtime_configuration {
+            write_pi_config_projection(config_dir.path(), configuration, runtime_capability)?;
+        }
         let session_dir = match mode {
             PiRpcSessionMode::Standard => Some(self.create_private_directory("session")?),
             PiRpcSessionMode::Managed => None,
         };
+        if mode == PiRpcSessionMode::Standard && session_dir.is_none() {
+            return Err(PiRpcFailureKind::CapabilityMismatch);
+        }
+        let credential_value = credential.map(PiCredentialSecret::into_string);
         let mut child = configure_child_command(
             build_pi_command(
                 executable,
@@ -397,12 +449,19 @@ impl PiRpcAdapter {
                     extension_path,
                     mode,
                     session_dir.as_ref().map(|directory| directory.path()),
-                    self.config.provider.as_deref(),
-                    self.config.model.as_deref(),
+                    runtime_configuration
+                        .map(|configuration| configuration.provider_id.as_str())
+                        .or(self.config.provider.as_deref()),
+                    runtime_configuration
+                        .map(|configuration| configuration.model_id.as_str())
+                        .or(self.config.model.as_deref()),
+                    runtime_configuration
+                        .map(|configuration| configuration.thinking_level.as_str()),
                 ),
             ),
             executable,
             Some(config_dir.path()),
+            credential_value.as_deref(),
         )
         .current_dir(&workspace.canonical_root)
         .stdin(Stdio::piped())
@@ -459,6 +518,148 @@ impl PiRpcAdapter {
             }
             None => builder.tempdir().map_err(|_| PiRpcFailureKind::Internal),
         }
+    }
+
+    async fn resolve_runtime_configuration(
+        &self,
+        workspace: &PiRpcWorkspace,
+    ) -> Result<Option<ResolvedRuntimeConfiguration>, PiRpcFailureKind> {
+        let Some(configuration_port) = self.config.runtime_configuration.as_ref() else {
+            if self.config.credential_store.is_some() || self.config.provider_capabilities.is_some()
+            {
+                return Err(PiRpcFailureKind::CapabilityMismatch);
+            }
+            return Ok(None);
+        };
+
+        // A project-local .pi tree is an uncontrolled Pi configuration and may
+        // contain settings, auth state, packages, or extensions. P0 refuses to
+        // run in that workspace rather than attempting to interpret or merge it.
+        if workspace.canonical_root.join(".pi").exists() {
+            return Err(PiRpcFailureKind::CapabilityMismatch);
+        }
+
+        let configuration = configuration_port
+            .load_configuration()
+            .await
+            .map_err(|_| PiRpcFailureKind::CapabilityMismatch)?
+            .ok_or(PiRpcFailureKind::CapabilityMismatch)?;
+        validate_runtime_configuration_shape(&configuration)
+            .map_err(|_| PiRpcFailureKind::CapabilityMismatch)?;
+
+        let capability = if let Some(capabilities) = self.config.provider_capabilities.as_ref() {
+            let capability = capabilities
+                .inspect(PiProviderCapabilityRequest {
+                    provider_id: configuration.provider_id.clone(),
+                    model_id: configuration.model_id.clone(),
+                    base_url: configuration.base_url.clone(),
+                })
+                .await
+                .map_err(|_| PiRpcFailureKind::CapabilityMismatch)?;
+            if capability.provider_id != configuration.provider_id
+                || capability.model_id != configuration.model_id
+                || capability.api.is_empty()
+                || capability.api.len() > 128
+                || capability
+                    .api
+                    .chars()
+                    .any(|character| character.is_control() || character.is_whitespace())
+                || (configuration.base_url.is_some() && !capability.accepts_base_url)
+                || !capability
+                    .supported_thinking_levels
+                    .contains(&configuration.thinking_level)
+            {
+                return Err(PiRpcFailureKind::CapabilityMismatch);
+            }
+            Some(capability)
+        } else {
+            None
+        };
+        Ok(Some(ResolvedRuntimeConfiguration {
+            configuration,
+            capability,
+        }))
+    }
+
+    async fn read_runtime_credential(
+        &self,
+        configuration: Option<&PiRuntimeConfiguration>,
+    ) -> Result<Option<PiCredentialSecret>, PiRpcFailureKind> {
+        let Some(configuration) = configuration else {
+            return Ok(None);
+        };
+        let store = self
+            .config
+            .credential_store
+            .as_ref()
+            .ok_or(PiRpcFailureKind::Authentication)?;
+        let secret = store
+            .read(&configuration.provider_id, &configuration.credential_ref)
+            .await
+            .map_err(|_| PiRpcFailureKind::Authentication)?;
+        let value = secret.into_string();
+        if value.is_empty() {
+            return Err(PiRpcFailureKind::Authentication);
+        }
+        Ok(Some(PiCredentialSecret::new(value)))
+    }
+
+    async fn validate_native_capability(
+        &self,
+        session: &Arc<PiSession>,
+        configuration: &PiRuntimeConfiguration,
+    ) -> Result<(), PiRpcFailureKind> {
+        let models = session
+            .request(
+                "get_available_models",
+                json!({ "type": "get_available_models" }),
+            )
+            .await
+            .map_err(|_| PiRpcFailureKind::CapabilityMismatch)?;
+        let available = models
+            .get("models")
+            .and_then(Value::as_array)
+            .ok_or(PiRpcFailureKind::CapabilityMismatch)?;
+        let selected_model_is_available = available.iter().any(|model| {
+            model.get("provider").and_then(Value::as_str) == Some(&configuration.provider_id)
+                && model
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| id == configuration.model_id)
+        });
+        if !selected_model_is_available {
+            return Err(PiRpcFailureKind::CapabilityMismatch);
+        }
+
+        session
+            .request(
+                "set_model",
+                json!({
+                    "type": "set_model",
+                    "provider": configuration.provider_id,
+                    "modelId": configuration.model_id,
+                }),
+            )
+            .await
+            .map_err(|_| PiRpcFailureKind::CapabilityMismatch)?;
+        let levels = session
+            .request(
+                "get_available_thinking_levels",
+                json!({ "type": "get_available_thinking_levels" }),
+            )
+            .await
+            .map_err(|_| PiRpcFailureKind::CapabilityMismatch)?;
+        let levels = levels
+            .get("levels")
+            .and_then(Value::as_array)
+            .ok_or(PiRpcFailureKind::CapabilityMismatch)?;
+        if !levels
+            .iter()
+            .any(|level| level.as_str() == Some(configuration.thinking_level.as_str()))
+        {
+            return Err(PiRpcFailureKind::CapabilityMismatch);
+        }
+        Ok(())
     }
 
     async fn handshake(&self, session: &Arc<PiSession>) -> Result<(), PiRpcFailureKind> {
@@ -538,6 +739,11 @@ impl PiRpcAdapter {
             }
         }
 
+        let runtime_configuration = match self.resolve_runtime_configuration(&workspace).await {
+            Ok(configuration) => configuration,
+            Err(reason) => return PiRpcReply::Unavailable { reason },
+        };
+
         let mut extension = match self.install_first_party_extension() {
             Ok(extension) => extension,
             Err(reason) => return PiRpcReply::Unavailable { reason },
@@ -545,6 +751,20 @@ impl PiRpcAdapter {
         let extension_path = extension.path.clone();
         let executable = match self.probe_pi().await {
             Ok(path) => path,
+            Err(reason) => {
+                let reason = extension.cleanup().err().unwrap_or(reason);
+                return PiRpcReply::Unavailable { reason };
+            }
+        };
+        let credential = match self
+            .read_runtime_credential(
+                runtime_configuration
+                    .as_ref()
+                    .map(|resolved| &resolved.configuration),
+            )
+            .await
+        {
+            Ok(credential) => credential,
             Err(reason) => {
                 let reason = extension.cleanup().err().unwrap_or(reason);
                 return PiRpcReply::Unavailable { reason };
@@ -561,6 +781,13 @@ impl PiRpcAdapter {
                 &workspace,
                 &executable,
                 &extension_path,
+                runtime_configuration
+                    .as_ref()
+                    .map(|resolved| &resolved.configuration),
+                runtime_configuration
+                    .as_ref()
+                    .and_then(|resolved| resolved.capability.as_ref()),
+                credential,
             )
             .await
         {
@@ -575,6 +802,16 @@ impl PiRpcAdapter {
             let reason = extension.cleanup().err().unwrap_or(reason);
             return PiRpcReply::Unavailable { reason };
         }
+        if let Some(configuration) = runtime_configuration.as_ref() {
+            if let Err(reason) = self
+                .validate_native_capability(&prepared_session, &configuration.configuration)
+                .await
+            {
+                prepared_session.terminate().await;
+                let reason = extension.cleanup().err().unwrap_or(reason);
+                return PiRpcReply::Unavailable { reason };
+            }
+        }
 
         let mut state = self.state.lock().await;
         let extension_path = std::mem::take(&mut extension.path);
@@ -584,6 +821,12 @@ impl PiRpcAdapter {
         state.executable = Some(executable);
         state.extension_path = Some(extension_path);
         state.owned_extension_dir = owned_extension_dir;
+        state.runtime_configuration = runtime_configuration
+            .as_ref()
+            .map(|resolved| resolved.configuration.clone());
+        state.runtime_capability = runtime_configuration
+            .as_ref()
+            .and_then(|resolved| resolved.capability.clone());
         state.prepared_session = Some(prepared_session);
         state.readiness_failed = false;
         drop(state);
@@ -599,7 +842,14 @@ impl PiRpcAdapter {
         session_id: String,
         mode: PiRpcSessionMode,
     ) -> Result<(), PiRpcFailureKind> {
-        let (workspace, executable, extension_path, prepared_session) = {
+        let (
+            workspace,
+            executable,
+            extension_path,
+            runtime_configuration,
+            runtime_capability,
+            prepared_session,
+        ) = {
             let mut state = self.state.lock().await;
             if state.generation != Some(generation) || state.readiness_failed {
                 return Err(PiRpcFailureKind::Transport);
@@ -622,6 +872,8 @@ impl PiRpcAdapter {
                     .extension_path
                     .clone()
                     .ok_or(PiRpcFailureKind::CapabilityMismatch)?,
+                state.runtime_configuration.clone(),
+                state.runtime_capability.clone(),
                 prepared_session,
             )
         };
@@ -629,6 +881,9 @@ impl PiRpcAdapter {
         let session = match prepared_session {
             Some(session) if !session.terminated.load(Ordering::Acquire) => session,
             None => {
+                let credential = self
+                    .read_runtime_credential(runtime_configuration.as_ref())
+                    .await?;
                 let session = self
                     .spawn_session_process(
                         generation,
@@ -639,6 +894,9 @@ impl PiRpcAdapter {
                         &workspace,
                         &executable,
                         &extension_path,
+                        runtime_configuration.as_ref(),
+                        runtime_capability.as_ref(),
+                        credential,
                     )
                     .await?;
                 if let Err(reason) = self.handshake(&session).await {
@@ -649,6 +907,9 @@ impl PiRpcAdapter {
             }
             Some(session) => {
                 session.terminate().await;
+                let credential = self
+                    .read_runtime_credential(runtime_configuration.as_ref())
+                    .await?;
                 self.spawn_session_process(
                     generation,
                     task_id.clone(),
@@ -658,6 +919,9 @@ impl PiRpcAdapter {
                     &workspace,
                     &executable,
                     &extension_path,
+                    runtime_configuration.as_ref(),
+                    runtime_capability.as_ref(),
+                    credential,
                 )
                 .await?
             }
@@ -718,6 +982,7 @@ impl PiRpcAdapter {
             state.workspace = None;
             state.executable = None;
             state.extension_path = None;
+            state.runtime_configuration = None;
             state.readiness_failed = false;
             let owned_extension_dir = state.owned_extension_dir.clone();
             let mut sessions = state
@@ -1462,17 +1727,18 @@ fn pi_rpc_args(
     session_dir: Option<&Path>,
     provider: Option<&str>,
     model: Option<&str>,
+    thinking: Option<&str>,
 ) -> Vec<String> {
     let mut args = vec!["--mode".to_string(), "rpc".to_string()];
     match mode {
         PiRpcSessionMode::Managed => args.push("--no-session".to_string()),
         PiRpcSessionMode::Standard => {
+            let Some(session_dir) = session_dir else {
+                return Vec::new();
+            };
             args.extend([
                 "--session-dir".to_string(),
-                session_dir
-                    .expect("standard Pi RPC sessions require an isolated session directory")
-                    .to_string_lossy()
-                    .into_owned(),
+                session_dir.to_string_lossy().into_owned(),
             ]);
         }
     }
@@ -1488,7 +1754,107 @@ fn pi_rpc_args(
     if let Some(model) = model {
         args.extend(["--model".to_string(), model.to_string()]);
     }
+    if let Some(thinking) = thinking {
+        if let Some(model_index) = args.iter().position(|argument| argument == "--model") {
+            if let Some(model_value) = args.get_mut(model_index + 1) {
+                model_value.push(':');
+                model_value.push_str(thinking);
+            }
+        }
+    }
     args
+}
+
+/// Projects Halo's validated, non-secret configuration into the small set of
+/// Pi RPC startup arguments that P0 permits. The base URL is intentionally
+/// excluded from argv; callers project it into the adapter-owned Pi config
+/// directory instead. Credentials are never represented in this vector.
+pub fn pi_rpc_arguments(
+    configuration: &bitfun_runtime_ports::PiRuntimeConfiguration,
+    mode: PiRpcSessionMode,
+    extension_path: &str,
+    session_dir: Option<&str>,
+) -> Vec<String> {
+    if validate_runtime_configuration_shape(configuration).is_err()
+        || !valid_cli_selection(&configuration.provider_id)
+        || !valid_cli_selection(&configuration.model_id)
+    {
+        return Vec::new();
+    }
+    pi_rpc_args(
+        Path::new(extension_path),
+        mode,
+        session_dir.map(Path::new),
+        Some(&configuration.provider_id),
+        Some(&configuration.model_id),
+        Some(configuration.thinking_level.as_str()),
+    )
+}
+
+pub fn pi_models_json_projection(
+    configuration: &PiRuntimeConfiguration,
+    capability: Option<&PiProviderCapability>,
+) -> Result<Value, PiRpcFailureKind> {
+    validate_runtime_configuration_shape(configuration)
+        .map_err(|_| PiRpcFailureKind::CapabilityMismatch)?;
+    if let Some(capability) = capability {
+        if capability.provider_id != configuration.provider_id
+            || capability.model_id != configuration.model_id
+            || capability.api.is_empty()
+            || capability.api.len() > 128
+            || capability
+                .api
+                .chars()
+                .any(|character| character.is_control() || character.is_whitespace())
+        {
+            return Err(PiRpcFailureKind::CapabilityMismatch);
+        }
+    }
+
+    let mut provider = serde_json::Map::new();
+    provider.insert(
+        "apiKey".to_string(),
+        Value::String(HALO_PI_CREDENTIAL_ENV_REFERENCE.to_string()),
+    );
+    provider.insert("authHeader".to_string(), Value::Bool(true));
+    if let Some(base_url) = configuration.base_url.as_deref() {
+        provider.insert("baseUrl".to_string(), Value::String(base_url.to_string()));
+    }
+    if let Some(capability) = capability {
+        let reasoning = capability
+            .supported_thinking_levels
+            .iter()
+            .any(|level| *level != bitfun_runtime_ports::PiThinkingLevel::Off);
+        provider.insert("api".to_string(), Value::String(capability.api.clone()));
+        provider.insert(
+            "models".to_string(),
+            json!([{
+                "id": configuration.model_id,
+                // Only facts owned by Halo's selected configuration and the
+                // audited capability port belong in this projection. Pi may
+                // discover richer metadata; inventing context, token limits,
+                // modalities, or pricing here would create false provenance.
+                "reasoning": reasoning
+            }]),
+        );
+    }
+
+    let mut providers = serde_json::Map::new();
+    providers.insert(configuration.provider_id.clone(), Value::Object(provider));
+    Ok(Value::Object(serde_json::Map::from_iter([(
+        "providers".to_string(),
+        Value::Object(providers),
+    )])))
+}
+
+fn write_pi_config_projection(
+    config_dir: &Path,
+    configuration: &PiRuntimeConfiguration,
+    capability: Option<&PiProviderCapability>,
+) -> Result<(), PiRpcFailureKind> {
+    let projection = pi_models_json_projection(configuration, capability)?;
+    let encoded = serde_json::to_vec(&projection).map_err(|_| PiRpcFailureKind::Internal)?;
+    std::fs::write(config_dir.join("models.json"), encoded).map_err(|_| PiRpcFailureKind::Internal)
 }
 
 fn map_handshake_error(error: PortError) -> PiRpcFailureKind {
@@ -1537,6 +1903,7 @@ fn configure_child_command(
     mut command: Command,
     executable: &Path,
     config_dir: Option<&Path>,
+    credential: Option<&str>,
 ) -> Command {
     command.env_clear();
     for name in SAFE_CHILD_ENVIRONMENT {
@@ -1546,6 +1913,9 @@ fn configure_child_command(
     }
     if let Some(config_dir) = config_dir {
         command.env("PI_CODING_AGENT_DIR", config_dir);
+    }
+    if let Some(credential) = credential {
+        command.env(HALO_PI_CREDENTIAL_ENV, credential);
     }
 
     // The fixture is a controlled test executable, not a production Pi

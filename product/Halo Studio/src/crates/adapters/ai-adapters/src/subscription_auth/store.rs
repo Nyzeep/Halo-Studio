@@ -19,12 +19,15 @@ use std::time::Duration;
 const STORE_VERSION: u8 = 2;
 const CLEANUP_JOURNAL_VERSION: u8 = 1;
 const KEYRING_SERVICE: &str = "openbitfun.bitfun.subscription-auth.v1";
+const PI_KEYRING_SERVICE: &str = "openbitfun.halo.pi-credentials.v1";
+const PI_ENTRY_PREFIX: &str = "halo-pi/v1";
 const STORE_FILE_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
 const STORE_FILE_LOCK_RETRY_INTERVAL: Duration = Duration::from_millis(25);
 // Windows Credential Manager limits a generic credential blob to 2560 bytes.
 // Leave headroom for platform-store implementations and split every logical
 // secret so a long JWT or refresh token remains portable across all hosts.
 const SECRET_CHUNK_BYTES: usize = 2_048;
+const MAX_PI_CREDENTIAL_PARTS: usize = 256;
 
 /// A single credential assembled in memory after its secret material has been
 /// read from the platform credential vault.
@@ -885,7 +888,10 @@ async fn read_secure_file(path: &Path) -> Result<SecureStoreFile> {
     parse_secure_file(&bytes, path)
 }
 
-fn open_native_keyring_entry(entry_name: &str) -> std::result::Result<keyring_core::Entry, String> {
+fn open_native_keyring_entry_for(
+    service: &str,
+    entry_name: &str,
+) -> std::result::Result<keyring_core::Entry, String> {
     if keyring_core::get_default_store().is_none() {
         #[cfg(target_os = "macos")]
         let store = apple_native_keyring_store::keychain::Store::new();
@@ -913,11 +919,19 @@ fn open_native_keyring_entry(entry_name: &str) -> std::result::Result<keyring_co
             store.map_err(|error| format!("initialize system credential store: {error}"))?;
         keyring_core::set_default_store(store);
     }
-    keyring_core::Entry::new(KEYRING_SERVICE, entry_name)
+    keyring_core::Entry::new(service, entry_name)
         .map_err(|error| format!("open system credential entry: {error}"))
 }
 
+fn open_native_keyring_entry(entry_name: &str) -> std::result::Result<keyring_core::Entry, String> {
+    open_native_keyring_entry_for(KEYRING_SERVICE, entry_name)
+}
+
 async fn get_secret_bytes(entry_name: &str) -> Result<Option<Vec<u8>>> {
+    get_secret_bytes_for(KEYRING_SERVICE, entry_name).await
+}
+
+async fn get_secret_bytes_for(service: &str, entry_name: &str) -> Result<Option<Vec<u8>>> {
     if let Some(path) = overridden_store_path() {
         if test_vault_is_unavailable(&path) {
             return Err(vault_unavailable("subscription test vault unavailable"));
@@ -933,12 +947,13 @@ async fn get_secret_bytes(entry_name: &str) -> Result<Option<Vec<u8>>> {
             });
     }
 
+    let service = service.to_string();
     let entry_name = entry_name.to_string();
     tokio::task::spawn_blocking(move || {
         let _guard = native_keyring_lock()
             .lock()
             .map_err(|_| "subscription keyring lock poisoned".to_string())?;
-        let entry = open_native_keyring_entry(&entry_name)?;
+        let entry = open_native_keyring_entry_for(&service, &entry_name)?;
         match entry.get_secret() {
             Ok(secret) => Ok(Some(secret)),
             Err(keyring_core::Error::NoEntry) => Ok(None),
@@ -987,6 +1002,10 @@ async fn get_legacy_password(provider: &str) -> Result<Option<String>> {
 }
 
 async fn set_secret_bytes(entry_name: &str, secret: Vec<u8>) -> Result<()> {
+    set_secret_bytes_for(KEYRING_SERVICE, entry_name, secret).await
+}
+
+async fn set_secret_bytes_for(service: &str, entry_name: &str, secret: Vec<u8>) -> Result<()> {
     if secret.len() > SECRET_CHUNK_BYTES {
         return Err(anyhow!(
             "subscription credential chunk exceeds portable size limit: {} bytes",
@@ -1012,12 +1031,13 @@ async fn set_secret_bytes(entry_name: &str, secret: Vec<u8>) -> Result<()> {
         return Ok(());
     }
 
+    let service = service.to_string();
     let entry_name = entry_name.to_string();
     tokio::task::spawn_blocking(move || {
         let _guard = native_keyring_lock()
             .lock()
             .map_err(|_| "subscription keyring lock poisoned".to_string())?;
-        let entry = open_native_keyring_entry(&entry_name)?;
+        let entry = open_native_keyring_entry_for(&service, &entry_name)?;
         entry
             .set_secret(&secret)
             .map_err(|err| format!("write system credential entry: {err}"))
@@ -1028,6 +1048,10 @@ async fn set_secret_bytes(entry_name: &str, secret: Vec<u8>) -> Result<()> {
 }
 
 async fn delete_secret_entry(entry_name: &str) -> Result<()> {
+    delete_secret_entry_for(KEYRING_SERVICE, entry_name).await
+}
+
+async fn delete_secret_entry_for(service: &str, entry_name: &str) -> Result<()> {
     if let Some(path) = overridden_store_path() {
         if test_vault_is_unavailable(&path) {
             return Err(vault_unavailable("subscription test vault unavailable"));
@@ -1045,12 +1069,13 @@ async fn delete_secret_entry(entry_name: &str) -> Result<()> {
         return Ok(());
     }
 
+    let service = service.to_string();
     let entry_name = entry_name.to_string();
     tokio::task::spawn_blocking(move || {
         let _guard = native_keyring_lock()
             .lock()
             .map_err(|_| "subscription keyring lock poisoned".to_string())?;
-        let entry = open_native_keyring_entry(&entry_name)?;
+        let entry = open_native_keyring_entry_for(&service, &entry_name)?;
         match entry.delete_credential() {
             Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
             Err(err) => Err(format!("delete system credential entry: {err}")),
@@ -1059,6 +1084,162 @@ async fn delete_secret_entry(entry_name: &str) -> Result<()> {
     .await
     .context("join system credential delete task")?
     .map_err(vault_unavailable)
+}
+
+fn validate_pi_credential_reference(reference: &str) -> Result<()> {
+    if reference.is_empty()
+        || reference.len() > 256
+        || reference
+            .chars()
+            .any(|character| character.is_control() || matches!(character, '/' | '\\' | ':' | ' '))
+    {
+        return Err(anyhow!("Pi credential reference is invalid"));
+    }
+    Ok(())
+}
+
+fn pi_credential_entry(reference: &str, suffix: &str) -> String {
+    format!("{PI_ENTRY_PREFIX}/{reference}/{suffix}")
+}
+
+/// Writes one Pi credential directly to a Pi-only system-vault namespace.
+/// The non-secret part count is stored beside the vault chunks so reads and
+/// deletes never need to enumerate the subscription credential index.
+pub async fn write_pi_credential(reference: &str, secret: &str) -> Result<()> {
+    validate_pi_credential_reference(reference)?;
+    if secret.is_empty() {
+        return Err(anyhow!("Pi credential must not be empty"));
+    }
+    let chunks = secret_chunks(secret);
+    if chunks.len() > MAX_PI_CREDENTIAL_PARTS {
+        return Err(anyhow!("Pi credential is too large"));
+    }
+    for (index, chunk) in chunks.iter().enumerate() {
+        if let Err(error) = set_secret_bytes_for(
+            PI_KEYRING_SERVICE,
+            &pi_credential_entry(reference, &format!("secret/{index}")),
+            chunk.clone(),
+        )
+        .await
+        {
+            if let Err(cleanup_error) = cleanup_pi_credential_chunks(reference, index + 1).await {
+                log::warn!(
+                    "cleanup after interrupted Pi credential write remains pending: {cleanup_error:#}"
+                );
+            }
+            if let Err(cleanup_error) = delete_secret_entry_for(
+                PI_KEYRING_SERVICE,
+                &pi_credential_entry(reference, "parts"),
+            )
+            .await
+            {
+                log::warn!(
+                    "cleanup of interrupted Pi credential metadata remains pending: {cleanup_error:#}"
+                );
+            }
+            return Err(error);
+        }
+    }
+    if let Err(error) = set_secret_bytes_for(
+        PI_KEYRING_SERVICE,
+        &pi_credential_entry(reference, "parts"),
+        chunks.len().to_string().into_bytes(),
+    )
+    .await
+    {
+        if let Err(cleanup_error) = cleanup_pi_credential_chunks(reference, chunks.len()).await {
+            log::warn!(
+                "cleanup after interrupted Pi credential metadata write remains pending: {cleanup_error:#}"
+            );
+        }
+        if let Err(cleanup_error) =
+            delete_secret_entry_for(PI_KEYRING_SERVICE, &pi_credential_entry(reference, "parts"))
+                .await
+        {
+            log::warn!(
+                "cleanup of interrupted Pi credential metadata remains pending: {cleanup_error:#}"
+            );
+        }
+        return Err(error);
+    }
+    Ok(())
+}
+
+async fn cleanup_pi_credential_chunks(reference: &str, parts: usize) -> Result<()> {
+    let mut first_error = None;
+    for index in 0..parts.min(MAX_PI_CREDENTIAL_PARTS) {
+        if let Err(error) = delete_secret_entry_for(
+            PI_KEYRING_SERVICE,
+            &pi_credential_entry(reference, &format!("secret/{index}")),
+        )
+        .await
+        {
+            if first_error.is_none() {
+                first_error = Some(error);
+            }
+        }
+    }
+    first_error.map_or(Ok(()), Err)
+}
+
+/// Reads one Pi credential by its opaque reference. This is the only Pi
+/// credential operation that returns secret material to the caller.
+pub async fn read_pi_credential(reference: &str) -> Result<Option<String>> {
+    validate_pi_credential_reference(reference)?;
+    let Some(parts) =
+        get_secret_bytes_for(PI_KEYRING_SERVICE, &pi_credential_entry(reference, "parts")).await?
+    else {
+        return Ok(None);
+    };
+    let parts = String::from_utf8(parts)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| (1..=MAX_PI_CREDENTIAL_PARTS).contains(value))
+        .ok_or_else(|| anyhow!("Pi credential metadata is invalid"))?;
+    let mut bytes = Vec::new();
+    for index in 0..parts {
+        let Some(mut chunk) = get_secret_bytes_for(
+            PI_KEYRING_SERVICE,
+            &pi_credential_entry(reference, &format!("secret/{index}")),
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+        bytes.append(&mut chunk);
+    }
+    String::from_utf8(bytes)
+        .map(Some)
+        .map_err(|_| anyhow!("Pi credential bytes are invalid"))
+}
+
+/// Deletes one Pi credential without loading its secret or any other
+/// provider's credentials.
+pub async fn delete_pi_credential(reference: &str) -> Result<()> {
+    validate_pi_credential_reference(reference)?;
+    let Some(parts) =
+        get_secret_bytes_for(PI_KEYRING_SERVICE, &pi_credential_entry(reference, "parts")).await?
+    else {
+        return cleanup_pi_credential_chunks(reference, MAX_PI_CREDENTIAL_PARTS).await;
+    };
+    let parts = String::from_utf8(parts)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| (1..=MAX_PI_CREDENTIAL_PARTS).contains(value));
+    let Some(parts) = parts else {
+        cleanup_pi_credential_chunks(reference, MAX_PI_CREDENTIAL_PARTS).await?;
+        delete_secret_entry_for(PI_KEYRING_SERVICE, &pi_credential_entry(reference, "parts"))
+            .await?;
+        return Err(anyhow!("Pi credential metadata is invalid"));
+    };
+    for index in 0..parts {
+        delete_secret_entry_for(
+            PI_KEYRING_SERVICE,
+            &pi_credential_entry(reference, &format!("secret/{index}")),
+        )
+        .await?;
+    }
+    delete_secret_entry_for(PI_KEYRING_SERVICE, &pi_credential_entry(reference, "parts")).await
 }
 
 fn secret_chunks(secret: &str) -> Vec<Vec<u8>> {
@@ -1592,6 +1773,15 @@ pub(crate) async fn remove(provider: &str) -> Result<RemoveOutcome> {
     Ok(RemoveOutcome::Removed)
 }
 
+/// Removes one opaque credential reference for a platform adapter without
+/// exposing the subscription store's cleanup outcome type.
+pub async fn remove_entry(provider: &str) -> Result<()> {
+    match remove(provider).await? {
+        RemoveOutcome::Removed => Ok(()),
+        RemoveOutcome::CleanupPending(warning) => Err(anyhow!(warning)),
+    }
+}
+
 /// Persists all supplied credentials. Kept for compatibility with focused
 /// tests; production refresh/login paths should call [`upsert`] for one
 /// provider so concurrent providers cannot overwrite each other's tokens.
@@ -1942,5 +2132,68 @@ mod file_lock_tests {
         let message = format!("{error:#}");
         assert!(message.contains("transaction lock"));
         assert!(message.contains("directory") || message.contains("regular file"));
+    }
+}
+
+#[cfg(test)]
+mod pi_credential_tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn temporary_metadata_path(label: &str) -> PathBuf {
+        std::env::temp_dir()
+            .join(format!(
+                "bitfun-pi-credential-{label}-{}",
+                uuid::Uuid::new_v4()
+            ))
+            .join("subscription_auth.json")
+    }
+
+    #[tokio::test]
+    async fn partial_pi_credential_write_removes_already_written_chunks() {
+        let _guard = test_lock().lock().expect("Pi credential test lock");
+        let metadata_path = temporary_metadata_path("partial-write");
+        set_store_path_for_test(metadata_path);
+        set_test_vault_write_failure_after(Some(1));
+        set_test_vault_delete_failure(false);
+
+        let reference = "halo-pi-credential-v1-partial-write";
+        let error = write_pi_credential(reference, &"x".repeat(SECRET_CHUNK_BYTES * 2))
+            .await
+            .expect_err("the injected second vault write must fail");
+        assert!(error.to_string().contains("injected"));
+
+        let entries = test_vault_entries_for_assertion();
+        assert!(entries.keys().all(|entry| !entry.contains(reference)));
+        set_test_vault_write_failure_after(None);
+    }
+
+    #[tokio::test]
+    async fn deleting_a_pi_credential_without_parts_cleans_orphaned_chunks() {
+        let _guard = test_lock().lock().expect("Pi credential test lock");
+        let metadata_path = temporary_metadata_path("missing-parts");
+        set_store_path_for_test(metadata_path);
+        set_test_vault_delete_failure(false);
+
+        let reference = "halo-pi-credential-v1-missing-parts";
+        set_secret_bytes_for(
+            PI_KEYRING_SERVICE,
+            &pi_credential_entry(reference, "secret/0"),
+            b"orphaned".to_vec(),
+        )
+        .await
+        .expect("orphaned test chunk");
+
+        delete_pi_credential(reference)
+            .await
+            .expect("orphaned chunks should be cleaned");
+        assert!(!test_vault_entries_for_assertion()
+            .keys()
+            .any(|entry| entry.contains(reference)));
     }
 }

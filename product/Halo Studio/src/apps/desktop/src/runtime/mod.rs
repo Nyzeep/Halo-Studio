@@ -10,13 +10,30 @@ use bitfun_core::product_runtime::CoreLocalWorkspaceSnapshot;
 use bitfun_core::service::remote_ssh::SSHConnectionManager;
 use bitfun_core::service::token_usage::TokenUsageService;
 use bitfun_core::service::workspace::{WorkspaceKind, WorkspaceService};
-use bitfun_runtime_ports::LocalWorkspaceSnapshotPort;
+use bitfun_runtime_ports::{
+    LocalWorkspaceSnapshotPort, PiCredentialStorePort, PiRuntimeConfigurationManagementPort,
+};
 use tokio::sync::RwLock;
 
 mod session_application;
 mod session_host_effects;
 
 use session_host_effects::ProductionDesktopSessionHostEffects;
+
+const HALO_LOCAL_CODING_WIRING_UNAVAILABLE: &str =
+    "Halo local coding runtime wiring is unavailable";
+
+fn validate_halo_local_coding_wiring(
+    has_workbench: bool,
+    has_configuration: bool,
+    has_credential_store: bool,
+) -> Result<(), &'static str> {
+    if has_workbench && has_configuration && has_credential_store {
+        Ok(())
+    } else {
+        Err(HALO_LOCAL_CODING_WIRING_UNAVAILABLE)
+    }
+}
 
 pub(crate) use session_application::{
     DesktopSessionApplication, DesktopSessionApplicationError, DesktopSessionScopeRequest,
@@ -34,7 +51,18 @@ pub struct DesktopRuntimeContext {
     local_workspace_snapshot: Arc<dyn LocalWorkspaceSnapshotPort>,
     workspace_service: Arc<WorkspaceService>,
     permission_events_started: AtomicBool,
+    #[cfg(feature = "halo-local-coding")]
+    halo_workbench: HaloWorkbenchRuntime,
+    #[cfg(not(feature = "halo-local-coding"))]
     halo_workbench: Option<HaloWorkbenchRuntime>,
+    #[cfg(feature = "halo-local-coding")]
+    pi_configuration: Arc<dyn PiRuntimeConfigurationManagementPort>,
+    #[cfg(not(feature = "halo-local-coding"))]
+    pi_configuration: Option<Arc<dyn PiRuntimeConfigurationManagementPort>>,
+    #[cfg(feature = "halo-local-coding")]
+    pi_credential_store: Arc<dyn PiCredentialStorePort>,
+    #[cfg(not(feature = "halo-local-coding"))]
+    pi_credential_store: Option<Arc<dyn PiCredentialStorePort>>,
     halo_workbench_events_started: AtomicBool,
     halo_workbench_event_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
 }
@@ -48,7 +76,26 @@ impl DesktopRuntimeContext {
         ssh_manager: Arc<RwLock<Option<SSHConnectionManager>>>,
         acp_client_service: Option<Arc<bitfun_acp::AcpClientService>>,
         halo_workbench: Option<HaloWorkbenchRuntime>,
+        pi_configuration: Option<Arc<dyn PiRuntimeConfigurationManagementPort>>,
+        pi_credential_store: Option<Arc<dyn PiCredentialStorePort>>,
     ) -> Result<Self, String> {
+        #[cfg(feature = "halo-local-coding")]
+        validate_halo_local_coding_wiring(
+            halo_workbench.is_some(),
+            pi_configuration.is_some(),
+            pi_credential_store.is_some(),
+        )
+        .map_err(str::to_owned)?;
+
+        #[cfg(feature = "halo-local-coding")]
+        let (halo_workbench, pi_configuration, pi_credential_store) =
+            match (halo_workbench, pi_configuration, pi_credential_store) {
+                (Some(halo_workbench), Some(pi_configuration), Some(pi_credential_store)) => {
+                    (halo_workbench, pi_configuration, pi_credential_store)
+                }
+                _ => return Err(HALO_LOCAL_CODING_WIRING_UNAVAILABLE.to_owned()),
+            };
+
         let session_application = match (coordinator, scheduler) {
             (Some(coordinator), Some(scheduler)) => {
                 let host_effects =
@@ -73,6 +120,8 @@ impl DesktopRuntimeContext {
             workspace_service,
             permission_events_started: AtomicBool::new(false),
             halo_workbench,
+            pi_configuration,
+            pi_credential_store,
             halo_workbench_events_started: AtomicBool::new(false),
             halo_workbench_event_task: Mutex::new(None),
         })
@@ -80,9 +129,17 @@ impl DesktopRuntimeContext {
 
     #[cfg(feature = "halo-local-coding")]
     pub(crate) fn halo_workbench(&self) -> &HaloWorkbenchRuntime {
-        self.halo_workbench
-            .as_ref()
-            .expect("Halo Workbench Runtime is only available in Halo local coding")
+        &self.halo_workbench
+    }
+
+    #[cfg(feature = "halo-local-coding")]
+    pub(crate) fn pi_configuration(&self) -> &dyn PiRuntimeConfigurationManagementPort {
+        self.pi_configuration.as_ref()
+    }
+
+    #[cfg(feature = "halo-local-coding")]
+    pub(crate) fn pi_configuration_store(&self) -> &dyn PiCredentialStorePort {
+        self.pi_credential_store.as_ref()
     }
 
     #[cfg(feature = "halo-local-coding")]
@@ -270,6 +327,35 @@ impl Drop for DesktopRuntimeContext {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn halo_local_coding_wiring_fails_closed_when_any_required_seam_is_missing() {
+        for (has_workbench, has_configuration, has_credential_store) in [
+            (false, true, true),
+            (true, false, true),
+            (true, true, false),
+            (false, false, false),
+        ] {
+            let result = super::validate_halo_local_coding_wiring(
+                has_workbench,
+                has_configuration,
+                has_credential_store,
+            );
+            assert_eq!(
+                result,
+                Err(super::HALO_LOCAL_CODING_WIRING_UNAVAILABLE),
+                "missing Halo Pi seam must be rejected before command access"
+            );
+        }
+    }
+
+    #[test]
+    fn halo_local_coding_wiring_accepts_the_complete_seam_set() {
+        assert_eq!(
+            super::validate_halo_local_coding_wiring(true, true, true),
+            Ok(())
+        );
+    }
+
     #[test]
     fn desktop_runtime_wiring_reuses_existing_core_owners() {
         let runtime_source = include_str!("mod.rs");

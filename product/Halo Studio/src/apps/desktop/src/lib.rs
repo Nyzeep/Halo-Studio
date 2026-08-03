@@ -635,11 +635,28 @@ pub async fn run_with_context_and_options(
     startup_trace.record_elapsed_step("native_pre_tauri", "initialize_app_state", step_started);
 
     #[cfg(feature = "halo-local-coding")]
-    let halo_workbench = Some(bitfun_core::halo_workbench::build_halo_workbench_runtime(
-        app_state.workspace_service.clone(),
-    ));
+    let halo_workbench_components =
+        match bitfun_core::halo_workbench::build_halo_workbench_runtime_components(
+            app_state.workspace_service.clone(),
+        ) {
+            Ok(components) => components,
+            Err(error) => {
+                log::error!("Failed to initialize Halo Workbench Runtime configuration: {error}");
+                return;
+            }
+        };
+    #[cfg(feature = "halo-local-coding")]
+    let halo_workbench = Some(halo_workbench_components.runtime);
+    #[cfg(feature = "halo-local-coding")]
+    let pi_configuration = Some(halo_workbench_components.configuration);
+    #[cfg(feature = "halo-local-coding")]
+    let pi_credential_store = Some(halo_workbench_components.credential_store);
     #[cfg(not(feature = "halo-local-coding"))]
     let halo_workbench = None;
+    #[cfg(not(feature = "halo-local-coding"))]
+    let pi_configuration = None;
+    #[cfg(not(feature = "halo-local-coding"))]
+    let pi_credential_store = None;
 
     #[cfg(not(feature = "halo-local-coding"))]
     let desktop_runtime = match runtime::DesktopRuntimeContext::build(
@@ -650,6 +667,8 @@ pub async fn run_with_context_and_options(
         app_state.ssh_manager.clone(),
         app_state.acp_client_service.clone(),
         halo_workbench,
+        pi_configuration,
+        pi_credential_store,
     ) {
         Ok(runtime) => runtime,
         Err(error) => {
@@ -666,6 +685,8 @@ pub async fn run_with_context_and_options(
         app_state.ssh_manager.clone(),
         None,
         halo_workbench,
+        pi_configuration,
+        pi_credential_store,
     ) {
         Ok(runtime) => runtime,
         Err(error) => {
@@ -1240,6 +1261,22 @@ pub async fn run_with_context_and_options(
             api::workbench_runtime_api::halo_workbench_runtime_snapshot,
             #[cfg(feature = "halo-local-coding")]
             api::workbench_runtime_api::halo_workbench_runtime_submit_intent,
+            #[cfg(feature = "halo-local-coding")]
+            api::pi_configuration_api::halo_pi_credential_write,
+            #[cfg(feature = "halo-local-coding")]
+            api::pi_configuration_api::halo_pi_credential_delete,
+            #[cfg(feature = "halo-local-coding")]
+            api::pi_configuration_api::halo_pi_configuration_snapshot,
+            #[cfg(feature = "halo-local-coding")]
+            api::pi_configuration_api::halo_pi_configuration_create,
+            #[cfg(feature = "halo-local-coding")]
+            api::pi_configuration_api::halo_pi_configuration_update,
+            #[cfg(feature = "halo-local-coding")]
+            api::pi_configuration_api::halo_pi_configuration_delete,
+            #[cfg(feature = "halo-local-coding")]
+            api::pi_configuration_api::halo_pi_configuration_rollback,
+            #[cfg(feature = "halo-local-coding")]
+            api::pi_configuration_api::halo_pi_configuration_readiness,
             #[cfg(not(feature = "halo-local-coding"))]
             api::agentic_api::create_session,
             #[cfg(not(feature = "halo-local-coding"))]
