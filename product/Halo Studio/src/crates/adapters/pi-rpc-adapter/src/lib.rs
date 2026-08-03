@@ -47,6 +47,9 @@ const EVENT_CAPACITY: usize = 128;
 const DEFAULT_RESPONSE_TIMEOUT: Duration = Duration::from_secs(15);
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_ABORT_GRACE_PERIOD: Duration = Duration::from_secs(3);
+// The compatibility profile is intentionally explicit. A successful
+// `--version` process exit is not evidence that its RPC schema is known.
+const SUPPORTED_PI_RPC_VERSIONS: &[&str] = &["0.81.1"];
 const SAFE_CHILD_ENVIRONMENT: &[&str] = &[
     "PATH",
     "PATHEXT",
@@ -308,10 +311,11 @@ impl PiRpcAdapter {
         if !output.status.success() {
             return Err(PiRpcFailureKind::UnsupportedVersion);
         }
-        // Version probing is only executable readiness. It does not read
-        // auth.json/models.json, invoke a provider, or prove model readiness.
-        if output.stdout.is_empty() && output.stderr.is_empty() {
-            return Err(PiRpcFailureKind::Protocol);
+        // Version probing is only executable/version readiness. It does not
+        // read auth.json/models.json, invoke a provider, or prove RPC/model
+        // readiness.
+        if !has_supported_version(&output) {
+            return Err(PiRpcFailureKind::UnsupportedVersion);
         }
         Ok(executable)
     }
@@ -361,7 +365,7 @@ impl PiRpcAdapter {
                 if self
                     .probe_executable_version(&candidate)
                     .await
-                    .is_ok_and(|output| output.status.success())
+                    .is_ok_and(|output| output.status.success() && has_supported_version(&output))
                 {
                     return Ok(candidate);
                 }
@@ -677,7 +681,7 @@ impl PiRpcAdapter {
             .await
             .map_err(map_handshake_error)?;
         let cursor = match validate_entries_data(&entries) {
-            Ok(cursor) => cursor,
+            Ok(entries) => entries.leaf_id,
             Err(()) => {
                 session.fail_closed(PiRpcFailureKind::Protocol).await;
                 return Err(PiRpcFailureKind::Protocol);
@@ -691,7 +695,7 @@ impl PiRpcAdapter {
                 )
                 .await
                 .map_err(map_handshake_error)?;
-            if validate_entries_data(&since).is_err() {
+            if validate_incremental_entries_data(&since, &cursor).is_err() {
                 session.fail_closed(PiRpcFailureKind::Protocol).await;
                 return Err(PiRpcFailureKind::Protocol);
             }
@@ -814,6 +818,21 @@ impl PiRpcAdapter {
         }
 
         let mut state = self.state.lock().await;
+        // The reader can observe EOF immediately after the final handshake
+        // response. Check while holding the same state lock used by the
+        // failure path so a dead prepared child can never be published as a
+        // ready generation.
+        if prepared_session.terminated.load(Ordering::Acquire)
+            || prepared_session.has_exited().await
+        {
+            drop(state);
+            prepared_session.terminate().await;
+            let reason = extension
+                .cleanup()
+                .err()
+                .unwrap_or(PiRpcFailureKind::Transport);
+            return PiRpcReply::Unavailable { reason };
+        }
         let extension_path = std::mem::take(&mut extension.path);
         let owned_extension_dir = extension.owned_dir.take();
         state.generation = Some(generation);
@@ -862,6 +881,13 @@ impl PiRpcAdapter {
             } else {
                 None
             };
+            if prepared_session
+                .as_ref()
+                .is_some_and(|session| session.terminated.load(Ordering::Acquire))
+            {
+                state.readiness_failed = true;
+                return Err(PiRpcFailureKind::Transport);
+            }
             (
                 state.workspace.clone().ok_or(PiRpcFailureKind::Transport)?,
                 state
@@ -907,29 +933,22 @@ impl PiRpcAdapter {
             }
             Some(session) => {
                 session.terminate().await;
-                let credential = self
-                    .read_runtime_credential(runtime_configuration.as_ref())
-                    .await?;
-                self.spawn_session_process(
-                    generation,
-                    task_id.clone(),
-                    session_id.clone(),
-                    false,
-                    mode,
-                    &workspace,
-                    &executable,
-                    &extension_path,
-                    runtime_configuration.as_ref(),
-                    runtime_capability.as_ref(),
-                    credential,
-                )
-                .await?
+                return Err(PiRpcFailureKind::Transport);
             }
         };
         session.set_scope(task_id, session_id.clone()).await;
 
+        if session.terminated.load(Ordering::Acquire) || session.has_exited().await {
+            session.fail_closed(PiRpcFailureKind::Transport).await;
+            return Err(PiRpcFailureKind::Transport);
+        }
+
         let mut state = self.state.lock().await;
-        if state.generation != Some(generation) {
+        if state.generation != Some(generation)
+            || state.readiness_failed
+            || session.terminated.load(Ordering::Acquire)
+            || state.sessions.contains_key(&session_id)
+        {
             drop(state);
             session.terminate().await;
             return Err(PiRpcFailureKind::Transport);
@@ -983,6 +1002,7 @@ impl PiRpcAdapter {
             state.executable = None;
             state.extension_path = None;
             state.runtime_configuration = None;
+            state.runtime_capability = None;
             state.readiness_failed = false;
             let owned_extension_dir = state.owned_extension_dir.clone();
             let mut sessions = state
@@ -1485,6 +1505,14 @@ impl PiSession {
         let _ = child.kill().await;
         let _ = child.wait().await;
     }
+
+    async fn has_exited(&self) -> bool {
+        let mut child = self.child.lock().await;
+        match child.try_wait() {
+            Ok(Some(_)) | Err(_) => true,
+            Ok(None) => false,
+        }
+    }
 }
 
 async fn read_pi_stdout(session: Arc<PiSession>, stdout: ChildStdout) {
@@ -1570,6 +1598,10 @@ async fn handle_pi_message(session: &Arc<PiSession>, value: &Value) {
             });
         }
         Some("message_update") => {
+            if !valid_message_update(value) {
+                session.fail_closed(PiRpcFailureKind::Protocol).await;
+                return;
+            }
             let session_id = session.current_session_id().await;
             let _ = session.events.send(PiRpcEvent::MessageUpdated {
                 generation: session.generation,
@@ -1583,6 +1615,10 @@ async fn handle_pi_message(session: &Arc<PiSession>, value: &Value) {
             emit_tool_event(session, value, ToolEventKind::Updated).await;
         }
         Some("tool_execution_end") => {
+            if value.get("isError").and_then(Value::as_bool).is_none() {
+                session.fail_closed(PiRpcFailureKind::Protocol).await;
+                return;
+            }
             emit_tool_event(session, value, ToolEventKind::Ended).await;
         }
         Some("extension_ui_request") => session.handle_extension_ui_request(value).await,
@@ -1609,10 +1645,18 @@ async fn emit_tool_event(session: &Arc<PiSession>, value: &Value, kind: ToolEven
         session.fail_closed(PiRpcFailureKind::Protocol).await;
         return;
     };
+    if tool_call_id.is_empty() {
+        session.fail_closed(PiRpcFailureKind::Protocol).await;
+        return;
+    }
     let Some(tool_name) = value.get("toolName").and_then(Value::as_str) else {
         session.fail_closed(PiRpcFailureKind::Protocol).await;
         return;
     };
+    if tool_name.is_empty() {
+        session.fail_closed(PiRpcFailureKind::Protocol).await;
+        return;
+    }
     let session_id = session.current_session_id().await;
     let task_id = session.current_task_id().await;
     let redacted_tool_call_id =
@@ -1630,18 +1674,31 @@ async fn emit_tool_event(session: &Arc<PiSession>, value: &Value, kind: ToolEven
             redacted_tool_call_id,
             tool_name: tool_name.to_string(),
         },
-        ToolEventKind::Ended => PiRpcEvent::ToolExecutionEnded {
-            generation: session.generation,
-            session_id,
-            redacted_tool_call_id,
-            tool_name: tool_name.to_string(),
-            is_error: value
-                .get("isError")
-                .and_then(Value::as_bool)
-                .unwrap_or(true),
-        },
+        ToolEventKind::Ended => {
+            let Some(is_error) = value.get("isError").and_then(Value::as_bool) else {
+                session.fail_closed(PiRpcFailureKind::Protocol).await;
+                return;
+            };
+            PiRpcEvent::ToolExecutionEnded {
+                generation: session.generation,
+                session_id,
+                redacted_tool_call_id,
+                tool_name: tool_name.to_string(),
+                is_error,
+            }
+        }
     };
     let _ = session.events.send(event);
+}
+
+fn valid_message_update(value: &Value) -> bool {
+    value.get("message").is_some_and(Value::is_object)
+        && value
+            .get("assistantMessageEvent")
+            .and_then(Value::as_object)
+            .and_then(|event| event.get("type"))
+            .and_then(Value::as_str)
+            .is_some_and(|event_type| !event_type.is_empty())
 }
 
 fn stable_digest(value: &str) -> String {
@@ -1702,15 +1759,23 @@ fn validate_state_data(value: &Value) -> Result<(), ()> {
     Ok(())
 }
 
-fn validate_entries_data(value: &Value) -> Result<Option<String>, ()> {
+#[derive(Debug)]
+struct EntriesData {
+    ids: HashSet<String>,
+    leaf_id: Option<String>,
+}
+
+fn parse_entries_data(value: &Value) -> Result<EntriesData, ()> {
     let object = value.as_object().ok_or(())?;
     let entries = object.get("entries").and_then(Value::as_array).ok_or(())?;
+    let mut ids = HashSet::with_capacity(entries.len());
     for entry in entries {
-        if entry
+        let id = entry
             .get("id")
             .and_then(Value::as_str)
-            .is_none_or(str::is_empty)
-        {
+            .filter(|id| !id.is_empty())
+            .ok_or(())?;
+        if !ids.insert(id.to_string()) {
             return Err(());
         }
     }
@@ -1718,7 +1783,31 @@ fn validate_entries_data(value: &Value) -> Result<Option<String>, ()> {
     if !leaf_id.is_null() && leaf_id.as_str().is_none_or(str::is_empty) {
         return Err(());
     }
-    Ok(leaf_id.as_str().map(str::to_string))
+    Ok(EntriesData {
+        ids,
+        leaf_id: leaf_id.as_str().map(str::to_string),
+    })
+}
+
+fn validate_entries_data(value: &Value) -> Result<EntriesData, ()> {
+    let entries = parse_entries_data(value)?;
+    match (&entries.leaf_id, entries.ids.is_empty()) {
+        (None, true) => Ok(entries),
+        (Some(leaf_id), false) if entries.ids.contains(leaf_id) => Ok(entries),
+        _ => Err(()),
+    }
+}
+
+fn validate_incremental_entries_data(value: &Value, cursor: &str) -> Result<(), ()> {
+    let entries = parse_entries_data(value)?;
+    if entries.ids.contains(cursor) {
+        return Err(());
+    }
+    match (&entries.leaf_id, entries.ids.is_empty()) {
+        (Some(leaf_id), false) if entries.ids.contains(leaf_id) => Ok(()),
+        (Some(leaf_id), true) if leaf_id == cursor => Ok(()),
+        _ => Err(()),
+    }
 }
 
 fn pi_rpc_args(
@@ -1887,6 +1976,18 @@ fn parse_command_paths(bytes: &[u8]) -> Vec<PathBuf> {
         .filter(|line| !line.is_empty())
         .map(PathBuf::from)
         .collect()
+}
+
+fn has_supported_version(output: &std::process::Output) -> bool {
+    [output.stdout.as_slice(), output.stderr.as_slice()]
+        .into_iter()
+        .any(|bytes| {
+            String::from_utf8(bytes.to_vec()).ok().is_some_and(|value| {
+                SUPPORTED_PI_RPC_VERSIONS
+                    .iter()
+                    .any(|version| value.trim() == *version)
+            })
+        })
 }
 
 fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {

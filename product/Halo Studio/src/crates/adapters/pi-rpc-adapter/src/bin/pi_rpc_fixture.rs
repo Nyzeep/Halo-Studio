@@ -24,6 +24,14 @@ fn main() {
         if mode == "version_probe_failure" {
             std::process::exit(1);
         }
+        if mode == "version_probe_unknown" {
+            println!("9.99.0");
+            return;
+        }
+        if mode == "version_probe_malformed" {
+            println!("pi-development-build");
+            return;
+        }
         println!("0.81.1");
         return;
     }
@@ -132,10 +140,10 @@ fn main() {
                 );
                 continue;
             }
-            "require_since"
+            "require_since" | "bad_since"
                 if awaiting_since
                     && (command != "get_entries"
-                        || request.get("since").and_then(Value::as_str) != Some("cursor-1")) =>
+                        || request.get("since").and_then(Value::as_str) != Some("entry-1")) =>
             {
                 write_raw(&mut stdout, b"not-json\n");
                 return;
@@ -156,12 +164,17 @@ fn main() {
             "get_entries" => {
                 if request.get("since").is_some() {
                     awaiting_since = false;
+                    let data = if mode == "bad_since" {
+                        json!({ "entries": [{ "id": "entry-1" }], "leafId": "entry-1" })
+                    } else {
+                        json!({ "entries": [], "leafId": "entry-1" })
+                    };
                     respond(
                         &mut stdout,
                         request.get("id").and_then(Value::as_str),
                         command,
                         true,
-                        json!({ "entries": [], "leafId": Value::Null }),
+                        data,
                     );
                     if mode == "ready_then_eof" {
                         std::thread::sleep(Duration::from_millis(500));
@@ -176,7 +189,7 @@ fn main() {
                         true,
                         json!({
                             "entries": [{ "id": "entry-1" }],
-                            "leafId": "cursor-1"
+                            "leafId": "entry-1"
                         }),
                     );
                 }
@@ -247,6 +260,38 @@ fn main() {
                         Value::Null,
                     );
                     send_event(&mut stdout, json!({ "type": "agent_start" }));
+                }
+                "malformed_message_update" => {
+                    respond(
+                        &mut stdout,
+                        request.get("id").and_then(Value::as_str),
+                        command,
+                        true,
+                        Value::Null,
+                    );
+                    send_event(&mut stdout, json!({ "type": "agent_start" }));
+                    send_event(
+                        &mut stdout,
+                        json!({ "type": "message_update", "text": "invalid" }),
+                    );
+                }
+                "malformed_tool_execution_end" => {
+                    respond(
+                        &mut stdout,
+                        request.get("id").and_then(Value::as_str),
+                        command,
+                        true,
+                        Value::Null,
+                    );
+                    send_event(&mut stdout, json!({ "type": "agent_start" }));
+                    send_event(
+                        &mut stdout,
+                        json!({
+                            "type": "tool_execution_end",
+                            "toolCallId": "raw-secret-tool-call-id",
+                            "toolName": "write"
+                        }),
+                    );
                 }
                 "extension" | "extension_duplicate" | "extension_timeout" | "extension_error" => {
                     respond(
@@ -370,7 +415,13 @@ fn send_happy_events(stdout: &mut BufWriter<io::StdoutLock<'_>>) {
         stdout,
         json!({
             "type": "message_update",
-            "text": "unicode\u{2028}separator\u{2029}payload"
+            "message": {},
+            "assistantMessageEvent": {
+                "type": "text_delta",
+                "contentIndex": 0,
+                "delta": "unicode\u{2028}separator\u{2029}payload",
+                "partial": {}
+            }
         }),
     );
     send_event(
