@@ -42,6 +42,7 @@ function createFixture(overrides = {}) {
   const extensionPath = "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts";
   const adapterPath = "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/lib.rs";
   const licensePath = "product/Halo Studio/LICENSE";
+  const hostLicensePath = "product/Halo Studio/pi-host-LICENSE.txt";
   const noticePath = "product/THIRD_PARTY_NOTICES.md";
   const releaseArtifactPath = "product/Halo Studio/release-license-bundle.txt";
   const lockPaths = [
@@ -50,7 +51,7 @@ function createFixture(overrides = {}) {
     "product/Halo Studio/Cargo.lock",
   ];
 
-  for (const file of [extensionPath, adapterPath, licensePath, noticePath, releaseArtifactPath, ...lockPaths]) {
+  for (const file of [extensionPath, adapterPath, licensePath, hostLicensePath, noticePath, releaseArtifactPath, ...lockPaths]) {
     mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
   }
   writeFileSync(path.join(root, extensionPath), EXTENSION_SOURCE);
@@ -60,6 +61,10 @@ function createFixture(overrides = {}) {
     "MIT License\\nCopyright (c) 2026 CWing\\nPermission is hereby granted, free of charge, to any person obtaining a copy\\n",
   );
   writeFileSync(
+    path.join(root, hostLicensePath),
+    "MIT License\\nCopyright (c) Pi fixture\\nPermission is hereby granted, free of charge, to any person obtaining a copy\\n",
+  );
+  writeFileSync(
     path.join(root, noticePath),
     `${EXTENSION_ID}\\nMIT License\\n${extensionPath}\\n`,
   );
@@ -67,7 +72,7 @@ function createFixture(overrides = {}) {
   for (const lockPath of lockPaths) writeFileSync(path.join(root, lockPath), "lockfile\\n");
 
   execFileSync("git", ["init", "--quiet"], { cwd: root, stdio: "ignore" });
-  execFileSync("git", ["add", "--", extensionPath, adapterPath, licensePath, noticePath, releaseArtifactPath, ...lockPaths], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["add", "--", extensionPath, adapterPath, licensePath, hostLicensePath, noticePath, releaseArtifactPath, ...lockPaths], { cwd: root, stdio: "ignore" });
   execFileSync(
     "git",
     ["-c", "user.name=Halo fixture", "-c", "user.email=fixture@example.invalid", "commit", "--quiet", "-m", "fixture"],
@@ -196,9 +201,9 @@ function createFixture(overrides = {}) {
             },
             licenseEvidence: {
               observedSpdx: "MIT",
-              evidencePath: licensePath,
-              copyright: "Copyright (c) 2026 CWing",
-              requiredText: ["MIT License", "Permission is hereby granted", "Copyright (c) 2026 CWing"],
+              evidencePath: hostLicensePath,
+              copyright: "Copyright (c) Pi fixture",
+              requiredText: ["MIT License", "Permission is hereby granted", "Copyright (c) Pi fixture"],
               releaseStatus: "included",
               releaseFiles: [{
                 ...fileFingerprint(releaseArtifactPath),
@@ -532,6 +537,19 @@ test("runtime scanning catches http get calls", () => {
   assert.ok(report.findings.some((finding) => finding.code === "runtime-network-capability"));
 });
 
+test("runtime scanning catches computed global fetch calls", () => {
+  const fixture = createFixture();
+  const runtimePath = "product/Halo Studio/scripts/runtime-computed-fetch";
+  mkdirSync(path.dirname(path.join(fixture.root, runtimePath)), { recursive: true });
+  writeFileSync(path.join(fixture.root, runtimePath), 'globalThis["fetch"]("https://example.invalid");\n');
+  fixture.manifest.runtime.scanPaths.push(runtimePath);
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "runtime-network-capability"));
+});
+
 test("shell download variants and script module inputs are blocked", () => {
   const fixture = createFixture();
   const runtimeDirectory = "product/Halo Studio/scripts/runtime-inputs";
@@ -614,7 +632,7 @@ test("side-effect and unresolved dynamic extension imports fail closed", () => {
   const fixture = createFixture();
   writeFileSync(
     path.join(fixture.root, fixture.extensionPath),
-    `${EXTENSION_SOURCE}import "@unreviewed/side-effect";\nexport * from "@unreviewed/re-export";\nconst packageName = "@unreviewed/computed";\nrequire(packageName);\n` + "import(`@unreviewed/template/${packageName}`);\n",
+    `${EXTENSION_SOURCE}import "@unreviewed/side-effect";\nexport * from "@unreviewed/re-export";\nexport * as ns from "@unreviewed/re-export-namespace";\nconst packageName = "@unreviewed/computed";\nrequire(packageName);\n` + "import(`@unreviewed/template/${packageName}`);\n",
   );
 
   const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
@@ -853,6 +871,16 @@ test("host license claims require SPDX markers and attribution text", () => {
   const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
 
   assert.ok(report.findings.some((finding) => finding.code === "host-license-spdx-text-missing"));
+});
+
+test("host license evidence cannot reuse Halo extension license files", () => {
+  const fixture = createFixture();
+  fixture.manifest.extensions[0].dependencies.host.licenseEvidence.evidencePath = "product/Halo Studio/LICENSE";
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditInventory({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "host-license-evidence-misclassified"));
 });
 
 test("floating version and incomplete provenance are blocked", () => {

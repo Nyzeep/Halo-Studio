@@ -417,6 +417,11 @@ function checkDependencies(repoRoot, extension, findings) {
       { evidencePath: hostLicense.evidencePath, releaseStatus: hostLicense.releaseStatus ?? null },
     );
   } else {
+    const extensionLicenseEvidencePaths = new Set((extension.license?.evidence ?? []).map((item) => normalizeRelativePath(typeof item === "string" ? item : item?.path)));
+    const hostLicenseEvidenceLabel = normalizeRelativePath(hostLicense.evidencePath);
+    if (extensionLicenseEvidencePaths.has(hostLicenseEvidenceLabel) || hostLicenseEvidenceLabel === "product/Halo Studio/LICENSE") {
+      addFinding(findings, "host-license-evidence-misclassified", `${extension.id} host license evidence must not reuse Halo extension license files`);
+    }
     const hostLicenseEvidencePath = resolveRepoPath(repoRoot, hostLicense.evidencePath);
     if (!hostLicenseEvidencePath || !isRegularFile(hostLicenseEvidencePath)) {
       addFinding(findings, "host-license-evidence-file-missing", `${extension.id} host license evidence must point to a repository-local file`);
@@ -479,7 +484,7 @@ function checkExtensionSource(extension, sourceContents, findings) {
   const staticImports = [
     ...sourceContents.matchAll(/^\s*import\s+(?!type\b).*?from\s+["']([^"']+)["']/gm),
     ...sourceContents.matchAll(/^\s*import\s+(?!type\b)["']([^"']+)["'];?/gm),
-    ...sourceContents.matchAll(/^\s*export\s+(?:\*|\{[^}]*\})\s+from\s+["']([^"']+)["']/gm),
+    ...sourceContents.matchAll(/^\s*export\s+(?:\*\s+as\s+\w+|\*|\{[^}]*\})\s+from\s+["']([^"']+)["']/gm),
   ].map((match) => match[1]);
   const dynamicImports = [];
   const unresolvedDynamicImports = [];
@@ -686,6 +691,7 @@ function checkRuntimeScan(repoRoot, runtime, findings) {
   ];
   const networkCapability = [
     /\b(?:globalThis|window)\.fetch\s*\(/i,
+    /\b(?:globalThis|window)\s*\[\s*["']fetch["']\s*\]\s*\(/i,
     /\bfetch\s*\(/i,
     /\bhttps?\.(?:get|request)\s*\(/i,
   ];
