@@ -69,6 +69,12 @@ function safePathLabel(value) {
   return normalizeRelativePath(value);
 }
 
+function safeEvidenceLocator(value) {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  if (isAbsolutePath(value)) return "<external-path>";
+  return normalizeRelativePath(value);
+}
+
 function sanitizeEvidence(value) {
   if (Array.isArray(value)) return value.map((entry) => sanitizeEvidence(entry));
   if (value && typeof value === "object") {
@@ -106,7 +112,65 @@ function canonicalRepoRelativePath(repoRoot, relativePath) {
 }
 
 function addFinding(findings, code, message, evidence = {}) {
-  findings.push({ code, message, evidence: sanitizeEvidence(evidence) });
+  const locator = safeEvidenceLocator(
+    evidence?.locator
+      ?? evidence?.path
+      ?? evidence?.manifest
+      ?? evidence?.workspaceManifest
+      ?? evidence?.referenceRoot,
+  ) ?? `audit://finding/${code}`;
+  findings.push({ code, message, locator, evidence: sanitizeEvidence(evidence) });
+}
+
+function collectEvidenceLocators(manifest) {
+  const locators = [];
+  const add = (pointer, value, kind) => {
+    const locator = safeEvidenceLocator(value);
+    if (!locator) return;
+    locators.push({ kind, pointer, locator });
+  };
+
+  add("manifest", "<manifest>", "inventory");
+  add("manifest.scope.auditScript", manifest?.scope?.auditScript, "audit-script");
+  add("manifest.upstreamCandidateEvidence.path", manifest?.upstreamCandidateEvidence?.path, "candidate-evidence");
+  add("manifest.dependencyBoundary.workspaceManifest", manifest?.dependencyBoundary?.workspaceManifest, "dependency-boundary");
+  add("manifest.runtime.adapterPath", manifest?.runtime?.adapterPath, "runtime-adapter");
+  for (const [index, scanPath] of (manifest?.runtime?.scanPaths ?? []).entries()) {
+    add(`manifest.runtime.scanPaths[${index}]`, scanPath, "runtime-input");
+  }
+  for (const [index, builtIn] of (manifest?.runtime?.builtInExtensions ?? []).entries()) {
+    add(`manifest.runtime.builtInExtensions[${index}].sourcePath`, builtIn?.sourcePath, "host-evidence");
+    for (const [evidenceIndex, evidencePath] of (builtIn?.capabilities?.evidence ?? []).entries()) {
+      add(`manifest.runtime.builtInExtensions[${index}].capabilities.evidence[${evidenceIndex}]`, evidencePath, "host-evidence");
+    }
+  }
+  for (const [index, extension] of (manifest?.extensions ?? []).entries()) {
+    const prefix = `manifest.extensions[${index}]`;
+    add(`${prefix}.sourcePath`, extension?.sourcePath, "extension-source");
+    for (const [evidenceIndex, item] of (extension?.license?.evidence ?? []).entries()) {
+      add(`${prefix}.license.evidence[${evidenceIndex}].path`, typeof item === "string" ? item : item?.path, "license-evidence");
+    }
+    for (const [lockfileIndex, item] of (extension?.license?.lockfileEvidence ?? []).entries()) {
+      add(`${prefix}.license.lockfileEvidence[${lockfileIndex}].path`, typeof item === "string" ? item : item?.path, "lockfile-evidence");
+    }
+    for (const [distributionIndex, item] of (extension?.license?.distributionFiles ?? []).entries()) {
+      add(`${prefix}.license.distributionFiles[${distributionIndex}].path`, typeof item === "string" ? item : item?.path, "distribution-evidence");
+    }
+    add(`${prefix}.license.releaseArtifactEvidence.path`, extension?.license?.releaseArtifactEvidence?.path, "release-artifact");
+    add(`${prefix}.dependencies.host.dependencyClosure.evidencePath`, extension?.dependencies?.host?.dependencyClosure?.evidencePath, "host-dependency-evidence");
+    add(`${prefix}.dependencies.host.licenseEvidence.evidencePath`, extension?.dependencies?.host?.licenseEvidence?.evidencePath, "host-license-evidence");
+    for (const [releaseIndex, item] of (extension?.dependencies?.host?.licenseEvidence?.releaseFiles ?? []).entries()) {
+      add(`${prefix}.dependencies.host.licenseEvidence.releaseFiles[${releaseIndex}].path`, typeof item === "string" ? item : item?.path, "host-license-release-evidence");
+    }
+  }
+
+  const seen = new Set();
+  return locators.filter((entry) => {
+    const key = `${entry.kind}:${entry.pointer}:${entry.locator}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function regexEscape(value) {
@@ -1025,6 +1089,9 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
     addFinding(findings, "upstream-evidence-mismatch", "Inventory upstream commit fields do not match the candidate evidence file");
     return;
   }
+  if (candidateEvidence.releaseGate?.status !== "passed") {
+    addFinding(findings, "upstream-candidate-release-gate-blocked", "Upstream candidate evidence is not validated for release");
+  }
   checkConflictDecisions(candidateEvidence, findings);
 
   const candidate = candidateEvidence.candidate;
@@ -1242,7 +1309,7 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
 
   const initialImportManifest = resolveRepoPath(repoRoot, candidateEvidence.base?.initialImportManifest);
   if (!initialImportManifest || !isRegularFile(initialImportManifest)) {
-    addFinding(findings, "upstream-initial-import-manifest-missing", `Initial import manifest is missing: ${candidateEvidence.base?.initialImportManifest}`);
+    addFinding(findings, "upstream-initial-import-manifest-missing", `Initial import manifest is missing: ${safePathLabel(candidateEvidence.base?.initialImportManifest)}`);
     return;
   }
   const initialManifest = readJson(initialImportManifest, findings);
@@ -1402,7 +1469,7 @@ function checkUpstreamEvidence(repoRoot, evidence, findings) {
   for (const paths of Object.values(recorded.representativeChangedPaths ?? {})) {
     for (const relativePath of paths ?? []) {
       if (!comparison.changed.some((entry) => entry.path === normalizeRelativePath(relativePath))) {
-        addFinding(findings, "upstream-representative-path-missing", `Representative changed path is not present in the computed diff: ${relativePath}`);
+        addFinding(findings, "upstream-representative-path-missing", `Representative changed path is not present in the computed diff: ${safePathLabel(relativePath)}`);
       }
     }
   }
@@ -1433,7 +1500,16 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
   const findings = [];
   const absoluteManifestPath = path.resolve(manifestPath);
   const manifest = readJson(absoluteManifestPath, findings);
-  if (!manifest) return { status: "blocked", findings, manifestPath: "<manifest>" };
+  if (!manifest) {
+    return {
+      status: "blocked",
+      findings,
+      manifestPath: "<manifest>",
+      declaredBlockingReasons: [],
+      evidenceLocators: collectEvidenceLocators(null),
+    };
+  }
+  const evidenceLocators = collectEvidenceLocators(manifest);
 
   if (manifest.schemaVersion !== 1) addFinding(findings, "manifest-schema-unsupported", "The extension inventory schema version is unsupported");
   if (manifest.scope?.productRoot !== "product/Halo Studio") addFinding(findings, "product-root-policy-mismatch", "The inventory product root must remain product/Halo Studio");
@@ -1447,6 +1523,9 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
   }
   if (manifest.releaseGate?.status === "blocked" && (!Array.isArray(manifest.releaseGate.blockingReasons) || manifest.releaseGate.blockingReasons.length === 0)) {
     addFinding(findings, "release-gate-reasons-missing", "A blocked release gate must record explicit blocking reasons");
+  }
+  if (manifest.releaseGate?.status === "passed" && Array.isArray(manifest.releaseGate.blockingReasons) && manifest.releaseGate.blockingReasons.length > 0) {
+    addFinding(findings, "release-gate-reasons-on-passed", "A passing release gate cannot retain blocking reasons");
   }
   checkUpstreamEvidence(repoRoot, manifest.upstreamCandidateEvidence, findings);
   checkWorkspaceBoundary(repoRoot, manifest.dependencyBoundary, findings);
@@ -1525,6 +1604,48 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
     findings,
     manifestPath: "<manifest>",
     extensionCount: manifest.extensions?.length ?? 0,
+    declaredBlockingReasons: Array.isArray(manifest.releaseGate?.blockingReasons)
+      ? manifest.releaseGate.blockingReasons.filter((reason) => typeof reason === "string" && reason.trim() !== "")
+      : [],
+    evidenceLocators,
+  };
+}
+
+export function auditReleaseGate(options = {}) {
+  try {
+    const inventoryReport = auditInventory(options);
+    const generatedReasons = inventoryReport.findings
+      .filter((finding) => finding.code !== "release-gate-declared-blocked")
+      .map((finding) => finding.message)
+      .filter((reason) => typeof reason === "string" && reason.trim() !== "");
+    const blockingReasons = [...new Set([
+      ...(inventoryReport.declaredBlockingReasons ?? []),
+      ...generatedReasons,
+    ])];
+
+    return {
+      status: inventoryReport.status === "passed" ? "eligible" : "blocked",
+      findings: inventoryReport.findings,
+      blockingReasons,
+      evidenceLocators: inventoryReport.evidenceLocators,
+      manifestPath: inventoryReport.manifestPath,
+      extensionCount: inventoryReport.extensionCount ?? 0,
+    };
+  } catch {
+    return createAuditExceptionReport();
+  }
+}
+
+function createAuditExceptionReport() {
+  const findings = [];
+  addFinding(findings, "audit-exception", "Release-gate audit failed closed", { locator: "audit://exception" });
+  return {
+    status: "blocked",
+    findings,
+    blockingReasons: findings.map((finding) => finding.message),
+    evidenceLocators: collectEvidenceLocators(null),
+    manifestPath: "<manifest>",
+    extensionCount: 0,
   };
 }
 
@@ -1547,20 +1668,22 @@ export function main(argv = process.argv.slice(2)) {
     console.log("Usage: node scripts/pi-extension-audit.mjs [--manifest <path>] [--root <repo>] [--json]");
     return 0;
   }
-  const report = auditInventory(options);
+  const report = auditReleaseGate(options);
   if (options.json) console.log(JSON.stringify(report, null, 2));
   else {
     console.log(`Pi extension audit: ${report.status}`);
     for (const finding of report.findings) console.log(`- [${finding.code}] ${finding.message}`);
   }
-  return report.status === "passed" ? 0 : 1;
+  return report.status === "eligible" ? 0 : 1;
 }
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   try {
     process.exitCode = main();
-  } catch (error) {
-    console.error("Pi extension audit failed");
+  } catch {
+    const report = createAuditExceptionReport();
+    if (process.argv.includes("--json")) console.log(JSON.stringify(report, null, 2));
+    else console.error("Pi extension audit failed");
     process.exitCode = 1;
   }
 }
