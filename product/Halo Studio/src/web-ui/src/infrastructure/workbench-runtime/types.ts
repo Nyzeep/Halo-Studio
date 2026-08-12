@@ -31,6 +31,31 @@ export interface WorkbenchRuntimeSession {
     | 'stopping'
     | 'ended'
     | 'failed';
+  baseline?: WorkbenchRuntimeTaskBaseline | null;
+  messages?: WorkbenchRuntimeMessage[];
+  activities?: WorkbenchRuntimeActivity[];
+  error?: WorkbenchRuntimeError | null;
+}
+
+export interface WorkbenchRuntimeTaskBaseline {
+  head: string;
+  canonicalRoot: string;
+  existingChangedFiles: string[];
+  workingTreeFingerprint: string;
+  capturedAtMs: number;
+}
+
+export interface WorkbenchRuntimeMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface WorkbenchRuntimeActivity {
+  activityId: string;
+  kind: 'tool';
+  label: string;
+  status: 'started' | 'updated' | 'completed' | 'failed';
+  isError: boolean;
 }
 
 export interface WorkbenchRuntimePendingOperation {
@@ -104,6 +129,8 @@ export type WorkbenchRuntimeEventKind =
   | 'runtimeStateChanged'
   | 'workspaceChanged'
   | 'sessionStateChanged'
+  | 'sessionMessageUpdated'
+  | 'sessionActivityUpdated'
   | 'operationRequested'
   | 'operationResolved';
 
@@ -131,6 +158,7 @@ export type WorkbenchRuntimeOperationDecision =
 export type WorkbenchRuntimeIntent =
   | { type: 'openWorkspace'; workspace: WorkbenchRuntimeWorkspaceInput }
   | { type: 'closeWorkspace' }
+  | { type: 'confirmManagedWorkspace'; workspaceId: string; rootPath: string }
   | { type: 'createSession'; taskId: string; mode: 'standard' | 'managed' }
   | { type: 'sendUserInput'; sessionId: string; content: string }
   | { type: 'followUp'; sessionId: string; content: string }

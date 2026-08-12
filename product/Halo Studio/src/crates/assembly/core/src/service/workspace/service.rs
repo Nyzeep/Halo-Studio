@@ -42,7 +42,7 @@ pub fn is_halo_workbench_workspace_trusted(workspace: &WorkspaceInfo) -> bool {
         .metadata
         .get("haloWorkbenchTrusted")
         .and_then(serde_json::Value::as_bool)
-        .unwrap_or(true)
+        .unwrap_or(false)
 }
 
 /// Workspace service.
@@ -850,6 +850,49 @@ impl WorkspaceService {
     pub async fn get_workspace(&self, workspace_id: &str) -> Option<WorkspaceInfo> {
         let manager = self.manager.read().await;
         manager.get_workspace(workspace_id).cloned()
+    }
+
+    /// Persists the one explicit trust decision required before Halo managed
+    /// execution. Standard workspace access never calls this method.
+    pub async fn confirm_halo_workbench_workspace_trust(
+        &self,
+        workspace_id: &str,
+        requested_root: &Path,
+    ) -> BitFunResult<()> {
+        let workspace = self
+            .get_workspace(workspace_id)
+            .await
+            .ok_or_else(|| BitFunError::service("Workspace is not registered"))?;
+        if workspace.workspace_kind == WorkspaceKind::Remote {
+            return Err(BitFunError::service(
+                "Remote workspaces are unsupported by Halo Workbench Runtime",
+            ));
+        }
+        let (canonical_root, _) = canonicalize_local_workspace_root(&workspace.root_path)
+            .map_err(|_| BitFunError::service("Workspace root is unavailable"))?;
+        let (canonical_requested_root, _) = canonicalize_local_workspace_root(requested_root)
+            .map_err(|_| BitFunError::service("Requested workspace root is unavailable"))?;
+        if !local_workspace_roots_equal(&canonical_root, &canonical_requested_root) {
+            return Err(BitFunError::service(
+                "Workspace request does not match the registered root",
+            ));
+        }
+        let changed = {
+            let mut manager = self.manager.write().await;
+            let Some(workspace) = manager.get_workspaces_mut().get_mut(workspace_id) else {
+                return Err(BitFunError::service("Workspace is not registered"));
+            };
+            let already_confirmed = is_halo_workbench_workspace_trusted(workspace);
+            workspace.metadata.insert(
+                "haloWorkbenchTrusted".to_string(),
+                serde_json::Value::Bool(true),
+            );
+            !already_confirmed
+        };
+        if changed {
+            self.save_workspace_data().await?;
+        }
+        Ok(())
     }
 
     /// Returns workspace details by root path.

@@ -13,9 +13,11 @@ import {
   type WorkbenchPiRpcVersion,
   type WorkbenchPiRpcVersionEvidenceSource,
   type WorkbenchRuntimeCapability,
+  type WorkbenchRuntimeActivity,
   type WorkbenchRuntimeEvent,
   type WorkbenchRuntimeIntentReceipt,
   type WorkbenchRuntimeIntentRequest,
+  type WorkbenchRuntimeSession,
   type WorkbenchRuntimeSnapshot,
 } from './types';
 
@@ -85,6 +87,8 @@ const EVENT_KINDS = new Set([
   'runtimeStateChanged',
   'workspaceChanged',
   'sessionStateChanged',
+  'sessionMessageUpdated',
+  'sessionActivityUpdated',
   'operationRequested',
   'operationResolved',
 ]);
@@ -98,6 +102,7 @@ const EVENT_SUMMARIES = new Set([
   'Workbench Runtime event stream failed',
   'Workbench workspace is being probed',
   'Workbench workspace was closed',
+  'Workspace trust was explicitly confirmed for managed execution',
   'Workbench session is being created',
   'Workbench session is idle',
   'Workbench session is running',
@@ -107,10 +112,16 @@ const EVENT_SUMMARIES = new Set([
   'Workbench session command failed',
   'Workbench session ended',
   'Workbench session failed',
+  'Workbench user message was recorded',
+  'Workbench assistant message was updated',
+  'Workbench tool activity was updated',
   'A Workbench operation requires a decision',
   'Workbench operation was resolved',
   'Workbench operation decision was submitted',
   'Workbench operation decision was not accepted',
+  'Workbench Runtime cleanup did not complete',
+  'The Workbench execution event stream has a gap',
+  'The Workbench execution event stream closed unexpectedly',
 ]);
 const WORKBENCH_ERROR_CODES = new Set([
   'adapter_access_denied',
@@ -121,6 +132,8 @@ const WORKBENCH_ERROR_CODES = new Set([
   'adapter_unavailable',
   'cleanup_failed',
   'invalid_request',
+  'managed_workspace_confirmation_required',
+  'managed_workspace_not_git',
   'operation_decision_in_progress',
   'operation_not_found',
   'pi_authentication_failed',
@@ -140,13 +153,16 @@ const WORKBENCH_ERROR_CODES = new Set([
   'session_not_found',
   'session_not_ready',
   'session_terminal',
+  'task_baseline_unavailable',
   'task_already_active',
   'workspace_facts_unavailable',
   'workspace_identity_mismatch',
   'workspace_untrusted',
 ]);
 const WORKBENCH_ERROR_RECOVERY_ACTIONS = new Set([
+  'choose_git_workspace',
   'choose_trusted_workspace',
+  'confirm_managed_workspace',
   'configure_provider',
   'correct_request',
   'create_new_request',
@@ -166,6 +182,14 @@ const WORKBENCH_ERROR_RECOVERY_ACTIONS = new Set([
   'reuse_or_end_existing_session',
 ]);
 const SAFE_RUNTIME_ERROR_SUMMARY = 'The Halo Workbench Runtime reported an error';
+const MAX_PUBLIC_MESSAGE_CHARS = 16 * 1024;
+const MAX_PUBLIC_LABEL_CHARS = 128;
+const MAX_BASELINE_HEAD_CHARS = 256;
+const MAX_BASELINE_PATH_CHARS = 1024;
+const MAX_SESSION_MESSAGES = 64;
+const MAX_SESSION_ACTIVITIES = 128;
+const MAX_BASELINE_CHANGED_FILES = 4096;
+const BASELINE_FINGERPRINT_PATTERN = /^[0-9a-f]{64}$/;
 
 export type WorkbenchRuntimeSyncStatus =
   | 'idle'
@@ -207,6 +231,15 @@ const requiredString = (value: unknown): string => {
   return value;
 };
 
+const boundedString = (value: unknown, maxChars: number, allowEmpty = false): string => {
+  if (typeof value !== 'string') return contractMismatch();
+  if (!allowEmpty && value.trim().length === 0) return contractMismatch();
+  if (value.length > maxChars || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value)) {
+    return contractMismatch();
+  }
+  return value;
+};
+
 const sanitizeRuntimeError = (input: unknown): WorkbenchRuntimeSnapshot['error'] => {
   if (!isRecord(input)
     || typeof input.code !== 'string'
@@ -223,6 +256,81 @@ const sanitizeRuntimeError = (input: unknown): WorkbenchRuntimeSnapshot['error']
       : 'retry',
     summary: SAFE_RUNTIME_ERROR_SUMMARY,
   };
+};
+
+const sanitizeTaskBaseline = (
+  input: unknown,
+): WorkbenchRuntimeSession['baseline'] => {
+  if (input === null || input === undefined) return null;
+  if (
+    !isRecord(input)
+    || !Array.isArray(input.existingChangedFiles)
+    || input.existingChangedFiles.length > MAX_BASELINE_CHANGED_FILES
+    || typeof input.capturedAtMs !== 'number'
+    || !isValidCounter(input.capturedAtMs)
+    || typeof input.workingTreeFingerprint !== 'string'
+    || !BASELINE_FINGERPRINT_PATTERN.test(input.workingTreeFingerprint)
+  ) {
+    return contractMismatch();
+  }
+
+  return {
+    head: boundedString(input.head, MAX_BASELINE_HEAD_CHARS),
+    canonicalRoot: boundedString(input.canonicalRoot, MAX_BASELINE_PATH_CHARS),
+    existingChangedFiles: input.existingChangedFiles.map(file => (
+      boundedString(file, MAX_BASELINE_PATH_CHARS)
+    )),
+    workingTreeFingerprint: input.workingTreeFingerprint,
+    capturedAtMs: input.capturedAtMs,
+  };
+};
+
+const sanitizeSessionMessages = (
+  input: unknown,
+): WorkbenchRuntimeSession['messages'] => {
+  if (input === undefined) return [];
+  if (!Array.isArray(input) || input.length > MAX_SESSION_MESSAGES) return contractMismatch();
+  return input.map(message => {
+    if (
+      !isRecord(message)
+      || (message.role !== 'user' && message.role !== 'assistant')
+    ) {
+      return contractMismatch();
+    }
+    return {
+      role: message.role,
+      content: boundedString(message.content, MAX_PUBLIC_MESSAGE_CHARS),
+    };
+  });
+};
+
+const SESSION_ACTIVITY_KINDS = new Set(['tool']);
+const SESSION_ACTIVITY_STATUSES = new Set(['started', 'updated', 'completed', 'failed']);
+
+const sanitizeSessionActivities = (
+  input: unknown,
+): WorkbenchRuntimeSession['activities'] => {
+  if (input === undefined) return [];
+  if (!Array.isArray(input) || input.length > MAX_SESSION_ACTIVITIES) {
+    return contractMismatch();
+  }
+  return input.map(activity => {
+    if (
+      !isRecord(activity)
+      || !SESSION_ACTIVITY_KINDS.has(String(activity.kind))
+      || !SESSION_ACTIVITY_STATUSES.has(String(activity.status))
+      || typeof activity.isError !== 'boolean'
+    ) {
+      return contractMismatch();
+    }
+    return {
+      activityId: boundedString(activity.activityId, MAX_PUBLIC_LABEL_CHARS),
+      kind: activity.kind as WorkbenchRuntimeActivity['kind'],
+      label: boundedString(activity.label, MAX_PUBLIC_LABEL_CHARS),
+      status: activity.status as WorkbenchRuntimeActivity['status'],
+      isError: activity.isError,
+    };
+  });
 };
 
 const sanitizeAdapterReadiness = (
@@ -339,6 +447,12 @@ const sanitizeSnapshot = (input: unknown): WorkbenchRuntimeSnapshot => {
       sessionId: requiredString(session.sessionId),
       mode: session.mode as WorkbenchRuntimeSnapshot['sessions'][number]['mode'],
       phase: session.phase as WorkbenchRuntimeSnapshot['sessions'][number]['phase'],
+      baseline: sanitizeTaskBaseline(session.baseline),
+      messages: sanitizeSessionMessages(session.messages),
+      activities: sanitizeSessionActivities(session.activities),
+      error: session.error === undefined || session.error === null
+        ? null
+        : sanitizeRuntimeError(session.error),
     };
   });
 

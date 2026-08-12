@@ -37,9 +37,19 @@
     white-space: nowrap;
   }
 
+  &__root-path {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-xs);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   &__phase,
   &__adapter,
-  &__session-phase {
+  &__session-phase,
+  &__session-mode {
     color: var(--color-text-tertiary);
     font-size: var(--font-size-xs);
   }
@@ -78,6 +88,96 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  &__session {
+    flex-wrap: wrap;
+    padding: 8px 0;
+  }
+
+  &__baseline,
+  &__messages,
+  &__activities,
+  &__session-error {
+    width: 100%;
+    margin-left: 24px;
+  }
+
+  &__baseline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-xs);
+
+    code {
+      max-width: 48%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &__messages {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  &__message {
+    padding: 7px 9px;
+    border-radius: 5px;
+    background: var(--color-bg-secondary);
+    font-size: var(--font-size-sm);
+
+    p {
+      margin: 3px 0 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  &__message-role {
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-xs);
+  }
+
+  &__activities {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 3px;
+  }
+
+  &__activity {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-xs);
+
+    span:first-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span:last-child {
+      flex: 0 0 auto;
+    }
+  }
+
+  &__activity.is-error,
+  &__session-error {
+    color: var(--color-status-error);
+  }
+
+  &__session-error {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--font-size-xs);
   }
 }
 

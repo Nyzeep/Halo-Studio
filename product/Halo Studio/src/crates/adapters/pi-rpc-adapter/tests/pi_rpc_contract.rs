@@ -397,7 +397,7 @@ async fn agent_end_never_substitutes_for_agent_settled_during_abort() {
 }
 
 #[tokio::test]
-async fn configured_start_projects_authority_into_isolated_pi_process_and_cleans_up() {
+async fn configured_task_session_projects_authority_after_non_secret_readiness() {
     let _environment = fixture_environment("credential_projection");
     let workspace_root = tempfile::tempdir().expect("workspace root");
     let storage_root = tempfile::tempdir().expect("adapter storage root");
@@ -430,6 +430,18 @@ async fn configured_start_projects_authority_into_isolated_pi_process_and_cleans
             .expect("configured start crosses the port"),
         PiRpcReply::Ready { .. }
     ));
+    assert_eq!(
+        adapter
+            .execute(PiRpcCommand::CreateSession {
+                generation: 127,
+                task_id: "configured-task".to_string(),
+                session_id: "configured-session".to_string(),
+                mode: PiRpcSessionMode::Managed,
+            })
+            .await
+            .expect("configured task session crosses the port"),
+        PiRpcReply::Accepted
+    );
     shutdown(&adapter, 127).await;
 
     assert_eq!(
@@ -442,7 +454,7 @@ async fn configured_start_projects_authority_into_isolated_pi_process_and_cleans
 }
 
 #[tokio::test]
-async fn configured_start_fails_closed_before_child_creation_for_credential_errors() {
+async fn configured_readiness_does_not_read_credentials_before_task_session_creation() {
     let _environment = fixture_environment("happy");
 
     let cases = ["missing", "read_failure", "provider_mismatch"];
@@ -475,19 +487,36 @@ async fn configured_start_fails_closed_before_child_creation_for_credential_erro
             .expect("fixture configuration is valid before credential lookup");
         let adapter = configured_adapter(configuration, credentials, storage_root.path());
 
+        let generation = 128 + index as u64;
+        assert!(
+            matches!(
+                adapter
+                    .execute(PiRpcCommand::Start {
+                        generation,
+                        workspace: configured_workspace(workspace_root.path()),
+                    })
+                    .await
+                    .expect("credential failure crosses the port"),
+                PiRpcReply::Ready { .. }
+            ),
+            "credential case {case} must not block non-secret readiness"
+        );
         assert_eq!(
             adapter
-                .execute(PiRpcCommand::Start {
-                    generation: 128 + index as u64,
-                    workspace: configured_workspace(workspace_root.path()),
+                .execute(PiRpcCommand::CreateSession {
+                    generation,
+                    task_id: format!("credential-{case}-task"),
+                    session_id: format!("credential-{case}-session"),
+                    mode: PiRpcSessionMode::Managed,
                 })
                 .await
-                .expect("credential failure crosses the port"),
+                .expect("task session creation crosses the port"),
             PiRpcReply::Unavailable {
                 reason: PiRpcFailureKind::Authentication,
             },
-            "credential case {case} must fail closed"
+            "credential case {case} must fail closed when the task session is created"
         );
+        shutdown(&adapter, generation).await;
         assert_eq!(
             std::fs::read_dir(storage_root.path())
                 .expect("failed-start storage root remains inspectable")
@@ -499,7 +528,7 @@ async fn configured_start_fails_closed_before_child_creation_for_credential_erro
 }
 
 #[tokio::test]
-async fn fake_pi_native_model_and_thinking_readiness_mismatches_fail_closed() {
+async fn fake_pi_native_model_and_thinking_task_checks_fail_closed() {
     let _environment = fixture_environment("model_mismatch");
     for (index, mode) in ["model_mismatch", "thinking_mismatch"]
         .into_iter()
@@ -523,19 +552,33 @@ async fn fake_pi_native_model_and_thinking_readiness_mismatches_fail_closed() {
             .expect("native readiness fixture configuration");
         let adapter = configured_adapter(configuration, credentials, storage_root.path());
 
-        assert_eq!(
+        let generation = 140 + index as u64;
+        assert!(matches!(
             adapter
                 .execute(PiRpcCommand::Start {
-                    generation: 140 + index as u64,
+                    generation,
                     workspace: configured_workspace(workspace_root.path()),
                 })
                 .await
                 .expect("native readiness failure crosses the port"),
+            PiRpcReply::Ready { .. }
+        ));
+        assert_eq!(
+            adapter
+                .execute(PiRpcCommand::CreateSession {
+                    generation,
+                    task_id: format!("native-{mode}-task"),
+                    session_id: format!("native-{mode}-session"),
+                    mode: PiRpcSessionMode::Managed,
+                })
+                .await
+                .expect("native task validation crosses the port"),
             PiRpcReply::Unavailable {
                 reason: PiRpcFailureKind::CapabilityMismatch,
             },
-            "fake Pi mode {mode} must fail closed"
+            "fake Pi mode {mode} must fail closed for the task session"
         );
+        shutdown(&adapter, generation).await;
         assert_eq!(
             std::fs::read_dir(storage_root.path())
                 .expect("readiness-failure storage root remains inspectable")
@@ -547,7 +590,7 @@ async fn fake_pi_native_model_and_thinking_readiness_mismatches_fail_closed() {
 }
 
 #[tokio::test]
-async fn configured_start_rejects_a_project_pi_directory_before_spawn() {
+async fn configured_task_session_rejects_a_project_pi_directory_before_spawn() {
     let _environment = fixture_environment("happy");
     let workspace_root = tempfile::tempdir().expect("workspace root");
     std::fs::create_dir(workspace_root.path().join(".pi")).expect("project Pi directory");
@@ -567,7 +610,7 @@ async fn configured_start_rejects_a_project_pi_directory_before_spawn() {
         .expect("project Pi fixture configuration");
     let adapter = configured_adapter(configuration, credentials, storage_root.path());
 
-    assert_eq!(
+    assert!(matches!(
         adapter
             .execute(PiRpcCommand::Start {
                 generation: 143,
@@ -575,10 +618,23 @@ async fn configured_start_rejects_a_project_pi_directory_before_spawn() {
             })
             .await
             .expect("project Pi rejection crosses the port"),
+        PiRpcReply::Ready { .. }
+    ));
+    assert_eq!(
+        adapter
+            .execute(PiRpcCommand::CreateSession {
+                generation: 143,
+                task_id: "project-pi-task".to_string(),
+                session_id: "project-pi-session".to_string(),
+                mode: PiRpcSessionMode::Managed,
+            })
+            .await
+            .expect("project Pi task creation crosses the port"),
         PiRpcReply::Unavailable {
             reason: PiRpcFailureKind::CapabilityMismatch,
         }
     );
+    shutdown(&adapter, 143).await;
     assert_eq!(
         std::fs::read_dir(storage_root.path())
             .expect("project rejection storage root remains inspectable")
@@ -597,12 +653,14 @@ async fn provider_and_model_selections_cannot_be_interpreted_as_pi_cli_options()
         Some("--provider-injection"),
         None,
     );
+    assert_eq!(start(&adapter, 1).await, PiRpcReply::Accepted);
     assert_eq!(
-        start(&adapter, 1).await,
+        create_session(&adapter, 1).await,
         PiRpcReply::Unavailable {
             reason: PiRpcFailureKind::CapabilityMismatch,
         }
     );
+    shutdown(&adapter, 1).await;
 
     let adapter = make_adapter_with_selection(
         Duration::from_secs(1),
@@ -611,12 +669,14 @@ async fn provider_and_model_selections_cannot_be_interpreted_as_pi_cli_options()
         None,
         Some("--model-injection"),
     );
+    assert_eq!(start(&adapter, 2).await, PiRpcReply::Accepted);
     assert_eq!(
-        start(&adapter, 2).await,
+        create_session(&adapter, 2).await,
         PiRpcReply::Unavailable {
             reason: PiRpcFailureKind::CapabilityMismatch,
         }
     );
+    shutdown(&adapter, 2).await;
 }
 
 fn workspace() -> PiRpcWorkspace {
@@ -771,6 +831,122 @@ async fn port_projects_crlf_tail_unicode_message_and_tool_events_without_raw_ids
         matches!(event, PiRpcEvent::AgentSettled { .. })
     })
     .await;
+    shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn port_redacts_assistant_credential_markers_without_stalling() {
+    let _environment = fixture_environment("sensitive_message_projection");
+    let generation = 116;
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+    let mut events = adapter.subscribe();
+
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "redact assistant output").await,
+        PiRpcReply::Accepted
+    );
+
+    let text = match wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::MessageUpdated { .. })
+    })
+    .await
+    {
+        PiRpcEvent::MessageUpdated { text, .. } => text,
+        _ => unreachable!(),
+    };
+    assert!(text.contains("Bearer [redacted]"));
+    assert!(text.contains("Authorization: [redacted]"));
+    assert!(text.contains("Cookie: [redacted]"));
+    assert!(text.contains("password=[redacted]"));
+    assert!(text.contains("token=[redacted]"));
+    assert!(text.contains("\"sessionId\":\"[redacted]\""));
+    assert!(text.contains("\"entryId\":\"[redacted]\""));
+    assert!(text.contains("\"toolCallId\":\"[redacted]\""));
+    assert!(text.contains("safe response"));
+    for canary in [
+        "raw-bearer-token",
+        "basic-auth-canary",
+        "cookie-canary",
+        "message-password-canary",
+        "raw-token",
+        "sk-live-canary",
+        "message-session-id-canary",
+        "message-entry-id-canary",
+        "message-tool-call-id-canary",
+    ] {
+        assert!(!text.contains(canary), "assistant text leaked {canary}");
+    }
+    shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn port_redacts_sensitive_tool_labels_before_public_events() {
+    let _environment = fixture_environment("sensitive_tool_projection");
+    let generation = 117;
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+    let mut events = adapter.subscribe();
+
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "redact tool label").await,
+        PiRpcReply::Accepted
+    );
+
+    let mut labels = Vec::new();
+    for _ in 0..3 {
+        let event = wait_for_event(&mut events, |event| {
+            matches!(
+                event,
+                PiRpcEvent::ToolExecutionStarted { .. }
+                    | PiRpcEvent::ToolExecutionUpdated { .. }
+                    | PiRpcEvent::ToolExecutionEnded { .. }
+            )
+        })
+        .await;
+        let label = match event {
+            PiRpcEvent::ToolExecutionStarted { tool_name, .. }
+            | PiRpcEvent::ToolExecutionUpdated { tool_name, .. }
+            | PiRpcEvent::ToolExecutionEnded { tool_name, .. } => tool_name,
+            _ => unreachable!(),
+        };
+        labels.push(label);
+    }
+
+    for label in labels {
+        assert!(label.contains("Authorization: [redacted]"));
+        assert!(label.contains("Cookie: [redacted]"));
+        assert!(label.contains("password=[redacted]"));
+        assert!(label.contains("sessionId=[redacted]"));
+        assert!(label.contains("entryId: [redacted]"));
+        assert!(label.contains("toolCallId=[redacted]"));
+        for canary in [
+            "tool-basic-canary",
+            "tool-cookie-canary",
+            "tool-password-canary",
+            "tool-session-id-canary",
+            "tool-entry-id-canary",
+            "tool-tool-call-id-canary",
+        ] {
+            assert!(!label.contains(canary), "tool label leaked {canary}");
+        }
+    }
     shutdown(&adapter, generation).await;
 }
 
@@ -1148,39 +1324,18 @@ async fn failed_prepared_session_handshake_cannot_be_reused_on_retry() {
 }
 
 #[tokio::test]
-async fn prepared_child_failure_after_start_fences_the_generation() {
-    let _environment = fixture_environment("ready_then_eof");
+async fn readiness_probe_is_not_reused_as_the_task_session() {
+    let _environment = fixture_environment("readiness_probe_eof");
     let generation = 23;
     let adapter = make_adapter(
         Duration::from_secs(1),
         Duration::from_secs(1),
         Duration::from_millis(100),
     );
-    let mut events = adapter.subscribe();
-
     assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
-    assert!(matches!(
-        wait_for_event(&mut events, |event| matches!(
-            event,
-            PiRpcEvent::Failed {
-                generation: 23,
-                reason: PiRpcFailureKind::Transport,
-            }
-        ))
-        .await,
-        PiRpcEvent::Failed { .. }
-    ));
-    assert_eq!(
-        start(&adapter, generation).await,
-        PiRpcReply::Unavailable {
-            reason: PiRpcFailureKind::Transport,
-        }
-    );
     assert_eq!(
         create_session(&adapter, generation).await,
-        PiRpcReply::Unavailable {
-            reason: PiRpcFailureKind::Transport,
-        }
+        PiRpcReply::Accepted
     );
     shutdown(&adapter, generation).await;
 }

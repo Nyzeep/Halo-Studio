@@ -42,8 +42,9 @@ pub use halo_workbench::{
     PiRpcOperationKind, PiRpcPort, PiRpcReply, PiRpcSessionMode, PiRpcVersion,
     PiRpcVersionEvidenceSource, PiRpcVersionSummary, PiRpcWorkspace, PiRuntimeConfiguration,
     PiRuntimeConfigurationManagementPort, PiRuntimeConfigurationPort, PiRuntimeConfigurationView,
-    PiStartupOptions, PiThinkingLevel, WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort,
-    WorkbenchWorkspaceFactsRequest, PI_RPC_ADAPTER_IDENTITY,
+    PiStartupOptions, PiThinkingLevel, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
+    WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort,
+    WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest, PI_RPC_ADAPTER_IDENTITY,
 };
 pub use local_workspace_snapshot::{
     LocalWorkspaceSnapshotPort, LocalWorkspaceSnapshotSessionRequest, LocalWorkspaceSnapshotStats,

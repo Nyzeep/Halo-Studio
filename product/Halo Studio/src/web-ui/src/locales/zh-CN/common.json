@@ -95,7 +95,6 @@
     "sections": {
       "extensions": "定制",
       "shell": "Shell",
-      "sessions": "会话",
       "assistantSessions": "助理会话"
     },
     "search": {
@@ -224,6 +223,41 @@
           "stopping": "正在停止",
           "ended": "已结束",
           "failed": "失败"
+        },
+        "sessionMode": {
+          "standard": "标准",
+          "managed": "受管任务"
+        },
+        "baseline": {
+          "root": "任务基线",
+          "changedFiles": "已有变更文件：{{count}} 个"
+        },
+        "messageRole": {
+          "user": "你",
+          "assistant": "助手"
+        },
+        "activityStatus": {
+          "started": "已开始",
+          "updated": "已更新",
+          "completed": "$t(shared:statuses.done)",
+          "failed": "$t(shared:statuses.failed)"
+        },
+        "sessionError": "此会话无法继续。",
+        "managedTask": {
+          "title": "启动受管任务",
+          "description": "在 Pi 接收首轮任务前，先确认此 Git 工作区。",
+          "workspaceRoot": "规范化工作区",
+          "workspaceUnavailable": "工作区不可用",
+          "gitRepository": "Git 工作区",
+          "notGitRepository": "不是 Git 工作区",
+          "trustConfirmed": "工作区信任已记录",
+          "trustRequired": "需要显式确认",
+          "taskId": "任务标识",
+          "firstPrompt": "首轮任务",
+          "trustCheckbox": "我确认 Pi 可以在此工作区执行这个受管任务。",
+          "create": "创建受管任务",
+          "firstTurnPending": "等待会话进入空闲状态后发送首轮任务……",
+          "actionFailed": "受管任务操作未完成，请检查工作区后重试。"
         },
         "error": "Workbench Runtime 无法继续。请检查工作区后重试。"
       },

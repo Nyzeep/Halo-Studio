@@ -30,12 +30,72 @@ pub struct WorkbenchWorkspaceFacts {
     pub git_repository: bool,
 }
 
+/// The explicit confirmation presented before a managed task may execute.
+///
+/// The caller supplies the identity and path it showed to the developer. The
+/// workspace owner must resolve and validate the real canonical path again;
+/// this is not a renderer-provided trust token.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkbenchWorkspaceTrustRequest {
+    pub workspace_id: String,
+    pub root: PathBuf,
+}
+
 #[async_trait]
 pub trait WorkbenchWorkspaceFactsPort: Send + Sync {
     async fn inspect(
         &self,
         request: WorkbenchWorkspaceFactsRequest,
     ) -> PortResult<WorkbenchWorkspaceFacts>;
+
+    /// Records an explicit managed-execution trust decision at the workspace
+    /// owner. Implementations must revalidate identity, canonical root and
+    /// repository facts before returning a trusted projection.
+    ///
+    /// The default keeps lightweight contract-test fakes source-compatible;
+    /// production assembly overrides it with the persistent workspace-owner
+    /// decision.
+    async fn confirm_managed_trust(
+        &self,
+        request: WorkbenchWorkspaceTrustRequest,
+    ) -> PortResult<WorkbenchWorkspaceFacts> {
+        self.inspect(WorkbenchWorkspaceFactsRequest {
+            workspace_id: request.workspace_id,
+            root: request.root,
+        })
+        .await
+    }
+}
+
+/// Request for a managed task's pre-execution Git baseline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkbenchTaskBaselineRequest {
+    pub workspace_id: String,
+    pub canonical_root: PathBuf,
+}
+
+/// Read-only facts captured immediately before a managed task session starts.
+///
+/// Only commit identity, changed path names and a fixed-length working-tree
+/// digest cross this port. Diffs, file contents, command output and Git
+/// process details remain in the provider.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkbenchTaskBaseline {
+    pub head: String,
+    pub canonical_root: PathBuf,
+    pub existing_changed_files: Vec<String>,
+    /// SHA-256 over status bits, paths, index entries and working-tree content
+    /// digests for the pre-task dirty tree.
+    pub working_tree_fingerprint: String,
+    pub captured_at_ms: i64,
+}
+
+#[async_trait]
+pub trait WorkbenchTaskBaselinePort: Send + Sync {
+    async fn capture(
+        &self,
+        request: WorkbenchTaskBaselineRequest,
+    ) -> PortResult<WorkbenchTaskBaseline>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -720,6 +780,9 @@ pub enum PiRpcEvent {
     MessageUpdated {
         generation: u64,
         session_id: String,
+        /// Adapter-owned, redacted assistant text. Pi message/session
+        /// identifiers and the original JSONL record never cross this port.
+        text: String,
     },
     ToolExecutionStarted {
         generation: u64,

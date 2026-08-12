@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
@@ -48,6 +48,9 @@ const EVENT_CAPACITY: usize = 128;
 const DEFAULT_RESPONSE_TIMEOUT: Duration = Duration::from_secs(15);
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_ABORT_GRACE_PERIOD: Duration = Duration::from_secs(3);
+const MAX_ASSISTANT_DELTA_BYTES: usize = 8 * 1024;
+const MAX_TOOL_NAME_BYTES: usize = 128;
+const NO_FAILURE_REASON: u8 = 0;
 // The compatibility profile is intentionally explicit. A successful
 // `--version` process exit is not evidence that its RPC schema is known.
 const SUPPORTED_PI_RPC_PROFILES: &[(&str, PiRpcVersion)] = &[
@@ -174,13 +177,7 @@ struct AdapterState {
     generation: Option<u64>,
     workspace: Option<PiRpcWorkspace>,
     executable: Option<PathBuf>,
-    extension_path: Option<PathBuf>,
-    owned_extension_dir: Option<PathBuf>,
-    runtime_configuration: Option<PiRuntimeConfiguration>,
-    runtime_capability: Option<PiProviderCapability>,
-    prepared_session: Option<Arc<PiSession>>,
     readiness_summary: Option<PiRpcAvailabilitySummary>,
-    readiness_failed: bool,
     sessions: HashMap<String, Arc<PiSession>>,
 }
 
@@ -196,37 +193,9 @@ struct ResolvedPiExecutable {
     summary: PiRpcAvailabilitySummary,
 }
 
-impl Drop for AdapterState {
-    fn drop(&mut self) {
-        if let Some(directory) = self.owned_extension_dir.take() {
-            let _ = std::fs::remove_dir_all(directory);
-        }
-    }
-}
-
 struct InstalledExtension {
     path: PathBuf,
     owned_dir: Option<PathBuf>,
-}
-
-impl InstalledExtension {
-    fn cleanup(mut self) -> Result<(), PiRpcFailureKind> {
-        let Some(directory) = self.owned_dir.as_ref() else {
-            return Ok(());
-        };
-
-        match std::fs::remove_dir_all(directory) {
-            Ok(()) => {
-                self.owned_dir = None;
-                Ok(())
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                self.owned_dir = None;
-                Ok(())
-            }
-            Err(_) => Err(PiRpcFailureKind::Internal),
-        }
-    }
 }
 
 impl Drop for InstalledExtension {
@@ -241,9 +210,10 @@ struct PiSession {
     generation: u64,
     task_id: Mutex<String>,
     session_id: Mutex<String>,
-    is_prepared: AtomicBool,
+    is_readiness_probe: bool,
     adapter_state: Weak<Mutex<AdapterState>>,
     _config_dir: tempfile::TempDir,
+    _extension: Option<InstalledExtension>,
     /// Standard session directories are intentionally persistent. Managed
     /// sessions use `--no-session` and therefore keep this field `None`.
     _session_dir: Option<PathBuf>,
@@ -257,7 +227,7 @@ struct PiSession {
     prompt_accepted: AtomicBool,
     running: AtomicBool,
     terminated: AtomicBool,
-    failure_reported: AtomicBool,
+    failure_reason: AtomicU8,
     settled_epoch: AtomicU64,
     settled: Notify,
     response_timeout: Duration,
@@ -463,12 +433,12 @@ impl PiRpcAdapter {
         generation: u64,
         task_id: String,
         session_id: String,
-        prepared: bool,
+        is_readiness_probe: bool,
         mode: PiRpcSessionMode,
         workspace: &PiRpcWorkspace,
         session_dir: Option<PathBuf>,
         executable: &Path,
-        extension_path: &Path,
+        extension: Option<InstalledExtension>,
         runtime_configuration: Option<&PiRuntimeConfiguration>,
         runtime_capability: Option<&PiProviderCapability>,
         credential: Option<PiCredentialSecret>,
@@ -480,7 +450,32 @@ impl PiRpcAdapter {
         if mode == PiRpcSessionMode::Standard && session_dir.is_none() {
             return Err(PiRpcFailureKind::CapabilityMismatch);
         }
+        let extension_path = extension.as_ref().map(|extension| extension.path.as_path());
+        if is_readiness_probe
+            && (extension_path.is_some()
+                || runtime_configuration.is_some()
+                || runtime_capability.is_some()
+                || credential.is_some())
+        {
+            return Err(PiRpcFailureKind::Internal);
+        }
+        if !is_readiness_probe && extension_path.is_none() {
+            return Err(PiRpcFailureKind::CapabilityMismatch);
+        }
         let credential_value = credential.map(PiCredentialSecret::into_string);
+        let provider = (!is_readiness_probe).then_some(()).and_then(|_| {
+            runtime_configuration
+                .map(|configuration| configuration.provider_id.as_str())
+                .or(self.config.provider.as_deref())
+        });
+        let model = (!is_readiness_probe).then_some(()).and_then(|_| {
+            runtime_configuration
+                .map(|configuration| configuration.model_id.as_str())
+                .or(self.config.model.as_deref())
+        });
+        let thinking = (!is_readiness_probe).then_some(()).and_then(|_| {
+            runtime_configuration.map(|configuration| configuration.thinking_level.as_str())
+        });
         let mut child = configure_child_command(
             build_pi_command(
                 executable,
@@ -488,14 +483,9 @@ impl PiRpcAdapter {
                     extension_path,
                     mode,
                     session_dir.as_deref(),
-                    runtime_configuration
-                        .map(|configuration| configuration.provider_id.as_str())
-                        .or(self.config.provider.as_deref()),
-                    runtime_configuration
-                        .map(|configuration| configuration.model_id.as_str())
-                        .or(self.config.model.as_deref()),
-                    runtime_configuration
-                        .map(|configuration| configuration.thinking_level.as_str()),
+                    provider,
+                    model,
+                    thinking,
                 ),
             ),
             executable,
@@ -517,9 +507,10 @@ impl PiRpcAdapter {
             generation,
             task_id: Mutex::new(task_id),
             session_id: Mutex::new(session_id),
-            is_prepared: AtomicBool::new(prepared),
+            is_readiness_probe,
             adapter_state: Arc::downgrade(&self.state),
             _config_dir: config_dir,
+            _extension: extension,
             _session_dir: session_dir,
             events: self.events.clone(),
             stdin: Mutex::new(stdin),
@@ -531,7 +522,7 @@ impl PiRpcAdapter {
             prompt_accepted: AtomicBool::new(false),
             running: AtomicBool::new(false),
             terminated: AtomicBool::new(false),
-            failure_reported: AtomicBool::new(false),
+            failure_reason: AtomicU8::new(NO_FAILURE_REASON),
             settled_epoch: AtomicU64::new(0),
             settled: Notify::new(),
             response_timeout: self.config.response_timeout,
@@ -786,26 +777,9 @@ impl PiRpcAdapter {
 
     async fn start(&self, generation: u64, workspace: PiRpcWorkspace) -> PiRpcReply {
         let _lifecycle = self.lifecycle.lock().await;
-        if self
-            .config
-            .provider
-            .as_deref()
-            .is_some_and(|value| !valid_cli_selection(value))
-            || self
-                .config
-                .model
-                .as_deref()
-                .is_some_and(|value| !valid_cli_selection(value))
-        {
-            return PiRpcReply::Unavailable {
-                reason: PiRpcFailureKind::CapabilityMismatch,
-            };
-        }
         {
             let state = self.state.lock().await;
-            if state.generation == Some(generation)
-                && state.workspace.as_ref() == Some(&workspace)
-                && !state.readiness_failed
+            if state.generation == Some(generation) && state.workspace.as_ref() == Some(&workspace)
             {
                 return state
                     .readiness_summary
@@ -815,14 +789,6 @@ impl PiRpcAdapter {
                         reason: PiRpcFailureKind::CapabilityMismatch,
                     });
             }
-            if state.generation == Some(generation)
-                && state.workspace.as_ref() == Some(&workspace)
-                && state.readiness_failed
-            {
-                return PiRpcReply::Unavailable {
-                    reason: PiRpcFailureKind::Transport,
-                };
-            }
             if state.generation.is_some() {
                 return PiRpcReply::Unavailable {
                     reason: PiRpcFailureKind::Transport,
@@ -830,116 +796,43 @@ impl PiRpcAdapter {
             }
         }
 
-        let runtime_configuration = match self.resolve_runtime_configuration(&workspace).await {
-            Ok(configuration) => configuration,
-            Err(reason) => return PiRpcReply::Unavailable { reason },
-        };
-
-        let mut extension = match self.install_first_party_extension() {
-            Ok(extension) => extension,
-            Err(reason) => return PiRpcReply::Unavailable { reason },
-        };
-        let extension_path = extension.path.clone();
         let resolved = match self.probe_pi().await {
             Ok(resolved) => resolved,
-            Err(reason) => {
-                let reason = extension.cleanup().err().unwrap_or(reason);
-                return PiRpcReply::Unavailable { reason };
-            }
+            Err(reason) => return PiRpcReply::Unavailable { reason },
         };
         let executable = resolved.path.clone();
-        let credential = match self
-            .read_runtime_credential(
-                runtime_configuration
-                    .as_ref()
-                    .map(|resolved| &resolved.configuration),
-            )
-            .await
-        {
-            Ok(credential) => credential,
-            Err(reason) => {
-                let reason = extension.cleanup().err().unwrap_or(reason);
-                return PiRpcReply::Unavailable { reason };
-            }
-        };
-
-        let prepared_session = match self
+        let readiness_probe = match self
             .spawn_session_process(
                 generation,
-                "__halo_workbench_prepared__".to_string(),
-                "__halo_workbench_prepared__".to_string(),
+                "__halo_workbench_readiness__".to_string(),
+                "__halo_workbench_readiness__".to_string(),
                 true,
                 PiRpcSessionMode::Managed,
                 &workspace,
                 None,
                 &executable,
-                &extension_path,
-                runtime_configuration
-                    .as_ref()
-                    .map(|resolved| &resolved.configuration),
-                runtime_configuration
-                    .as_ref()
-                    .and_then(|resolved| resolved.capability.as_ref()),
-                credential,
+                None,
+                None,
+                None,
+                None,
             )
             .await
         {
             Ok(session) => session,
-            Err(reason) => {
-                let reason = extension.cleanup().err().unwrap_or(reason);
-                return PiRpcReply::Unavailable { reason };
-            }
+            Err(reason) => return PiRpcReply::Unavailable { reason },
         };
-        if let Err(reason) = self.handshake(&prepared_session).await {
-            prepared_session.terminate().await;
-            let reason = extension.cleanup().err().unwrap_or(reason);
+        if let Err(reason) = self.handshake(&readiness_probe).await {
+            readiness_probe.terminate().await;
             return PiRpcReply::Unavailable { reason };
         }
-        if let Some(configuration) = runtime_configuration.as_ref() {
-            if let Err(reason) = self
-                .validate_native_capability(&prepared_session, &configuration.configuration)
-                .await
-            {
-                prepared_session.terminate().await;
-                let reason = extension.cleanup().err().unwrap_or(reason);
-                return PiRpcReply::Unavailable { reason };
-            }
-        }
-
         let readiness_summary = resolved.summary.with_readiness_handshake_verified();
+        readiness_probe.terminate().await;
 
         let mut state = self.state.lock().await;
-        // The reader can observe EOF immediately after the final handshake
-        // response. Check while holding the same state lock used by the
-        // failure path so a dead prepared child can never be published as a
-        // ready generation.
-        if prepared_session.terminated.load(Ordering::Acquire)
-            || prepared_session.has_exited().await
-        {
-            drop(state);
-            prepared_session.terminate().await;
-            let reason = extension
-                .cleanup()
-                .err()
-                .unwrap_or(PiRpcFailureKind::Transport);
-            return PiRpcReply::Unavailable { reason };
-        }
-        let extension_path = std::mem::take(&mut extension.path);
-        let owned_extension_dir = extension.owned_dir.take();
         state.generation = Some(generation);
         state.workspace = Some(workspace);
         state.executable = Some(executable);
-        state.extension_path = Some(extension_path);
-        state.owned_extension_dir = owned_extension_dir;
-        state.runtime_configuration = runtime_configuration
-            .as_ref()
-            .map(|resolved| resolved.configuration.clone());
-        state.runtime_capability = runtime_configuration
-            .as_ref()
-            .and_then(|resolved| resolved.capability.clone());
-        state.prepared_session = Some(prepared_session);
         state.readiness_summary = Some(readiness_summary.clone());
-        state.readiness_failed = false;
         drop(state);
 
         self.emit(PiRpcEvent::Ready { generation });
@@ -955,32 +848,13 @@ impl PiRpcAdapter {
         session_id: String,
         mode: PiRpcSessionMode,
     ) -> Result<(), PiRpcFailureKind> {
-        let (
-            workspace,
-            executable,
-            extension_path,
-            runtime_configuration,
-            runtime_capability,
-            prepared_session,
-        ) = {
-            let mut state = self.state.lock().await;
-            if state.generation != Some(generation) || state.readiness_failed {
+        let (workspace, executable) = {
+            let state = self.state.lock().await;
+            if state.generation != Some(generation) {
                 return Err(PiRpcFailureKind::Transport);
             }
             if state.sessions.contains_key(&session_id) {
                 return Err(PiRpcFailureKind::Internal);
-            }
-            let prepared_session = if mode == PiRpcSessionMode::Managed {
-                state.prepared_session.take()
-            } else {
-                None
-            };
-            if prepared_session
-                .as_ref()
-                .is_some_and(|session| session.terminated.load(Ordering::Acquire))
-            {
-                state.readiness_failed = true;
-                return Err(PiRpcFailureKind::Transport);
             }
             (
                 state.workspace.clone().ok_or(PiRpcFailureKind::Transport)?,
@@ -988,100 +862,100 @@ impl PiRpcAdapter {
                     .executable
                     .clone()
                     .ok_or(PiRpcFailureKind::Transport)?,
-                state
-                    .extension_path
-                    .clone()
-                    .ok_or(PiRpcFailureKind::CapabilityMismatch)?,
-                state.runtime_configuration.clone(),
-                state.runtime_capability.clone(),
-                prepared_session,
             )
         };
 
-        let was_prepared = prepared_session.is_some();
+        let runtime_configuration = self.resolve_runtime_configuration(&workspace).await?;
+        if self
+            .config
+            .provider
+            .as_deref()
+            .is_some_and(|value| !valid_cli_selection(value))
+            || self
+                .config
+                .model
+                .as_deref()
+                .is_some_and(|value| !valid_cli_selection(value))
+        {
+            return Err(PiRpcFailureKind::CapabilityMismatch);
+        }
+        let credential = self
+            .read_runtime_credential(
+                runtime_configuration
+                    .as_ref()
+                    .map(|resolved| &resolved.configuration),
+            )
+            .await?;
+        let extension = self.install_first_party_extension()?;
         let standard_session_dir = (mode == PiRpcSessionMode::Standard)
             .then(|| self.standard_session_directory(&workspace, &task_id))
             .transpose()?;
         let cleanup_session_dir = standard_session_dir.clone();
-        let session = match prepared_session {
-            Some(session) if !session.terminated.load(Ordering::Acquire) => session,
-            None => {
-                let credential = match self
-                    .read_runtime_credential(runtime_configuration.as_ref())
-                    .await
-                {
-                    Ok(credential) => credential,
-                    Err(reason) => {
-                        if let Some(session_dir) = cleanup_session_dir.as_deref() {
-                            remove_empty_standard_session_directory(session_dir);
-                        }
-                        return Err(reason);
-                    }
-                };
-                let session = match self
-                    .spawn_session_process(
-                        generation,
-                        task_id.clone(),
-                        session_id.clone(),
-                        false,
-                        mode,
-                        &workspace,
-                        standard_session_dir,
-                        &executable,
-                        &extension_path,
-                        runtime_configuration.as_ref(),
-                        runtime_capability.as_ref(),
-                        credential,
-                    )
-                    .await
-                {
-                    Ok(session) => session,
-                    Err(reason) => {
-                        if let Some(session_dir) = cleanup_session_dir.as_deref() {
-                            remove_empty_standard_session_directory(session_dir);
-                        }
-                        return Err(reason);
-                    }
-                };
-                if let Err(reason) = self.handshake(&session).await {
-                    session.terminate().await;
-                    if let Some(session_dir) = cleanup_session_dir.as_deref() {
-                        remove_empty_standard_session_directory(session_dir);
-                    }
-                    return Err(reason);
+        let session = match self
+            .spawn_session_process(
+                generation,
+                task_id.clone(),
+                session_id.clone(),
+                false,
+                mode,
+                &workspace,
+                standard_session_dir,
+                &executable,
+                Some(extension),
+                runtime_configuration
+                    .as_ref()
+                    .map(|resolved| &resolved.configuration),
+                runtime_configuration
+                    .as_ref()
+                    .and_then(|resolved| resolved.capability.as_ref()),
+                credential,
+            )
+            .await
+        {
+            Ok(session) => session,
+            Err(reason) => {
+                if let Some(session_dir) = cleanup_session_dir.as_deref() {
+                    remove_empty_standard_session_directory(session_dir);
                 }
-                session
-            }
-            Some(session) => {
-                session.fail_closed(PiRpcFailureKind::Transport).await;
-                return Err(PiRpcFailureKind::Transport);
+                return Err(reason);
             }
         };
-        session.set_scope(task_id, session_id.clone()).await;
-
-        if session.terminated.load(Ordering::Acquire) || session.has_exited().await {
-            session.fail_closed(PiRpcFailureKind::Transport).await;
+        if let Err(reason) = self.handshake(&session).await {
+            session.terminate().await;
             if let Some(session_dir) = cleanup_session_dir.as_deref() {
                 remove_empty_standard_session_directory(session_dir);
             }
-            if was_prepared {
-                let mut state = self.state.lock().await;
-                if state.generation == Some(generation) {
-                    state.readiness_failed = true;
+            return Err(reason);
+        }
+        if let Some(configuration) = runtime_configuration.as_ref() {
+            if let Err(reason) = self
+                .validate_native_capability(&session, &configuration.configuration)
+                .await
+            {
+                session.terminate().await;
+                if let Some(session_dir) = cleanup_session_dir.as_deref() {
+                    remove_empty_standard_session_directory(session_dir);
                 }
+                return Err(reason);
             }
-            return Err(PiRpcFailureKind::Transport);
+        };
+
+        if session.terminated.load(Ordering::Acquire) || session.has_exited().await {
+            let reason = session
+                .recorded_failure_reason()
+                .unwrap_or(PiRpcFailureKind::Transport);
+            session.fail_closed(reason).await;
+            if let Some(session_dir) = cleanup_session_dir.as_deref() {
+                remove_empty_standard_session_directory(session_dir);
+            }
+            return Err(reason);
         }
 
         let mut state = self.state.lock().await;
         if state.generation != Some(generation)
-            || state.readiness_failed
             || session.terminated.load(Ordering::Acquire)
             || state.sessions.contains_key(&session_id)
         {
-            if was_prepared && state.generation == Some(generation) {
-                state.readiness_failed = true;
-            }
             drop(state);
             session.terminate().await;
             if let Some(session_dir) = cleanup_session_dir.as_deref() {
@@ -1137,7 +1011,7 @@ impl PiRpcAdapter {
 
     async fn shutdown_sessions(&self, generation: u64) -> Result<(), PiRpcFailureKind> {
         let _lifecycle = self.lifecycle.lock().await;
-        let (sessions, owned_extension_dir) = {
+        let sessions = {
             let mut state = self.state.lock().await;
             match state.generation {
                 Some(active_generation) if active_generation != generation => {
@@ -1149,21 +1023,12 @@ impl PiRpcAdapter {
             state.generation = None;
             state.workspace = None;
             state.executable = None;
-            state.extension_path = None;
-            state.runtime_configuration = None;
-            state.runtime_capability = None;
             state.readiness_summary = None;
-            state.readiness_failed = false;
-            let owned_extension_dir = state.owned_extension_dir.clone();
-            let mut sessions = state
+            state
                 .sessions
                 .drain()
                 .map(|(_, session)| session)
-                .collect::<Vec<_>>();
-            if let Some(session) = state.prepared_session.take() {
-                sessions.push(session);
-            }
-            (sessions, owned_extension_dir)
+                .collect::<Vec<_>>()
         };
 
         for session in sessions {
@@ -1171,16 +1036,6 @@ impl PiRpcAdapter {
                 let _ = session.abort_with_grace().await;
             }
             session.terminate().await;
-        }
-
-        if let Some(directory) = owned_extension_dir {
-            match std::fs::remove_dir_all(directory) {
-                Ok(()) => {
-                    self.state.lock().await.owned_extension_dir = None;
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(_) => return Err(PiRpcFailureKind::Internal),
-            }
         }
         Ok(())
     }
@@ -1368,18 +1223,25 @@ impl PiRpcPort for PiRpcAdapter {
 }
 
 impl PiSession {
+    fn recorded_failure_reason(&self) -> Option<PiRpcFailureKind> {
+        match self.failure_reason.load(Ordering::Acquire) {
+            1 => Some(PiRpcFailureKind::NotInstalled),
+            2 => Some(PiRpcFailureKind::UnsupportedVersion),
+            3 => Some(PiRpcFailureKind::CapabilityMismatch),
+            4 => Some(PiRpcFailureKind::Authentication),
+            5 => Some(PiRpcFailureKind::Transport),
+            6 => Some(PiRpcFailureKind::Protocol),
+            7 => Some(PiRpcFailureKind::Internal),
+            _ => None,
+        }
+    }
+
     async fn current_task_id(&self) -> String {
         self.task_id.lock().await.clone()
     }
 
     async fn current_session_id(&self) -> String {
         self.session_id.lock().await.clone()
-    }
-
-    async fn set_scope(&self, task_id: String, session_id: String) {
-        self.is_prepared.store(false, Ordering::Release);
-        *self.task_id.lock().await = task_id;
-        *self.session_id.lock().await = session_id;
     }
 
     async fn request(self: &Arc<Self>, command: &str, payload: Value) -> PortResult<Value> {
@@ -1621,7 +1483,25 @@ impl PiSession {
     }
 
     async fn fail_protocol(self: &Arc<Self>, reason: PiRpcFailureKind) {
-        if self.failure_reported.swap(true, Ordering::AcqRel) {
+        let reason_code = match reason {
+            PiRpcFailureKind::NotInstalled => 1,
+            PiRpcFailureKind::UnsupportedVersion => 2,
+            PiRpcFailureKind::CapabilityMismatch => 3,
+            PiRpcFailureKind::Authentication => 4,
+            PiRpcFailureKind::Transport => 5,
+            PiRpcFailureKind::Protocol => 6,
+            PiRpcFailureKind::Internal => 7,
+        };
+        if self
+            .failure_reason
+            .compare_exchange(
+                NO_FAILURE_REASON,
+                reason_code,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_err()
+        {
             return;
         }
         self.running.store(false, Ordering::Release);
@@ -1632,40 +1512,21 @@ impl PiSession {
         };
         self.fail_pending(message).await;
         self.operations.lock().await.clear();
+        if self.is_readiness_probe {
+            return;
+        }
         let session_id = self.current_session_id().await;
-        let is_prepared = self.is_prepared.load(Ordering::Acquire);
         if let Some(adapter_state) = self.adapter_state.upgrade() {
             let mut state = adapter_state.lock().await;
-            if is_prepared {
-                if state
-                    .prepared_session
-                    .as_ref()
-                    .is_some_and(|prepared| Arc::ptr_eq(prepared, self))
-                {
-                    state.prepared_session = None;
-                }
-                // A failed readiness process must not leave Start idempotently
-                // reporting a healthy Pi generation. The runtime receives the
-                // redacted Failed event below and can fence the generation.
-                state.readiness_failed = true;
-            } else {
-                state
-                    .sessions
-                    .retain(|_, session| !Arc::ptr_eq(session, self));
-            }
+            state
+                .sessions
+                .retain(|_, session| !Arc::ptr_eq(session, self));
         }
-        if is_prepared {
-            let _ = self.events.send(PiRpcEvent::Failed {
-                generation: self.generation,
-                reason,
-            });
-        } else {
-            let _ = self.events.send(PiRpcEvent::SessionFailed {
-                generation: self.generation,
-                session_id,
-                reason,
-            });
-        }
+        let _ = self.events.send(PiRpcEvent::SessionFailed {
+            generation: self.generation,
+            session_id,
+            reason,
+        });
     }
 
     async fn fail_closed(self: &Arc<Self>, reason: PiRpcFailureKind) {
@@ -1789,10 +1650,12 @@ async fn handle_pi_message(session: &Arc<PiSession>, value: &Value) {
                 session.fail_closed(PiRpcFailureKind::Protocol).await;
                 return;
             }
+            let text = extract_assistant_delta(value);
             let session_id = session.current_session_id().await;
             let _ = session.events.send(PiRpcEvent::MessageUpdated {
                 generation: session.generation,
                 session_id,
+                text,
             });
         }
         Some("tool_execution_start") => {
@@ -1836,14 +1699,14 @@ async fn emit_tool_event(session: &Arc<PiSession>, value: &Value, kind: ToolEven
         session.fail_closed(PiRpcFailureKind::Protocol).await;
         return;
     }
-    let Some(tool_name) = value.get("toolName").and_then(Value::as_str) else {
+    let Some(tool_name) = value
+        .get("toolName")
+        .and_then(Value::as_str)
+        .and_then(|value| bounded_protocol_label(value, MAX_TOOL_NAME_BYTES))
+    else {
         session.fail_closed(PiRpcFailureKind::Protocol).await;
         return;
     };
-    if tool_name.is_empty() {
-        session.fail_closed(PiRpcFailureKind::Protocol).await;
-        return;
-    }
     let session_id = session.current_session_id().await;
     let task_id = session.current_task_id().await;
     let redacted_tool_call_id =
@@ -1853,13 +1716,13 @@ async fn emit_tool_event(session: &Arc<PiSession>, value: &Value, kind: ToolEven
             generation: session.generation,
             session_id: session_id.clone(),
             redacted_tool_call_id,
-            tool_name: tool_name.to_string(),
+            tool_name: tool_name.clone(),
         },
         ToolEventKind::Updated => PiRpcEvent::ToolExecutionUpdated {
             generation: session.generation,
             session_id: session_id.clone(),
             redacted_tool_call_id,
-            tool_name: tool_name.to_string(),
+            tool_name: tool_name.clone(),
         },
         ToolEventKind::Ended => {
             let Some(is_error) = value.get("isError").and_then(Value::as_bool) else {
@@ -1870,7 +1733,7 @@ async fn emit_tool_event(session: &Arc<PiSession>, value: &Value, kind: ToolEven
                 generation: session.generation,
                 session_id,
                 redacted_tool_call_id,
-                tool_name: tool_name.to_string(),
+                tool_name,
                 is_error,
             }
         }
@@ -1886,6 +1749,314 @@ fn valid_message_update(value: &Value) -> bool {
             .and_then(|event| event.get("type"))
             .and_then(Value::as_str)
             .is_some_and(|event_type| SUPPORTED_ASSISTANT_MESSAGE_EVENT_TYPES.contains(&event_type))
+}
+
+/// Projects only the assistant text delta from a Pi message event. Thinking,
+/// tool-call arguments, partial message objects and the original event are
+/// deliberately discarded at this boundary.
+fn extract_assistant_delta(value: &Value) -> String {
+    let event = value
+        .get("assistantMessageEvent")
+        .and_then(Value::as_object);
+    let event_type = event
+        .and_then(|event| event.get("type"))
+        .and_then(Value::as_str);
+    if !matches!(event_type, Some("text_delta" | "text_start" | "text_end")) {
+        return String::new();
+    }
+    event
+        .and_then(|event| event.get("delta").or_else(|| event.get("content")))
+        .and_then(Value::as_str)
+        .map(redact_assistant_text)
+        .unwrap_or_default()
+}
+
+fn bounded_protocol_label(value: &str, max_bytes: usize) -> Option<String> {
+    if value.is_empty() || value.chars().any(char::is_control) {
+        return None;
+    }
+    Some(truncate_utf8(&redact_assistant_text(value), max_bytes))
+}
+
+/// Redacts high-confidence credential forms before assistant text enters the
+/// Halo event stream. This is intentionally conservative: ordinary prose is
+/// preserved, while common bearer/API-key prefixes and key/value secrets are
+/// replaced without retaining the original token.
+fn redact_assistant_text(value: &str) -> String {
+    let mut redacted = value
+        .chars()
+        .filter(|character| !character.is_control() || matches!(character, '\n' | '\r' | '\t'))
+        .collect::<String>();
+    for header in ["authorization", "cookie"] {
+        redacted = redact_header_values(&redacted, header);
+    }
+    for prefix in ["sk-", "sk_", "ghp_", "github_pat_", "xoxb-", "AIza"] {
+        redacted = redact_prefixed_token(&redacted, prefix);
+    }
+    redacted = redact_literal_value(&redacted, "bearer ");
+    for name in [
+        "api-key",
+        "api_key",
+        "secret",
+        "token",
+        "password",
+        "sessionid",
+        "entryid",
+        "toolcallid",
+        "session_id",
+        "entry_id",
+        "tool_call_id",
+    ] {
+        redacted = redact_named_values(&redacted, name);
+    }
+    truncate_utf8(&redacted, MAX_ASSISTANT_DELTA_BYTES)
+}
+
+fn redact_header_values(value: &str, header: &str) -> String {
+    let mut redacted = value.to_string();
+    let mut cursor = 0;
+    while cursor < redacted.len() {
+        let Some(start) = find_named_marker(&redacted, header, cursor) else {
+            break;
+        };
+        let mut delimiter = start + header.len();
+        if redacted[delimiter..].starts_with('"') || redacted[delimiter..].starts_with('\'') {
+            delimiter += 1;
+        }
+        delimiter = skip_horizontal_whitespace(&redacted, delimiter);
+        if !redacted[delimiter..].starts_with(':') && !redacted[delimiter..].starts_with('=') {
+            cursor = delimiter;
+            continue;
+        }
+        let value_start = skip_horizontal_whitespace(&redacted, delimiter + 1);
+        let value_end = header_value_end(&redacted, value_start);
+        if value_start == value_end {
+            cursor = value_start;
+            continue;
+        }
+        redacted.replace_range(value_start..value_end, "[redacted]");
+        cursor = value_start + "[redacted]".len();
+    }
+    redacted
+}
+
+fn redact_named_values(value: &str, name: &str) -> String {
+    let mut redacted = value.to_string();
+    let mut cursor = 0;
+    while cursor < redacted.len() {
+        let Some(start) = find_named_marker(&redacted, name, cursor) else {
+            break;
+        };
+        let mut delimiter = start + name.len();
+        if redacted[delimiter..].starts_with('"') || redacted[delimiter..].starts_with('\'') {
+            delimiter += 1;
+        }
+        delimiter = skip_horizontal_whitespace(&redacted, delimiter);
+        if !redacted[delimiter..].starts_with(':') && !redacted[delimiter..].starts_with('=') {
+            cursor = delimiter;
+            continue;
+        }
+        let mut value_start = skip_horizontal_whitespace(&redacted, delimiter + 1);
+        let quote = redacted[value_start..]
+            .chars()
+            .next()
+            .filter(|character| matches!(character, '"' | '\'' | '`'));
+        if let Some(quote) = quote {
+            value_start += quote.len_utf8();
+            let value_end = quoted_value_end(&redacted, value_start, quote);
+            if value_start != value_end {
+                redacted.replace_range(value_start..value_end, "[redacted]");
+                cursor = value_start + "[redacted]".len();
+                continue;
+            }
+        } else {
+            let value_end = token_value_end(&redacted, value_start);
+            if value_start != value_end {
+                redacted.replace_range(value_start..value_end, "[redacted]");
+                cursor = value_start + "[redacted]".len();
+                continue;
+            }
+        }
+        cursor = value_start;
+    }
+    redacted
+}
+
+fn redact_literal_value(value: &str, marker: &str) -> String {
+    let mut redacted = value.to_string();
+    let mut cursor = 0;
+    while cursor < redacted.len() {
+        let lower = redacted[cursor..].to_ascii_lowercase();
+        let Some(relative) = lower.find(marker) else {
+            break;
+        };
+        let value_start = cursor + relative + marker.len();
+        let value_end = token_value_end(&redacted, value_start);
+        if value_start == value_end {
+            cursor = value_start;
+            continue;
+        }
+        redacted.replace_range(value_start..value_end, "[redacted]");
+        cursor = value_start + "[redacted]".len();
+    }
+    redacted
+}
+
+fn find_named_marker(value: &str, name: &str, mut cursor: usize) -> Option<usize> {
+    while cursor < value.len() {
+        let lower = value[cursor..].to_ascii_lowercase();
+        let relative = lower.find(name)?;
+        let start = cursor + relative;
+        let end = start + name.len();
+        if identifier_boundary(value, start, end) {
+            return Some(start);
+        }
+        cursor = end;
+    }
+    None
+}
+
+fn identifier_boundary(value: &str, start: usize, end: usize) -> bool {
+    let before = value[..start].chars().next_back();
+    let after = value[end..].chars().next();
+    !before.is_some_and(is_identifier_character) && !after.is_some_and(is_identifier_character)
+}
+
+fn is_identifier_character(character: char) -> bool {
+    character.is_ascii_alphanumeric() || character == '_'
+}
+
+fn skip_horizontal_whitespace(value: &str, mut cursor: usize) -> usize {
+    while let Some(character) = value[cursor..].chars().next() {
+        if !matches!(character, ' ' | '\t') {
+            break;
+        }
+        cursor += character.len_utf8();
+    }
+    cursor
+}
+
+fn header_value_end(value: &str, value_start: usize) -> usize {
+    for (offset, character) in value[value_start..].char_indices() {
+        let cursor = value_start + offset;
+        if matches!(character, '\n' | '\r') {
+            return cursor;
+        }
+        if cursor > value_start
+            && value[..cursor]
+                .chars()
+                .next_back()
+                .is_some_and(|previous| matches!(previous, ' ' | '\t'))
+            && is_inline_sensitive_key(value, cursor)
+        {
+            let mut boundary = cursor;
+            while boundary > value_start
+                && value[..boundary]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|previous| matches!(previous, ' ' | '\t'))
+            {
+                boundary -= value[..boundary]
+                    .chars()
+                    .next_back()
+                    .expect("boundary has a preceding character")
+                    .len_utf8();
+            }
+            return boundary;
+        }
+    }
+    value.len()
+}
+
+fn is_inline_sensitive_key(value: &str, cursor: usize) -> bool {
+    [
+        "authorization",
+        "cookie",
+        "api-key",
+        "api_key",
+        "secret",
+        "token",
+        "password",
+        "sessionid",
+        "entryid",
+        "toolcallid",
+        "session_id",
+        "entry_id",
+        "tool_call_id",
+    ]
+    .into_iter()
+    .any(|name| {
+        find_named_marker(value, name, cursor) == Some(cursor)
+            && named_marker_has_value_delimiter(value, cursor, name)
+    })
+}
+
+fn named_marker_has_value_delimiter(value: &str, start: usize, name: &str) -> bool {
+    let mut cursor = start + name.len();
+    if value[cursor..].starts_with('"') || value[cursor..].starts_with('\'') {
+        cursor += 1;
+    }
+    cursor = skip_horizontal_whitespace(value, cursor);
+    value[cursor..].starts_with(':') || value[cursor..].starts_with('=')
+}
+
+fn quoted_value_end(value: &str, value_start: usize, quote: char) -> usize {
+    let mut escaped = false;
+    for (offset, character) in value[value_start..].char_indices() {
+        if character == quote && !escaped {
+            return value_start + offset;
+        }
+        escaped = character == '\\' && !escaped;
+        if character != '\\' {
+            escaped = false;
+        }
+    }
+    value.len()
+}
+
+fn token_value_end(value: &str, value_start: usize) -> usize {
+    value[value_start..]
+        .char_indices()
+        .find(|(_, character)| {
+            character.is_whitespace()
+                || matches!(character, '"' | '\'' | '`' | ',' | ';' | '}' | ']')
+        })
+        .map(|(offset, _)| value_start + offset)
+        .unwrap_or(value.len())
+}
+
+fn redact_prefixed_token(value: &str, prefix: &str) -> String {
+    let mut result = String::with_capacity(value.len());
+    let mut cursor = 0;
+    while let Some(relative) = value[cursor..].find(prefix) {
+        let start = cursor + relative;
+        result.push_str(&value[cursor..start]);
+        let end = value[start..]
+            .char_indices()
+            .find(|(_, character)| {
+                character.is_whitespace() || matches!(character, '"' | '\'' | '`' | ',' | ';')
+            })
+            .map(|(offset, _)| start + offset)
+            .unwrap_or(value.len());
+        result.push_str("[redacted]");
+        cursor = end;
+        if cursor >= value.len() {
+            break;
+        }
+    }
+    result.push_str(&value[cursor..]);
+    result
+}
+
+fn truncate_utf8(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
+        return value.to_string();
+    }
+    let mut end = max_bytes;
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value[..end].to_string()
 }
 
 fn stable_digest(value: &str) -> String {
@@ -2039,7 +2210,7 @@ fn validate_incremental_entries_data(value: &Value, cursor: &str) -> Result<(), 
 }
 
 fn pi_rpc_args(
-    extension_path: &Path,
+    extension_path: Option<&Path>,
     mode: PiRpcSessionMode,
     session_dir: Option<&Path>,
     provider: Option<&str>,
@@ -2059,12 +2230,13 @@ fn pi_rpc_args(
             ]);
         }
     }
-    args.extend([
-        "--no-approve".to_string(),
-        "--no-extensions".to_string(),
-        "--extension".to_string(),
-        extension_path.to_string_lossy().into_owned(),
-    ]);
+    args.extend(["--no-approve".to_string(), "--no-extensions".to_string()]);
+    if let Some(extension_path) = extension_path {
+        args.extend([
+            "--extension".to_string(),
+            extension_path.to_string_lossy().into_owned(),
+        ]);
+    }
     if let Some(provider) = provider {
         args.extend(["--provider".to_string(), provider.to_string()]);
     }
@@ -2099,7 +2271,7 @@ pub fn pi_rpc_arguments(
         return Vec::new();
     }
     pi_rpc_args(
-        Path::new(extension_path),
+        Some(Path::new(extension_path)),
         mode,
         session_dir.map(Path::new),
         Some(&configuration.provider_id),

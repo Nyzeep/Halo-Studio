@@ -224,6 +224,41 @@
           "ended": "Ended",
           "failed": "Failed"
         },
+        "sessionMode": {
+          "standard": "Standard",
+          "managed": "Managed"
+        },
+        "baseline": {
+          "root": "Task baseline",
+          "changedFiles": "{{count}} existing changed files"
+        },
+        "messageRole": {
+          "user": "You",
+          "assistant": "Assistant"
+        },
+        "activityStatus": {
+          "started": "Started",
+          "updated": "Updated",
+          "completed": "$t(shared:statuses.done)",
+          "failed": "$t(shared:statuses.failed)"
+        },
+        "sessionError": "This session could not continue.",
+        "managedTask": {
+          "title": "Start a managed task",
+          "description": "Confirm this Git workspace before Pi receives the first task turn.",
+          "workspaceRoot": "Canonical workspace",
+          "workspaceUnavailable": "Workspace unavailable",
+          "gitRepository": "Git workspace",
+          "notGitRepository": "Not a Git workspace",
+          "trustConfirmed": "Workspace trust is recorded",
+          "trustRequired": "Explicit confirmation required",
+          "taskId": "Task identifier",
+          "firstPrompt": "First task turn",
+          "trustCheckbox": "I confirm that Pi may execute this managed task in this workspace.",
+          "create": "Create managed task",
+          "firstTurnPending": "Waiting for the session to become idle before sending the first turn…",
+          "actionFailed": "The managed task action could not be completed. Check the workspace and try again."
+        },
         "error": "Workbench Runtime couldn't continue. Check the workspace or try again."
       },
       "ariaNeedsInput": "A session needs your input",

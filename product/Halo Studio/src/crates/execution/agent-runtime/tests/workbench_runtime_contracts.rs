@@ -6,17 +6,19 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bitfun_agent_runtime::halo_workbench::{
-    HaloWorkbenchCapability, HaloWorkbenchIntent, HaloWorkbenchIntentRequest,
-    HaloWorkbenchOperationDecision, HaloWorkbenchPendingOperationPhase, HaloWorkbenchPhase,
-    HaloWorkbenchRuntime, HaloWorkbenchSessionMode, HaloWorkbenchSessionPhase,
-    HaloWorkbenchWorkspaceInput, HALO_WORKBENCH_SCHEMA_VERSION,
+    HaloWorkbenchActivityStatus, HaloWorkbenchCapability, HaloWorkbenchIntent,
+    HaloWorkbenchIntentRequest, HaloWorkbenchMessageRole, HaloWorkbenchOperationDecision,
+    HaloWorkbenchPendingOperationPhase, HaloWorkbenchPhase, HaloWorkbenchRuntime,
+    HaloWorkbenchSessionMode, HaloWorkbenchSessionPhase, HaloWorkbenchWorkspaceInput,
+    HALO_WORKBENCH_SCHEMA_VERSION,
 };
 use bitfun_runtime_ports::{
     ClockPort, PiProviderReadiness, PiProviderReadinessPort, PiRpcAvailabilitySummary,
     PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationKind, PiRpcPort, PiRpcReply,
     PiRpcVersion, PiRpcVersionEvidenceSource, PortError, PortErrorKind, PortResult,
-    RuntimeServiceCapability, RuntimeServicePort, WorkbenchWorkspaceFacts,
-    WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, PI_RPC_ADAPTER_IDENTITY,
+    RuntimeServiceCapability, RuntimeServicePort, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
+    WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
+    PI_RPC_ADAPTER_IDENTITY,
 };
 use tokio::sync::{broadcast, Notify, Semaphore};
 
@@ -255,6 +257,45 @@ struct RevocableWorkspaceFacts {
     trusted: AtomicBool,
 }
 
+struct FixedTaskBaseline;
+
+#[async_trait]
+impl WorkbenchTaskBaselinePort for FixedTaskBaseline {
+    async fn capture(
+        &self,
+        request: bitfun_runtime_ports::WorkbenchTaskBaselineRequest,
+    ) -> PortResult<WorkbenchTaskBaseline> {
+        Ok(WorkbenchTaskBaseline {
+            head: "test-head".to_string(),
+            canonical_root: request.canonical_root,
+            existing_changed_files: vec![
+                "already-tracked.rs".to_string(),
+                "untracked-note.txt".to_string(),
+            ],
+            working_tree_fingerprint: "a".repeat(64),
+            captured_at_ms: 1_234,
+        })
+    }
+}
+
+struct MismatchedTaskBaseline;
+
+#[async_trait]
+impl WorkbenchTaskBaselinePort for MismatchedTaskBaseline {
+    async fn capture(
+        &self,
+        _request: bitfun_runtime_ports::WorkbenchTaskBaselineRequest,
+    ) -> PortResult<WorkbenchTaskBaseline> {
+        Ok(WorkbenchTaskBaseline {
+            head: "wrong-workspace-head".to_string(),
+            canonical_root: PathBuf::from("C:/work/wrong-workspace"),
+            existing_changed_files: vec!["wrong-workspace-file.rs".to_string()],
+            working_tree_fingerprint: "b".repeat(64),
+            captured_at_ms: 1_234,
+        })
+    }
+}
+
 impl RevocableWorkspaceFacts {
     fn new() -> Self {
         Self {
@@ -333,10 +374,24 @@ fn build_runtime_with_ports(
     workspace_facts: Arc<dyn WorkbenchWorkspaceFactsPort>,
     provider_readiness: Arc<dyn PiProviderReadinessPort>,
 ) -> HaloWorkbenchRuntime {
-    HaloWorkbenchRuntime::new(
+    HaloWorkbenchRuntime::new_with_task_baseline(
         adapter,
         workspace_facts,
         provider_readiness,
+        Arc::new(FixedTaskBaseline),
+        Arc::new(FixedClock),
+    )
+}
+
+fn build_runtime_with_baseline(
+    adapter: Arc<DeterministicPiRpc>,
+    task_baseline: Arc<dyn WorkbenchTaskBaselinePort>,
+) -> HaloWorkbenchRuntime {
+    HaloWorkbenchRuntime::new_with_task_baseline(
+        adapter,
+        Arc::new(TrustedWorkspaceFacts),
+        Arc::new(AvailableProviderReadiness),
+        task_baseline,
         Arc::new(FixedClock),
     )
 }
@@ -411,12 +466,29 @@ async fn create_idle_session(
     generation: u64,
     request_id: &str,
 ) -> String {
+    create_session_with_mode(
+        runtime,
+        adapter,
+        generation,
+        request_id,
+        HaloWorkbenchSessionMode::Standard,
+    )
+    .await
+}
+
+async fn create_session_with_mode(
+    runtime: &HaloWorkbenchRuntime,
+    adapter: &DeterministicPiRpc,
+    generation: u64,
+    request_id: &str,
+    mode: HaloWorkbenchSessionMode,
+) -> String {
     let receipt = runtime
         .submit(HaloWorkbenchIntentRequest {
             request_id: request_id.to_string(),
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: request_id.to_string(),
-                mode: HaloWorkbenchSessionMode::Standard,
+                mode,
             },
         })
         .await
@@ -661,8 +733,24 @@ async fn trust_revoke_closes_the_runtime_before_forwarding_session_input() {
         Arc::new(AvailableProviderReadiness),
     );
     let generation = open_ready(&runtime, &adapter, "open-trust-revoke", "trust-revoke").await;
-    let session_id =
-        create_idle_session(&runtime, &adapter, generation, "create-trust-revoke").await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-trust-revoke".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "trust-revoke".to_string(),
+                root_path: PathBuf::from("C:/work/trust-revoke"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        "create-trust-revoke",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
     facts.revoke();
     adapter.clear_commands();
 
@@ -681,6 +769,327 @@ async fn trust_revoke_closes_the_runtime_before_forwarding_session_input() {
     assert_eq!(runtime.snapshot().phase, HaloWorkbenchPhase::Disconnected);
     assert_eq!(adapter.count(CommandKind::SendUserInput), 0);
     assert_eq!(adapter.count(CommandKind::Shutdown), 1);
+}
+
+#[tokio::test]
+async fn managed_task_requires_confirmation_and_records_existing_git_baseline_before_starting() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-managed-baseline",
+        "managed-baseline",
+    )
+    .await;
+
+    let unconfirmed = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "create-unconfirmed-managed-task".to_string(),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "managed-baseline-task".to_string(),
+                mode: HaloWorkbenchSessionMode::Managed,
+            },
+        })
+        .await
+        .expect_err("managed session requires explicit workspace confirmation");
+    assert_eq!(unconfirmed.code, "managed_workspace_confirmation_required");
+    assert_eq!(adapter.count(CommandKind::CreateSession), 0);
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-managed-baseline".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "managed-baseline".to_string(),
+                root_path: PathBuf::from("C:/work/managed-baseline"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let receipt = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "create-confirmed-managed-task".to_string(),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "managed-baseline-task".to_string(),
+                mode: HaloWorkbenchSessionMode::Managed,
+            },
+        })
+        .await
+        .expect("confirmed managed session is created");
+    let session_id = receipt.session_id.expect("managed session id");
+    let session = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("managed session is projected");
+    let baseline = session
+        .baseline
+        .expect("baseline is captured before Pi starts the task");
+    assert_eq!(baseline.head, "test-head");
+    assert_eq!(
+        baseline.canonical_root,
+        PathBuf::from("C:/work/managed-baseline")
+    );
+    assert_eq!(
+        baseline.existing_changed_files,
+        vec![
+            "already-tracked.rs".to_string(),
+            "untracked-note.txt".to_string(),
+        ]
+    );
+    assert_eq!(session.phase, HaloWorkbenchSessionPhase::Creating);
+    assert_eq!(adapter.count(CommandKind::CreateSession), 1);
+    assert!(adapter.commands().iter().any(|command| {
+        matches!(
+            command,
+            PiRpcCommand::CreateSession {
+                generation: command_generation,
+                task_id,
+                session_id: command_session_id,
+                mode: bitfun_runtime_ports::PiRpcSessionMode::Managed,
+            } if *command_generation == generation
+                && task_id == "managed-baseline-task"
+                && command_session_id == &session_id
+        )
+    }));
+}
+
+#[tokio::test]
+async fn managed_task_rejects_a_baseline_from_a_different_workspace_before_starting_pi() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime_with_baseline(adapter.clone(), Arc::new(MismatchedTaskBaseline));
+    let _generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-mismatched-managed-baseline",
+        "mismatched-managed-baseline",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-mismatched-managed-baseline".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "mismatched-managed-baseline".to_string(),
+                root_path: PathBuf::from("C:/work/mismatched-managed-baseline"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+
+    let error = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "create-mismatched-managed-baseline".to_string(),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "mismatched-managed-baseline-task".to_string(),
+                mode: HaloWorkbenchSessionMode::Managed,
+            },
+        })
+        .await
+        .expect_err("a baseline must belong to the confirmed workspace");
+
+    assert_eq!(error.code, "task_baseline_unavailable");
+    assert_eq!(adapter.count(CommandKind::CreateSession), 0);
+    assert!(runtime
+        .snapshot()
+        .sessions
+        .iter()
+        .all(|session| session.baseline.is_none()));
+}
+
+#[tokio::test]
+async fn managed_first_turn_projects_redacted_activity_and_fences_late_events() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-managed-first-turn-projection",
+        "managed-first-turn-projection",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-managed-first-turn-projection".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "managed-first-turn-projection".to_string(),
+                root_path: PathBuf::from("C:/work/managed-first-turn-projection"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let receipt = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "create-managed-first-turn-projection".to_string(),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "managed-first-turn-projection-task".to_string(),
+                mode: HaloWorkbenchSessionMode::Managed,
+            },
+        })
+        .await
+        .expect("managed session is created");
+    let session_id = receipt.session_id.expect("managed session id");
+    adapter.emit(PiRpcEvent::SessionCreated {
+        generation,
+        session_id: session_id.clone(),
+    });
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Idle).await;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "send-managed-first-turn-projection".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "Inspect the focused change".to_string(),
+            },
+        })
+        .await
+        .expect("first managed prompt is accepted");
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Running).await;
+
+    adapter.emit(PiRpcEvent::MessageUpdated {
+        generation,
+        session_id: session_id.clone(),
+        text: "Safe response Authorization: Basic runtime-basic-canary Cookie: runtime-cookie-canary password=runtime-password-canary token=runtime-message-canary sessionId=runtime-session-id-canary entryId: runtime-entry-id-canary toolCallId=\"runtime-tool-call-id-canary\"".to_string(),
+    });
+    for (status, is_error) in [
+        (HaloWorkbenchActivityStatus::Started, false),
+        (HaloWorkbenchActivityStatus::Updated, false),
+        (HaloWorkbenchActivityStatus::Completed, false),
+    ] {
+        let event = match status {
+            HaloWorkbenchActivityStatus::Started => PiRpcEvent::ToolExecutionStarted {
+                generation,
+                session_id: session_id.clone(),
+                redacted_tool_call_id: "raw-tool-call-id-canary".to_string(),
+                tool_name: "write Authorization: Basic runtime-tool-basic-canary Cookie: runtime-tool-cookie-canary password=runtime-tool-password-canary token=runtime-tool-canary".to_string(),
+            },
+            HaloWorkbenchActivityStatus::Updated => PiRpcEvent::ToolExecutionUpdated {
+                generation,
+                session_id: session_id.clone(),
+                redacted_tool_call_id: "raw-tool-call-id-canary".to_string(),
+                tool_name: "write Authorization: Basic runtime-tool-basic-canary Cookie: runtime-tool-cookie-canary password=runtime-tool-password-canary token=runtime-tool-canary".to_string(),
+            },
+            HaloWorkbenchActivityStatus::Completed => PiRpcEvent::ToolExecutionEnded {
+                generation,
+                session_id: session_id.clone(),
+                redacted_tool_call_id: "raw-tool-call-id-canary".to_string(),
+                tool_name: "write Authorization: Basic runtime-tool-basic-canary Cookie: runtime-tool-cookie-canary password=runtime-tool-password-canary token=runtime-tool-canary".to_string(),
+                is_error,
+            },
+            _ => unreachable!("the first-turn fixture only emits tool lifecycle states"),
+        };
+        adapter.emit(event);
+    }
+    adapter.emit(PiRpcEvent::AgentSettled {
+        generation,
+        session_id: session_id.clone(),
+    });
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::WaitingDeveloper,
+    )
+    .await;
+
+    let settled_snapshot = runtime.snapshot();
+    let settled_session = settled_snapshot
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("managed session remains in the public snapshot");
+    assert_eq!(settled_session.messages.len(), 2);
+    assert_eq!(
+        settled_session.messages[0].role,
+        HaloWorkbenchMessageRole::User
+    );
+    assert_eq!(
+        settled_session.messages[0].content,
+        "Inspect the focused change"
+    );
+    assert_eq!(
+        settled_session.messages[1].role,
+        HaloWorkbenchMessageRole::Assistant
+    );
+    assert_eq!(
+        settled_session.messages[1].content,
+        "Safe response Authorization: [redacted] Cookie: [redacted] password=[redacted] token=[redacted] sessionId=[redacted] entryId: [redacted] toolCallId=\"[redacted]\""
+    );
+    assert_eq!(settled_session.activities.len(), 1);
+    assert_eq!(
+        settled_session.activities[0].status,
+        HaloWorkbenchActivityStatus::Completed
+    );
+    assert_eq!(
+        settled_session.activities[0].label,
+        "write Authorization: [redacted] Cookie: [redacted] password=[redacted] token=[redacted]"
+    );
+    assert!(settled_session.activities[0]
+        .activity_id
+        .starts_with("activity-"));
+    assert!(!settled_session.activities[0].is_error);
+    let public = serde_json::to_string(&settled_snapshot).expect("snapshot serializes");
+    for canary in [
+        "runtime-message-canary",
+        "runtime-basic-canary",
+        "runtime-cookie-canary",
+        "runtime-password-canary",
+        "runtime-tool-canary",
+        "runtime-tool-basic-canary",
+        "runtime-tool-cookie-canary",
+        "runtime-tool-password-canary",
+        "runtime-session-id-canary",
+        "runtime-entry-id-canary",
+        "runtime-tool-call-id-canary",
+        "raw-tool-call-id-canary",
+    ] {
+        assert!(!public.contains(canary), "public snapshot leaked {canary}");
+    }
+
+    let settled_version = settled_snapshot.state_version;
+    adapter.emit(PiRpcEvent::MessageUpdated {
+        generation,
+        session_id: session_id.clone(),
+        text: "late-message-canary".to_string(),
+    });
+    adapter.emit(PiRpcEvent::ToolExecutionUpdated {
+        generation,
+        session_id: session_id.clone(),
+        redacted_tool_call_id: "raw-tool-call-id-canary".to_string(),
+        tool_name: "late-tool-canary".to_string(),
+    });
+    adapter.emit(PiRpcEvent::MessageUpdated {
+        generation,
+        session_id: "foreign-session".to_string(),
+        text: "foreign-message-canary".to_string(),
+    });
+    adapter.emit(PiRpcEvent::AgentSettled {
+        generation: generation.saturating_add(1),
+        session_id,
+    });
+    tokio::task::yield_now().await;
+
+    let after_late_events = runtime.snapshot();
+    assert_eq!(after_late_events.state_version, settled_version);
+    let after_late_session = after_late_events
+        .sessions
+        .iter()
+        .find(|session| session.task_id == "managed-first-turn-projection-task")
+        .expect("managed session remains isolated from late events");
+    assert_eq!(after_late_session.messages.len(), 2);
+    assert_eq!(after_late_session.activities.len(), 1);
+    let after_late_public =
+        serde_json::to_string(&after_late_events).expect("late-event snapshot serializes");
+    for canary in [
+        "late-message-canary",
+        "late-tool-canary",
+        "foreign-message-canary",
+    ] {
+        assert!(
+            !after_late_public.contains(canary),
+            "late or foreign event leaked {canary}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -1398,7 +1807,7 @@ async fn concurrent_operation_decisions_cross_the_seam_exactly_once() {
             request_id: "create-decision-race-session".to_string(),
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "decision-race-task".to_string(),
-                mode: HaloWorkbenchSessionMode::Managed,
+                mode: HaloWorkbenchSessionMode::Standard,
             },
         })
         .await
@@ -1462,7 +1871,7 @@ async fn operation_decisions_are_limited_to_one_time_allow_or_deny() {
             request_id: "create-decision-kind-session".to_string(),
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "decision-kind-task".to_string(),
-                mode: HaloWorkbenchSessionMode::Managed,
+                mode: HaloWorkbenchSessionMode::Standard,
             },
         })
         .await

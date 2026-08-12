@@ -10,6 +10,7 @@ import {
   workbenchRuntimeStore,
 } from '@/infrastructure/workbench-runtime';
 
+import WorkbenchManagedTaskComposer from './WorkbenchManagedTaskComposer';
 import './WorkbenchSessionScene.scss';
 
 interface WorkbenchSessionSceneProps {
@@ -41,8 +42,13 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
       <header className="bitfun-workbench-session-scene__header">
         <div className="bitfun-workbench-session-scene__heading">
           <span className="bitfun-workbench-session-scene__workspace">
-            {snapshot?.workspace?.displayName ?? t('nav.groups.sessions')}
+            {snapshot?.workspace?.displayName ?? t('nav.items.sessions')}
           </span>
+          {snapshot?.workspace?.rootPath ? (
+            <code className="bitfun-workbench-session-scene__root-path">
+              {snapshot.workspace.rootPath}
+            </code>
+          ) : null}
           <span className="bitfun-workbench-session-scene__phase">
             {t(runtimePhaseMessageKey)}
           </span>
@@ -53,6 +59,8 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
       </header>
 
       <div className="bitfun-workbench-session-scene__body" aria-live="polite">
+        <WorkbenchManagedTaskComposer />
+
         {isSyncing && !snapshot ? (
           <div className="bitfun-workbench-session-scene__state" role="status">
             <Loader2 size={16} aria-hidden="true" />
@@ -64,6 +72,13 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
           <div className="bitfun-workbench-session-scene__state is-error" role="alert">
             <AlertCircle size={16} aria-hidden="true" />
             <span>{t(selectWorkbenchRuntimeErrorMessageKey(runtimeState))}</span>
+          </div>
+        ) : null}
+
+        {snapshot?.error ? (
+          <div className="bitfun-workbench-session-scene__state is-error" role="alert">
+            <AlertCircle size={16} aria-hidden="true" />
+            <span>{t('nav.sessions.workbenchRuntime.error')}</span>
           </div>
         ) : null}
 
@@ -84,9 +99,63 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
             <span className="bitfun-workbench-session-scene__session-name">
               {t('nav.sessions.newSession')} {index + 1}
             </span>
+            <span className="bitfun-workbench-session-scene__session-mode">
+              {session.mode === 'managed'
+                ? t('nav.sessions.workbenchRuntime.sessionMode.managed')
+                : t('nav.sessions.workbenchRuntime.sessionMode.standard')}
+            </span>
             <span className="bitfun-workbench-session-scene__session-phase">
               {t(selectWorkbenchRuntimeSessionPhaseMessageKey(session.phase))}
             </span>
+            {session.baseline?.canonicalRoot ? (
+              <div className="bitfun-workbench-session-scene__baseline">
+                <span>{t('nav.sessions.workbenchRuntime.baseline.root')}</span>
+                <code>{session.baseline.canonicalRoot}</code>
+                <span>
+                  {t('nav.sessions.workbenchRuntime.baseline.changedFiles', {
+                    count: session.baseline.existingChangedFiles.length,
+                  })}
+                </span>
+              </div>
+            ) : null}
+            {(session.messages ?? []).length > 0 ? (
+              <div className="bitfun-workbench-session-scene__messages">
+                {(session.messages ?? []).map((message, messageIndex) => (
+                  <div
+                    key={`${session.sessionId}-message-${messageIndex}`}
+                    className={`bitfun-workbench-session-scene__message is-${message.role}`}
+                  >
+                    <span className="bitfun-workbench-session-scene__message-role">
+                      {t(message.role === 'user'
+                        ? 'nav.sessions.workbenchRuntime.messageRole.user'
+                        : 'nav.sessions.workbenchRuntime.messageRole.assistant')}
+                    </span>
+                    <p>{message.content}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {(session.activities ?? []).length > 0 ? (
+              <div className="bitfun-workbench-session-scene__activities">
+                {(session.activities ?? []).map(activity => (
+                  <div
+                    key={`${session.sessionId}-${activity.activityId}`}
+                    className={`bitfun-workbench-session-scene__activity${activity.isError ? ' is-error' : ''}`}
+                  >
+                    <span>{activity.label}</span>
+                    <span>
+                      {t(`nav.sessions.workbenchRuntime.activityStatus.${activity.status}`)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {session.error ? (
+              <div className="bitfun-workbench-session-scene__session-error" role="alert">
+                <AlertCircle size={14} aria-hidden="true" />
+                <span>{t('nav.sessions.workbenchRuntime.sessionError')}</span>
+              </div>
+            ) : null}
           </article>
         ))}
       </div>

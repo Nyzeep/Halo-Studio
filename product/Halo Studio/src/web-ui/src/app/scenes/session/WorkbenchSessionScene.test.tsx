@@ -17,6 +17,7 @@ const runtimeStore = vi.hoisted(() => {
     subscribe: () => () => undefined,
   };
 });
+const submitWorkbenchRuntimeIntent = vi.hoisted(() => vi.fn());
 
 vi.mock('@/infrastructure/i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -28,6 +29,7 @@ vi.mock('@/infrastructure/workbench-runtime', () => ({
     'nav.sessions.workbenchRuntime.sessionPhase.waitingDeveloper'
   ),
   selectWorkbenchRuntimeErrorMessageKey: () => 'nav.sessions.workbenchRuntime.error',
+  submitWorkbenchRuntimeIntent,
   workbenchRuntimeStore: runtimeStore,
 }));
 
@@ -36,6 +38,7 @@ describe('WorkbenchSessionScene', () => {
   let root: Root;
 
   beforeEach(() => {
+    submitWorkbenchRuntimeIntent.mockReset();
     runtimeStore.setState({
       syncStatus: 'failed',
       snapshot: {
@@ -66,5 +69,234 @@ describe('WorkbenchSessionScene', () => {
       .toContain('nav.sessions.workbenchRuntime.sessionPhase.waitingDeveloper');
     expect(container.textContent).toContain('nav.sessions.workbenchRuntime.error');
     expect(container.textContent).not.toContain('pi_protocol_error');
+  });
+
+  it('does not offer a standard session as a managed task reply target', async () => {
+    runtimeStore.setState({
+      syncStatus: 'ready',
+      snapshot: {
+        phase: 'ready',
+        adapter: { identity: 'pi-rpc-p0' },
+        workspace: { displayName: 'Halo Studio', gitRepository: true, trusted: true },
+        sessions: [{ sessionId: 'standard-session', mode: 'standard', phase: 'waitingDeveloper' }],
+      },
+      stableErrorCode: null,
+    });
+
+    await act(async () => {
+      root.render(<WorkbenchSessionScene isActive />);
+    });
+
+    expect(container.querySelector('[data-testid="workbench-managed-task-session"]')).toBeNull();
+    expect(container.querySelector('[data-testid="workbench-managed-task-reply"]')).toBeNull();
+  });
+
+  it('leaves a settled managed task waiting without exposing follow-up controls', async () => {
+    runtimeStore.setState({
+      syncStatus: 'ready',
+      snapshot: {
+        phase: 'ready',
+        adapter: { identity: 'pi-rpc-p0' },
+        workspace: { displayName: 'Halo Studio', gitRepository: true, trusted: true },
+        sessions: [{ sessionId: 'managed-session', mode: 'managed', phase: 'waitingDeveloper' }],
+      },
+      stableErrorCode: null,
+    });
+
+    await act(async () => {
+      root.render(<WorkbenchSessionScene isActive />);
+    });
+
+    expect(container.querySelector('[data-testid="workbench-managed-task-session"]')).toBeNull();
+    expect(container.querySelector('[data-testid="workbench-managed-task-reply"]')).toBeNull();
+    expect(container.querySelector('[data-testid="workbench-managed-task-send-reply"]')).toBeNull();
+  });
+
+  it('does not send a first prompt to a standard session returned by a malformed create receipt', async () => {
+    submitWorkbenchRuntimeIntent
+      .mockResolvedValue({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ sessionId: 'standard-session' });
+    runtimeStore.setState({
+      syncStatus: 'ready',
+      snapshot: {
+        phase: 'ready',
+        adapter: { identity: 'pi-rpc-p0' },
+        workspace: {
+          workspaceId: 'workspace-1',
+          displayName: 'Halo Studio',
+          rootPath: 'C:/work/halo',
+          gitRepository: true,
+          trusted: true,
+        },
+        sessions: [],
+      },
+      stableErrorCode: null,
+    });
+
+    await act(async () => {
+      root.render(<WorkbenchSessionScene isActive />);
+    });
+    const prompt = container.querySelector<HTMLTextAreaElement>(
+      '[data-testid="workbench-managed-task-prompt"]',
+    );
+    const trust = container.querySelector<HTMLInputElement>(
+      '[data-testid="workbench-managed-task-trust"]',
+    );
+    const form = container.querySelector('form');
+    expect(prompt).not.toBeNull();
+    expect(trust).not.toBeNull();
+    expect(form).not.toBeNull();
+
+    await act(async () => {
+      const setPrompt = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        'value',
+      )?.set;
+      setPrompt?.call(prompt, 'Run the managed task');
+      prompt!.dispatchEvent(new Event('input', { bubbles: true }));
+      trust!.click();
+    });
+    await act(async () => {
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    expect(submitWorkbenchRuntimeIntent).toHaveBeenCalledTimes(2);
+
+    runtimeStore.setState({
+      syncStatus: 'ready',
+      snapshot: {
+        phase: 'ready',
+        adapter: { identity: 'pi-rpc-p0' },
+        workspace: {
+          workspaceId: 'workspace-1',
+          displayName: 'Halo Studio',
+          rootPath: 'C:/work/halo',
+          gitRepository: true,
+          trusted: true,
+        },
+        sessions: [{ sessionId: 'standard-session', mode: 'standard', phase: 'idle' }],
+      },
+      stableErrorCode: null,
+    });
+    await act(async () => {
+      root.render(<WorkbenchSessionScene isActive />);
+      await Promise.resolve();
+    });
+
+    expect(submitWorkbenchRuntimeIntent).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('nav.sessions.workbenchRuntime.managedTask.actionFailed');
+  });
+
+  it('sends the first managed task prompt only after the created managed session becomes idle', async () => {
+    submitWorkbenchRuntimeIntent
+      .mockResolvedValue({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ sessionId: 'managed-session' });
+    runtimeStore.setState({
+      syncStatus: 'ready',
+      snapshot: {
+        phase: 'ready',
+        adapter: { identity: 'pi-rpc-p0' },
+        workspace: {
+          workspaceId: 'workspace-1',
+          displayName: 'Halo Studio',
+          rootPath: 'C:/work/halo',
+          gitRepository: true,
+          trusted: true,
+        },
+        sessions: [],
+      },
+      stableErrorCode: null,
+    });
+
+    await act(async () => {
+      root.render(<WorkbenchSessionScene isActive />);
+    });
+    const prompt = container.querySelector<HTMLTextAreaElement>(
+      '[data-testid="workbench-managed-task-prompt"]',
+    );
+    const trust = container.querySelector<HTMLInputElement>(
+      '[data-testid="workbench-managed-task-trust"]',
+    );
+    const form = container.querySelector('form');
+    expect(prompt).not.toBeNull();
+    expect(trust).not.toBeNull();
+    expect(form).not.toBeNull();
+
+    await act(async () => {
+      const setPrompt = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        'value',
+      )?.set;
+      setPrompt?.call(prompt, 'Run the managed task');
+      prompt!.dispatchEvent(new Event('input', { bubbles: true }));
+      trust!.click();
+    });
+    await act(async () => {
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    expect(submitWorkbenchRuntimeIntent).toHaveBeenCalledTimes(2);
+    expect(submitWorkbenchRuntimeIntent).toHaveBeenNthCalledWith(1, {
+      type: 'confirmManagedWorkspace',
+      workspaceId: 'workspace-1',
+      rootPath: 'C:/work/halo',
+    });
+    expect(submitWorkbenchRuntimeIntent).toHaveBeenNthCalledWith(2, {
+      type: 'createSession',
+      taskId: expect.stringMatching(/^managed-task-/),
+      mode: 'managed',
+    });
+
+    runtimeStore.setState({
+      syncStatus: 'ready',
+      snapshot: {
+        phase: 'ready',
+        adapter: { identity: 'pi-rpc-p0' },
+        workspace: {
+          workspaceId: 'workspace-1',
+          displayName: 'Halo Studio',
+          rootPath: 'C:/work/halo',
+          gitRepository: true,
+          trusted: true,
+        },
+        sessions: [{ sessionId: 'managed-session', mode: 'managed', phase: 'creating' }],
+      },
+      stableErrorCode: null,
+    });
+    await act(async () => {
+      root.render(<WorkbenchSessionScene isActive />);
+      await Promise.resolve();
+    });
+    expect(submitWorkbenchRuntimeIntent).toHaveBeenCalledTimes(2);
+
+    runtimeStore.setState({
+      syncStatus: 'ready',
+      snapshot: {
+        phase: 'ready',
+        adapter: { identity: 'pi-rpc-p0' },
+        workspace: {
+          workspaceId: 'workspace-1',
+          displayName: 'Halo Studio',
+          rootPath: 'C:/work/halo',
+          gitRepository: true,
+          trusted: true,
+        },
+        sessions: [{ sessionId: 'managed-session', mode: 'managed', phase: 'idle' }],
+      },
+      stableErrorCode: null,
+    });
+    await act(async () => {
+      root.render(<WorkbenchSessionScene isActive />);
+      await Promise.resolve();
+    });
+
+    expect(submitWorkbenchRuntimeIntent).toHaveBeenCalledTimes(3);
+    expect(submitWorkbenchRuntimeIntent).toHaveBeenLastCalledWith({
+      type: 'sendUserInput',
+      sessionId: 'managed-session',
+      content: 'Run the managed task',
+    });
   });
 });
