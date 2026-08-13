@@ -1,4 +1,4 @@
-//! Thin runtime ports for boundaries that currently cross service and agentic
+﻿//! Thin runtime ports for boundaries that currently cross service and agentic
 //! concrete implementations.
 //!
 //! This crate intentionally contains only DTOs and traits. It must not depend
@@ -45,7 +45,10 @@ pub use halo_workbench::{
     PiRuntimeConfigurationManagementPort, PiRuntimeConfigurationPort, PiRuntimeConfigurationView,
     PiStartupOptions, PiThinkingLevel, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
     WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort,
-    WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest, PI_RPC_ADAPTER_IDENTITY,
+    WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest, WorkbenchDeliveryAttribution,
+    WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort,
+    WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint, WorkbenchDeliveryFingerprintRequest,
+    PI_RPC_ADAPTER_IDENTITY,
 };
 pub use local_workspace_snapshot::{
     LocalWorkspaceSnapshotPort, LocalWorkspaceSnapshotSessionRequest, LocalWorkspaceSnapshotStats,

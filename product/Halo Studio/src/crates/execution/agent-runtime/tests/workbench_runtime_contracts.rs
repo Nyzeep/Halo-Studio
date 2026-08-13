@@ -6,21 +6,22 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bitfun_agent_runtime::halo_workbench::{
-    HaloWorkbenchActivityStatus, HaloWorkbenchCapability, HaloWorkbenchIntent,
-    HaloWorkbenchIntentRequest, HaloWorkbenchMessageRole, HaloWorkbenchOperationDecision,
-    HaloWorkbenchOperationRiskLevel, HaloWorkbenchPendingOperationPhase, HaloWorkbenchPhase,
-    HaloWorkbenchRuntime,
+    HaloWorkbenchActivityStatus, HaloWorkbenchCapability, HaloWorkbenchDeliveryDecision,
+    HaloWorkbenchIntent, HaloWorkbenchIntentRequest,
+    HaloWorkbenchMessageRole, HaloWorkbenchOperationDecision, HaloWorkbenchOperationRiskLevel,
+    HaloWorkbenchPendingOperationPhase, HaloWorkbenchPhase, HaloWorkbenchRuntime,
     HaloWorkbenchSessionMode, HaloWorkbenchSessionPhase, HaloWorkbenchWorkspaceInput,
     HALO_WORKBENCH_SCHEMA_VERSION,
 };
 use bitfun_runtime_ports::{
-    ClockPort, PiProviderReadiness, PiProviderReadinessPort, PiRpcAvailabilitySummary,
-    PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationKind, PiRpcOperationRiskLevel,
-    PiRpcOperationSummary, PiRpcPort, PiRpcReply,
-    PiRpcVersion, PiRpcVersionEvidenceSource, PortError, PortErrorKind, PortResult,
-    RuntimeServiceCapability, RuntimeServicePort, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
-    WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
-    PI_RPC_ADAPTER_IDENTITY,
+    ClockPort, PiProviderReadiness, PiProviderReadinessPort, PiRpcAvailabilitySummary, PiRpcCommand,
+    PiRpcEvent, PiRpcFailureKind, PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcOperationSummary,
+    PiRpcPort, PiRpcReply, PiRpcVersion, PiRpcVersionEvidenceSource, PortError, PortErrorKind,
+    PortResult, RuntimeServiceCapability, RuntimeServicePort, WorkbenchDeliveryAttribution,
+    WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort,
+    WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint, WorkbenchDeliveryFingerprintRequest,
+    WorkbenchTaskBaseline, WorkbenchTaskBaselinePort, WorkbenchWorkspaceFacts,
+    WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, PI_RPC_ADAPTER_IDENTITY,
 };
 use tokio::sync::{broadcast, Notify, Semaphore};
 
@@ -298,6 +299,57 @@ impl WorkbenchTaskBaselinePort for MismatchedTaskBaseline {
     }
 }
 
+struct FixedDeliveryEvidence {
+    fingerprint: WorkbenchDeliveryFingerprint,
+    evidence: WorkbenchDeliveryEvidence,
+}
+
+impl FixedDeliveryEvidence {
+    fn new(
+        diff_preview: &str,
+        changed_files: Vec<&str>,
+        attribution: Vec<(String, WorkbenchDeliveryAttributionKind)>,
+        settled_changed_files: Vec<&str>,
+    ) -> Self {
+        Self {
+            fingerprint: WorkbenchDeliveryFingerprint {
+                head: "test-head".to_string(),
+                changed_files: settled_changed_files.into_iter().map(str::to_string).collect(),
+                working_tree_fingerprint: "c".repeat(64),
+                captured_at_ms: 2_000,
+            },
+            evidence: WorkbenchDeliveryEvidence {
+                captured_at_ms: 2_000,
+                head: "test-head".to_string(),
+                working_tree_fingerprint: "d".repeat(64),
+                changed_files: changed_files.into_iter().map(str::to_string).collect(),
+                diff_preview: diff_preview.to_string(),
+                attribution: attribution
+                    .into_iter()
+                    .map(|(path, kind)| WorkbenchDeliveryAttribution { path, kind })
+                    .collect(),
+            },
+        }
+    }
+}
+
+#[async_trait]
+impl WorkbenchDeliveryEvidencePort for FixedDeliveryEvidence {
+    async fn capture(
+        &self,
+        _request: WorkbenchDeliveryEvidenceRequest,
+    ) -> PortResult<WorkbenchDeliveryEvidence> {
+        Ok(self.evidence.clone())
+    }
+
+    async fn capture_fingerprint(
+        &self,
+        _request: WorkbenchDeliveryFingerprintRequest,
+    ) -> PortResult<WorkbenchDeliveryFingerprint> {
+        Ok(self.fingerprint.clone())
+    }
+}
+
 impl RevocableWorkspaceFacts {
     fn new() -> Self {
         Self {
@@ -394,6 +446,20 @@ fn build_runtime_with_baseline(
         Arc::new(TrustedWorkspaceFacts),
         Arc::new(AvailableProviderReadiness),
         task_baseline,
+        Arc::new(FixedClock),
+    )
+}
+
+fn build_runtime_with_delivery_evidence(
+    adapter: Arc<DeterministicPiRpc>,
+    delivery_evidence: Arc<dyn WorkbenchDeliveryEvidencePort>,
+) -> HaloWorkbenchRuntime {
+    HaloWorkbenchRuntime::new_with_delivery_evidence(
+        adapter,
+        Arc::new(TrustedWorkspaceFacts),
+        Arc::new(AvailableProviderReadiness),
+        Arc::new(FixedTaskBaseline),
+        delivery_evidence,
         Arc::new(FixedClock),
     )
 }
@@ -2086,3 +2152,318 @@ async fn adapter_failures_and_debug_output_strip_sensitive_fields() {
         );
     }
 }
+
+
+async fn settle_managed_session(
+    runtime: &HaloWorkbenchRuntime,
+    adapter: &Arc<DeterministicPiRpc>,
+    workspace_id: &str,
+    task_id: &str,
+    request_prefix: &str,
+) -> (u64, String) {
+    let generation = open_ready(runtime, adapter, &format!("open-{request_prefix}"), workspace_id).await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: format!("confirm-{request_prefix}"),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: workspace_id.to_string(),
+                root_path: PathBuf::from(format!("C:/work/{workspace_id}")),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let receipt = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: format!("create-{request_prefix}"),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: task_id.to_string(),
+                mode: HaloWorkbenchSessionMode::Managed,
+            },
+        })
+        .await
+        .expect("managed session is created");
+    let session_id = receipt.session_id.expect("managed session id");
+    adapter.emit(PiRpcEvent::SessionCreated {
+        generation,
+        session_id: session_id.clone(),
+    });
+    wait_for_session_phase(runtime, &session_id, HaloWorkbenchSessionPhase::Idle).await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: format!("send-{request_prefix}"),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "Inspect the focused change".to_string(),
+            },
+        })
+        .await
+        .expect("managed prompt is accepted");
+    wait_for_session_phase(runtime, &session_id, HaloWorkbenchSessionPhase::Running).await;
+    adapter.emit(PiRpcEvent::AgentSettled {
+        generation,
+        session_id: session_id.clone(),
+    });
+    wait_for_session_phase(runtime, &session_id, HaloWorkbenchSessionPhase::WaitingDeveloper).await;
+    (generation, session_id)
+}
+
+fn delivery_evidence_for(session_id: &str, runtime: &HaloWorkbenchRuntime) -> Option<bitfun_agent_runtime::halo_workbench::HaloWorkbenchDeliveryReviewSnapshot> {
+    runtime
+        .snapshot()
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .and_then(|session| session.delivery_review.clone())
+}
+
+#[tokio::test]
+async fn finish_and_review_freezes_evidence_and_releases_adapter_session() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime_with_delivery_evidence(
+        adapter.clone(),
+        Arc::new(FixedDeliveryEvidence::new(
+            "diff --git a/tracked.rs b/tracked.rs\n+new content",
+            vec!["tracked.rs", "new-file.rs"],
+            vec![
+                ("already-tracked.rs".to_string(), WorkbenchDeliveryAttributionKind::ExistingUserModification),
+                ("tracked.rs".to_string(), WorkbenchDeliveryAttributionKind::TaskModification),
+            ],
+            vec!["tracked.rs"],
+        )),
+    );
+    let (generation, session_id) = settle_managed_session(
+        &runtime,
+        &adapter,
+        "finish-review-freeze",
+        "finish-review-freeze-task",
+        "finish-review-freeze",
+    )
+    .await;
+    let _ = generation;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "finish-review-freeze-request".to_string(),
+            intent: HaloWorkbenchIntent::FinishAndReview {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("finish and review is accepted");
+
+    let snapshot = runtime.snapshot();
+    let session = snapshot
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("managed session remains");
+    assert_eq!(session.phase, HaloWorkbenchSessionPhase::Reviewing);
+    let review = session.delivery_review.as_ref().expect("delivery review is frozen");
+    assert_eq!(review.decision, None);
+    assert_eq!(review.evidence.changed_files, vec!["tracked.rs", "new-file.rs"]);
+    assert_eq!(review.evidence.attribution.len(), 2);
+    assert_eq!(adapter.count(CommandKind::EndSession), 1);
+}
+
+#[tokio::test]
+async fn delivery_review_redacts_sensitive_diff_preview() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime_with_delivery_evidence(
+        adapter.clone(),
+        Arc::new(FixedDeliveryEvidence::new(
+            "Authorization: Basic diff-basic-canary Cookie: diff-cookie-canary password=diff-password-canary token=diff-token-canary sessionId=diff-session-id-canary",
+            vec!["tracked.rs"],
+            vec![("tracked.rs".to_string(), WorkbenchDeliveryAttributionKind::TaskModification)],
+            vec!["tracked.rs"],
+        )),
+    );
+    let (_generation, session_id) = settle_managed_session(
+        &runtime,
+        &adapter,
+        "finish-review-redact",
+        "finish-review-redact-task",
+        "finish-review-redact",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "finish-review-redact-request".to_string(),
+            intent: HaloWorkbenchIntent::FinishAndReview {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("finish and review is accepted");
+
+    let review = delivery_evidence_for(&session_id, &runtime).expect("review frozen");
+    for canary in [
+        "diff-basic-canary",
+        "diff-cookie-canary",
+        "diff-password-canary",
+        "diff-token-canary",
+        "diff-session-id-canary",
+    ] {
+        assert!(
+            !review.evidence.diff_preview.contains(canary),
+            "diff preview leaked canary: {canary}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn accept_delivery_records_conclusion_without_new_adapter_commands() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime_with_delivery_evidence(
+        adapter.clone(),
+        Arc::new(FixedDeliveryEvidence::new(
+            "diff",
+            vec!["tracked.rs"],
+            vec![("tracked.rs".to_string(), WorkbenchDeliveryAttributionKind::TaskModification)],
+            vec!["tracked.rs"],
+        )),
+    );
+    let (_generation, session_id) = settle_managed_session(
+        &runtime,
+        &adapter,
+        "accept-delivery",
+        "accept-delivery-task",
+        "accept-delivery",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "accept-delivery-finish".to_string(),
+            intent: HaloWorkbenchIntent::FinishAndReview {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("finish and review is accepted");
+    let commands_after_finish = adapter.commands().len();
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "accept-delivery-decision".to_string(),
+            intent: HaloWorkbenchIntent::AcceptDelivery {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("accept delivery is recorded");
+
+    let snapshot = runtime.snapshot();
+    let session = snapshot
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("managed session remains");
+    assert_eq!(session.phase, HaloWorkbenchSessionPhase::Ended);
+    let review = session.delivery_review.as_ref().expect("delivery review remains frozen");
+    assert_eq!(review.decision, Some(HaloWorkbenchDeliveryDecision::Accepted));
+    assert_eq!(
+        adapter.commands().len(),
+        commands_after_finish,
+        "accepting a delivery must not issue any adapter command"
+    );
+}
+
+#[tokio::test]
+async fn reject_delivery_records_conclusion_and_ends_session() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime_with_delivery_evidence(
+        adapter.clone(),
+        Arc::new(FixedDeliveryEvidence::new(
+            "diff",
+            vec!["tracked.rs"],
+            vec![("tracked.rs".to_string(), WorkbenchDeliveryAttributionKind::TaskModification)],
+            vec!["tracked.rs"],
+        )),
+    );
+    let (_generation, session_id) = settle_managed_session(
+        &runtime,
+        &adapter,
+        "reject-delivery",
+        "reject-delivery-task",
+        "reject-delivery",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "reject-delivery-finish".to_string(),
+            intent: HaloWorkbenchIntent::FinishAndReview {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("finish and review is accepted");
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "reject-delivery-decision".to_string(),
+            intent: HaloWorkbenchIntent::RejectDelivery {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("reject delivery is recorded");
+
+    let session = runtime
+        .snapshot()
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("managed session remains")
+        .clone();
+    assert_eq!(session.phase, HaloWorkbenchSessionPhase::Ended);
+    assert_eq!(
+        session.delivery_review.as_ref().unwrap().decision,
+        Some(HaloWorkbenchDeliveryDecision::Rejected)
+    );
+}
+
+#[tokio::test]
+async fn finish_and_review_is_rejected_outside_waiting_developer() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime_with_delivery_evidence(
+        adapter.clone(),
+        Arc::new(FixedDeliveryEvidence::new(
+            "diff",
+            vec!["tracked.rs"],
+            vec![("tracked.rs".to_string(), WorkbenchDeliveryAttributionKind::TaskModification)],
+            vec!["tracked.rs"],
+        )),
+    );
+    let (_generation, session_id) = settle_managed_session(
+        &runtime,
+        &adapter,
+        "finish-gating",
+        "finish-gating-task",
+        "finish-gating",
+    )
+    .await;
+    // Move the session into Running via a follow-up, then finish must fail.
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "finish-gating-follow-up".to_string(),
+            intent: HaloWorkbenchIntent::FollowUp {
+                session_id: session_id.clone(),
+                content: "Keep going".to_string(),
+            },
+        })
+        .await
+        .expect("follow-up is accepted");
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Running).await;
+
+    let error = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "finish-gating-request".to_string(),
+            intent: HaloWorkbenchIntent::FinishAndReview {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect_err("finish must be rejected while running");
+    assert_eq!(error.code, "delivery_review_not_ready");
+    assert_eq!(adapter.count(CommandKind::EndSession), 0);
+}
+
