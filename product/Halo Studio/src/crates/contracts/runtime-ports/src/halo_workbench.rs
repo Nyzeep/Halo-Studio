@@ -327,6 +327,23 @@ impl fmt::Debug for PiRpcOperationDecision {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PiRpcOperationRiskLevel {
+    Standard,
+    HighRisk,
+}
+
+/// Adapter-owned, redacted one-time permission summary. Raw tool arguments and
+/// Pi identifiers never cross this port.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PiRpcOperationSummary {
+    pub tool_name: String,
+    pub arguments: String,
+    pub risk_level: PiRpcOperationRiskLevel,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PiRpcFailureKind {
     NotInstalled,
@@ -770,6 +787,7 @@ pub enum PiRpcEvent {
         session_id: String,
         operation_id: String,
         kind: PiRpcOperationKind,
+        summary: PiRpcOperationSummary,
         redacted_tool_call_id: Option<String>,
     },
     OperationResolved {

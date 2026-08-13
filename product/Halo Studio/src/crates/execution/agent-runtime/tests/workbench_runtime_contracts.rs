@@ -8,13 +8,15 @@ use async_trait::async_trait;
 use bitfun_agent_runtime::halo_workbench::{
     HaloWorkbenchActivityStatus, HaloWorkbenchCapability, HaloWorkbenchIntent,
     HaloWorkbenchIntentRequest, HaloWorkbenchMessageRole, HaloWorkbenchOperationDecision,
-    HaloWorkbenchPendingOperationPhase, HaloWorkbenchPhase, HaloWorkbenchRuntime,
+    HaloWorkbenchOperationRiskLevel, HaloWorkbenchPendingOperationPhase, HaloWorkbenchPhase,
+    HaloWorkbenchRuntime,
     HaloWorkbenchSessionMode, HaloWorkbenchSessionPhase, HaloWorkbenchWorkspaceInput,
     HALO_WORKBENCH_SCHEMA_VERSION,
 };
 use bitfun_runtime_ports::{
     ClockPort, PiProviderReadiness, PiProviderReadinessPort, PiRpcAvailabilitySummary,
-    PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationKind, PiRpcPort, PiRpcReply,
+    PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationKind, PiRpcOperationRiskLevel,
+    PiRpcOperationSummary, PiRpcPort, PiRpcReply,
     PiRpcVersion, PiRpcVersionEvidenceSource, PortError, PortErrorKind, PortResult,
     RuntimeServiceCapability, RuntimeServicePort, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
     WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
@@ -1557,6 +1559,11 @@ async fn close_fences_an_in_flight_operation_decision() {
         session_id,
         operation_id: "resolve-close-race".to_string(),
         kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "write".to_string(),
+            arguments: "{}".to_string(),
+            risk_level: PiRpcOperationRiskLevel::Standard,
+        },
         redacted_tool_call_id: None,
     });
     wait_for_pending_operation(&runtime, "resolve-close-race").await;
@@ -1626,6 +1633,11 @@ async fn operation_decision_remains_pending_until_the_adapter_confirms_it() {
         session_id: session_id.clone(),
         operation_id: "operation-local".to_string(),
         kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "write".to_string(),
+            arguments: "{}".to_string(),
+            risk_level: PiRpcOperationRiskLevel::Standard,
+        },
         redacted_tool_call_id: None,
     });
     tokio::task::yield_now().await;
@@ -1669,6 +1681,11 @@ async fn terminal_sessions_do_not_regress_accept_commands_or_keep_operations() {
         session_id: ended_session.clone(),
         operation_id: "operation-before-end".to_string(),
         kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "write".to_string(),
+            arguments: "{}".to_string(),
+            risk_level: PiRpcOperationRiskLevel::Standard,
+        },
         redacted_tool_call_id: None,
     });
     wait_for_pending_operation(&runtime, "operation-before-end").await;
@@ -1689,6 +1706,11 @@ async fn terminal_sessions_do_not_regress_accept_commands_or_keep_operations() {
         session_id: ended_session.clone(),
         operation_id: "operation-after-end".to_string(),
         kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "write".to_string(),
+            arguments: "{}".to_string(),
+            risk_level: PiRpcOperationRiskLevel::Standard,
+        },
         redacted_tool_call_id: None,
     });
     tokio::task::yield_now().await;
@@ -1773,6 +1795,11 @@ async fn operation_resolution_must_match_the_owning_session() {
         session_id: owner_session.clone(),
         operation_id: "session-bound-operation".to_string(),
         kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "write".to_string(),
+            arguments: "{}".to_string(),
+            risk_level: PiRpcOperationRiskLevel::Standard,
+        },
         redacted_tool_call_id: None,
     });
     wait_for_pending_operation(&runtime, "session-bound-operation").await;
@@ -1822,6 +1849,11 @@ async fn concurrent_operation_decisions_cross_the_seam_exactly_once() {
         session_id,
         operation_id: "operation-race".to_string(),
         kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "write".to_string(),
+            arguments: "{}".to_string(),
+            risk_level: PiRpcOperationRiskLevel::Standard,
+        },
         redacted_tool_call_id: None,
     });
     tokio::task::yield_now().await;
@@ -1886,6 +1918,11 @@ async fn operation_decisions_are_limited_to_one_time_allow_or_deny() {
         session_id: session_id.clone(),
         operation_id: "allow-operation".to_string(),
         kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "write".to_string(),
+            arguments: "{}".to_string(),
+            risk_level: PiRpcOperationRiskLevel::Standard,
+        },
         redacted_tool_call_id: None,
     });
     adapter.emit(PiRpcEvent::OperationRequested {
@@ -1893,6 +1930,11 @@ async fn operation_decisions_are_limited_to_one_time_allow_or_deny() {
         session_id,
         operation_id: "deny-operation".to_string(),
         kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "write".to_string(),
+            arguments: "{}".to_string(),
+            risk_level: PiRpcOperationRiskLevel::Standard,
+        },
         redacted_tool_call_id: None,
     });
     tokio::task::yield_now().await;
@@ -1924,6 +1966,51 @@ async fn operation_decisions_are_limited_to_one_time_allow_or_deny() {
         .pending_operations
         .iter()
         .all(|operation| operation.phase == HaloWorkbenchPendingOperationPhase::DecisionSubmitted));
+}
+
+#[tokio::test]
+async fn pending_operation_projects_redacted_summary_and_risk_level() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(&runtime, &adapter, "open-summary-risk", "summary-risk").await;
+    let receipt = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "create-summary-risk-session".to_string(),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "summary-risk-task".to_string(),
+                mode: HaloWorkbenchSessionMode::Standard,
+            },
+        })
+        .await
+        .expect("session create accepted");
+    let session_id = receipt.session_id.expect("local session id");
+    adapter.emit(PiRpcEvent::SessionCreated {
+        generation,
+        session_id: session_id.clone(),
+    });
+    adapter.emit(PiRpcEvent::OperationRequested {
+        generation,
+        session_id: session_id.clone(),
+        operation_id: "high-risk-operation".to_string(),
+        kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "browser".to_string(),
+            arguments: r#"{"action":"[redacted]"}"#.to_string(),
+            risk_level: PiRpcOperationRiskLevel::HighRisk,
+        },
+        redacted_tool_call_id: None,
+    });
+    wait_for_pending_operation(&runtime, "high-risk-operation").await;
+
+    let pending = runtime.snapshot().pending_operations;
+    let operation = pending
+        .iter()
+        .find(|operation| operation.operation_id == "high-risk-operation")
+        .expect("pending high-risk operation");
+    assert_eq!(operation.tool_name, "browser");
+    assert_eq!(operation.risk_level, HaloWorkbenchOperationRiskLevel::HighRisk);
+    assert!(operation.arguments.contains("[redacted]"));
+    assert!(!operation.arguments.contains("https://example.test/submit"));
 }
 
 #[tokio::test]

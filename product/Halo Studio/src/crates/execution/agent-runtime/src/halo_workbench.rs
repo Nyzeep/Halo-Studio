@@ -11,7 +11,8 @@ use std::sync::{Arc, Mutex, Weak};
 
 use bitfun_runtime_ports::{
     ClockPort, PiProviderReadinessPort, PiRpcAvailabilitySummary, PiRpcCapability, PiRpcCommand,
-    PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind, PiRpcPort,
+    PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind,
+    PiRpcOperationRiskLevel, PiRpcPort,
     PiRpcReply, PiRpcSessionMode, PiRpcVersionEvidenceSource, PiRpcVersionSummary, PiRpcWorkspace,
     PortErrorKind, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort, WorkbenchTaskBaselineRequest,
     WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest,
@@ -329,6 +330,22 @@ pub enum HaloWorkbenchPendingOperationPhase {
     DecisionSubmitted,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HaloWorkbenchOperationRiskLevel {
+    Standard,
+    HighRisk,
+}
+
+impl From<PiRpcOperationRiskLevel> for HaloWorkbenchOperationRiskLevel {
+    fn from(level: PiRpcOperationRiskLevel) -> Self {
+        match level {
+            PiRpcOperationRiskLevel::Standard => Self::Standard,
+            PiRpcOperationRiskLevel::HighRisk => Self::HighRisk,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HaloWorkbenchPendingOperationSnapshot {
@@ -337,6 +354,9 @@ pub struct HaloWorkbenchPendingOperationSnapshot {
     pub session_id: String,
     pub kind: HaloWorkbenchOperationKind,
     pub phase: HaloWorkbenchPendingOperationPhase,
+    pub tool_name: String,
+    pub arguments: String,
+    pub risk_level: HaloWorkbenchOperationRiskLevel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
@@ -1000,6 +1020,7 @@ impl HaloWorkbenchRuntimeInner {
                 session_id,
                 operation_id,
                 kind,
+                summary,
                 ..
             } => {
                 let event_session_id = session_id.clone();
@@ -1032,6 +1053,9 @@ impl HaloWorkbenchRuntimeInner {
                                 session_id,
                                 kind: kind.into(),
                                 phase: HaloWorkbenchPendingOperationPhase::AwaitingDecision,
+                                tool_name: summary.tool_name,
+                                arguments: summary.arguments,
+                                risk_level: summary.risk_level.into(),
                             },
                         );
                         true

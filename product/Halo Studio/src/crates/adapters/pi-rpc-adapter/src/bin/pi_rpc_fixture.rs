@@ -401,7 +401,12 @@ fn main() {
                         }),
                     );
                 }
-                "extension" | "extension_duplicate" | "extension_timeout" | "extension_error" => {
+                "extension"
+                | "extension_duplicate"
+                | "extension_timeout"
+                | "extension_error"
+                | "extension_high_risk"
+                | "extension_sensitive" => {
                     respond(
                         &mut stdout,
                         request.get("id").and_then(Value::as_str),
@@ -412,6 +417,10 @@ fn main() {
                     send_event(&mut stdout, json!({ "type": "agent_start" }));
                     if mode == "extension_error" {
                         send_event(&mut stdout, json!({ "type": "extension_error" }));
+                    } else if mode == "extension_high_risk" {
+                        send_high_risk_permission_request(&mut stdout);
+                    } else if mode == "extension_sensitive" {
+                        send_sensitive_permission_request(&mut stdout);
                     } else {
                         send_permission_request(&mut stdout);
                     }
@@ -452,7 +461,11 @@ fn main() {
             "extension_ui_response" => {
                 if mode == "extension_duplicate" {
                     send_permission_request(&mut stdout);
-                } else if mode == "extension" || mode == "extension_timeout" {
+                } else if mode == "extension"
+                    || mode == "extension_timeout"
+                    || mode == "extension_high_risk"
+                    || mode == "extension_sensitive"
+                {
                     send_event(&mut stdout, json!({ "type": "agent_settled" }));
                 }
             }
@@ -590,6 +603,17 @@ fn send_happy_events(stdout: &mut BufWriter<io::StdoutLock<'_>>) {
 }
 
 fn send_permission_request(stdout: &mut BufWriter<io::StdoutLock<'_>>) {
+    send_event(
+        stdout,
+        json!({
+            "type": "tool_execution_start",
+            "toolCallId": "raw-secret-permission-id",
+            "toolName": "write",
+            "args": {
+                "path": "/workspace/notes.txt"
+            }
+        }),
+    );
     let message = serde_json::to_string(&json!({
         "toolCallId": "raw-secret-permission-id",
         "toolName": "write"
@@ -600,6 +624,69 @@ fn send_permission_request(stdout: &mut BufWriter<io::StdoutLock<'_>>) {
         json!({
             "type": "extension_ui_request",
             "id": "ui-request-1",
+            "method": "confirm",
+            "message": message
+        }),
+    );
+}
+
+fn send_sensitive_permission_request(stdout: &mut BufWriter<io::StdoutLock<'_>>) {
+    send_event(
+        stdout,
+        json!({
+            "type": "tool_execution_start",
+            "toolCallId": "raw-secret-sensitive-permission-id",
+            "toolName": "bash",
+            "args": {
+                "command": "curl -H 'Authorization: Bearer fake-secret' https://example.test",
+                "path": "/home/nyzee/.ssh/id_rsa",
+                "sessionId": "raw-pi-session-id",
+                "entryId": "raw-pi-entry-id",
+                "toolCallId": "raw-pi-tool-call-id",
+                "answer": "the-answer-is-42"
+            }
+        }),
+    );
+    let message = serde_json::to_string(&json!({
+        "toolCallId": "raw-secret-sensitive-permission-id",
+        "toolName": "bash"
+    }))
+    .expect("fixture permission notice serializes");
+    send_event(
+        stdout,
+        json!({
+            "type": "extension_ui_request",
+            "id": "ui-request-sensitive",
+            "method": "confirm",
+            "message": message
+        }),
+    );
+}
+
+fn send_high_risk_permission_request(stdout: &mut BufWriter<io::StdoutLock<'_>>) {
+    send_event(
+        stdout,
+        json!({
+            "type": "tool_execution_start",
+            "toolCallId": "raw-secret-high-risk-permission-id",
+            "toolName": "browser",
+            "args": {
+                "action": "click",
+                "target": "https://example.test/submit",
+                "commit": true
+            }
+        }),
+    );
+    let message = serde_json::to_string(&json!({
+        "toolCallId": "raw-secret-high-risk-permission-id",
+        "toolName": "browser"
+    }))
+    .expect("fixture permission notice serializes");
+    send_event(
+        stdout,
+        json!({
+            "type": "extension_ui_request",
+            "id": "ui-request-high-risk",
             "method": "confirm",
             "message": message
         }),
