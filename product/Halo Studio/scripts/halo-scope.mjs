@@ -212,7 +212,7 @@ function checkSourceAssembly(rootDir, scope) {
   requireContains(mainNavSource, 'data-testid="nav-git-btn"', 'MainNav.tsx');
   requireContains(mainNavSource, 'WorkspaceListSection variant="projects"', 'MainNav.tsx');
   requireContains(mainNavSource, 'workbenchRuntimeStore', 'MainNav.tsx');
-  requireContains(mainNavSource, "intent: { type: 'createSession', mode: 'standard' }", 'MainNav.tsx');
+  requireContains(mainNavSource, "intent: { type: 'createSession', taskId: requestId, mode: 'standard' }", 'MainNav.tsx');
   requireNoMatch(mainNavSource, /FlowChatManager|flowChatManager|resolveAgentTypeForSessionCreation/, 'MainNav.tsx');
   requireNoMatch(mainNavSource, /MiniAppEntry|Cowork|SSHRemote|RemoteWorkspaceDialog|openScene\('assistant'\)|openScene\('browser'\)|openScene\('insights'\)/, 'MainNav.tsx');
 
