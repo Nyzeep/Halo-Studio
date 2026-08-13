@@ -19,10 +19,9 @@ export default function haloPermissionGate(pi: ExtensionAPI) {
   });
 }
 `;
-const ADAPTER_START_FLOW = `async fn start() {
-let mut extension = match self.install_first_party_extension() { _ => todo!() };
-let extension_path = extension.path.clone();
-state.extension_path = Some(extension_path);
+const ADAPTER_CREATE_SESSION_FLOW = `async fn create_session() {
+let extension = self.install_first_party_extension()?;
+Some(extension);
 }
 `;
 const ADAPTER_SOURCE = `pub const HALO_PI_EXTENSION_VERSION: &str = "1.0.0";
@@ -33,11 +32,14 @@ fn install_embedded_extension() {
   let _ = stable_digest(HALO_PERMISSION_EXTENSION_SOURCE);
   let _ = HALO_PI_EXTENSION_ID;
 }
-fn spawn_session_process(extension_path: &Path) { pi_rpc_args(extension_path, mode); }
-fn pi_rpc_args(extension_path: &Path) {
+fn spawn_session_process(extension: Option<InstalledExtension>) {
+  let extension_path = extension.as_ref().map(|extension| extension.path.as_path());
+  pi_rpc_args(extension_path, mode);
+}
+fn pi_rpc_args(extension_path: Option<&Path>, mode: PiRpcSessionMode) {
   args.extend(["--extension".to_string(), extension_path.to_string_lossy().into_owned()]);
 }
-${ADAPTER_START_FLOW}
+${ADAPTER_CREATE_SESSION_FLOW}
 let config_dir = "adapter-owned";
 `;
 
@@ -665,15 +667,14 @@ test("adapter load-path evidence must come from the real spawn flow, not a decoy
   assert.ok(report.findings.some((finding) => finding.code === "adapter-runtime-load-path-unproven"));
 });
 
-test("adapter load-path evidence must bind lifecycle tokens to the start flow", () => {
+test("adapter load-path evidence must bind lifecycle tokens to the create_session flow", () => {
   const fixture = createFixture();
   const decoyAdapter = ADAPTER_SOURCE.replace(
-    ADAPTER_START_FLOW,
-    `async fn start() {}
+    ADAPTER_CREATE_SESSION_FLOW,
+    `async fn create_session() {}
 fn decoy_lifecycle() {
-let mut extension = match self.install_first_party_extension() { _ => todo!() };
-let extension_path = extension.path.clone();
-state.extension_path = Some(extension_path);
+let extension = self.install_first_party_extension()?;
+Some(extension);
 }
 `,
   );

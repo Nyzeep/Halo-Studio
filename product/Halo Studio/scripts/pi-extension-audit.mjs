@@ -1113,14 +1113,13 @@ function checkLoadBoundary(extension, adapterSource, findings) {
     && /fn\s+install_embedded_extension[\s\S]*?HALO_PI_EXTENSION_ID/.test(adapterSource);
   const hasHashBoundRuntimePath = /fn\s+pi_rpc_args[\s\S]*?--extension[\s\S]*?extension_path\.to_string_lossy\s*\(\)/.test(adapterSource);
   const spawnSessionBody = extractRustFunctionBody(adapterSource, "spawn_session_process");
-  const startBody = extractRustFunctionBody(adapterSource, "start");
-  const hasRuntimePathFlow = Boolean(spawnSessionBody && /pi_rpc_args\s*\(\s*extension_path\s*,/.test(spawnSessionBody)
-    && startBody
-    && [
-      "let mut extension = match self.install_first_party_extension()",
-      "let extension_path = extension.path.clone()",
-      "state.extension_path = Some(extension_path)",
-    ].every((token) => startBody.includes(token)));
+  const createSessionBody = extractRustFunctionBody(adapterSource, "create_session");
+  const hasRuntimePathFlow = Boolean(spawnSessionBody
+    && /let\s+extension_path\s*=\s*extension\.as_ref\(\)\.map\(\|extension\|\s*extension\.path\.as_path\(\)\)/.test(spawnSessionBody)
+    && /pi_rpc_args\s*\(\s*extension_path\s*,/.test(spawnSessionBody)
+    && createSessionBody
+    && /self\.install_first_party_extension\(\)\?/.test(createSessionBody)
+    && /Some\(extension\)/.test(createSessionBody));
   if (!hasEmbeddedInstall || !hasHashBoundEmbeddedSource) {
     addFinding(findings, "adapter-extension-source-not-hash-bound", `${extension.id} adapter does not prove that the embedded source is copied under its fixed digest`);
   }
