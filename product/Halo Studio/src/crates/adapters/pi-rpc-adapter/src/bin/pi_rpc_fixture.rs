@@ -7,6 +7,8 @@ use serde_json::{json, Value};
 fn main() {
     let arguments = env::args().collect::<Vec<_>>();
     let mode = env::var("HALO_PI_RPC_FIXTURE_MODE").unwrap_or_else(|_| "happy".to_string());
+    let readiness_probe = arguments.iter().any(|argument| argument == "--no-session")
+        && !arguments.iter().any(|argument| argument == "--extension");
     if arguments.iter().any(|argument| argument == "--version") {
         if matches!(
             mode.as_str(),
@@ -40,7 +42,10 @@ fn main() {
         return;
     }
 
-    if mode == "credential_projection" && !controlled_launch_is_valid(&arguments) {
+    if mode == "credential_projection"
+        && !readiness_launch_is_valid(&arguments)
+        && !controlled_launch_is_valid(&arguments)
+    {
         return;
     }
     let stdin = io::stdin();
@@ -320,6 +325,46 @@ fn main() {
                         }),
                     );
                 }
+                "sensitive_message_projection" | "sensitive_tool_projection" => {
+                    respond(
+                        &mut stdout,
+                        request.get("id").and_then(Value::as_str),
+                        command,
+                        true,
+                        Value::Null,
+                    );
+                    send_event(&mut stdout, json!({ "type": "agent_start" }));
+                    send_event(
+                        &mut stdout,
+                        json!({
+                            "type": "message_update",
+                            "message": {},
+                            "assistantMessageEvent": {
+                                "type": "text_delta",
+                                "contentIndex": 0,
+                                "delta": "Bearer raw-bearer-token Authorization: Basic basic-auth-canary Cookie: session=cookie-canary password=message-password-canary token=raw-token sk-live-canary {\"sessionId\":\"message-session-id-canary\",\"entryId\":\"message-entry-id-canary\",\"toolCallId\":\"message-tool-call-id-canary\"}\nsafe response"
+                            }
+                        }),
+                    );
+                    if mode == "sensitive_tool_projection" {
+                        for event_type in [
+                            "tool_execution_start",
+                            "tool_execution_update",
+                            "tool_execution_end",
+                        ] {
+                            let mut event = json!({
+                                "type": event_type,
+                                "toolCallId": "raw-sensitive-tool-call-id",
+                                "toolName": "Authorization: Basic tool-basic-canary Cookie: tool-cookie-canary password=tool-password-canary sessionId=tool-session-id-canary entryId: tool-entry-id-canary toolCallId=tool-tool-call-id-canary"
+                            });
+                            if event_type == "tool_execution_end" {
+                                event["isError"] = Value::Bool(false);
+                            }
+                            send_event(&mut stdout, event);
+                        }
+                    }
+                    send_event(&mut stdout, json!({ "type": "agent_settled" }));
+                }
                 "malformed_tool_execution_end" => {
                     respond(
                         &mut stdout,
@@ -397,8 +442,7 @@ fn main() {
                     true,
                     Value::Null,
                 );
-                if mode == "ready_then_eof" {
-                    std::thread::sleep(Duration::from_millis(500));
+                if mode == "readiness_probe_eof" && readiness_probe {
                     return;
                 }
                 if mode != "hang_abort" && mode != "agent_end_without_settled" {
@@ -451,6 +495,28 @@ fn controlled_launch_is_valid(arguments: &[String]) -> bool {
         && !models.contains("synthetic-credential-canary")
         && !config_dir.join("auth.json").exists()
         && !config_dir.join("settings.json").exists()
+}
+
+fn readiness_launch_is_valid(arguments: &[String]) -> bool {
+    let managed_session = arguments.iter().any(|argument| argument == "--no-session")
+        && !arguments.iter().any(|argument| argument == "--session-dir");
+    let extensions_are_disabled = arguments
+        .iter()
+        .any(|argument| argument == "--no-extensions")
+        && !arguments.iter().any(|argument| argument == "--extension");
+    let no_task_selection = !arguments.iter().any(|argument| argument == "--provider")
+        && !arguments.iter().any(|argument| argument == "--model");
+    let Some(config_dir) = env::var_os("PI_CODING_AGENT_DIR") else {
+        return false;
+    };
+    managed_session
+        && extensions_are_disabled
+        && no_task_selection
+        && env::var_os("HALO_PI_CREDENTIAL").is_none()
+        && std::path::Path::new(&config_dir).is_dir()
+        && !std::path::Path::new(&config_dir)
+            .join("models.json")
+            .exists()
 }
 
 fn respond(

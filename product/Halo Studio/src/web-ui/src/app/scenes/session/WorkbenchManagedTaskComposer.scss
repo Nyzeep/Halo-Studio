@@ -1,0 +1,143 @@
+.bitfun-workbench-managed-task {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--color-bg-secondary);
+
+  &__header,
+  &__workspace-line,
+  &__workspace-facts,
+  &__pending {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__header {
+    justify-content: space-between;
+
+    h2 {
+      margin: 0;
+      font-size: var(--font-size-sm);
+    }
+
+    p {
+      margin: 3px 0 0;
+      color: var(--color-text-tertiary);
+      font-size: var(--font-size-xs);
+    }
+
+    > svg {
+      color: var(--color-status-success);
+    }
+  }
+
+  &__workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+  }
+
+  &__workspace-line {
+    min-width: 0;
+
+    code {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--color-text-primary);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &__workspace-facts {
+    padding-left: 22px;
+    color: var(--color-text-tertiary);
+  }
+
+  &__form {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      color: var(--color-text-secondary);
+      font-size: var(--font-size-xs);
+    }
+
+    input:not([type='checkbox']),
+    textarea,
+    select {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--border-subtle);
+      border-radius: 5px;
+      padding: 7px 8px;
+      background: var(--color-bg-primary);
+      color: var(--color-text-primary);
+      font: inherit;
+      resize: vertical;
+    }
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      align-self: flex-start;
+      min-height: 30px;
+      border: 0;
+      border-radius: 5px;
+      padding: 0 11px;
+      background: var(--color-accent);
+      color: var(--color-text-on-accent);
+      cursor: pointer;
+      font: inherit;
+      font-size: var(--font-size-xs);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+  }
+
+  &__trust-check {
+    flex-direction: row !important;
+    align-items: flex-start;
+
+    input {
+      margin-top: 1px;
+    }
+  }
+
+  &__pending,
+  &__error {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+  }
+
+  &__error {
+    color: var(--color-status-error);
+  }
+}
+
+.is-spinning {
+  animation: bitfun-workbench-spin 900ms linear infinite;
+}
+
+@keyframes bitfun-workbench-spin {
+  to { transform: rotate(360deg); }
+}

@@ -456,7 +456,7 @@ const MainNav: React.FC<MainNavProps> = ({
       <div className="bitfun-nav-panel__sections" data-testid="nav-sections">
         <div className="bitfun-nav-panel__section">
           <SectionHeader
-            label={t('nav.sections.sessions')}
+            label={t('nav.items.sessions')}
             collapsible
             isOpen={expandedSections.has('sessions')}
             onToggle={() => toggleSection('sessions')}

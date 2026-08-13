@@ -224,6 +224,41 @@
           "ended": "已結束",
           "failed": "失敗"
         },
+        "sessionMode": {
+          "standard": "標準",
+          "managed": "受管任務"
+        },
+        "baseline": {
+          "root": "任務基線",
+          "changedFiles": "既有變更檔案：{{count}} 個"
+        },
+        "messageRole": {
+          "user": "你",
+          "assistant": "助理"
+        },
+        "activityStatus": {
+          "started": "已開始",
+          "updated": "已更新",
+          "completed": "$t(shared:statuses.done)",
+          "failed": "$t(shared:statuses.failed)"
+        },
+        "sessionError": "此會話無法繼續。",
+        "managedTask": {
+          "title": "啟動受管任務",
+          "description": "在 Pi 接收首輪任務前，先確認此 Git 工作區。",
+          "workspaceRoot": "規範化工作區",
+          "workspaceUnavailable": "工作區無法使用",
+          "gitRepository": "Git 工作區",
+          "notGitRepository": "不是 Git 工作區",
+          "trustConfirmed": "工作區信任已記錄",
+          "trustRequired": "需要明確確認",
+          "taskId": "任務識別碼",
+          "firstPrompt": "首輪任務",
+          "trustCheckbox": "我確認 Pi 可以在此工作區執行這個受管任務。",
+          "create": "建立受管任務",
+          "firstTurnPending": "等待會話進入閒置狀態後傳送首輪任務……",
+          "actionFailed": "受管任務操作未完成，請檢查工作區後重試。"
+        },
         "error": "Workbench Runtime 無法繼續。請檢查工作區後重試。"
       },
       "ariaNeedsInput": "有會話需要你的輸入",

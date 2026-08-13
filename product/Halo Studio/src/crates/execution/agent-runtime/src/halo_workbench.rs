@@ -13,7 +13,8 @@ use bitfun_runtime_ports::{
     ClockPort, PiProviderReadinessPort, PiRpcAvailabilitySummary, PiRpcCapability, PiRpcCommand,
     PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind, PiRpcPort,
     PiRpcReply, PiRpcSessionMode, PiRpcVersionEvidenceSource, PiRpcVersionSummary, PiRpcWorkspace,
-    PortErrorKind, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
+    PortErrorKind, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort, WorkbenchTaskBaselineRequest,
+    WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest,
     PI_RPC_ADAPTER_IDENTITY,
 };
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,12 @@ pub const HALO_WORKBENCH_SCHEMA_VERSION: u32 = 1;
 
 const MAX_COMPLETED_REQUEST_RECORDS: usize = 256;
 const MAX_COMPLETED_CLEANUP_RECORDS: usize = 64;
+const MAX_SESSION_MESSAGES: usize = 64;
+const MAX_SESSION_ACTIVITIES: usize = 128;
+const MAX_BASELINE_CHANGED_FILES: usize = 4096;
+const BASELINE_FINGERPRINT_HEX_LENGTH: usize = 64;
+const MAX_PUBLIC_MESSAGE_BYTES: usize = 16 * 1024;
+const MAX_PUBLIC_LABEL_BYTES: usize = 128;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -213,6 +220,57 @@ impl From<HaloWorkbenchSessionMode> for PiRpcSessionMode {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HaloWorkbenchTaskBaselineSnapshot {
+    pub head: String,
+    pub canonical_root: PathBuf,
+    pub existing_changed_files: Vec<String>,
+    pub working_tree_fingerprint: String,
+    pub captured_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HaloWorkbenchMessageRole {
+    User,
+    Assistant,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HaloWorkbenchMessageSnapshot {
+    pub role: HaloWorkbenchMessageRole,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HaloWorkbenchActivityKind {
+    Tool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HaloWorkbenchActivityStatus {
+    Started,
+    Updated,
+    Completed,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HaloWorkbenchActivitySnapshot {
+    /// A Halo/adapter-redacted correlation value. This is never a raw Pi
+    /// toolCallId or an entry/session identifier.
+    pub activity_id: String,
+    pub kind: HaloWorkbenchActivityKind,
+    pub label: String,
+    pub status: HaloWorkbenchActivityStatus,
+    pub is_error: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum HaloWorkbenchSessionPhase {
@@ -244,6 +302,10 @@ pub struct HaloWorkbenchSessionSnapshot {
     pub session_id: String,
     pub mode: HaloWorkbenchSessionMode,
     pub phase: HaloWorkbenchSessionPhase,
+    pub baseline: Option<HaloWorkbenchTaskBaselineSnapshot>,
+    pub messages: Vec<HaloWorkbenchMessageSnapshot>,
+    pub activities: Vec<HaloWorkbenchActivitySnapshot>,
+    pub error: Option<HaloWorkbenchError>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -363,6 +425,30 @@ impl HaloWorkbenchError {
         )
     }
 
+    fn managed_workspace_confirmation_required() -> Self {
+        Self::new(
+            "managed_workspace_confirmation_required",
+            "Managed execution requires an explicit workspace confirmation",
+            "confirm_managed_workspace",
+        )
+    }
+
+    fn managed_workspace_not_git() -> Self {
+        Self::new(
+            "managed_workspace_not_git",
+            "Managed execution requires a Git workspace",
+            "choose_git_workspace",
+        )
+    }
+
+    fn task_baseline_unavailable() -> Self {
+        Self::new(
+            "task_baseline_unavailable",
+            "The managed task Git baseline could not be captured",
+            "retry",
+        )
+    }
+
     fn operation_not_found() -> Self {
         Self::new(
             "operation_not_found",
@@ -400,6 +486,8 @@ pub enum HaloWorkbenchEventKind {
     RuntimeStateChanged,
     WorkspaceChanged,
     SessionStateChanged,
+    SessionMessageUpdated,
+    SessionActivityUpdated,
     OperationRequested,
     OperationResolved,
 }
@@ -468,6 +556,10 @@ pub enum HaloWorkbenchIntent {
         workspace: HaloWorkbenchWorkspaceInput,
     },
     CloseWorkspace,
+    ConfirmManagedWorkspace {
+        workspace_id: String,
+        root_path: PathBuf,
+    },
     CreateSession {
         task_id: String,
         mode: HaloWorkbenchSessionMode,
@@ -503,6 +595,14 @@ impl fmt::Debug for HaloWorkbenchIntent {
                 .field("workspace", workspace)
                 .finish(),
             Self::CloseWorkspace => formatter.write_str("CloseWorkspace"),
+            Self::ConfirmManagedWorkspace {
+                workspace_id,
+                root_path: _,
+            } => formatter
+                .debug_struct("ConfirmManagedWorkspace")
+                .field("workspace_id", workspace_id)
+                .field("root_path", &"<redacted>")
+                .finish(),
             Self::CreateSession { task_id, mode } => formatter
                 .debug_struct("CreateSession")
                 .field("task_id", task_id)
@@ -631,6 +731,7 @@ struct RuntimeState {
     state_version: u64,
     generation: u64,
     adapter_generation: Option<u64>,
+    managed_workspace_confirmation: Option<ManagedWorkspaceConfirmation>,
     cleanup_started: HashSet<u64>,
     terminated: bool,
 }
@@ -649,6 +750,7 @@ impl Default for RuntimeState {
             state_version: 0,
             generation: 0,
             adapter_generation: None,
+            managed_workspace_confirmation: None,
             cleanup_started: HashSet::new(),
             terminated: false,
         }
@@ -658,6 +760,7 @@ impl Default for RuntimeState {
 struct HaloWorkbenchRuntimeInner {
     adapter: Arc<dyn PiRpcPort>,
     workspace_facts: Arc<dyn WorkbenchWorkspaceFactsPort>,
+    task_baseline: Arc<dyn WorkbenchTaskBaselinePort>,
     provider_readiness: Arc<dyn PiProviderReadinessPort>,
     clock: Arc<dyn ClockPort>,
     state: Mutex<RuntimeState>,
@@ -668,6 +771,28 @@ struct HaloWorkbenchRuntimeInner {
     events: broadcast::Sender<HaloWorkbenchEvent>,
     adapter_events_started: AtomicBool,
     shutdown_result: OnceCell<Result<(), HaloWorkbenchError>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ManagedWorkspaceConfirmation {
+    generation: u64,
+    workspace_id: String,
+    canonical_root: PathBuf,
+}
+
+struct UnavailableTaskBaselinePort;
+
+#[async_trait::async_trait]
+impl WorkbenchTaskBaselinePort for UnavailableTaskBaselinePort {
+    async fn capture(
+        &self,
+        _request: WorkbenchTaskBaselineRequest,
+    ) -> bitfun_runtime_ports::PortResult<WorkbenchTaskBaseline> {
+        Err(bitfun_runtime_ports::PortError::new(
+            PortErrorKind::NotAvailable,
+            "managed task baseline provider is unavailable",
+        ))
+    }
 }
 
 impl HaloWorkbenchRuntimeInner {
@@ -806,40 +931,69 @@ impl HaloWorkbenchRuntimeInner {
                     "Workbench session ended",
                 );
             }
-            PiRpcEvent::SessionFailed { session_id, .. } => {
-                self.set_session_phase(
+            PiRpcEvent::SessionFailed {
+                session_id, reason, ..
+            } => {
+                self.set_session_failure(
                     generation,
                     &session_id,
+                    adapter_failure(reason),
                     HaloWorkbenchSessionPhase::Failed,
-                    "Workbench session failed",
                 );
             }
-            PiRpcEvent::MessageUpdated { session_id, .. } => {
-                self.publish_session_observation(
+            PiRpcEvent::MessageUpdated {
+                session_id, text, ..
+            } => {
+                self.append_assistant_message(generation, &session_id, text);
+            }
+            PiRpcEvent::ToolExecutionStarted {
+                session_id,
+                redacted_tool_call_id,
+                tool_name,
+                ..
+            } => {
+                self.update_tool_activity(
                     generation,
                     &session_id,
-                    "Workbench session message updated",
+                    redacted_tool_call_id,
+                    tool_name,
+                    HaloWorkbenchActivityStatus::Started,
+                    false,
                 );
             }
-            PiRpcEvent::ToolExecutionStarted { session_id, .. } => {
-                self.publish_session_observation(
+            PiRpcEvent::ToolExecutionUpdated {
+                session_id,
+                redacted_tool_call_id,
+                tool_name,
+                ..
+            } => {
+                self.update_tool_activity(
                     generation,
                     &session_id,
-                    "Workbench tool execution started",
+                    redacted_tool_call_id,
+                    tool_name,
+                    HaloWorkbenchActivityStatus::Updated,
+                    false,
                 );
             }
-            PiRpcEvent::ToolExecutionUpdated { session_id, .. } => {
-                self.publish_session_observation(
+            PiRpcEvent::ToolExecutionEnded {
+                session_id,
+                redacted_tool_call_id,
+                tool_name,
+                is_error,
+                ..
+            } => {
+                self.update_tool_activity(
                     generation,
                     &session_id,
-                    "Workbench tool execution updated",
-                );
-            }
-            PiRpcEvent::ToolExecutionEnded { session_id, .. } => {
-                self.publish_session_observation(
-                    generation,
-                    &session_id,
-                    "Workbench tool execution ended",
+                    redacted_tool_call_id,
+                    tool_name,
+                    if is_error {
+                        HaloWorkbenchActivityStatus::Failed
+                    } else {
+                        HaloWorkbenchActivityStatus::Completed
+                    },
+                    is_error,
                 );
             }
             PiRpcEvent::OperationRequested {
@@ -915,26 +1069,92 @@ impl HaloWorkbenchRuntimeInner {
         }
     }
 
-    fn publish_session_observation(
-        &self,
-        generation: u64,
-        session_id: &str,
-        summary: &'static str,
-    ) {
+    fn append_assistant_message(&self, generation: u64, session_id: &str, text: String) {
+        let text = redact_halo_text(&text, MAX_PUBLIC_MESSAGE_BYTES);
+        if text.is_empty() {
+            return;
+        }
         let owned_session_id = session_id.to_string();
         self.publish_transition(
             None,
-            HaloWorkbenchEventKind::SessionStateChanged,
-            summary,
+            HaloWorkbenchEventKind::SessionMessageUpdated,
+            "Workbench assistant message was updated",
             Some(owned_session_id.clone()),
             None,
             move |state| {
-                state.generation == generation
-                    && state.phase == HaloWorkbenchPhase::Ready
-                    && state
-                        .sessions
-                        .get(&owned_session_id)
-                        .is_some_and(|session| !session.phase.is_terminal())
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&owned_session_id) else {
+                    return false;
+                };
+                if session.phase != HaloWorkbenchSessionPhase::Running {
+                    return false;
+                }
+                append_message(
+                    &mut session.messages,
+                    HaloWorkbenchMessageRole::Assistant,
+                    text,
+                );
+                true
+            },
+        );
+    }
+
+    fn update_tool_activity(
+        &self,
+        generation: u64,
+        session_id: &str,
+        activity_id: String,
+        label: String,
+        status: HaloWorkbenchActivityStatus,
+        is_error: bool,
+    ) {
+        let Some(activity_id) = opaque_public_activity_id(&activity_id) else {
+            return;
+        };
+        let label = redact_halo_text(&label, MAX_PUBLIC_LABEL_BYTES);
+        let Some(label) = bounded_public_label(&label, MAX_PUBLIC_LABEL_BYTES) else {
+            return;
+        };
+        let owned_session_id = session_id.to_string();
+        self.publish_transition(
+            None,
+            HaloWorkbenchEventKind::SessionActivityUpdated,
+            "Workbench tool activity was updated",
+            Some(owned_session_id.clone()),
+            None,
+            move |state| {
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&owned_session_id) else {
+                    return false;
+                };
+                if session.phase != HaloWorkbenchSessionPhase::Running {
+                    return false;
+                }
+                if let Some(activity) = session
+                    .activities
+                    .iter_mut()
+                    .find(|activity| activity.activity_id == activity_id)
+                {
+                    activity.label = label;
+                    activity.status = status;
+                    activity.is_error = is_error;
+                    return true;
+                }
+                if session.activities.len() >= MAX_SESSION_ACTIVITIES {
+                    session.activities.remove(0);
+                }
+                session.activities.push(HaloWorkbenchActivitySnapshot {
+                    activity_id,
+                    kind: HaloWorkbenchActivityKind::Tool,
+                    label,
+                    status,
+                    is_error,
+                });
+                true
             },
         );
     }
@@ -967,11 +1187,46 @@ impl HaloWorkbenchRuntimeInner {
                     return false;
                 }
                 session.phase = phase;
+                session.error = None;
                 if phase.is_terminal() {
                     state
                         .pending_operations
                         .retain(|_, operation| operation.session_id != owned_session_id);
                 }
+                true
+            },
+        );
+    }
+
+    fn set_session_failure(
+        &self,
+        generation: u64,
+        session_id: &str,
+        error: HaloWorkbenchError,
+        phase: HaloWorkbenchSessionPhase,
+    ) {
+        let owned_session_id = session_id.to_string();
+        self.publish_transition(
+            None,
+            HaloWorkbenchEventKind::SessionStateChanged,
+            "Workbench session failed",
+            Some(owned_session_id.clone()),
+            None,
+            move |state| {
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&owned_session_id) else {
+                    return false;
+                };
+                if session.phase.is_terminal() || !valid_session_transition(session.phase, phase) {
+                    return false;
+                }
+                session.phase = phase;
+                session.error = Some(error);
+                state
+                    .pending_operations
+                    .retain(|_, operation| operation.session_id != owned_session_id);
                 true
             },
         );
@@ -1077,11 +1332,31 @@ impl HaloWorkbenchRuntime {
         provider_readiness: Arc<dyn PiProviderReadinessPort>,
         clock: Arc<dyn ClockPort>,
     ) -> Self {
+        Self::new_with_task_baseline(
+            adapter,
+            workspace_facts,
+            provider_readiness,
+            Arc::new(UnavailableTaskBaselinePort),
+            clock,
+        )
+    }
+
+    /// Constructs the runtime with the read-only Git baseline provider used
+    /// by managed task creation. The compatibility `new` constructor remains
+    /// available for standard-only callers and contract fakes.
+    pub fn new_with_task_baseline(
+        adapter: Arc<dyn PiRpcPort>,
+        workspace_facts: Arc<dyn WorkbenchWorkspaceFactsPort>,
+        provider_readiness: Arc<dyn PiProviderReadinessPort>,
+        task_baseline: Arc<dyn WorkbenchTaskBaselinePort>,
+        clock: Arc<dyn ClockPort>,
+    ) -> Self {
         let (events, _) = broadcast::channel(256);
         Self {
             inner: Arc::new(HaloWorkbenchRuntimeInner {
                 adapter,
                 workspace_facts,
+                task_baseline,
                 provider_readiness,
                 clock,
                 state: Mutex::new(RuntimeState::default()),
@@ -1269,6 +1544,13 @@ impl HaloWorkbenchRuntime {
                 self.close_workspace(Some(request_id), false).await?;
                 Ok(self.inner.receipt(request_id, None))
             }
+            HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id,
+                root_path,
+            } => {
+                self.confirm_managed_workspace(request_id, workspace_id, root_path)
+                    .await
+            }
             HaloWorkbenchIntent::CreateSession { task_id, mode } => {
                 self.create_session(request_id, task_id, mode).await
             }
@@ -1374,17 +1656,6 @@ impl HaloWorkbenchRuntime {
                 .fail_generation(generation, Some(request_id), error.clone());
             return Err(error);
         }
-        if !facts.trusted {
-            let error = HaloWorkbenchError::new(
-                "workspace_untrusted",
-                "The selected workspace is not trusted",
-                "choose_trusted_workspace",
-            );
-            self.inner
-                .fail_generation(generation, Some(request_id), error.clone());
-            return Err(error);
-        }
-
         let adapter_workspace = PiRpcWorkspace {
             workspace_id: facts.workspace_id.clone(),
             canonical_root: facts.canonical_root.clone(),
@@ -1408,6 +1679,7 @@ impl HaloWorkbenchRuntime {
                 }
                 state.workspace = Some(public_workspace);
                 state.adapter_generation = Some(generation);
+                state.managed_workspace_confirmation = None;
                 state.sessions.clear();
                 state.pending_operations.clear();
                 state.phase = HaloWorkbenchPhase::Probing;
@@ -1639,6 +1911,7 @@ impl HaloWorkbenchRuntime {
                     state.phase = HaloWorkbenchPhase::Disconnected;
                     state.adapter_available = false;
                     state.adapter_readiness = None;
+                    state.managed_workspace_confirmation = None;
                     state.workspace = None;
                     state.sessions.clear();
                     state.pending_operations.clear();
@@ -1697,6 +1970,7 @@ impl HaloWorkbenchRuntime {
                 state.phase = HaloWorkbenchPhase::Disconnected;
                 state.adapter_available = false;
                 state.adapter_readiness = None;
+                state.managed_workspace_confirmation = None;
                 if state.adapter_generation == Some(cleanup_generation) {
                     state.adapter_generation = None;
                 }
@@ -1788,6 +2062,94 @@ impl HaloWorkbenchRuntime {
         }
     }
 
+    async fn confirm_managed_workspace(
+        &self,
+        request_id: &str,
+        workspace_id: String,
+        root_path: PathBuf,
+    ) -> IntentResult {
+        validate_workspace_confirmation(&workspace_id, &root_path)?;
+        let generation = self.ready_generation()?;
+        let expected_root = {
+            let state = self.inner.state.lock().expect("Halo Workbench state lock");
+            let workspace = state
+                .workspace
+                .as_ref()
+                .ok_or_else(HaloWorkbenchError::runtime_not_ready)?;
+            if workspace.workspace_id != workspace_id || workspace.root_path != root_path {
+                return Err(HaloWorkbenchError::new(
+                    "workspace_identity_mismatch",
+                    "The confirmed workspace does not match the active canonical workspace",
+                    "refresh_workspace",
+                ));
+            }
+            workspace.root_path.clone()
+        };
+
+        let facts = self
+            .inner
+            .workspace_facts
+            .confirm_managed_trust(WorkbenchWorkspaceTrustRequest {
+                workspace_id: workspace_id.clone(),
+                root: root_path,
+            })
+            .await
+            .map_err(|_| {
+                HaloWorkbenchError::new(
+                    "workspace_facts_unavailable",
+                    "Workspace trust could not be confirmed",
+                    "retry",
+                )
+            })?;
+        if facts.workspace_id != workspace_id || facts.canonical_root != expected_root {
+            return Err(HaloWorkbenchError::new(
+                "workspace_identity_mismatch",
+                "Workspace identity verification failed",
+                "refresh_workspace",
+            ));
+        }
+        if !facts.git_repository {
+            return Err(HaloWorkbenchError::managed_workspace_not_git());
+        }
+        if !facts.trusted {
+            return Err(HaloWorkbenchError::new(
+                "workspace_untrusted",
+                "The workspace owner did not confirm managed execution",
+                "confirm_managed_workspace",
+            ));
+        }
+
+        let confirmation = ManagedWorkspaceConfirmation {
+            generation,
+            workspace_id: workspace_id.clone(),
+            canonical_root: expected_root,
+        };
+        self.inner.publish_transition(
+            Some(request_id),
+            HaloWorkbenchEventKind::WorkspaceChanged,
+            "Workspace trust was explicitly confirmed for managed execution",
+            None,
+            None,
+            move |state| {
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                    return false;
+                }
+                let Some(workspace) = state.workspace.as_mut() else {
+                    return false;
+                };
+                if workspace.workspace_id != workspace_id
+                    || workspace.root_path != confirmation.canonical_root
+                {
+                    return false;
+                }
+                workspace.trusted = true;
+                state.managed_workspace_confirmation = Some(confirmation);
+                true
+            },
+        );
+        Ok(self.inner.receipt(request_id, None))
+    }
+
     async fn create_session(
         &self,
         request_id: &str,
@@ -1805,6 +2167,9 @@ impl HaloWorkbenchRuntime {
                 .map(|workspace| workspace.workspace_id.clone())
                 .ok_or_else(HaloWorkbenchError::runtime_not_ready)?
         };
+        if mode == HaloWorkbenchSessionMode::Managed {
+            self.ensure_managed_workspace_confirmed(generation).await?;
+        }
         let event_session_id = session_id.clone();
         let state_session_id = session_id.clone();
         let state_task_id = task_id.clone();
@@ -1834,6 +2199,10 @@ impl HaloWorkbenchRuntime {
                         session_id: state_session_id,
                         mode,
                         phase: HaloWorkbenchSessionPhase::Creating,
+                        baseline: None,
+                        messages: Vec::new(),
+                        activities: Vec::new(),
+                        error: None,
                     },
                 );
                 true
@@ -1850,6 +2219,23 @@ impl HaloWorkbenchRuntime {
                 return Err(HaloWorkbenchError::task_already_active());
             }
             return Err(HaloWorkbenchError::runtime_not_ready());
+        }
+        if mode == HaloWorkbenchSessionMode::Managed {
+            let baseline = match self.capture_managed_task_baseline(generation).await {
+                Ok(baseline) => baseline,
+                Err(error) => {
+                    self.fail_session_before_adapter(
+                        generation,
+                        request_id,
+                        &session_id,
+                        error.clone(),
+                    );
+                    return Err(error);
+                }
+            };
+            if !self.attach_session_baseline(generation, &session_id, baseline) {
+                return Err(HaloWorkbenchError::session_not_found());
+            }
         }
         let result = self
             .execute_session_adapter_action(
@@ -1875,6 +2261,151 @@ impl HaloWorkbenchRuntime {
         Ok(self.inner.receipt(request_id, Some(session_id)))
     }
 
+    async fn ensure_managed_workspace_confirmed(
+        &self,
+        generation: u64,
+    ) -> Result<(), HaloWorkbenchError> {
+        let confirmation = {
+            let state = self.inner.state.lock().expect("Halo Workbench state lock");
+            state.managed_workspace_confirmation.clone()
+        };
+        let Some(confirmation) = confirmation else {
+            return Err(HaloWorkbenchError::managed_workspace_confirmation_required());
+        };
+        if confirmation.generation != generation {
+            return Err(HaloWorkbenchError::managed_workspace_confirmation_required());
+        }
+        let request = WorkbenchWorkspaceFactsRequest {
+            workspace_id: confirmation.workspace_id.clone(),
+            root: confirmation.canonical_root.clone(),
+        };
+        let facts = self
+            .inner
+            .workspace_facts
+            .inspect(request.clone())
+            .await
+            .map_err(|_| {
+                HaloWorkbenchError::new(
+                    "workspace_facts_unavailable",
+                    "Workspace trust could not be revalidated",
+                    "retry",
+                )
+            })?;
+        if facts.workspace_id != request.workspace_id
+            || facts.canonical_root != request.root
+            || !facts.git_repository
+        {
+            return Err(HaloWorkbenchError::new(
+                "workspace_identity_mismatch",
+                "The managed workspace changed after confirmation",
+                "refresh_workspace",
+            ));
+        }
+        if !facts.trusted {
+            return Err(HaloWorkbenchError::new(
+                "workspace_untrusted",
+                "Managed workspace trust is no longer active",
+                "confirm_managed_workspace",
+            ));
+        }
+        Ok(())
+    }
+
+    async fn capture_managed_task_baseline(
+        &self,
+        generation: u64,
+    ) -> Result<HaloWorkbenchTaskBaselineSnapshot, HaloWorkbenchError> {
+        self.ensure_managed_workspace_confirmed(generation).await?;
+        let request = {
+            let state = self.inner.state.lock().expect("Halo Workbench state lock");
+            let workspace = state
+                .workspace
+                .as_ref()
+                .ok_or_else(HaloWorkbenchError::runtime_not_ready)?;
+            WorkbenchTaskBaselineRequest {
+                workspace_id: workspace.workspace_id.clone(),
+                canonical_root: workspace.root_path.clone(),
+            }
+        };
+        let baseline = self
+            .inner
+            .task_baseline
+            .capture(request.clone())
+            .await
+            .map_err(|_| HaloWorkbenchError::task_baseline_unavailable())?;
+        validate_task_baseline(&baseline)
+            .map_err(|_| HaloWorkbenchError::task_baseline_unavailable())?;
+        if baseline.canonical_root != request.canonical_root {
+            return Err(HaloWorkbenchError::task_baseline_unavailable());
+        }
+        Ok(HaloWorkbenchTaskBaselineSnapshot {
+            head: baseline.head,
+            canonical_root: baseline.canonical_root,
+            existing_changed_files: baseline.existing_changed_files,
+            working_tree_fingerprint: baseline.working_tree_fingerprint,
+            captured_at_ms: baseline.captured_at_ms,
+        })
+    }
+
+    fn attach_session_baseline(
+        &self,
+        generation: u64,
+        session_id: &str,
+        baseline: HaloWorkbenchTaskBaselineSnapshot,
+    ) -> bool {
+        let session_id = session_id.to_string();
+        self.inner.publish_transition(
+            None,
+            HaloWorkbenchEventKind::SessionStateChanged,
+            "Managed task Git baseline was captured",
+            Some(session_id.clone()),
+            None,
+            move |state| {
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&session_id) else {
+                    return false;
+                };
+                if session.mode != HaloWorkbenchSessionMode::Managed
+                    || session.phase != HaloWorkbenchSessionPhase::Creating
+                {
+                    return false;
+                }
+                session.baseline = Some(baseline);
+                true
+            },
+        )
+    }
+
+    fn fail_session_before_adapter(
+        &self,
+        generation: u64,
+        request_id: &str,
+        session_id: &str,
+        error: HaloWorkbenchError,
+    ) {
+        let session_id = session_id.to_string();
+        self.inner.publish_transition(
+            Some(request_id),
+            HaloWorkbenchEventKind::SessionStateChanged,
+            "Workbench session command failed",
+            Some(session_id.clone()),
+            None,
+            move |state| {
+                if state.generation != generation {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&session_id) else {
+                    return false;
+                };
+                session.phase = HaloWorkbenchSessionPhase::Failed;
+                session.error = Some(error);
+                true
+            },
+        );
+    }
+
     async fn session_command(
         &self,
         request_id: &str,
@@ -1890,6 +2421,7 @@ impl HaloWorkbenchRuntime {
         let allow_session_removal = matches!(&intent, SessionIntent::End);
         let command = match intent {
             SessionIntent::Prompt(content) => {
+                self.append_user_message(generation, session_id, &content)?;
                 self.mark_session_running(
                     generation,
                     request_id,
@@ -1904,6 +2436,7 @@ impl HaloWorkbenchRuntime {
                 }
             }
             SessionIntent::FollowUp(content) => {
+                self.append_user_message(generation, session_id, &content)?;
                 self.mark_session_running(
                     generation,
                     request_id,
@@ -1958,6 +2491,48 @@ impl HaloWorkbenchRuntime {
         Ok(self.inner.receipt(request_id, Some(session_id.to_string())))
     }
 
+    fn append_user_message(
+        &self,
+        generation: u64,
+        session_id: &str,
+        content: &str,
+    ) -> Result<(), HaloWorkbenchError> {
+        let session_id = session_id.to_string();
+        let content = redact_halo_text(content, MAX_PUBLIC_MESSAGE_BYTES);
+        if content.trim().is_empty() {
+            return Err(HaloWorkbenchError::invalid_request(
+                "Non-empty user input is required",
+            ));
+        }
+        if !self.inner.publish_transition(
+            None,
+            HaloWorkbenchEventKind::SessionMessageUpdated,
+            "Workbench user message was recorded",
+            Some(session_id.clone()),
+            None,
+            move |state| {
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&session_id) else {
+                    return false;
+                };
+                if session.phase.is_terminal() {
+                    return false;
+                }
+                append_message(
+                    &mut session.messages,
+                    HaloWorkbenchMessageRole::User,
+                    content,
+                );
+                true
+            },
+        ) {
+            return Err(HaloWorkbenchError::session_not_found());
+        }
+        Ok(())
+    }
+
     async fn execute_session_adapter_action(
         &self,
         generation: u64,
@@ -1966,7 +2541,11 @@ impl HaloWorkbenchRuntime {
         command: PiRpcCommand,
         allow_session_removal: bool,
     ) -> Result<PiRpcReply, HaloWorkbenchError> {
-        self.ensure_workspace_trusted(generation).await?;
+        self.ensure_workspace_available(generation).await?;
+        let managed = self.session_requires_managed_trust(generation, session_id)?;
+        if managed {
+            self.ensure_managed_workspace_trusted(generation).await?;
+        }
         self.ensure_session_transport_allowed(generation, task_id, session_id)?;
         let result = {
             let _action = self.inner.adapter_actions.lock().await;
@@ -1977,7 +2556,10 @@ impl HaloWorkbenchRuntime {
                 .await
                 .map_err(|error| port_failure(error.kind))
         };
-        self.ensure_workspace_trusted(generation).await?;
+        self.ensure_workspace_available(generation).await?;
+        if managed {
+            self.ensure_managed_workspace_trusted(generation).await?;
+        }
         if !allow_session_removal {
             self.ensure_session_transport_allowed(generation, task_id, session_id)?;
         }
@@ -2000,7 +2582,7 @@ impl HaloWorkbenchRuntime {
             .ok_or_else(HaloWorkbenchError::session_not_found)
     }
 
-    async fn ensure_workspace_trusted(&self, generation: u64) -> Result<(), HaloWorkbenchError> {
+    async fn ensure_workspace_available(&self, generation: u64) -> Result<(), HaloWorkbenchError> {
         let request = {
             let state = self.inner.state.lock().expect("Halo Workbench state lock");
             if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
@@ -2024,24 +2606,92 @@ impl HaloWorkbenchRuntime {
             .map_err(|_| {
                 HaloWorkbenchError::new(
                     "workspace_facts_unavailable",
-                    "Workspace trust could not be revalidated",
+                    "Workspace facts could not be revalidated",
                     "retry",
                 )
             })?;
-        let still_trusted = facts.workspace_id == request.workspace_id
-            && facts.canonical_root == request.root
-            && facts.trusted;
-        if still_trusted {
+        if facts.workspace_id == request.workspace_id && facts.canonical_root == request.root {
             return Ok(());
         }
 
         let error = HaloWorkbenchError::new(
-            "workspace_untrusted",
-            "Workspace trust was revoked while the task was active",
-            "choose_trusted_workspace",
+            "workspace_identity_mismatch",
+            "The active workspace changed while the session was running",
+            "refresh_workspace",
         );
         let _ = self.close_workspace(None, false).await;
         Err(error)
+    }
+
+    async fn ensure_managed_workspace_trusted(
+        &self,
+        generation: u64,
+    ) -> Result<(), HaloWorkbenchError> {
+        let confirmation = {
+            let state = self.inner.state.lock().expect("Halo Workbench state lock");
+            state.managed_workspace_confirmation.clone()
+        };
+        let Some(confirmation) = confirmation else {
+            return Err(HaloWorkbenchError::managed_workspace_confirmation_required());
+        };
+        if confirmation.generation != generation {
+            return Err(HaloWorkbenchError::managed_workspace_confirmation_required());
+        }
+        let request = WorkbenchWorkspaceFactsRequest {
+            workspace_id: confirmation.workspace_id.clone(),
+            root: confirmation.canonical_root.clone(),
+        };
+        let facts = self
+            .inner
+            .workspace_facts
+            .inspect(request.clone())
+            .await
+            .map_err(|_| {
+                HaloWorkbenchError::new(
+                    "workspace_facts_unavailable",
+                    "Workspace trust could not be revalidated",
+                    "retry",
+                )
+            })?;
+        if facts.workspace_id != request.workspace_id || facts.canonical_root != request.root {
+            let error = HaloWorkbenchError::new(
+                "workspace_identity_mismatch",
+                "The managed workspace changed while the task was active",
+                "refresh_workspace",
+            );
+            let _ = self.close_workspace(None, false).await;
+            return Err(error);
+        }
+        if facts.git_repository && facts.trusted {
+            return Ok(());
+        }
+        let error = if facts.git_repository {
+            HaloWorkbenchError::new(
+                "workspace_untrusted",
+                "Workspace trust was revoked while the managed task was active",
+                "confirm_managed_workspace",
+            )
+        } else {
+            HaloWorkbenchError::managed_workspace_not_git()
+        };
+        let _ = self.close_workspace(None, false).await;
+        Err(error)
+    }
+
+    fn session_requires_managed_trust(
+        &self,
+        generation: u64,
+        session_id: &str,
+    ) -> Result<bool, HaloWorkbenchError> {
+        let state = self.inner.state.lock().expect("Halo Workbench state lock");
+        if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+            return Err(HaloWorkbenchError::runtime_not_ready());
+        }
+        state
+            .sessions
+            .get(session_id)
+            .map(|session| session.mode == HaloWorkbenchSessionMode::Managed)
+            .ok_or_else(HaloWorkbenchError::session_not_found)
     }
 
     fn ensure_session_action_allowed(
@@ -2215,6 +2865,7 @@ impl HaloWorkbenchRuntime {
             Err(error) => error,
         };
         let session_id = session_id.to_string();
+        let session_error = error.clone();
         self.inner.publish_transition(
             Some(request_id),
             HaloWorkbenchEventKind::SessionStateChanged,
@@ -2232,6 +2883,7 @@ impl HaloWorkbenchRuntime {
                     return false;
                 }
                 session.phase = failure_phase;
+                session.error = Some(session_error);
                 true
             },
         );
@@ -2253,7 +2905,10 @@ impl HaloWorkbenchRuntime {
                 .map(|operation| (operation.task_id.clone(), operation.session_id.clone()))
                 .ok_or_else(HaloWorkbenchError::operation_not_found)?
         };
-        self.ensure_workspace_trusted(generation).await?;
+        self.ensure_workspace_available(generation).await?;
+        if self.session_requires_managed_trust(generation, &session_id)? {
+            self.ensure_managed_workspace_trusted(generation).await?;
+        }
         self.ensure_session_transport_allowed(generation, &task_id, &session_id)?;
         validate_operation_decision(&decision)?;
         let owned_operation_id = operation_id.to_string();
@@ -2319,7 +2974,10 @@ impl HaloWorkbenchRuntime {
                 .map_err(|error| port_failure(error.kind));
             result
         };
-        self.ensure_workspace_trusted(generation).await?;
+        self.ensure_workspace_available(generation).await?;
+        if self.session_requires_managed_trust(generation, &session_id)? {
+            self.ensure_managed_workspace_trusted(generation).await?;
+        }
         self.ensure_session_transport_allowed(generation, &task_id, &session_id)?;
         match result {
             Ok(PiRpcReply::Accepted)
@@ -2435,6 +3093,371 @@ fn validate_workspace_input(
         ));
     }
     Ok(())
+}
+
+fn validate_workspace_confirmation(
+    workspace_id: &str,
+    root_path: &PathBuf,
+) -> Result<(), HaloWorkbenchError> {
+    if workspace_id.trim().is_empty() || root_path.as_os_str().is_empty() {
+        return Err(HaloWorkbenchError::invalid_request(
+            "A workspace identity and canonical root are required for managed confirmation",
+        ));
+    }
+    if workspace_id.chars().any(char::is_control)
+        || root_path.to_string_lossy().chars().any(char::is_control)
+    {
+        return Err(HaloWorkbenchError::invalid_request(
+            "The managed workspace confirmation contains invalid characters",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_task_baseline(baseline: &WorkbenchTaskBaseline) -> Result<(), ()> {
+    if baseline.head.trim().is_empty()
+        || baseline.canonical_root.as_os_str().is_empty()
+        || baseline.captured_at_ms < 0
+        || baseline.existing_changed_files.len() > MAX_BASELINE_CHANGED_FILES
+        || baseline.working_tree_fingerprint.len() != BASELINE_FINGERPRINT_HEX_LENGTH
+        || !baseline
+            .working_tree_fingerprint
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+        || baseline.existing_changed_files.iter().any(|path| {
+            path.trim().is_empty()
+                || path.len() > MAX_PUBLIC_LABEL_BYTES * 8
+                || path.chars().any(char::is_control)
+        })
+    {
+        return Err(());
+    }
+    Ok(())
+}
+
+fn append_message(
+    messages: &mut Vec<HaloWorkbenchMessageSnapshot>,
+    role: HaloWorkbenchMessageRole,
+    content: String,
+) {
+    if content.is_empty() {
+        return;
+    }
+    if role == HaloWorkbenchMessageRole::Assistant
+        && messages
+            .last()
+            .is_some_and(|message| message.role == HaloWorkbenchMessageRole::Assistant)
+    {
+        if let Some(message) = messages.last_mut() {
+            let remaining = MAX_PUBLIC_MESSAGE_BYTES.saturating_sub(message.content.len());
+            if remaining > 0 {
+                message
+                    .content
+                    .push_str(&truncate_utf8(&content, remaining));
+            }
+        }
+        return;
+    }
+    if messages.len() >= MAX_SESSION_MESSAGES {
+        messages.remove(0);
+    }
+    messages.push(HaloWorkbenchMessageSnapshot {
+        role,
+        content: truncate_utf8(&content, MAX_PUBLIC_MESSAGE_BYTES),
+    });
+}
+
+fn bounded_public_label(value: &str, max_bytes: usize) -> Option<String> {
+    if value.is_empty() || value.chars().any(char::is_control) {
+        return None;
+    }
+    Some(truncate_utf8(value, max_bytes))
+}
+
+/// Tool-call identifiers stay adapter-private even if a malformed adapter
+/// event reaches the Runtime. The public snapshot uses an opaque local key.
+fn opaque_public_activity_id(value: &str) -> Option<String> {
+    bounded_public_label(value, MAX_PUBLIC_LABEL_BYTES)?;
+    let digest = Sha256::digest(value.as_bytes());
+    Some(format!("activity-{}", hex::encode(&digest[..8])))
+}
+
+fn redact_halo_text(value: &str, max_bytes: usize) -> String {
+    let mut redacted = value
+        .chars()
+        .filter(|character| !character.is_control() || matches!(character, '\n' | '\r' | '\t'))
+        .collect::<String>();
+    for header in ["authorization", "cookie"] {
+        redacted = redact_halo_header_values(&redacted, header);
+    }
+    for prefix in ["sk-", "sk_", "ghp_", "github_pat_", "xoxb-", "AIza"] {
+        redacted = redact_prefixed_halo_token(&redacted, prefix);
+    }
+    redacted = redact_halo_literal_value(&redacted, "bearer ");
+    for name in [
+        "api-key",
+        "api_key",
+        "secret",
+        "token",
+        "password",
+        "sessionid",
+        "entryid",
+        "toolcallid",
+        "session_id",
+        "entry_id",
+        "tool_call_id",
+    ] {
+        redacted = redact_halo_named_values(&redacted, name);
+    }
+    truncate_utf8(&redacted, max_bytes)
+}
+
+fn redact_halo_header_values(value: &str, header: &str) -> String {
+    let mut redacted = value.to_string();
+    let mut cursor = 0;
+    while cursor < redacted.len() {
+        let Some(start) = find_halo_named_marker(&redacted, header, cursor) else {
+            break;
+        };
+        let mut delimiter = start + header.len();
+        if redacted[delimiter..].starts_with('"') || redacted[delimiter..].starts_with('\'') {
+            delimiter += 1;
+        }
+        delimiter = skip_halo_horizontal_whitespace(&redacted, delimiter);
+        if !redacted[delimiter..].starts_with(':') && !redacted[delimiter..].starts_with('=') {
+            cursor = delimiter;
+            continue;
+        }
+        let value_start = skip_halo_horizontal_whitespace(&redacted, delimiter + 1);
+        let value_end = halo_header_value_end(&redacted, value_start);
+        if value_start == value_end {
+            cursor = value_start;
+            continue;
+        }
+        redacted.replace_range(value_start..value_end, "[redacted]");
+        cursor = value_start + "[redacted]".len();
+    }
+    redacted
+}
+
+fn redact_halo_named_values(value: &str, name: &str) -> String {
+    let mut redacted = value.to_string();
+    let mut cursor = 0;
+    while cursor < redacted.len() {
+        let Some(start) = find_halo_named_marker(&redacted, name, cursor) else {
+            break;
+        };
+        let mut delimiter = start + name.len();
+        if redacted[delimiter..].starts_with('"') || redacted[delimiter..].starts_with('\'') {
+            delimiter += 1;
+        }
+        delimiter = skip_halo_horizontal_whitespace(&redacted, delimiter);
+        if !redacted[delimiter..].starts_with(':') && !redacted[delimiter..].starts_with('=') {
+            cursor = delimiter;
+            continue;
+        }
+        let mut value_start = skip_halo_horizontal_whitespace(&redacted, delimiter + 1);
+        let quote = redacted[value_start..]
+            .chars()
+            .next()
+            .filter(|character| matches!(character, '"' | '\'' | '`'));
+        if let Some(quote) = quote {
+            value_start += quote.len_utf8();
+            let value_end = halo_quoted_value_end(&redacted, value_start, quote);
+            if value_start != value_end {
+                redacted.replace_range(value_start..value_end, "[redacted]");
+                cursor = value_start + "[redacted]".len();
+                continue;
+            }
+        } else {
+            let value_end = halo_token_value_end(&redacted, value_start);
+            if value_start != value_end {
+                redacted.replace_range(value_start..value_end, "[redacted]");
+                cursor = value_start + "[redacted]".len();
+                continue;
+            }
+        }
+        cursor = value_start;
+    }
+    redacted
+}
+
+fn redact_halo_literal_value(value: &str, marker: &str) -> String {
+    let mut redacted = value.to_string();
+    let mut cursor = 0;
+    while cursor < redacted.len() {
+        let lower = redacted[cursor..].to_ascii_lowercase();
+        let Some(relative) = lower.find(marker) else {
+            break;
+        };
+        let value_start = cursor + relative + marker.len();
+        let value_end = halo_token_value_end(&redacted, value_start);
+        if value_start == value_end {
+            cursor = value_start;
+            continue;
+        }
+        redacted.replace_range(value_start..value_end, "[redacted]");
+        cursor = value_start + "[redacted]".len();
+    }
+    redacted
+}
+
+fn find_halo_named_marker(value: &str, name: &str, mut cursor: usize) -> Option<usize> {
+    while cursor < value.len() {
+        let lower = value[cursor..].to_ascii_lowercase();
+        let relative = lower.find(name)?;
+        let start = cursor + relative;
+        let end = start + name.len();
+        if halo_identifier_boundary(value, start, end) {
+            return Some(start);
+        }
+        cursor = end;
+    }
+    None
+}
+
+fn halo_identifier_boundary(value: &str, start: usize, end: usize) -> bool {
+    let before = value[..start].chars().next_back();
+    let after = value[end..].chars().next();
+    !before.is_some_and(is_halo_identifier_character)
+        && !after.is_some_and(is_halo_identifier_character)
+}
+
+fn is_halo_identifier_character(character: char) -> bool {
+    character.is_ascii_alphanumeric() || character == '_'
+}
+
+fn skip_halo_horizontal_whitespace(value: &str, mut cursor: usize) -> usize {
+    while let Some(character) = value[cursor..].chars().next() {
+        if !matches!(character, ' ' | '\t') {
+            break;
+        }
+        cursor += character.len_utf8();
+    }
+    cursor
+}
+
+fn halo_header_value_end(value: &str, value_start: usize) -> usize {
+    for (offset, character) in value[value_start..].char_indices() {
+        let cursor = value_start + offset;
+        if matches!(character, '\n' | '\r') {
+            return cursor;
+        }
+        if cursor > value_start
+            && value[..cursor]
+                .chars()
+                .next_back()
+                .is_some_and(|previous| matches!(previous, ' ' | '\t'))
+            && is_inline_halo_sensitive_key(value, cursor)
+        {
+            let mut boundary = cursor;
+            while boundary > value_start
+                && value[..boundary]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|previous| matches!(previous, ' ' | '\t'))
+            {
+                boundary -= value[..boundary]
+                    .chars()
+                    .next_back()
+                    .expect("boundary has a preceding character")
+                    .len_utf8();
+            }
+            return boundary;
+        }
+    }
+    value.len()
+}
+
+fn is_inline_halo_sensitive_key(value: &str, cursor: usize) -> bool {
+    [
+        "authorization",
+        "cookie",
+        "api-key",
+        "api_key",
+        "secret",
+        "token",
+        "password",
+        "sessionid",
+        "entryid",
+        "toolcallid",
+        "session_id",
+        "entry_id",
+        "tool_call_id",
+    ]
+    .into_iter()
+    .any(|name| {
+        find_halo_named_marker(value, name, cursor) == Some(cursor)
+            && halo_named_marker_has_value_delimiter(value, cursor, name)
+    })
+}
+
+fn halo_named_marker_has_value_delimiter(value: &str, start: usize, name: &str) -> bool {
+    let mut cursor = start + name.len();
+    if value[cursor..].starts_with('"') || value[cursor..].starts_with('\'') {
+        cursor += 1;
+    }
+    cursor = skip_halo_horizontal_whitespace(value, cursor);
+    value[cursor..].starts_with(':') || value[cursor..].starts_with('=')
+}
+
+fn halo_quoted_value_end(value: &str, value_start: usize, quote: char) -> usize {
+    let mut escaped = false;
+    for (offset, character) in value[value_start..].char_indices() {
+        if character == quote && !escaped {
+            return value_start + offset;
+        }
+        escaped = character == '\\' && !escaped;
+        if character != '\\' {
+            escaped = false;
+        }
+    }
+    value.len()
+}
+
+fn halo_token_value_end(value: &str, value_start: usize) -> usize {
+    value[value_start..]
+        .char_indices()
+        .find(|(_, character)| {
+            character.is_whitespace()
+                || matches!(character, '"' | '\'' | '`' | ',' | ';' | '}' | ']')
+        })
+        .map(|(offset, _)| value_start + offset)
+        .unwrap_or(value.len())
+}
+
+fn redact_prefixed_halo_token(value: &str, prefix: &str) -> String {
+    let mut result = String::with_capacity(value.len());
+    let mut cursor = 0;
+    while let Some(relative) = value[cursor..].find(prefix) {
+        let start = cursor + relative;
+        result.push_str(&value[cursor..start]);
+        let end = value[start..]
+            .char_indices()
+            .find(|(_, character)| {
+                character.is_whitespace() || matches!(character, '"' | '\'' | '`' | ',' | ';')
+            })
+            .map(|(offset, _)| start + offset)
+            .unwrap_or(value.len());
+        result.push_str("[redacted]");
+        cursor = end;
+        if cursor >= value.len() {
+            break;
+        }
+    }
+    result.push_str(&value[cursor..]);
+    result
+}
+
+fn truncate_utf8(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
+        return value.to_string();
+    }
+    let mut end = max_bytes;
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value[..end].to_string()
 }
 
 fn validate_operation_decision(
