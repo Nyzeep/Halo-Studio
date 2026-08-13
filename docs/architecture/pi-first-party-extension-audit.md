@@ -203,3 +203,19 @@ host, provider, and license provenance:
 - **Provider IDs do not prove ownership.** `<PI_REFERENCE_ROOT>/packages/coding-agent/src/core/model-runtime.ts:32,99-103,145-148,193-217` keeps Pi-ai built-ins, native extension providers, named extension configs, and `models.json` provider IDs as separate inputs, then recomposes them. `<PI_REFERENCE_ROOT>/packages/coding-agent/src/core/provider-composer.ts:411-435` states and implements the built-in → `models.json` → extension → model-override layering. The first-party docs likewise say an extension can preserve an existing provider endpoint (`<PI_REFERENCE_ROOT>/packages/coding-agent/docs/custom-provider.md:33,119-119`), replace its model list (`:184-184`), and that `models.json` overrides apply to both built-in and extension-registered models (`<PI_REFERENCE_ROOT>/packages/coding-agent/docs/models.md:143-145,313-320,362-366`). The RPC/session formats record runtime provider/model identity (`<PI_REFERENCE_ROOT>/packages/coding-agent/docs/rpc.md:1367-1375`; `<PI_REFERENCE_ROOT>/packages/coding-agent/docs/session-format.md:85-86,218`), not a source-owner or license field.
 
 - **License evidence remains a separate gate.** `<PI_REFERENCE_ROOT>/LICENSE:1` and the `license` fields in `<PI_REFERENCE_ROOT>/packages/coding-agent/package.json:98` and `<PI_REFERENCE_ROOT>/packages/ai/package.json:86` declare MIT for the Pi source/packages. Separately, `<PI_REFERENCE_ROOT>/packages/coding-agent/docs/llama-cpp.md:5,79` directs users to an external llama.cpp build and says the llama.cpp server performs Hugging Face model downloads. Those declarations do not establish the license/notice/source closure for a future bundled Pi artifact, the external llama.cpp executable, provider services, model repositories/GGUFs, or the complete dependency closure. The existing release conclusion remains **BLOCKED**.
+
+## 2026-08-13 refresh note
+
+- Extension source provenance re-verified against main: source commit
+  `e8c445d6a81d90851ac03d6aac7a4f11b6b749a3` (ancestor of main), tree
+  `f50918b6bdebc6067f409f248cc9182ff5bcdec3`, canonical blob
+  `15d6908cc30e45f8812a87c591e58799d2f7ae69`, SHA-256
+  `A6F704110E56BE3C1C0754DADDE1BE2B27F65C76EE03F2C19A1E43CD06848C0B`. These match
+  the machine inventory; `git show <commit>:<path>` smudges CRLF on Windows, so the
+  canonical object identity is read via `git rev-parse main:<path>`, not `git show`.
+- `@earendil-works/pi-coding-agent` remains type-only (line 1 `import type`) and
+  absent from package.json/pnpm-lock.yaml/package-lock.json/Cargo.toml/Cargo.lock.
+- `cargo tree -p bitfun-pi-rpc-adapter --offline` resolves cleanly with no
+  @earendil-works runtime entry.
+- Audit CLI/tests refreshed for the current adapter `create_session` load flow and the
+  halo-scope.mjs allowlist hash; `node --test pi-extension-audit.test.mjs` passes 92/92.

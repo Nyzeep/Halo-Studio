@@ -46,7 +46,7 @@
       {
         "path": "product/Halo Studio/scripts/halo-scope.mjs",
         "code": "forbidden-absolute-path",
-        "sha256": "894652f9373a70b878e24a36dd8a787610def01a03d158fc89a9b21d64e0374f",
+        "sha256": "d530b0bb45bbddbcae46d54db8e49cb960acb146c9cddf7a09cdf41d2f571bd7",
         "reason": "The match is a negative guard literal used to reject a legacy BitFun-main path; it is not used as a build or runtime input path."
       },
       {
@@ -230,4 +230,19 @@
       "updateResponsibility": "Halo Studio maintainers. Any source, embedded-loader, host-permission, or dependency change increments the fixed version and requires new source commit/hash/license evidence and fresh contract verification."
     }
   ]
+,
+  "upstreamRehearsalEvidence": {
+    "rehearsalDate": "2026-08-13",
+    "freshCommit": "9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6",
+    "freshCommitParent": "59e06a0 (7-char prefix)",
+    "freshCommitMessage": "perf(cargo): centralize default feature ownership",
+    "freshCommitChangedFiles": 41,
+    "source": "git ls-remote https://github.com/GCWing/BitFun.git HEAD refs/heads/main",
+    "baseCommit": "ca56631e38f36db675583288df2bd44c540d250a",
+    "treeDiffDerived": false,
+    "treeDiffBlockedReason": "git fetch (POST) and codeload (large GET) blocked; GitHub REST API rate-limited (403). Only ls-remote metadata and commit HTML page reachable.",
+    "automatedMerge": false,
+    "upstreamWrite": false
+  }
+
 }
