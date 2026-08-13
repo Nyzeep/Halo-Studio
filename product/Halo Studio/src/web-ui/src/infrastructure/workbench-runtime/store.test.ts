@@ -526,6 +526,82 @@ describe('WorkbenchRuntimeStore', () => {
     expect(store.getState().stableErrorCode).toBe('runtime_contract_mismatch');
   });
 
+  it('sanitizes delivery review fields and fails closed on an invalid decision', async () => {
+    const reviewingSnapshot = {
+      ...snapshot(0, 0, 'ready'),
+      sessions: [
+        {
+          workspaceId: 'workspace-1',
+          taskId: 'task-1',
+          sessionId: 'session-1',
+          mode: 'managed',
+          phase: 'reviewing',
+          baseline: null,
+          messages: [],
+          activities: [],
+          deliveryReview: {
+            evidence: {
+              capturedAtMs: 1234,
+              head: 'test-head',
+              workingTreeFingerprint: 'a'.repeat(64),
+              changedFiles: ['tracked.rs', 'new-file.rs'],
+              diffPreview: 'diff --git a/tracked.rs b/tracked.rs',
+              attribution: [
+                { path: 'already-tracked.rs', kind: 'existingUserModification' },
+                { path: 'tracked.rs', kind: 'taskModification' },
+              ],
+            },
+            summary: 'task summary',
+            verificationResults: 'verification',
+            runConclusion: 'conclusion',
+            decision: null,
+            rawPayload: 'secret-canary-value',
+          },
+          error: null,
+        },
+      ],
+    } as unknown as WorkbenchRuntimeSnapshot;
+    const client: WorkbenchRuntimeClient = {
+      subscribe: vi.fn(async () => vi.fn()),
+      readSnapshot: vi
+        .fn<() => Promise<WorkbenchRuntimeSnapshot>>()
+        .mockResolvedValueOnce(reviewingSnapshot)
+        .mockResolvedValueOnce(snapshot(1, 1, 'ready')),
+      submitIntent: vi.fn(),
+    };
+    const store = createWorkbenchRuntimeStore(client);
+    await store.getState().start();
+
+    const session = store.getState().snapshot?.sessions[0];
+    expect(session?.deliveryReview?.evidence.changedFiles).toEqual(['tracked.rs', 'new-file.rs']);
+    expect(session?.deliveryReview?.summary).toBe('task summary');
+    expect(JSON.stringify(session)).not.toContain('rawPayload');
+
+    const invalidDecision = {
+      ...reviewingSnapshot,
+      sessions: [
+        {
+          ...reviewingSnapshot.sessions[0],
+          deliveryReview: {
+            ...reviewingSnapshot.sessions[0].deliveryReview,
+            decision: 'allow',
+          },
+        },
+      ],
+    } as unknown as WorkbenchRuntimeSnapshot;
+    const invalidClient: WorkbenchRuntimeClient = {
+      subscribe: vi.fn(async () => vi.fn()),
+      readSnapshot: vi
+        .fn<() => Promise<WorkbenchRuntimeSnapshot>>()
+        .mockResolvedValueOnce(invalidDecision)
+        .mockResolvedValueOnce(snapshot(1, 1, 'ready')),
+      submitIntent: vi.fn(),
+    };
+    const invalidStore = createWorkbenchRuntimeStore(invalidClient);
+    await invalidStore.getState().start();
+    expect(invalidStore.getState().stableErrorCode).toBe('runtime_contract_mismatch');
+  });
+
   it('accepts settled and interrupted session phases with only safe event summaries', async () => {
     let onEvent: ((value: WorkbenchRuntimeEvent) => void) | undefined;
     const initial = {

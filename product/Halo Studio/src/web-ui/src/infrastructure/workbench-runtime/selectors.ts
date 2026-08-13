@@ -20,6 +20,7 @@ const SESSION_PHASE_MESSAGE_KEYS: Record<WorkbenchRuntimeSession['phase'], strin
   idle: 'nav.sessions.workbenchRuntime.sessionPhase.idle',
   running: 'nav.sessions.workbenchRuntime.sessionPhase.running',
   waitingDeveloper: 'nav.sessions.workbenchRuntime.sessionPhase.waitingDeveloper',
+  reviewing: 'nav.sessions.workbenchRuntime.sessionPhase.reviewing',
   interrupted: 'nav.sessions.workbenchRuntime.sessionPhase.interrupted',
   stopping: 'nav.sessions.workbenchRuntime.sessionPhase.stopping',
   ended: 'nav.sessions.workbenchRuntime.sessionPhase.ended',

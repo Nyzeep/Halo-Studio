@@ -222,7 +222,8 @@
           "interrupted": "已中斷",
           "stopping": "正在停止",
           "ended": "已結束",
-          "failed": "失敗"
+          "failed": "失敗",
+          "reviewing": "?????"
         },
         "sessionMode": {
           "standard": "標準",
@@ -265,7 +266,24 @@
           "firstTurnPending": "等待會話進入閒置狀態後傳送首輪任務……",
           "actionFailed": "受管任務操作未完成，請檢查工作區後重試。"
         },
-        "error": "Workbench Runtime 無法繼續。請檢查工作區後重試。"
+        "error": "Workbench Runtime 無法繼續。請檢查工作區後重試。",
+        "deliveryReview": {
+          "title": "????",
+          "finishAndReview": "?????",
+          "accept": "????",
+          "reject": "????",
+          "diffPreview": "????",
+          "changedFiles": "????",
+          "summary": "????",
+          "verificationResults": "????",
+          "runConclusion": "????",
+          "attribution": "????",
+          "freshness": "??????",
+          "existingUserModification": "???????",
+          "taskModification": "????",
+          "manualIntervention": "????",
+          "actionFailed": "??????"
+        }
       },
       "ariaNeedsInput": "有會話需要你的輸入",
       "ariaNeedsInputWithName": "會話 '{{name}}' 需要你的輸入",
