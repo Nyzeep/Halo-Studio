@@ -235,6 +235,12 @@ impl HaloWorkbenchSessionPhase {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HaloWorkbenchSessionSnapshot {
+    /// The active Halo workspace that owns this session. This is a Halo-local
+    /// binding, not a Pi session identifier.
+    pub workspace_id: String,
+    /// Stable Halo task identity. Standard sessions use it to select their
+    /// adapter-owned persistent session directory.
+    pub task_id: String,
     pub session_id: String,
     pub mode: HaloWorkbenchSessionMode,
     pub phase: HaloWorkbenchSessionPhase,
@@ -265,6 +271,7 @@ pub enum HaloWorkbenchPendingOperationPhase {
 #[serde(rename_all = "camelCase")]
 pub struct HaloWorkbenchPendingOperationSnapshot {
     pub operation_id: String,
+    pub task_id: String,
     pub session_id: String,
     pub kind: HaloWorkbenchOperationKind,
     pub phase: HaloWorkbenchPendingOperationPhase,
@@ -329,6 +336,30 @@ impl HaloWorkbenchError {
             "session_terminal",
             "The requested Workbench session has ended",
             "create_new_session",
+        )
+    }
+
+    fn session_busy() -> Self {
+        Self::new(
+            "session_busy",
+            "The requested Workbench session is already processing a lifecycle action",
+            "wait_for_session_state",
+        )
+    }
+
+    fn session_not_ready() -> Self {
+        Self::new(
+            "session_not_ready",
+            "The requested Workbench session is not in the required state for this action",
+            "wait_for_agent_settled",
+        )
+    }
+
+    fn task_already_active() -> Self {
+        Self::new(
+            "task_already_active",
+            "The requested Halo task already owns an active session in this workspace",
+            "reuse_or_end_existing_session",
         )
     }
 
@@ -438,13 +469,21 @@ pub enum HaloWorkbenchIntent {
     },
     CloseWorkspace,
     CreateSession {
+        task_id: String,
         mode: HaloWorkbenchSessionMode,
     },
     SendUserInput {
         session_id: String,
         content: String,
     },
+    FollowUp {
+        session_id: String,
+        content: String,
+    },
     StopSession {
+        session_id: String,
+    },
+    AbortSession {
         session_id: String,
     },
     EndSession {
@@ -464,8 +503,9 @@ impl fmt::Debug for HaloWorkbenchIntent {
                 .field("workspace", workspace)
                 .finish(),
             Self::CloseWorkspace => formatter.write_str("CloseWorkspace"),
-            Self::CreateSession { mode } => formatter
+            Self::CreateSession { task_id, mode } => formatter
                 .debug_struct("CreateSession")
+                .field("task_id", task_id)
                 .field("mode", mode)
                 .finish(),
             Self::SendUserInput { session_id, .. } => formatter
@@ -473,8 +513,17 @@ impl fmt::Debug for HaloWorkbenchIntent {
                 .field("session_id", session_id)
                 .field("content", &"<redacted>")
                 .finish(),
+            Self::FollowUp { session_id, .. } => formatter
+                .debug_struct("FollowUp")
+                .field("session_id", session_id)
+                .field("content", &"<redacted>")
+                .finish(),
             Self::StopSession { session_id } => formatter
                 .debug_struct("StopSession")
+                .field("session_id", session_id)
+                .finish(),
+            Self::AbortSession { session_id } => formatter
+                .debug_struct("AbortSession")
                 .field("session_id", session_id)
                 .finish(),
             Self::EndSession { session_id } => formatter
@@ -818,10 +867,14 @@ impl HaloWorkbenchRuntimeInner {
                         {
                             return false;
                         }
+                        let Some(session) = state.sessions.get(&session_id) else {
+                            return false;
+                        };
                         state.pending_operations.insert(
                             operation_id.clone(),
                             HaloWorkbenchPendingOperationSnapshot {
                                 operation_id,
+                                task_id: session.task_id.clone(),
                                 session_id,
                                 kind: kind.into(),
                                 phase: HaloWorkbenchPendingOperationPhase::AwaitingDecision,
@@ -1216,22 +1269,29 @@ impl HaloWorkbenchRuntime {
                 self.close_workspace(Some(request_id), false).await?;
                 Ok(self.inner.receipt(request_id, None))
             }
-            HaloWorkbenchIntent::CreateSession { mode } => {
-                self.create_session(request_id, mode).await
+            HaloWorkbenchIntent::CreateSession { task_id, mode } => {
+                self.create_session(request_id, task_id, mode).await
             }
             HaloWorkbenchIntent::SendUserInput {
                 session_id,
                 content,
             } => {
-                self.session_command(
-                    request_id,
-                    &session_id,
-                    SessionIntent::SendUserInput(content),
-                )
-                .await
+                self.session_command(request_id, &session_id, SessionIntent::Prompt(content))
+                    .await
+            }
+            HaloWorkbenchIntent::FollowUp {
+                session_id,
+                content,
+            } => {
+                self.session_command(request_id, &session_id, SessionIntent::FollowUp(content))
+                    .await
             }
             HaloWorkbenchIntent::StopSession { session_id } => {
-                self.session_command(request_id, &session_id, SessionIntent::Stop)
+                self.session_command(request_id, &session_id, SessionIntent::Abort)
+                    .await
+            }
+            HaloWorkbenchIntent::AbortSession { session_id } => {
+                self.session_command(request_id, &session_id, SessionIntent::Abort)
                     .await
             }
             HaloWorkbenchIntent::EndSession { session_id } => {
@@ -1731,12 +1791,24 @@ impl HaloWorkbenchRuntime {
     async fn create_session(
         &self,
         request_id: &str,
+        task_id: String,
         mode: HaloWorkbenchSessionMode,
     ) -> IntentResult {
+        validate_task_id(&task_id)?;
         let session_id = Uuid::new_v4().to_string();
         let generation = self.ready_generation()?;
+        let workspace_id = {
+            let state = self.inner.state.lock().expect("Halo Workbench state lock");
+            state
+                .workspace
+                .as_ref()
+                .map(|workspace| workspace.workspace_id.clone())
+                .ok_or_else(HaloWorkbenchError::runtime_not_ready)?
+        };
         let event_session_id = session_id.clone();
         let state_session_id = session_id.clone();
+        let state_task_id = task_id.clone();
+        let state_workspace_id = workspace_id.clone();
         if !self.inner.publish_transition(
             Some(request_id),
             HaloWorkbenchEventKind::SessionStateChanged,
@@ -1747,9 +1819,18 @@ impl HaloWorkbenchRuntime {
                 if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
                     return false;
                 }
+                if state.sessions.values().any(|session| {
+                    session.workspace_id == state_workspace_id
+                        && session.task_id == state_task_id
+                        && !session.phase.is_terminal()
+                }) {
+                    return false;
+                }
                 state.sessions.insert(
                     state_session_id.clone(),
                     HaloWorkbenchSessionSnapshot {
+                        workspace_id: state_workspace_id,
+                        task_id: state_task_id,
                         session_id: state_session_id,
                         mode,
                         phase: HaloWorkbenchSessionPhase::Creating,
@@ -1758,18 +1839,30 @@ impl HaloWorkbenchRuntime {
                 true
             },
         ) {
+            let state = self.inner.state.lock().expect("Halo Workbench state lock");
+            if state.generation == generation
+                && state.sessions.values().any(|session| {
+                    session.workspace_id == workspace_id
+                        && session.task_id == task_id
+                        && !session.phase.is_terminal()
+                })
+            {
+                return Err(HaloWorkbenchError::task_already_active());
+            }
             return Err(HaloWorkbenchError::runtime_not_ready());
         }
         let result = self
             .execute_session_adapter_action(
                 generation,
+                &task_id,
                 &session_id,
                 PiRpcCommand::CreateSession {
                     generation,
-                    task_id: session_id.clone(),
+                    task_id: task_id.clone(),
                     session_id: session_id.clone(),
                     mode: mode.into(),
                 },
+                false,
             )
             .await;
         self.finish_session_command(
@@ -1788,34 +1881,72 @@ impl HaloWorkbenchRuntime {
         session_id: &str,
         intent: SessionIntent,
     ) -> IntentResult {
-        if let SessionIntent::SendUserInput(content) = &intent {
+        if let SessionIntent::Prompt(content) | SessionIntent::FollowUp(content) = &intent {
             validate_user_input(content)?;
         }
         let generation = self.ready_generation()?;
-        self.ensure_session_action_allowed(generation, session_id)?;
+        self.ensure_session_action_allowed(generation, session_id, &intent)?;
+        let task_id = self.session_task_id(generation, session_id)?;
+        let allow_session_removal = matches!(&intent, SessionIntent::End);
         let command = match intent {
-            SessionIntent::SendUserInput(content) => PiRpcCommand::SendUserInput {
-                generation,
-                session_id: session_id.to_string(),
-                content,
-            },
-            SessionIntent::Stop => {
-                self.mark_session_stopping(generation, request_id, session_id);
-                PiRpcCommand::StopSession {
+            SessionIntent::Prompt(content) => {
+                self.mark_session_running(
                     generation,
+                    request_id,
+                    session_id,
+                    HaloWorkbenchSessionPhase::Idle,
+                )?;
+                PiRpcCommand::SendUserInput {
+                    generation,
+                    task_id: task_id.clone(),
+                    session_id: session_id.to_string(),
+                    content,
+                }
+            }
+            SessionIntent::FollowUp(content) => {
+                self.mark_session_running(
+                    generation,
+                    request_id,
+                    session_id,
+                    HaloWorkbenchSessionPhase::WaitingDeveloper,
+                )?;
+                PiRpcCommand::FollowUp {
+                    generation,
+                    task_id: task_id.clone(),
+                    session_id: session_id.to_string(),
+                    content,
+                }
+            }
+            SessionIntent::Abort => {
+                self.mark_session_stopping(
+                    generation,
+                    request_id,
+                    session_id,
+                    SessionIntent::Abort,
+                )?;
+                PiRpcCommand::AbortSession {
+                    generation,
+                    task_id: task_id.clone(),
                     session_id: session_id.to_string(),
                 }
             }
             SessionIntent::End => {
-                self.mark_session_stopping(generation, request_id, session_id);
+                self.mark_session_stopping(generation, request_id, session_id, SessionIntent::End)?;
                 PiRpcCommand::EndSession {
                     generation,
+                    task_id: task_id.clone(),
                     session_id: session_id.to_string(),
                 }
             }
         };
         let result = self
-            .execute_session_adapter_action(generation, session_id, command)
+            .execute_session_adapter_action(
+                generation,
+                &task_id,
+                session_id,
+                command,
+                allow_session_removal,
+            )
             .await;
         self.finish_session_command(
             generation,
@@ -1830,14 +1961,16 @@ impl HaloWorkbenchRuntime {
     async fn execute_session_adapter_action(
         &self,
         generation: u64,
+        task_id: &str,
         session_id: &str,
         command: PiRpcCommand,
+        allow_session_removal: bool,
     ) -> Result<PiRpcReply, HaloWorkbenchError> {
         self.ensure_workspace_trusted(generation).await?;
-        self.ensure_session_action_allowed(generation, session_id)?;
+        self.ensure_session_transport_allowed(generation, task_id, session_id)?;
         let result = {
             let _action = self.inner.adapter_actions.lock().await;
-            self.ensure_session_action_allowed(generation, session_id)?;
+            self.ensure_session_transport_allowed(generation, task_id, session_id)?;
             self.inner
                 .adapter
                 .execute(command)
@@ -1845,8 +1978,26 @@ impl HaloWorkbenchRuntime {
                 .map_err(|error| port_failure(error.kind))
         };
         self.ensure_workspace_trusted(generation).await?;
-        self.ensure_session_action_allowed(generation, session_id)?;
+        if !allow_session_removal {
+            self.ensure_session_transport_allowed(generation, task_id, session_id)?;
+        }
         result
+    }
+
+    fn session_task_id(
+        &self,
+        generation: u64,
+        session_id: &str,
+    ) -> Result<String, HaloWorkbenchError> {
+        let state = self.inner.state.lock().expect("Halo Workbench state lock");
+        if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+            return Err(HaloWorkbenchError::runtime_not_ready());
+        }
+        state
+            .sessions
+            .get(session_id)
+            .map(|session| session.task_id.clone())
+            .ok_or_else(HaloWorkbenchError::session_not_found)
     }
 
     async fn ensure_workspace_trusted(&self, generation: u64) -> Result<(), HaloWorkbenchError> {
@@ -1897,6 +2048,7 @@ impl HaloWorkbenchRuntime {
         &self,
         generation: u64,
         session_id: &str,
+        intent: &SessionIntent,
     ) -> Result<(), HaloWorkbenchError> {
         let state = self.inner.state.lock().expect("Halo Workbench state lock");
         if state.terminated
@@ -1912,31 +2064,139 @@ impl HaloWorkbenchRuntime {
         if session.phase.is_terminal() {
             return Err(HaloWorkbenchError::session_terminal());
         }
+        let allowed = match intent {
+            SessionIntent::Prompt(_) => matches!(session.phase, HaloWorkbenchSessionPhase::Idle),
+            SessionIntent::FollowUp(_) => {
+                matches!(session.phase, HaloWorkbenchSessionPhase::WaitingDeveloper)
+            }
+            SessionIntent::Abort => matches!(session.phase, HaloWorkbenchSessionPhase::Running),
+            SessionIntent::End => matches!(
+                session.phase,
+                HaloWorkbenchSessionPhase::Idle
+                    | HaloWorkbenchSessionPhase::Running
+                    | HaloWorkbenchSessionPhase::WaitingDeveloper
+                    | HaloWorkbenchSessionPhase::Interrupted
+            ),
+        };
+        if allowed {
+            return Ok(());
+        }
+        if session.phase == HaloWorkbenchSessionPhase::Stopping
+            || (session.phase == HaloWorkbenchSessionPhase::Running
+                && matches!(
+                    intent,
+                    SessionIntent::Prompt(_) | SessionIntent::FollowUp(_)
+                ))
+        {
+            Err(HaloWorkbenchError::session_busy())
+        } else {
+            Err(HaloWorkbenchError::session_not_ready())
+        }
+    }
+
+    fn ensure_session_transport_allowed(
+        &self,
+        generation: u64,
+        task_id: &str,
+        session_id: &str,
+    ) -> Result<(), HaloWorkbenchError> {
+        let state = self.inner.state.lock().expect("Halo Workbench state lock");
+        if state.terminated
+            || state.generation != generation
+            || state.phase != HaloWorkbenchPhase::Ready
+        {
+            return Err(HaloWorkbenchError::runtime_not_ready());
+        }
+        let session = state
+            .sessions
+            .get(session_id)
+            .ok_or_else(HaloWorkbenchError::session_not_found)?;
+        if session.task_id != task_id {
+            return Err(HaloWorkbenchError::session_not_found());
+        }
+        if session.phase.is_terminal() {
+            return Err(HaloWorkbenchError::session_terminal());
+        }
         Ok(())
     }
 
-    fn mark_session_stopping(&self, generation: u64, request_id: &str, session_id: &str) {
+    fn mark_session_running(
+        &self,
+        generation: u64,
+        request_id: &str,
+        session_id: &str,
+        expected_phase: HaloWorkbenchSessionPhase,
+    ) -> Result<(), HaloWorkbenchError> {
         let session_id = session_id.to_string();
-        self.inner.publish_transition(
+        if self.inner.publish_transition(
+            Some(request_id),
+            HaloWorkbenchEventKind::SessionStateChanged,
+            "Workbench session is running",
+            Some(session_id.clone()),
+            None,
+            move |state| {
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&session_id) else {
+                    return false;
+                };
+                if session.phase != expected_phase {
+                    return false;
+                }
+                session.phase = HaloWorkbenchSessionPhase::Running;
+                true
+            },
+        ) {
+            Ok(())
+        } else {
+            Err(HaloWorkbenchError::session_busy())
+        }
+    }
+
+    fn mark_session_stopping(
+        &self,
+        generation: u64,
+        request_id: &str,
+        session_id: &str,
+        intent: SessionIntent,
+    ) -> Result<(), HaloWorkbenchError> {
+        let session_id = session_id.to_string();
+        if self.inner.publish_transition(
             Some(request_id),
             HaloWorkbenchEventKind::SessionStateChanged,
             "Workbench session is stopping",
             Some(session_id.clone()),
             None,
             move |state| {
-                if state.generation != generation {
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
                     return false;
                 }
                 let Some(session) = state.sessions.get_mut(&session_id) else {
                     return false;
                 };
-                if session.phase.is_terminal() {
+                let allowed = match intent {
+                    SessionIntent::Abort => session.phase == HaloWorkbenchSessionPhase::Running,
+                    SessionIntent::End => matches!(
+                        session.phase,
+                        HaloWorkbenchSessionPhase::Idle
+                            | HaloWorkbenchSessionPhase::Running
+                            | HaloWorkbenchSessionPhase::WaitingDeveloper
+                            | HaloWorkbenchSessionPhase::Interrupted
+                    ),
+                    SessionIntent::Prompt(_) | SessionIntent::FollowUp(_) => false,
+                };
+                if !allowed {
                     return false;
                 }
                 session.phase = HaloWorkbenchSessionPhase::Stopping;
                 true
             },
-        );
+        ) {
+            Ok(())
+        } else {
+            Err(HaloWorkbenchError::session_busy())
+        }
     }
 
     fn finish_session_command(
@@ -1985,16 +2245,16 @@ impl HaloWorkbenchRuntime {
         decision: HaloWorkbenchOperationDecision,
     ) -> IntentResult {
         let generation = self.ready_generation()?;
-        let session_id = {
+        let (task_id, session_id) = {
             let state = self.inner.state.lock().expect("Halo Workbench state lock");
             state
                 .pending_operations
                 .get(operation_id)
-                .map(|operation| operation.session_id.clone())
+                .map(|operation| (operation.task_id.clone(), operation.session_id.clone()))
                 .ok_or_else(HaloWorkbenchError::operation_not_found)?
         };
         self.ensure_workspace_trusted(generation).await?;
-        self.ensure_session_action_allowed(generation, &session_id)?;
+        self.ensure_session_transport_allowed(generation, &task_id, &session_id)?;
         validate_operation_decision(&decision)?;
         let owned_operation_id = operation_id.to_string();
         let claimed = self.inner.publish_transition(
@@ -2030,7 +2290,7 @@ impl HaloWorkbenchRuntime {
         }
         let result = {
             let _action = self.inner.adapter_actions.lock().await;
-            self.ensure_session_action_allowed(generation, &session_id)?;
+            self.ensure_session_transport_allowed(generation, &task_id, &session_id)?;
             let operation_is_claimed = self
                 .inner
                 .state
@@ -2050,7 +2310,7 @@ impl HaloWorkbenchRuntime {
                 .adapter
                 .execute(PiRpcCommand::ResolveOperation {
                     generation,
-                    task_id: session_id.clone(),
+                    task_id: task_id.clone(),
                     session_id: session_id.clone(),
                     operation_id: operation_id.to_string(),
                     decision: decision.into(),
@@ -2060,7 +2320,7 @@ impl HaloWorkbenchRuntime {
             result
         };
         self.ensure_workspace_trusted(generation).await?;
-        self.ensure_session_action_allowed(generation, &session_id)?;
+        self.ensure_session_transport_allowed(generation, &task_id, &session_id)?;
         match result {
             Ok(PiRpcReply::Accepted)
             | Ok(PiRpcReply::Available { .. })
@@ -2130,8 +2390,9 @@ impl HaloWorkbenchRuntime {
 }
 
 enum SessionIntent {
-    SendUserInput(String),
-    Stop,
+    Prompt(String),
+    FollowUp(String),
+    Abort,
     End,
 }
 
@@ -2144,20 +2405,14 @@ fn valid_session_transition(
     matches!(
         (from, to),
         (Creating, Idle | Running | Stopping | Ended | Failed)
-            | (Idle, Running | WaitingDeveloper | Stopping | Ended | Failed)
+            | (Idle, Running | Stopping | Ended | Failed)
             | (
                 Running,
-                Idle | WaitingDeveloper | Interrupted | Stopping | Ended | Failed
+                WaitingDeveloper | Interrupted | Stopping | Ended | Failed
             )
-            | (
-                WaitingDeveloper,
-                Running | Interrupted | Stopping | Ended | Failed
-            )
-            | (
-                Interrupted,
-                Running | WaitingDeveloper | Stopping | Ended | Failed
-            )
-            | (Stopping, WaitingDeveloper | Interrupted | Ended | Failed)
+            | (WaitingDeveloper, Interrupted | Stopping | Ended | Failed)
+            | (Interrupted, Ended | Failed)
+            | (Stopping, Interrupted | Ended | Failed)
     )
 }
 
@@ -2194,6 +2449,20 @@ fn validate_user_input(content: &str) -> Result<(), HaloWorkbenchError> {
     if content.trim().is_empty() {
         return Err(HaloWorkbenchError::invalid_request(
             "Non-empty user input is required",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_task_id(task_id: &str) -> Result<(), HaloWorkbenchError> {
+    if task_id.trim().is_empty()
+        || task_id.len() > 256
+        || task_id
+            .chars()
+            .any(|character| character.is_control() || character == '\\')
+    {
+        return Err(HaloWorkbenchError::invalid_request(
+            "A safe, non-empty task identifier is required",
         ));
     }
     Ok(())

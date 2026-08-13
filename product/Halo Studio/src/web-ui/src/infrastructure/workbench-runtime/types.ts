@@ -18,6 +18,8 @@ export interface WorkbenchRuntimeWorkspace {
 }
 
 export interface WorkbenchRuntimeSession {
+  workspaceId: string;
+  taskId: string;
   sessionId: string;
   mode: 'standard' | 'managed';
   phase:
@@ -33,6 +35,7 @@ export interface WorkbenchRuntimeSession {
 
 export interface WorkbenchRuntimePendingOperation {
   operationId: string;
+  taskId: string;
   sessionId: string;
   kind: 'permission';
   phase: 'awaitingDecision' | 'decisionSubmitted';
@@ -128,9 +131,11 @@ export type WorkbenchRuntimeOperationDecision =
 export type WorkbenchRuntimeIntent =
   | { type: 'openWorkspace'; workspace: WorkbenchRuntimeWorkspaceInput }
   | { type: 'closeWorkspace' }
-  | { type: 'createSession'; mode: 'standard' | 'managed' }
+  | { type: 'createSession'; taskId: string; mode: 'standard' | 'managed' }
   | { type: 'sendUserInput'; sessionId: string; content: string }
+  | { type: 'followUp'; sessionId: string; content: string }
   | { type: 'stopSession'; sessionId: string }
+  | { type: 'abortSession'; sessionId: string }
   | { type: 'endSession'; sessionId: string }
   | {
       type: 'resolveOperation';

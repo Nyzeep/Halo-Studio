@@ -136,8 +136,11 @@ const WORKBENCH_ERROR_CODES = new Set([
   'runtime_internal',
   'runtime_not_ready',
   'runtime_shutdown',
+  'session_busy',
   'session_not_found',
+  'session_not_ready',
   'session_terminal',
+  'task_already_active',
   'workspace_facts_unavailable',
   'workspace_identity_mismatch',
   'workspace_untrusted',
@@ -158,6 +161,9 @@ const WORKBENCH_ERROR_RECOVERY_ACTIONS = new Set([
   'review_system_permissions',
   'upgrade_pi',
   'wait_for_operation_confirmation',
+  'wait_for_agent_settled',
+  'wait_for_session_state',
+  'reuse_or_end_existing_session',
 ]);
 const SAFE_RUNTIME_ERROR_SUMMARY = 'The Halo Workbench Runtime reported an error';
 
@@ -193,6 +199,11 @@ const contractMismatch = (): never => {
 const nullableString = (value: unknown): string | null => {
   if (value === null) return null;
   if (typeof value !== 'string') return contractMismatch();
+  return value;
+};
+
+const requiredString = (value: unknown): string => {
+  if (typeof value !== 'string' || value.trim().length === 0) return contractMismatch();
   return value;
 };
 
@@ -317,14 +328,15 @@ const sanitizeSnapshot = (input: unknown): WorkbenchRuntimeSnapshot => {
   const sessions = input.sessions.map(session => {
     if (
       !isRecord(session)
-      || typeof session.sessionId !== 'string'
       || !SESSION_MODES.has(String(session.mode))
       || !SESSION_PHASES.has(String(session.phase))
     ) {
       return contractMismatch();
     }
     return {
-      sessionId: session.sessionId,
+      workspaceId: requiredString(session.workspaceId),
+      taskId: requiredString(session.taskId),
+      sessionId: requiredString(session.sessionId),
       mode: session.mode as WorkbenchRuntimeSnapshot['sessions'][number]['mode'],
       phase: session.phase as WorkbenchRuntimeSnapshot['sessions'][number]['phase'],
     };
@@ -333,16 +345,15 @@ const sanitizeSnapshot = (input: unknown): WorkbenchRuntimeSnapshot => {
   const pendingOperations = input.pendingOperations.map(operation => {
     if (
       !isRecord(operation)
-      || typeof operation.operationId !== 'string'
-      || typeof operation.sessionId !== 'string'
       || !OPERATION_KINDS.has(String(operation.kind))
       || !OPERATION_PHASES.has(String(operation.phase))
     ) {
       return contractMismatch();
     }
     return {
-      operationId: operation.operationId,
-      sessionId: operation.sessionId,
+      operationId: requiredString(operation.operationId),
+      taskId: requiredString(operation.taskId),
+      sessionId: requiredString(operation.sessionId),
       kind: operation.kind as WorkbenchRuntimeSnapshot['pendingOperations'][number]['kind'],
       phase: operation.phase as WorkbenchRuntimeSnapshot['pendingOperations'][number]['phase'],
     };

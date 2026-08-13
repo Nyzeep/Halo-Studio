@@ -51,7 +51,7 @@ export const selectWorkbenchRuntimeSessionsForWorkspace = (
   workspaceId: string,
 ): WorkbenchRuntimeSession[] => {
   if (state.snapshot?.workspace?.workspaceId !== workspaceId) return EMPTY_WORKBENCH_SESSIONS;
-  return state.snapshot.sessions;
+  return state.snapshot.sessions.filter(session => session.workspaceId === workspaceId);
 };
 
 export const selectWorkbenchRuntimeSessionNeedsDecision = (

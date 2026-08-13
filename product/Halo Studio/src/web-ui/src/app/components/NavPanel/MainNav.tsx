@@ -207,10 +207,14 @@ const MainNav: React.FC<MainNavProps> = ({
 
       const snapshot = workbenchRuntimeStore.getState().snapshot;
       if (snapshot?.phase !== 'ready' || snapshot.workspace?.workspaceId !== target.id) return;
+      const requestId = createWorkbenchRuntimeRequestId('create-session');
       await workbenchRuntimeStore.getState().submitIntent({
-          requestId: createWorkbenchRuntimeRequestId('create-session'),
-          intent: { type: 'createSession', mode: 'standard' },
-        });
+        requestId,
+        // A navigation-created session is one explicit Halo task. Reusing the
+        // request id keeps the task identity stable across request retries
+        // while the runtime owns the session id and Pi history path.
+        intent: { type: 'createSession', taskId: requestId, mode: 'standard' },
+      });
     } catch {
       log.error('Failed to create code session');
     }
