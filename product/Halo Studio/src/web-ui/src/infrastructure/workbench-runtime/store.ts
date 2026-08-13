@@ -14,6 +14,8 @@ import {
   type WorkbenchPiRpcVersionEvidenceSource,
   type WorkbenchRuntimeCapability,
   type WorkbenchRuntimeActivity,
+  type WorkbenchRuntimeDeliveryAttributionKind,
+  type WorkbenchRuntimeDeliveryDecision,
   type WorkbenchRuntimeEvent,
   type WorkbenchRuntimeIntentReceipt,
   type WorkbenchRuntimeIntentRequest,
@@ -37,6 +39,7 @@ const SESSION_PHASES = new Set([
   'idle',
   'running',
   'waitingDeveloper',
+  'reviewing',
   'interrupted',
   'stopping',
   'ended',
@@ -108,6 +111,9 @@ const EVENT_SUMMARIES = new Set([
   'Workbench session is idle',
   'Workbench session is running',
   'Workbench session is waiting for developer',
+  'Workbench session is in delivery review',
+  'Workbench delivery evidence was frozen',
+  'Workbench delivery was resolved',
   'Workbench session was interrupted',
   'Workbench session is stopping',
   'Workbench session command failed',
@@ -132,6 +138,9 @@ const WORKBENCH_ERROR_CODES = new Set([
   'adapter_timeout',
   'adapter_unavailable',
   'cleanup_failed',
+  'delivery_decision_not_ready',
+  'delivery_evidence_unavailable',
+  'delivery_review_not_ready',
   'invalid_request',
   'managed_workspace_confirmation_required',
   'managed_workspace_not_git',
@@ -334,6 +343,72 @@ const sanitizeSessionActivities = (
   });
 };
 
+const DELIVERY_DECISIONS = new Set(['accepted', 'rejected']);
+const DELIVERY_ATTRIBUTION_KINDS = new Set([
+  'existingUserModification',
+  'taskModification',
+  'manualIntervention',
+]);
+
+const sanitizeDeliveryReview = (
+  input: unknown,
+): WorkbenchRuntimeSession['deliveryReview'] => {
+  if (input === null || input === undefined) return null;
+  if (
+    !isRecord(input)
+    || !isRecord(input.evidence)
+    || typeof input.evidence.capturedAtMs !== 'number'
+    || !isValidCounter(input.evidence.capturedAtMs)
+    || typeof input.evidence.head !== 'string'
+    || typeof input.evidence.workingTreeFingerprint !== 'string'
+    || !BASELINE_FINGERPRINT_PATTERN.test(input.evidence.workingTreeFingerprint)
+    || !Array.isArray(input.evidence.changedFiles)
+    || input.evidence.changedFiles.length > MAX_BASELINE_CHANGED_FILES
+    || typeof input.evidence.diffPreview !== 'string'
+    || !Array.isArray(input.evidence.attribution)
+    || input.evidence.attribution.length > MAX_BASELINE_CHANGED_FILES
+    || typeof input.summary !== 'string'
+    || typeof input.verificationResults !== 'string'
+    || typeof input.runConclusion !== 'string'
+    || !(input.decision === null || input.decision === undefined || typeof input.decision === 'string')
+    || (typeof input.decision === 'string' && !DELIVERY_DECISIONS.has(input.decision))
+  ) {
+    return contractMismatch();
+  }
+
+  return {
+    evidence: {
+      capturedAtMs: input.evidence.capturedAtMs,
+      head: boundedString(input.evidence.head, MAX_BASELINE_HEAD_CHARS),
+      workingTreeFingerprint: input.evidence.workingTreeFingerprint,
+      changedFiles: input.evidence.changedFiles.map(file => (
+        boundedString(file, MAX_BASELINE_PATH_CHARS)
+      )),
+      diffPreview: boundedString(input.evidence.diffPreview, MAX_PUBLIC_MESSAGE_CHARS),
+      attribution: input.evidence.attribution.map(item => {
+        if (
+          !isRecord(item)
+          || typeof item.path !== 'string'
+          || typeof item.kind !== 'string'
+          || !DELIVERY_ATTRIBUTION_KINDS.has(item.kind)
+        ) {
+          return contractMismatch();
+        }
+        return {
+          path: boundedString(item.path, MAX_BASELINE_PATH_CHARS),
+          kind: item.kind as WorkbenchRuntimeDeliveryAttributionKind,
+        };
+      }),
+    },
+    summary: boundedString(input.summary, MAX_PUBLIC_MESSAGE_CHARS),
+    verificationResults: boundedString(input.verificationResults, MAX_PUBLIC_MESSAGE_CHARS),
+    runConclusion: boundedString(input.runConclusion, MAX_PUBLIC_MESSAGE_CHARS),
+    decision: (typeof input.decision === 'string'
+      ? input.decision as WorkbenchRuntimeDeliveryDecision
+      : null),
+  };
+};
+
 const sanitizeAdapterReadiness = (
   input: unknown,
 ): WorkbenchRuntimeSnapshot['adapter']['readiness'] => {
@@ -451,6 +526,7 @@ const sanitizeSnapshot = (input: unknown): WorkbenchRuntimeSnapshot => {
       baseline: sanitizeTaskBaseline(session.baseline),
       messages: sanitizeSessionMessages(session.messages),
       activities: sanitizeSessionActivities(session.activities),
+      deliveryReview: sanitizeDeliveryReview(session.deliveryReview),
       error: session.error === undefined || session.error === null
         ? null
         : sanitizeRuntimeError(session.error),

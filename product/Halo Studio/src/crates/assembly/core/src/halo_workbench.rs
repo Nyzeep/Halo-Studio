@@ -1,4 +1,4 @@
-//! Halo Workbench Runtime product assembly.
+﻿//! Halo Workbench Runtime product assembly.
 //!
 //! P0 deliberately selects exactly one production adapter identity. This
 //! module only wires existing owners and narrow projections; runtime state and
@@ -18,14 +18,17 @@ use bitfun_pi_rpc_adapter::{
 use bitfun_runtime_ports::{
     PiCredentialSecret, PiCredentialStorePort, PiProviderReadiness, PiProviderReadinessPort,
     PiRpcPort, PiRuntimeConfigurationManagementPort, PortError, PortErrorKind, PortResult,
-    WorkbenchTaskBaseline, WorkbenchTaskBaselinePort, WorkbenchTaskBaselineRequest,
+    WorkbenchDeliveryAttribution, WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence,
+    WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint,
+    WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
+    WorkbenchTaskBaselineRequest,
     WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
     WorkbenchWorkspaceTrustRequest,
 };
 use sha2::{Digest, Sha256};
 
 use crate::product_runtime::SystemProductClock;
-use crate::service::git::{GitFileStatus, GitService, GitStatus};
+use crate::service::git::{GitDiffParams, GitFileStatus, GitService, GitStatus};
 use crate::service::remote_ssh::{canonicalize_local_workspace_root, local_workspace_roots_equal};
 use crate::service::workspace::{
     is_halo_workbench_workspace_trusted, WorkspaceInfo, WorkspaceKind, WorkspaceService,
@@ -145,6 +148,157 @@ impl WorkbenchTaskBaselinePort for CoreWorkbenchTaskBaseline {
     }
 }
 
+
+#[derive(Clone, Copy, Default)]
+struct CoreWorkbenchDeliveryEvidence;
+
+const MAX_DELIVERY_DIFF_PREVIEW_BYTES: usize = 64 * 1024;
+
+impl CoreWorkbenchDeliveryEvidence {
+    async fn capture_fingerprint_impl(
+        canonical_root: &Path,
+    ) -> PortResult<(String, WorkbenchDeliveryFingerprint)> {
+        let head = GitService::resolve_revision(canonical_root, "HEAD")
+            .await
+            .map_err(|_| PortError::new(PortErrorKind::Backend, "Git HEAD could not be resolved"))?;
+        let status = GitService::get_status(canonical_root).await.map_err(|_| {
+            PortError::new(PortErrorKind::Backend, "Git status could not be captured")
+        })?;
+        let working_tree_fingerprint =
+            capture_working_tree_fingerprint(canonical_root, &head, &status).map_err(|_| {
+                PortError::new(
+                    PortErrorKind::Backend,
+                    "Git working-tree fingerprint could not be captured",
+                )
+            })?;
+        let changed_files = collect_changed_files(&status);
+        Ok((
+            head.clone(),
+            WorkbenchDeliveryFingerprint {
+                head,
+                changed_files,
+                working_tree_fingerprint,
+                captured_at_ms: chrono::Utc::now().timestamp_millis(),
+            },
+        ))
+    }
+}
+
+#[async_trait]
+impl WorkbenchDeliveryEvidencePort for CoreWorkbenchDeliveryEvidence {
+    async fn capture_fingerprint(
+        &self,
+        request: WorkbenchDeliveryFingerprintRequest,
+    ) -> PortResult<WorkbenchDeliveryFingerprint> {
+        let (canonical_root, _) = canonicalize_local_workspace_root(&request.canonical_root)
+            .map_err(|_| {
+                PortError::new(PortErrorKind::NotAvailable, "workspace root is unavailable")
+            })?;
+        let (_, fingerprint) = Self::capture_fingerprint_impl(&canonical_root).await?;
+        Ok(fingerprint)
+    }
+
+    async fn capture(
+        &self,
+        request: WorkbenchDeliveryEvidenceRequest,
+    ) -> PortResult<WorkbenchDeliveryEvidence> {
+        let (canonical_root, _) = canonicalize_local_workspace_root(&request.canonical_root)
+            .map_err(|_| {
+                PortError::new(PortErrorKind::NotAvailable, "workspace root is unavailable")
+            })?;
+        let (head, fingerprint) = Self::capture_fingerprint_impl(&canonical_root).await?;
+        let diff_preview = capture_bounded_diff_preview(&canonical_root).await.map_err(|_| {
+            PortError::new(
+                PortErrorKind::Backend,
+                "Git diff preview could not be captured",
+            )
+        })?;
+        let attribution = attribute_changes(&request, fingerprint.changed_files.as_slice());
+        Ok(WorkbenchDeliveryEvidence {
+            captured_at_ms: fingerprint.captured_at_ms,
+            head,
+            working_tree_fingerprint: fingerprint.working_tree_fingerprint,
+            changed_files: fingerprint.changed_files,
+            diff_preview,
+            attribution,
+        })
+    }
+}
+
+fn collect_changed_files(status: &GitStatus) -> Vec<String> {
+    let mut changed_files = status
+        .staged
+        .iter()
+        .chain(status.unstaged.iter())
+        .map(|file| file.path.clone())
+        .chain(status.untracked.iter().cloned())
+        .chain(status.conflicts.iter().cloned())
+        .collect::<Vec<_>>();
+    changed_files.sort();
+    changed_files.dedup();
+    changed_files.truncate(MAX_BASELINE_CHANGED_FILES);
+    changed_files
+}
+
+async fn capture_bounded_diff_preview(root: &Path) -> Result<String, String> {
+    let diff = GitService::get_diff(
+        root,
+        &GitDiffParams {
+            source: Some("HEAD".to_string()),
+            target: None,
+            files: None,
+            staged: None,
+            stat: None,
+            review_safe: Some(true),
+        },
+    )
+    .await
+    .map_err(|error| format!("capture delivery diff preview: {error}"))?;
+    Ok(truncate_utf8(&diff, MAX_DELIVERY_DIFF_PREVIEW_BYTES))
+}
+
+fn attribute_changes(
+    request: &WorkbenchDeliveryEvidenceRequest,
+    final_changed_files: &[String],
+) -> Vec<WorkbenchDeliveryAttribution> {
+    let baseline: BTreeSet<&str> = request
+        .baseline
+        .existing_changed_files
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let settled: Option<BTreeSet<&str>> = request
+        .settled
+        .as_ref()
+        .map(|fingerprint| fingerprint.changed_files.iter().map(String::as_str).collect());
+    final_changed_files
+        .iter()
+        .map(|file| {
+            let kind = if baseline.contains(file.as_str()) {
+                WorkbenchDeliveryAttributionKind::ExistingUserModification
+            } else if settled.as_ref().is_some_and(|set| !set.contains(file.as_str())) {
+                WorkbenchDeliveryAttributionKind::ManualIntervention
+            } else {
+                WorkbenchDeliveryAttributionKind::TaskModification
+            };
+            WorkbenchDeliveryAttribution {
+                path: file.clone(),
+                kind,
+            }
+        })
+        .collect()
+}
+
+fn truncate_utf8(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
+        return value.to_string();
+    }
+    let mut end = max_bytes;
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value[..end].to_string()
+}
 fn capture_working_tree_fingerprint(
     root: &Path,
     head: &str,
@@ -540,13 +694,14 @@ pub fn build_halo_workbench_runtime_components(
             .with_credential_store(credential_store.clone()),
     );
     let adapter = selected_pi_rpc(configuration.clone(), credential_store.clone());
-    let runtime = HaloWorkbenchRuntime::new_with_task_baseline(
+    let runtime = HaloWorkbenchRuntime::new_with_delivery_evidence(
         adapter,
         Arc::new(CoreWorkbenchWorkspaceFacts::new(workspace_service)),
         Arc::new(PiRpcConfiguredReadinessGate {
             configuration: configuration.clone(),
         }),
         Arc::new(CoreWorkbenchTaskBaseline),
+        Arc::new(CoreWorkbenchDeliveryEvidence),
         Arc::new(SystemProductClock),
     );
     let configuration: Arc<dyn PiRuntimeConfigurationManagementPort> = configuration;
@@ -576,13 +731,15 @@ mod tests {
 
     use bitfun_runtime_ports::{
         PiCredentialSecret, PiCredentialStorePort, PiRpcCommand, PiRpcFailureKind, PiRpcPort,
-        PiRpcReply, PiRpcWorkspace, PortErrorKind, WorkbenchTaskBaselinePort,
-        WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFactsRequest,
+        PiRpcReply, PiRpcWorkspace, PortErrorKind, WorkbenchDeliveryAttributionKind,
+        WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint, WorkbenchTaskBaseline,
+        WorkbenchTaskBaselinePort, WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFactsRequest,
     };
     use chrono::Utc;
 
     use super::{
-        project_workspace_facts, CoreWorkbenchTaskBaseline, PiRpcAdapter, PiSystemCredentialStore,
+        attribute_changes, project_workspace_facts, CoreWorkbenchTaskBaseline, PiRpcAdapter,
+        PiSystemCredentialStore,
     };
     use crate::service::workspace::{
         GitInfo, WorkspaceInfo, WorkspaceKind, WorkspaceStatistics, WorkspaceStatus, WorkspaceType,
@@ -680,6 +837,55 @@ mod tests {
         assert!(
             !subscription_metadata.exists(),
             "Pi credentials must not create or mutate the subscription metadata store"
+        );
+    }
+
+    #[test]
+    fn delivery_attribution_classifies_baseline_task_and_manual_changes() {
+        let request = WorkbenchDeliveryEvidenceRequest {
+            workspace_id: "workspace-1".to_string(),
+            canonical_root: PathBuf::from("C:/work/workspace-1"),
+            baseline: WorkbenchTaskBaseline {
+                head: "head".to_string(),
+                canonical_root: PathBuf::from("C:/work/workspace-1"),
+                existing_changed_files: vec!["pre-existing.rs".to_string()],
+                working_tree_fingerprint: "a".repeat(64),
+                captured_at_ms: 1,
+            },
+            settled: Some(WorkbenchDeliveryFingerprint {
+                head: "head".to_string(),
+                changed_files: vec!["pre-existing.rs".to_string(), "task-change.rs".to_string()],
+                working_tree_fingerprint: "b".repeat(64),
+                captured_at_ms: 2,
+            }),
+        };
+
+        let attribution = attribute_changes(
+            &request,
+            &[
+                "pre-existing.rs".to_string(),
+                "task-change.rs".to_string(),
+                "manual-change.rs".to_string(),
+            ],
+        );
+
+        let kind_for = |path: &str| {
+            attribution
+                .iter()
+                .find(|item| item.path == path)
+                .map(|item| item.kind)
+        };
+        assert_eq!(
+            kind_for("pre-existing.rs"),
+            Some(WorkbenchDeliveryAttributionKind::ExistingUserModification)
+        );
+        assert_eq!(
+            kind_for("task-change.rs"),
+            Some(WorkbenchDeliveryAttributionKind::TaskModification)
+        );
+        assert_eq!(
+            kind_for("manual-change.rs"),
+            Some(WorkbenchDeliveryAttributionKind::ManualIntervention)
         );
     }
 

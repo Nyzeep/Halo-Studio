@@ -1,4 +1,4 @@
-//! Portable owner for the Halo Workbench Runtime public seam.
+﻿//! Portable owner for the Halo Workbench Runtime public seam.
 //!
 //! The owner exposes Halo-local state and intent types. Pi RPC protocol and
 //! process details remain behind [`PiRpcPort`].
@@ -8,13 +8,17 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
+use std::time::Duration;
 
 use bitfun_runtime_ports::{
     ClockPort, PiProviderReadinessPort, PiRpcAvailabilitySummary, PiRpcCapability, PiRpcCommand,
     PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind,
     PiRpcOperationRiskLevel, PiRpcPort,
     PiRpcReply, PiRpcSessionMode, PiRpcVersionEvidenceSource, PiRpcVersionSummary, PiRpcWorkspace,
-    PortErrorKind, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort, WorkbenchTaskBaselineRequest,
+    PortErrorKind, WorkbenchDeliveryAttributionKind,
+    WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest,
+    WorkbenchDeliveryFingerprint, WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline,
+    WorkbenchTaskBaselinePort, WorkbenchTaskBaselineRequest,
     WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest,
     PI_RPC_ADAPTER_IDENTITY,
 };
@@ -33,6 +37,8 @@ const MAX_BASELINE_CHANGED_FILES: usize = 4096;
 const BASELINE_FINGERPRINT_HEX_LENGTH: usize = 64;
 const MAX_PUBLIC_MESSAGE_BYTES: usize = 16 * 1024;
 const MAX_PUBLIC_LABEL_BYTES: usize = 128;
+const MAX_DELIVERY_DIFF_BYTES: usize = 64 * 1024;
+const MAX_DELIVERY_SUMMARY_BYTES: usize = 16 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -279,6 +285,7 @@ pub enum HaloWorkbenchSessionPhase {
     Idle,
     Running,
     WaitingDeveloper,
+    Reviewing,
     Interrupted,
     Stopping,
     Ended,
@@ -289,6 +296,65 @@ impl HaloWorkbenchSessionPhase {
     fn is_terminal(self) -> bool {
         matches!(self, Self::Ended | Self::Failed)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HaloWorkbenchDeliveryDecision {
+    Accepted,
+    Rejected,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HaloWorkbenchDeliveryAttributionKind {
+    ExistingUserModification,
+    TaskModification,
+    ManualIntervention,
+}
+
+impl From<WorkbenchDeliveryAttributionKind> for HaloWorkbenchDeliveryAttributionKind {
+    fn from(kind: WorkbenchDeliveryAttributionKind) -> Self {
+        match kind {
+            WorkbenchDeliveryAttributionKind::ExistingUserModification => {
+                Self::ExistingUserModification
+            }
+            WorkbenchDeliveryAttributionKind::TaskModification => Self::TaskModification,
+            WorkbenchDeliveryAttributionKind::ManualIntervention => Self::ManualIntervention,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HaloWorkbenchDeliveryAttributionSnapshot {
+    pub path: String,
+    pub kind: HaloWorkbenchDeliveryAttributionKind,
+}
+
+/// Read-only, bounded, redacted delivery evidence exposed to the Workbench UI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HaloWorkbenchDeliveryEvidenceSnapshot {
+    pub captured_at_ms: i64,
+    pub head: String,
+    pub working_tree_fingerprint: String,
+    pub changed_files: Vec<String>,
+    pub diff_preview: String,
+    pub attribution: Vec<HaloWorkbenchDeliveryAttributionSnapshot>,
+}
+
+/// Frozen delivery review state shown to the developer after an explicit
+/// "finish and review". Contains no raw Pi identifiers, tool logs, credentials
+/// or full conversation content.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HaloWorkbenchDeliveryReviewSnapshot {
+    pub evidence: HaloWorkbenchDeliveryEvidenceSnapshot,
+    pub summary: String,
+    pub verification_results: String,
+    pub run_conclusion: String,
+    pub decision: Option<HaloWorkbenchDeliveryDecision>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -307,6 +373,7 @@ pub struct HaloWorkbenchSessionSnapshot {
     pub messages: Vec<HaloWorkbenchMessageSnapshot>,
     pub activities: Vec<HaloWorkbenchActivitySnapshot>,
     pub error: Option<HaloWorkbenchError>,
+    pub delivery_review: Option<HaloWorkbenchDeliveryReviewSnapshot>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -484,6 +551,30 @@ impl HaloWorkbenchError {
             "wait_for_operation_confirmation",
         )
     }
+
+    fn delivery_review_not_ready() -> Self {
+        Self::new(
+            "delivery_review_not_ready",
+            "The Workbench session is not ready for delivery review",
+            "wait_for_agent_settled",
+        )
+    }
+
+    fn delivery_evidence_unavailable() -> Self {
+        Self::new(
+            "delivery_evidence_unavailable",
+            "The managed delivery evidence could not be captured",
+            "retry",
+        )
+    }
+
+    fn delivery_decision_not_ready() -> Self {
+        Self::new(
+            "delivery_decision_not_ready",
+            "The delivery decision is not available for this Workbench session",
+            "refresh_runtime_snapshot",
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -605,6 +696,15 @@ pub enum HaloWorkbenchIntent {
         operation_id: String,
         decision: HaloWorkbenchOperationDecision,
     },
+    FinishAndReview {
+        session_id: String,
+    },
+    AcceptDelivery {
+        session_id: String,
+    },
+    RejectDelivery {
+        session_id: String,
+    },
 }
 
 impl fmt::Debug for HaloWorkbenchIntent {
@@ -657,6 +757,18 @@ impl fmt::Debug for HaloWorkbenchIntent {
                 .debug_struct("ResolveOperation")
                 .field("operation_id", operation_id)
                 .field("decision", decision)
+                .finish(),
+            Self::FinishAndReview { session_id } => formatter
+                .debug_struct("FinishAndReview")
+                .field("session_id", session_id)
+                .finish(),
+            Self::AcceptDelivery { session_id } => formatter
+                .debug_struct("AcceptDelivery")
+                .field("session_id", session_id)
+                .finish(),
+            Self::RejectDelivery { session_id } => formatter
+                .debug_struct("RejectDelivery")
+                .field("session_id", session_id)
                 .finish(),
         }
     }
@@ -746,6 +858,7 @@ struct RuntimeState {
     workspace: Option<HaloWorkbenchWorkspaceSnapshot>,
     sessions: BTreeMap<String, HaloWorkbenchSessionSnapshot>,
     pending_operations: BTreeMap<String, HaloWorkbenchPendingOperationSnapshot>,
+    settled_fingerprints: BTreeMap<String, watch::Receiver<Option<WorkbenchDeliveryFingerprint>>>,
     error: Option<HaloWorkbenchError>,
     sequence: u64,
     state_version: u64,
@@ -765,6 +878,7 @@ impl Default for RuntimeState {
             workspace: None,
             sessions: BTreeMap::new(),
             pending_operations: BTreeMap::new(),
+            settled_fingerprints: BTreeMap::new(),
             error: None,
             sequence: 0,
             state_version: 0,
@@ -781,6 +895,7 @@ struct HaloWorkbenchRuntimeInner {
     adapter: Arc<dyn PiRpcPort>,
     workspace_facts: Arc<dyn WorkbenchWorkspaceFactsPort>,
     task_baseline: Arc<dyn WorkbenchTaskBaselinePort>,
+    delivery_evidence: Arc<dyn WorkbenchDeliveryEvidencePort>,
     provider_readiness: Arc<dyn PiProviderReadinessPort>,
     clock: Arc<dyn ClockPort>,
     state: Mutex<RuntimeState>,
@@ -811,6 +926,31 @@ impl WorkbenchTaskBaselinePort for UnavailableTaskBaselinePort {
         Err(bitfun_runtime_ports::PortError::new(
             PortErrorKind::NotAvailable,
             "managed task baseline provider is unavailable",
+        ))
+    }
+}
+
+struct UnavailableDeliveryEvidencePort;
+
+#[async_trait::async_trait]
+impl WorkbenchDeliveryEvidencePort for UnavailableDeliveryEvidencePort {
+    async fn capture(
+        &self,
+        _request: WorkbenchDeliveryEvidenceRequest,
+    ) -> bitfun_runtime_ports::PortResult<WorkbenchDeliveryEvidence> {
+        Err(bitfun_runtime_ports::PortError::new(
+            PortErrorKind::NotAvailable,
+            "managed delivery evidence provider is unavailable",
+        ))
+    }
+
+    async fn capture_fingerprint(
+        &self,
+        _request: WorkbenchDeliveryFingerprintRequest,
+    ) -> bitfun_runtime_ports::PortResult<WorkbenchDeliveryFingerprint> {
+        Err(bitfun_runtime_ports::PortError::new(
+            PortErrorKind::NotAvailable,
+            "managed delivery evidence provider is unavailable",
         ))
     }
 }
@@ -920,6 +1060,7 @@ impl HaloWorkbenchRuntimeInner {
                 );
             }
             PiRpcEvent::AgentSettled { session_id, .. } => {
+                self.capture_settled_fingerprint(generation, &session_id);
                 self.set_session_phase(
                     generation,
                     &session_id,
@@ -944,12 +1085,7 @@ impl HaloWorkbenchRuntimeInner {
                 );
             }
             PiRpcEvent::SessionEnded { session_id, .. } => {
-                self.set_session_phase(
-                    generation,
-                    &session_id,
-                    HaloWorkbenchSessionPhase::Ended,
-                    "Workbench session ended",
-                );
+                self.set_adapter_session_ended(generation, &session_id);
             }
             PiRpcEvent::SessionFailed {
                 session_id, reason, ..
@@ -1321,6 +1457,76 @@ impl HaloWorkbenchRuntimeInner {
             },
         );
     }
+
+    fn capture_settled_fingerprint(&self, generation: u64, session_id: &str) {
+        let session_id_owned = session_id.to_string();
+        let request = {
+            let state = self.state.lock().expect("Halo Workbench state lock");
+            if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                return;
+            }
+            let Some(session) = state.sessions.get(&session_id_owned) else {
+                return;
+            };
+            if session.mode != HaloWorkbenchSessionMode::Managed {
+                return;
+            }
+            let Some(workspace) = state.workspace.as_ref() else {
+                return;
+            };
+            WorkbenchDeliveryFingerprintRequest {
+                workspace_id: workspace.workspace_id.clone(),
+                canonical_root: workspace.root_path.clone(),
+            }
+        };
+        let (sender, receiver) = watch::channel(None);
+        {
+            let mut state = self.state.lock().expect("Halo Workbench state lock");
+            if state.generation != generation {
+                return;
+            }
+            state
+                .settled_fingerprints
+                .insert(session_id_owned, receiver);
+        }
+        let port = self.delivery_evidence.clone();
+        tokio::spawn(async move {
+            let fingerprint = port.capture_fingerprint(request).await.ok();
+            sender.send_replace(fingerprint);
+        });
+    }
+
+    fn set_adapter_session_ended(&self, generation: u64, session_id: &str) {
+        let session_id_owned = session_id.to_string();
+        self.publish_transition(
+            None,
+            HaloWorkbenchEventKind::SessionStateChanged,
+            "Workbench session ended",
+            Some(session_id_owned.clone()),
+            None,
+            move |state| {
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&session_id_owned) else {
+                    return false;
+                };
+                // A finished managed task remains in read-only delivery review
+                // until the developer accepts or rejects the result.
+                if session.phase == HaloWorkbenchSessionPhase::Reviewing
+                    || session.phase.is_terminal()
+                {
+                    return false;
+                }
+                session.phase = HaloWorkbenchSessionPhase::Ended;
+                session.error = None;
+                state
+                    .pending_operations
+                    .retain(|_, operation| operation.session_id != session_id_owned);
+                true
+            },
+        );
+    }
 }
 
 impl Drop for HaloWorkbenchRuntimeInner {
@@ -1375,12 +1581,33 @@ impl HaloWorkbenchRuntime {
         task_baseline: Arc<dyn WorkbenchTaskBaselinePort>,
         clock: Arc<dyn ClockPort>,
     ) -> Self {
+        Self::new_with_delivery_evidence(
+            adapter,
+            workspace_facts,
+            provider_readiness,
+            task_baseline,
+            Arc::new(UnavailableDeliveryEvidencePort),
+            clock,
+        )
+    }
+
+    /// Constructs the runtime with both the Git baseline provider and the
+    /// read-only delivery evidence provider used by managed tasks.
+    pub fn new_with_delivery_evidence(
+        adapter: Arc<dyn PiRpcPort>,
+        workspace_facts: Arc<dyn WorkbenchWorkspaceFactsPort>,
+        provider_readiness: Arc<dyn PiProviderReadinessPort>,
+        task_baseline: Arc<dyn WorkbenchTaskBaselinePort>,
+        delivery_evidence: Arc<dyn WorkbenchDeliveryEvidencePort>,
+        clock: Arc<dyn ClockPort>,
+    ) -> Self {
         let (events, _) = broadcast::channel(256);
         Self {
             inner: Arc::new(HaloWorkbenchRuntimeInner {
                 adapter,
                 workspace_facts,
                 task_baseline,
+                delivery_evidence,
                 provider_readiness,
                 clock,
                 state: Mutex::new(RuntimeState::default()),
@@ -1610,6 +1837,25 @@ impl HaloWorkbenchRuntime {
             } => {
                 self.resolve_operation(request_id, &operation_id, decision)
                     .await
+            }
+            HaloWorkbenchIntent::FinishAndReview { session_id } => {
+                self.finish_and_review(request_id, &session_id).await
+            }
+            HaloWorkbenchIntent::AcceptDelivery { session_id } => {
+                self.resolve_delivery(
+                    request_id,
+                    &session_id,
+                    HaloWorkbenchDeliveryDecision::Accepted,
+                )
+                .await
+            }
+            HaloWorkbenchIntent::RejectDelivery { session_id } => {
+                self.resolve_delivery(
+                    request_id,
+                    &session_id,
+                    HaloWorkbenchDeliveryDecision::Rejected,
+                )
+                .await
             }
         }
     }
@@ -2227,6 +2473,7 @@ impl HaloWorkbenchRuntime {
                         messages: Vec::new(),
                         activities: Vec::new(),
                         error: None,
+                        delivery_review: None,
                     },
                 );
                 true
@@ -3019,6 +3266,332 @@ impl HaloWorkbenchRuntime {
         }
     }
 
+    /// Explicitly closes the logical session for delivery review. This is not
+    /// an abort: it stops accepting new prompts and follow-ups, freezes the
+    /// bounded/redacted delivery evidence, then releases the adapter session.
+    async fn finish_and_review(&self, request_id: &str, session_id: &str) -> IntentResult {
+        let generation = self.ready_generation()?;
+        if !self.enter_delivery_review(generation, request_id, session_id) {
+            let state = self.inner.state.lock().expect("Halo Workbench state lock");
+            return if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                Err(HaloWorkbenchError::runtime_not_ready())
+            } else if !state.sessions.contains_key(session_id) {
+                Err(HaloWorkbenchError::session_not_found())
+            } else {
+                Err(HaloWorkbenchError::delivery_review_not_ready())
+            };
+        }
+
+        let settled = self.await_settled_fingerprint(generation, session_id).await;
+        let evidence = match self
+            .capture_delivery_evidence(generation, session_id, settled)
+            .await
+        {
+            Ok(evidence) => evidence,
+            Err(error) => {
+                self.fail_session_phase(generation, request_id, session_id, error.clone());
+                return Err(error);
+            }
+        };
+        let review = self.build_delivery_review(generation, session_id, evidence)?;
+        if !self.attach_delivery_review(generation, request_id, session_id, review) {
+            return Err(HaloWorkbenchError::session_not_found());
+        }
+
+        self.release_adapter_session(generation, request_id, session_id)
+            .await?;
+        Ok(self.inner.receipt(request_id, Some(session_id.to_string())))
+    }
+
+    /// Records the developer's accept/reject conclusion. No Git write, commit,
+    /// push, rollback, file deletion, branch creation or history rewrite is
+    /// performed here.
+    async fn resolve_delivery(
+        &self,
+        request_id: &str,
+        session_id: &str,
+        decision: HaloWorkbenchDeliveryDecision,
+    ) -> IntentResult {
+        let generation = self.ready_generation()?;
+        let session_id_owned = session_id.to_string();
+        if self.inner.publish_transition(
+            Some(request_id),
+            HaloWorkbenchEventKind::SessionStateChanged,
+            "Workbench delivery was resolved",
+            Some(session_id_owned.clone()),
+            None,
+            move |state| {
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&session_id_owned) else {
+                    return false;
+                };
+                if session.phase != HaloWorkbenchSessionPhase::Reviewing {
+                    return false;
+                }
+                let Some(review) = session.delivery_review.as_mut() else {
+                    return false;
+                };
+                if review.decision.is_some() {
+                    return false;
+                }
+                review.decision = Some(decision);
+                session.phase = HaloWorkbenchSessionPhase::Ended;
+                session.error = None;
+                state
+                    .pending_operations
+                    .retain(|_, operation| operation.session_id != session_id_owned);
+                true
+            },
+        ) {
+            Ok(self.inner.receipt(request_id, Some(session_id.to_string())))
+        } else {
+            let state = self.inner.state.lock().expect("Halo Workbench state lock");
+            if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                Err(HaloWorkbenchError::runtime_not_ready())
+            } else if !state.sessions.contains_key(session_id) {
+                Err(HaloWorkbenchError::session_not_found())
+            } else {
+                Err(HaloWorkbenchError::delivery_decision_not_ready())
+            }
+        }
+    }
+
+    fn enter_delivery_review(
+        &self,
+        generation: u64,
+        request_id: &str,
+        session_id: &str,
+    ) -> bool {
+        let session_id_owned = session_id.to_string();
+        self.inner.publish_transition(
+            Some(request_id),
+            HaloWorkbenchEventKind::SessionStateChanged,
+            "Workbench session is in delivery review",
+            Some(session_id_owned.clone()),
+            None,
+            move |state| {
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&session_id_owned) else {
+                    return false;
+                };
+                if session.mode != HaloWorkbenchSessionMode::Managed
+                    || session.phase != HaloWorkbenchSessionPhase::WaitingDeveloper
+                {
+                    return false;
+                }
+                session.phase = HaloWorkbenchSessionPhase::Reviewing;
+                true
+            },
+        )
+    }
+
+    fn attach_delivery_review(
+        &self,
+        generation: u64,
+        request_id: &str,
+        session_id: &str,
+        review: HaloWorkbenchDeliveryReviewSnapshot,
+    ) -> bool {
+        let session_id_owned = session_id.to_string();
+        self.inner.publish_transition(
+            Some(request_id),
+            HaloWorkbenchEventKind::SessionStateChanged,
+            "Workbench delivery evidence was frozen",
+            Some(session_id_owned.clone()),
+            None,
+            move |state| {
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&session_id_owned) else {
+                    return false;
+                };
+                if session.phase != HaloWorkbenchSessionPhase::Reviewing {
+                    return false;
+                }
+                session.delivery_review = Some(review);
+                true
+            },
+        )
+    }
+
+    fn fail_session_phase(
+        &self,
+        generation: u64,
+        request_id: &str,
+        session_id: &str,
+        error: HaloWorkbenchError,
+    ) {
+        let session_id_owned = session_id.to_string();
+        self.inner.publish_transition(
+            Some(request_id),
+            HaloWorkbenchEventKind::SessionStateChanged,
+            "Workbench session command failed",
+            Some(session_id_owned.clone()),
+            None,
+            move |state| {
+                if state.generation != generation {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&session_id_owned) else {
+                    return false;
+                };
+                if session.phase.is_terminal() {
+                    return false;
+                }
+                session.phase = HaloWorkbenchSessionPhase::Failed;
+                session.error = Some(error);
+                true
+            },
+        );
+    }
+
+    async fn await_settled_fingerprint(
+        &self,
+        generation: u64,
+        session_id: &str,
+    ) -> Option<WorkbenchDeliveryFingerprint> {
+        let mut receiver = {
+            let state = self.inner.state.lock().expect("Halo Workbench state lock");
+            if state.generation != generation {
+                return None;
+            }
+            state.settled_fingerprints.get(session_id).cloned()?
+        };
+        let current = receiver.borrow().clone();
+        if current.is_some() {
+            return current;
+        }
+        if tokio::time::timeout(Duration::from_secs(5), receiver.changed())
+            .await
+            .is_err()
+        {
+            return None;
+        }
+        let result = receiver.borrow().clone();
+        result
+    }
+
+    async fn capture_delivery_evidence(
+        &self,
+        generation: u64,
+        session_id: &str,
+        settled: Option<WorkbenchDeliveryFingerprint>,
+    ) -> Result<WorkbenchDeliveryEvidence, HaloWorkbenchError> {
+        let request = {
+            let state = self.inner.state.lock().expect("Halo Workbench state lock");
+            if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                return Err(HaloWorkbenchError::runtime_not_ready());
+            }
+            let session = state
+                .sessions
+                .get(session_id)
+                .ok_or_else(HaloWorkbenchError::session_not_found)?;
+            let baseline = session
+                .baseline
+                .as_ref()
+                .ok_or_else(HaloWorkbenchError::task_baseline_unavailable)?;
+            let workspace = state
+                .workspace
+                .as_ref()
+                .ok_or_else(HaloWorkbenchError::runtime_not_ready)?;
+            WorkbenchDeliveryEvidenceRequest {
+                workspace_id: workspace.workspace_id.clone(),
+                canonical_root: workspace.root_path.clone(),
+                baseline: WorkbenchTaskBaseline {
+                    head: baseline.head.clone(),
+                    canonical_root: baseline.canonical_root.clone(),
+                    existing_changed_files: baseline.existing_changed_files.clone(),
+                    working_tree_fingerprint: baseline.working_tree_fingerprint.clone(),
+                    captured_at_ms: baseline.captured_at_ms,
+                },
+                settled,
+            }
+        };
+        self.inner
+            .delivery_evidence
+            .capture(request)
+            .await
+            .map_err(|_| HaloWorkbenchError::delivery_evidence_unavailable())
+    }
+
+    fn build_delivery_review(
+        &self,
+        generation: u64,
+        session_id: &str,
+        evidence: WorkbenchDeliveryEvidence,
+    ) -> Result<HaloWorkbenchDeliveryReviewSnapshot, HaloWorkbenchError> {
+        let state = self.inner.state.lock().expect("Halo Workbench state lock");
+        if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+            return Err(HaloWorkbenchError::runtime_not_ready());
+        }
+        let session = state
+            .sessions
+            .get(session_id)
+            .ok_or_else(HaloWorkbenchError::session_not_found)?;
+        Ok(HaloWorkbenchDeliveryReviewSnapshot {
+            evidence: HaloWorkbenchDeliveryEvidenceSnapshot {
+                captured_at_ms: evidence.captured_at_ms,
+                head: evidence.head,
+                working_tree_fingerprint: evidence.working_tree_fingerprint,
+                changed_files: evidence.changed_files,
+                diff_preview: redact_halo_text(&evidence.diff_preview, MAX_DELIVERY_DIFF_BYTES),
+                attribution: evidence
+                    .attribution
+                    .into_iter()
+                    .map(|item| HaloWorkbenchDeliveryAttributionSnapshot {
+                        path: item.path,
+                        kind: item.kind.into(),
+                    })
+                    .collect(),
+            },
+            summary: summarize_delivery_messages(&session.messages),
+            verification_results: summarize_delivery_activities(&session.activities),
+            run_conclusion: session
+                .messages
+                .iter()
+                .rev()
+                .find(|message| message.role == HaloWorkbenchMessageRole::Assistant)
+                .map(|message| redact_halo_text(&message.content, MAX_DELIVERY_SUMMARY_BYTES))
+                .unwrap_or_default(),
+            decision: None,
+        })
+    }
+
+    async fn release_adapter_session(
+        &self,
+        generation: u64,
+        request_id: &str,
+        session_id: &str,
+    ) -> Result<(), HaloWorkbenchError> {
+        let task_id = self.session_task_id(generation, session_id)?;
+        let result = self
+            .execute_session_adapter_action(
+                generation,
+                &task_id,
+                session_id,
+                PiRpcCommand::EndSession {
+                    generation,
+                    task_id: task_id.clone(),
+                    session_id: session_id.to_string(),
+                },
+                true,
+            )
+            .await;
+        self.finish_session_command(
+            generation,
+            request_id,
+            session_id,
+            result,
+            HaloWorkbenchSessionPhase::Failed,
+        )?;
+        Ok(())
+    }
+
     fn restore_operation(
         &self,
         generation: u64,
@@ -3092,7 +3665,8 @@ fn valid_session_transition(
                 Running,
                 WaitingDeveloper | Interrupted | Stopping | Ended | Failed
             )
-            | (WaitingDeveloper, Interrupted | Stopping | Ended | Failed)
+            | (WaitingDeveloper, Reviewing | Interrupted | Stopping | Ended | Failed)
+            | (Reviewing, Failed)
             | (Interrupted, Ended | Failed)
             | (Stopping, Interrupted | Ended | Failed)
     )
@@ -3157,6 +3731,25 @@ fn validate_task_baseline(baseline: &WorkbenchTaskBaseline) -> Result<(), ()> {
         return Err(());
     }
     Ok(())
+}
+
+fn summarize_delivery_messages(messages: &[HaloWorkbenchMessageSnapshot]) -> String {
+    let joined = messages
+        .iter()
+        .filter(|message| message.role == HaloWorkbenchMessageRole::Assistant)
+        .map(|message| message.content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    redact_halo_text(&joined, MAX_DELIVERY_SUMMARY_BYTES)
+}
+
+fn summarize_delivery_activities(activities: &[HaloWorkbenchActivitySnapshot]) -> String {
+    let joined = activities
+        .iter()
+        .map(|activity| activity.label.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    redact_halo_text(&joined, MAX_DELIVERY_SUMMARY_BYTES)
 }
 
 fn append_message(

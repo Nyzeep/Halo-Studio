@@ -356,4 +356,74 @@ describe('WorkbenchSessionScene', () => {
       decision: { type: 'allowOnce' },
     });
   });
+  it('renders a read-only delivery review and dispatches accept and reject decisions', async () => {
+    submitWorkbenchRuntimeIntent.mockResolvedValue({});
+    runtimeStore.setState({
+      syncStatus: 'ready',
+      snapshot: {
+        phase: 'ready',
+        adapter: { identity: 'pi-rpc-p0' },
+        workspace: { displayName: 'Halo Studio', gitRepository: true, trusted: true },
+        sessions: [
+          {
+            sessionId: 'managed-session',
+            mode: 'managed',
+            phase: 'reviewing',
+            baseline: null,
+            messages: [],
+            activities: [],
+            deliveryReview: {
+              evidence: {
+                capturedAtMs: 1234,
+                head: 'test-head',
+                workingTreeFingerprint: 'a'.repeat(64),
+                changedFiles: ['tracked.rs'],
+                diffPreview: 'diff --git a/tracked.rs b/tracked.rs\n+changed',
+                attribution: [{ path: 'tracked.rs', kind: 'taskModification' }],
+              },
+              summary: 'summary',
+              verificationResults: 'verification',
+              runConclusion: 'conclusion',
+              decision: null,
+            },
+            error: null,
+          },
+        ],
+      },
+      stableErrorCode: null,
+    });
+
+    await act(async () => {
+      root.render(<WorkbenchSessionScene isActive />);
+    });
+
+    expect(container.querySelector('[data-testid="workbench-delivery-review"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="workbench-delivery-diff"]')?.textContent)
+      .toContain('+changed');
+
+    const accept = container.querySelector<HTMLButtonElement>(
+      '[data-testid="workbench-delivery-accept"]',
+    );
+    accept?.click();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(submitWorkbenchRuntimeIntent).toHaveBeenCalledWith({
+      type: 'acceptDelivery',
+      sessionId: 'managed-session',
+    });
+
+    submitWorkbenchRuntimeIntent.mockClear();
+    const reject = container.querySelector<HTMLButtonElement>(
+      '[data-testid="workbench-delivery-reject"]',
+    );
+    reject?.click();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(submitWorkbenchRuntimeIntent).toHaveBeenCalledWith({
+      type: 'rejectDelivery',
+      sessionId: 'managed-session',
+    });
+  });
 });

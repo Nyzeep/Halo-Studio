@@ -27,6 +27,7 @@ export interface WorkbenchRuntimeSession {
     | 'idle'
     | 'running'
     | 'waitingDeveloper'
+    | 'reviewing'
     | 'interrupted'
     | 'stopping'
     | 'ended'
@@ -34,6 +35,7 @@ export interface WorkbenchRuntimeSession {
   baseline?: WorkbenchRuntimeTaskBaseline | null;
   messages?: WorkbenchRuntimeMessage[];
   activities?: WorkbenchRuntimeActivity[];
+  deliveryReview?: WorkbenchRuntimeDeliveryReview | null;
   error?: WorkbenchRuntimeError | null;
 }
 
@@ -71,6 +73,35 @@ export interface WorkbenchRuntimePendingOperation {
   /** Adapter-redacted, bounded tool arguments summary. */
   arguments: string;
   riskLevel: WorkbenchRuntimeOperationRiskLevel;
+}
+
+export type WorkbenchRuntimeDeliveryDecision = 'accepted' | 'rejected';
+
+export type WorkbenchRuntimeDeliveryAttributionKind =
+  | 'existingUserModification'
+  | 'taskModification'
+  | 'manualIntervention';
+
+export interface WorkbenchRuntimeDeliveryAttribution {
+  path: string;
+  kind: WorkbenchRuntimeDeliveryAttributionKind;
+}
+
+export interface WorkbenchRuntimeDeliveryEvidence {
+  capturedAtMs: number;
+  head: string;
+  workingTreeFingerprint: string;
+  changedFiles: string[];
+  diffPreview: string;
+  attribution: WorkbenchRuntimeDeliveryAttribution[];
+}
+
+export interface WorkbenchRuntimeDeliveryReview {
+  evidence: WorkbenchRuntimeDeliveryEvidence;
+  summary: string;
+  verificationResults: string;
+  runConclusion: string;
+  decision: WorkbenchRuntimeDeliveryDecision | null;
 }
 
 export interface WorkbenchRuntimeError {
@@ -172,6 +203,9 @@ export type WorkbenchRuntimeIntent =
   | { type: 'stopSession'; sessionId: string }
   | { type: 'abortSession'; sessionId: string }
   | { type: 'endSession'; sessionId: string }
+  | { type: 'finishAndReview'; sessionId: string }
+  | { type: 'acceptDelivery'; sessionId: string }
+  | { type: 'rejectDelivery'; sessionId: string }
   | {
       type: 'resolveOperation';
       operationId: string;

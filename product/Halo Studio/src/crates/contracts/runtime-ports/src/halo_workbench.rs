@@ -855,3 +855,74 @@ pub trait PiRpcPort: Send + Sync {
 
     fn subscribe(&self) -> broadcast::Receiver<PiRpcEvent>;
 }
+
+
+/// Classification for a changed path in a read-only delivery review.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkbenchDeliveryAttributionKind {
+    /// The path was already dirty in the pre-task baseline.
+    ExistingUserModification,
+    /// The path changed during the managed task.
+    TaskModification,
+    /// The path changed after the task settled (manual developer intervention).
+    ManualIntervention,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkbenchDeliveryAttribution {
+    pub path: String,
+    pub kind: WorkbenchDeliveryAttributionKind,
+}
+
+/// A fixed-length, content-free fingerprint of the working tree at a point in
+/// time. It is used to attribute later changes and to detect stale evidence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkbenchDeliveryFingerprint {
+    pub head: String,
+    pub changed_files: Vec<String>,
+    pub working_tree_fingerprint: String,
+    pub captured_at_ms: i64,
+}
+
+/// Read-only, bounded, redacted delivery evidence captured when a managed
+/// task is explicitly finished for review. Diffs are previews, changed paths
+/// are relative and redacted, and no file contents or Git process details
+/// cross this port.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkbenchDeliveryEvidence {
+    pub captured_at_ms: i64,
+    pub head: String,
+    pub working_tree_fingerprint: String,
+    /// Bounded list of changed paths (relative, redacted).
+    pub changed_files: Vec<String>,
+    /// Bounded unified-diff preview (redacted at the provider).
+    pub diff_preview: String,
+    pub attribution: Vec<WorkbenchDeliveryAttribution>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkbenchDeliveryEvidenceRequest {
+    pub workspace_id: String,
+    pub canonical_root: PathBuf,
+    pub baseline: WorkbenchTaskBaseline,
+    pub settled: Option<WorkbenchDeliveryFingerprint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkbenchDeliveryFingerprintRequest {
+    pub workspace_id: String,
+    pub canonical_root: PathBuf,
+}
+
+#[async_trait]
+pub trait WorkbenchDeliveryEvidencePort: Send + Sync {
+    async fn capture(
+        &self,
+        request: WorkbenchDeliveryEvidenceRequest,
+    ) -> PortResult<WorkbenchDeliveryEvidence>;
+
+    async fn capture_fingerprint(
+        &self,
+        request: WorkbenchDeliveryFingerprintRequest,
+    ) -> PortResult<WorkbenchDeliveryFingerprint>;
+}

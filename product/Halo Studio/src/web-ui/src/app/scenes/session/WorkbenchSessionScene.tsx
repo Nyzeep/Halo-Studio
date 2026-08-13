@@ -10,6 +10,7 @@ import {
   workbenchRuntimeStore,
 } from '@/infrastructure/workbench-runtime';
 
+import WorkbenchDeliveryReview from './WorkbenchDeliveryReview';
 import WorkbenchManagedTaskComposer from './WorkbenchManagedTaskComposer';
 import WorkbenchPermissionDecision from './WorkbenchPermissionDecision';
 import './WorkbenchSessionScene.scss';
@@ -162,6 +163,7 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
                   operation={operation}
                 />
               ))}
+            <WorkbenchDeliveryReview session={session} />
             {session.error ? (
               <div className="bitfun-workbench-session-scene__session-error" role="alert">
                 <AlertCircle size={14} aria-hidden="true" />

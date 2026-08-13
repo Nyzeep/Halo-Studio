@@ -222,7 +222,8 @@
           "interrupted": "Interrupted",
           "stopping": "Stopping",
           "ended": "Ended",
-          "failed": "Failed"
+          "failed": "Failed",
+          "reviewing": "Delivery review"
         },
         "sessionMode": {
           "standard": "Standard",
@@ -265,7 +266,24 @@
           "firstTurnPending": "Waiting for the session to become idle before sending the first turn…",
           "actionFailed": "The managed task action could not be completed. Check the workspace and try again."
         },
-        "error": "Workbench Runtime couldn't continue. Check the workspace or try again."
+        "error": "Workbench Runtime couldn't continue. Check the workspace or try again.",
+        "deliveryReview": {
+          "title": "Delivery review",
+          "finishAndReview": "Finish and review",
+          "accept": "Accept delivery",
+          "reject": "Reject delivery",
+          "diffPreview": "Diff preview",
+          "changedFiles": "Changed files",
+          "summary": "Summary",
+          "verificationResults": "Verification results",
+          "runConclusion": "Run conclusion",
+          "attribution": "Attribution",
+          "freshness": "Evidence captured",
+          "existingUserModification": "Existing user modification",
+          "taskModification": "Task modification",
+          "manualIntervention": "Manual intervention",
+          "actionFailed": "Delivery action failed"
+        }
       },
       "ariaNeedsInput": "A session needs your input",
       "ariaNeedsInputWithName": "Session '{{name}}' needs your input",
