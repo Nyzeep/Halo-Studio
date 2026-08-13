@@ -58,12 +58,19 @@ export interface WorkbenchRuntimeActivity {
   isError: boolean;
 }
 
+export type WorkbenchRuntimeOperationRiskLevel = 'standard' | 'highRisk';
+
 export interface WorkbenchRuntimePendingOperation {
   operationId: string;
   taskId: string;
   sessionId: string;
   kind: 'permission';
   phase: 'awaitingDecision' | 'decisionSubmitted';
+  /** Adapter-redacted tool name. Never a raw Pi identifier. */
+  toolName: string;
+  /** Adapter-redacted, bounded tool arguments summary. */
+  arguments: string;
+  riskLevel: WorkbenchRuntimeOperationRiskLevel;
 }
 
 export interface WorkbenchRuntimeError {

@@ -28,7 +28,8 @@ use async_trait::async_trait;
 use bitfun_runtime_ports::{
     PiCredentialSecret, PiCredentialStorePort, PiProviderCapability, PiProviderCapabilityPort,
     PiProviderCapabilityRequest, PiRpcAvailabilitySummary, PiRpcCommand, PiRpcEvent,
-    PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind, PiRpcPort, PiRpcReply,
+    PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind, PiRpcOperationRiskLevel,
+    PiRpcOperationSummary, PiRpcPort, PiRpcReply,
     PiRpcSessionMode, PiRpcVersion, PiRpcVersionEvidenceSource, PiRpcWorkspace,
     PiRuntimeConfiguration, PiRuntimeConfigurationPort, PortError, PortErrorKind, PortResult,
     PI_RPC_ADAPTER_IDENTITY,
@@ -50,6 +51,7 @@ const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_ABORT_GRACE_PERIOD: Duration = Duration::from_secs(3);
 const MAX_ASSISTANT_DELTA_BYTES: usize = 8 * 1024;
 const MAX_TOOL_NAME_BYTES: usize = 128;
+const MAX_TOOL_ARGUMENTS_BYTES: usize = 512;
 const NO_FAILURE_REASON: u8 = 0;
 // The compatibility profile is intentionally explicit. A successful
 // `--version` process exit is not evidence that its RPC schema is known.
@@ -223,6 +225,7 @@ struct PiSession {
     pending: Mutex<HashMap<String, oneshot::Sender<PortResult<Value>>>>,
     operations: Mutex<HashMap<String, PiOperationBinding>>,
     seen_extension_requests: Mutex<HashSet<String>>,
+    tool_calls: Mutex<HashMap<String, CapturedToolCall>>,
     prompt_sent: AtomicBool,
     prompt_accepted: AtomicBool,
     running: AtomicBool,
@@ -250,6 +253,17 @@ struct PermissionNotice {
     tool_call_id: String,
     #[serde(rename = "toolName")]
     tool_name: String,
+}
+
+/// Adapter-owned, redacted tool-call facts captured from the Pi RPC
+/// `tool_execution_start` event and correlated to the first-party gate's
+/// `extension_ui_request`. Raw arguments never leave this module.
+#[derive(Debug, Clone)]
+struct CapturedToolCall {
+    tool_name: String,
+    raw_tool_name: String,
+    redacted_arguments: String,
+    risk_level: PiRpcOperationRiskLevel,
 }
 
 impl Default for PiRpcAdapter {
@@ -518,6 +532,7 @@ impl PiRpcAdapter {
             pending: Mutex::new(HashMap::new()),
             operations: Mutex::new(HashMap::new()),
             seen_extension_requests: Mutex::new(HashSet::new()),
+            tool_calls: Mutex::new(HashMap::new()),
             prompt_sent: AtomicBool::new(false),
             prompt_accepted: AtomicBool::new(false),
             running: AtomicBool::new(false),
@@ -1244,6 +1259,36 @@ impl PiSession {
         self.session_id.lock().await.clone()
     }
 
+    async fn capture_tool_call(
+        &self,
+        raw_tool_call_id: &str,
+        raw_tool_name: &str,
+        bounded_tool_name: &str,
+        value: &Value,
+    ) {
+        // `args` is present on the Pi RPC `tool_execution_start` event, but a
+        // missing/empty object must still be a correlated permission request,
+        // so the gate always records a bounded, redacted summary.
+        let args = value.get("args").cloned().unwrap_or_else(|| json!({}));
+        let redacted_arguments = redact_tool_arguments(&args);
+        let risk_level = classify_tool_risk(raw_tool_name, &args);
+        let mut tool_calls = self.tool_calls.lock().await;
+        tool_calls.insert(
+            raw_tool_call_id.to_string(),
+            CapturedToolCall {
+                tool_name: bounded_tool_name.to_string(),
+                raw_tool_name: raw_tool_name.to_string(),
+                redacted_arguments,
+                risk_level,
+            },
+        );
+    }
+
+    async fn forget_tool_call(&self, raw_tool_call_id: &str) {
+        let mut tool_calls = self.tool_calls.lock().await;
+        tool_calls.remove(raw_tool_call_id);
+    }
+
     async fn request(self: &Arc<Self>, command: &str, payload: Value) -> PortResult<Value> {
         self.request_with_timeout(command, payload, self.response_timeout)
             .await
@@ -1425,6 +1470,25 @@ impl PiSession {
             }
         };
 
+        let captured = {
+            let mut tool_calls = self.tool_calls.lock().await;
+            let Some(captured) = tool_calls.remove(&notice.tool_call_id) else {
+                drop(tool_calls);
+                self.fail_closed(PiRpcFailureKind::Protocol).await;
+                return;
+            };
+            captured
+        };
+        if captured.raw_tool_name != notice.tool_name {
+            self.fail_closed(PiRpcFailureKind::Protocol).await;
+            return;
+        }
+        let summary = PiRpcOperationSummary {
+            tool_name: captured.tool_name,
+            arguments: captured.redacted_arguments,
+            risk_level: captured.risk_level,
+        };
+
         let task_id = self.current_task_id().await;
         let session_id = self.current_session_id().await;
         let operation_id = format!("pi-operation-{}", Uuid::new_v4());
@@ -1457,6 +1521,7 @@ impl PiSession {
             session_id: session_id.clone(),
             operation_id: operation_id.clone(),
             kind: PiRpcOperationKind::Permission,
+            summary,
             redacted_tool_call_id: Some(redacted_tool_call_id),
         });
 
@@ -1699,11 +1764,11 @@ async fn emit_tool_event(session: &Arc<PiSession>, value: &Value, kind: ToolEven
         session.fail_closed(PiRpcFailureKind::Protocol).await;
         return;
     }
-    let Some(tool_name) = value
-        .get("toolName")
-        .and_then(Value::as_str)
-        .and_then(|value| bounded_protocol_label(value, MAX_TOOL_NAME_BYTES))
-    else {
+    let Some(raw_tool_name) = value.get("toolName").and_then(Value::as_str) else {
+        session.fail_closed(PiRpcFailureKind::Protocol).await;
+        return;
+    };
+    let Some(tool_name) = bounded_protocol_label(raw_tool_name, MAX_TOOL_NAME_BYTES) else {
         session.fail_closed(PiRpcFailureKind::Protocol).await;
         return;
     };
@@ -1711,6 +1776,17 @@ async fn emit_tool_event(session: &Arc<PiSession>, value: &Value, kind: ToolEven
     let task_id = session.current_task_id().await;
     let redacted_tool_call_id =
         redact_tool_call_id(session.generation, &task_id, &session_id, tool_call_id);
+    match kind {
+        ToolEventKind::Started => {
+            session
+                .capture_tool_call(tool_call_id, raw_tool_name, &tool_name, value)
+                .await;
+        }
+        ToolEventKind::Ended => {
+            session.forget_tool_call(tool_call_id).await;
+        }
+        ToolEventKind::Updated => {}
+    }
     let event = match kind {
         ToolEventKind::Started => PiRpcEvent::ToolExecutionStarted {
             generation: session.generation,
@@ -2140,6 +2216,148 @@ fn redact_tool_call_id(generation: u64, task_id: &str, session_id: &str, value: 
         "tool-{}",
         stable_digest(&format!("{generation}:{task_id}:{session_id}:{value}"))
     )
+}
+
+/// Browser / Computer Use tool families that can produce worktree-external
+/// side effects. P0 still gates every tool; the risk level only makes those
+/// decisions more prominent in Halo UI.
+const BROWSER_COMPUTER_TOOL_NAME_MARKERS: &[&str] = &[
+    "browser",
+    "computer",
+    "computer_use",
+    "computer-use",
+    "playwright",
+    "browser_action",
+    "webdriver",
+];
+
+/// Argument keys that indicate an external side effect when observed on a
+/// browser / Computer Use tool call.
+const EXTERNAL_SIDE_EFFECT_ARG_MARKERS: &[&str] = &[
+    "write",
+    "commit",
+    "submit",
+    "upload",
+    "download",
+    "clipboard",
+    "paste",
+    "process",
+    "exec",
+    "command",
+    "shell",
+    "system",
+    "run",
+];
+
+fn classify_tool_risk(tool_name: &str, args: &Value) -> PiRpcOperationRiskLevel {
+    let normalized = tool_name.to_ascii_lowercase().replace('_', "-");
+    let is_browser_or_computer = BROWSER_COMPUTER_TOOL_NAME_MARKERS
+        .iter()
+        .any(|marker| normalized.contains(marker));
+    if !is_browser_or_computer {
+        return PiRpcOperationRiskLevel::Standard;
+    }
+    if args_contain_external_side_effect(args) {
+        PiRpcOperationRiskLevel::HighRisk
+    } else {
+        PiRpcOperationRiskLevel::Standard
+    }
+}
+
+fn args_contain_external_side_effect(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => map.iter().any(|(key, value)| {
+            let lower = key.to_ascii_lowercase();
+            EXTERNAL_SIDE_EFFECT_ARG_MARKERS
+                .iter()
+                .any(|marker| lower.contains(marker))
+                || args_contain_external_side_effect(value)
+        }),
+        Value::Array(items) => items.iter().any(args_contain_external_side_effect),
+        _ => false,
+    }
+}
+
+/// Redacts raw tool arguments into a bounded, renderer-safe summary. Raw
+/// parameters, credentials, paths, and Pi identifiers never survive this
+/// function.
+fn redact_tool_arguments(value: &Value) -> String {
+    let redacted = redact_tool_value(value);
+    truncate_utf8(
+        &serde_json::to_string(&redacted).unwrap_or_else(|_| "{}".to_string()),
+        MAX_TOOL_ARGUMENTS_BYTES,
+    )
+}
+
+fn redact_tool_value(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut redacted = serde_json::Map::new();
+            for (key, value) in map {
+                if is_sensitive_tool_key(key) {
+                    redacted.insert(key.clone(), json!("[redacted]"));
+                } else {
+                    redacted.insert(key.clone(), redact_tool_value(value));
+                }
+            }
+            Value::Object(redacted)
+        }
+        Value::Array(items) => Value::Array(items.iter().map(redact_tool_value).collect()),
+        Value::String(value) => {
+            if looks_like_sensitive_tool_string(value) {
+                json!("[redacted]")
+            } else {
+                Value::String(redact_assistant_text(value))
+            }
+        }
+        other => other.clone(),
+    }
+}
+
+fn is_sensitive_tool_key(key: &str) -> bool {
+    let lower = key.to_ascii_lowercase();
+    [
+        "authorization",
+        "cookie",
+        "token",
+        "secret",
+        "password",
+        "api_key",
+        "apikey",
+        "api-key",
+        "credential",
+        "sessionid",
+        "entryid",
+        "toolcallid",
+        "answer",
+    ]
+    .into_iter()
+    .any(|marker| lower.contains(marker))
+}
+
+fn looks_like_sensitive_tool_string(value: &str) -> bool {
+    let trimmed = value.trim();
+    let looks_like_path = trimmed.starts_with('/')
+        || trimmed.starts_with('\\')
+        || trimmed.starts_with("./")
+        || trimmed.starts_with("../")
+        || (trimmed.len() >= 3
+            && trimmed.as_bytes()[1] == b':'
+            && matches!(trimmed.as_bytes()[0], b'a'..=b'z' | b'A'..=b'Z'))
+        || trimmed.starts_with("~/");
+    let looks_like_url = trimmed.contains("://");
+    let looks_like_secret = [
+        "bearer ",
+        "sk-",
+        "sk_",
+        "ghp_",
+        "github_pat_",
+        "xoxb-",
+        "AIza",
+    ]
+    .into_iter()
+    .any(|prefix| trimmed.to_ascii_lowercase().starts_with(prefix));
+    looks_like_path || looks_like_url || looks_like_secret
 }
 
 fn validate_state_data(value: &Value) -> Result<(), ()> {

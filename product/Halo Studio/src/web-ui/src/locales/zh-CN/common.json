@@ -243,6 +243,12 @@
           "failed": "$t(shared:statuses.failed)"
         },
         "sessionError": "此会话无法继续。",
+        "permission": {
+          "title": "工具操作需要确认",
+          "allowOnce": "本次允许",
+          "deny": "拒绝",
+          "highRisk": "高风险"
+        },
         "managedTask": {
           "title": "启动受管任务",
           "description": "在 Pi 接收首轮任务前，先确认此 Git 工作区。",

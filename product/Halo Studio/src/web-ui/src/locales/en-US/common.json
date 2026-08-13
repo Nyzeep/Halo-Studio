@@ -243,6 +243,12 @@
           "failed": "$t(shared:statuses.failed)"
         },
         "sessionError": "This session could not continue.",
+        "permission": {
+          "title": "Tool action needs confirmation",
+          "allowOnce": "Allow this once",
+          "deny": "Deny",
+          "highRisk": "High risk"
+        },
         "managedTask": {
           "title": "Start a managed task",
           "description": "Confirm this Git workspace before Pi receives the first task turn.",

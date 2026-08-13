@@ -9,7 +9,8 @@ use bitfun_pi_rpc_adapter::{
 use bitfun_runtime_ports::{
     PiCredentialSecret, PiCredentialStorePort, PiRpcAvailabilitySummary, PiRpcCapability,
     PiRpcCommand, PiRpcCompatibilityProfile, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision,
-    PiRpcPort, PiRpcReply, PiRpcSessionMode, PiRpcVersion, PiRpcVersionEvidenceSource,
+    PiRpcOperationRiskLevel, PiRpcPort, PiRpcReply, PiRpcSessionMode, PiRpcVersion,
+    PiRpcVersionEvidenceSource,
     PiRpcWorkspace, PiRuntimeConfiguration, PiStartupOptions, PiThinkingLevel, PortErrorKind,
 };
 use tokio::sync::broadcast;
@@ -1688,6 +1689,120 @@ async fn extension_response_id_mismatch_fails_closed() {
         .await,
         PiRpcEvent::SessionFailed { .. }
     ));
+    shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn extension_decision_projects_a_redacted_arguments_summary() {
+    let _environment = fixture_environment("extension");
+    let generation = 42;
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_millis(500),
+        Duration::from_millis(100),
+    );
+    let mut events = adapter.subscribe();
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "permission").await,
+        PiRpcReply::Accepted
+    );
+    let requested = wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::OperationRequested { .. })
+    })
+    .await;
+    let summary = match requested {
+        PiRpcEvent::OperationRequested { summary, .. } => summary,
+        _ => unreachable!(),
+    };
+    assert_eq!(summary.tool_name, "write");
+    assert_eq!(summary.risk_level, PiRpcOperationRiskLevel::Standard);
+    assert!(summary.arguments.contains("[redacted]"));
+    assert!(!summary.arguments.contains("/workspace/notes.txt"));
+    shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn extension_sensitive_arguments_are_redacted_from_the_summary() {
+    let _environment = fixture_environment("extension_sensitive");
+    let generation = 43;
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_millis(500),
+        Duration::from_millis(100),
+    );
+    let mut events = adapter.subscribe();
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "permission").await,
+        PiRpcReply::Accepted
+    );
+    let requested = wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::OperationRequested { .. })
+    })
+    .await;
+    let summary = match requested {
+        PiRpcEvent::OperationRequested { summary, .. } => summary,
+        _ => unreachable!(),
+    };
+    assert_eq!(summary.tool_name, "bash");
+    assert_eq!(summary.risk_level, PiRpcOperationRiskLevel::Standard);
+    for forbidden in [
+        "fake-secret",
+        "Bearer",
+        "/home/nyzee/.ssh/id_rsa",
+        "raw-pi-session-id",
+        "raw-pi-entry-id",
+        "raw-pi-tool-call-id",
+        "the-answer-is-42",
+    ] {
+        assert!(
+            !summary.arguments.contains(forbidden),
+            "summary leaked {forbidden}: {}",
+            summary.arguments
+        );
+    }
+    shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn browser_computer_use_external_side_effect_is_classified_high_risk() {
+    let _environment = fixture_environment("extension_high_risk");
+    let generation = 44;
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_millis(500),
+        Duration::from_millis(100),
+    );
+    let mut events = adapter.subscribe();
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "permission").await,
+        PiRpcReply::Accepted
+    );
+    let requested = wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::OperationRequested { .. })
+    })
+    .await;
+    let summary = match requested {
+        PiRpcEvent::OperationRequested { summary, .. } => summary,
+        _ => unreachable!(),
+    };
+    assert_eq!(summary.tool_name, "browser");
+    assert_eq!(summary.risk_level, PiRpcOperationRiskLevel::HighRisk);
+    assert!(!summary.arguments.contains("https://example.test/submit"));
     shutdown(&adapter, generation).await;
 }
 
