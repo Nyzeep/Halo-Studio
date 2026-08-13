@@ -44,6 +44,7 @@ const SESSION_PHASES = new Set([
 ]);
 const OPERATION_KINDS = new Set(['permission']);
 const OPERATION_PHASES = new Set(['awaitingDecision', 'decisionSubmitted']);
+const OPERATION_RISK_LEVELS = new Set(['standard', 'highRisk']);
 const PI_RPC_VERSIONS = new Set(['0.81.1', '0.83.0']);
 const PI_RPC_COMPATIBILITY_PROFILES = new Set([
   'pi-rpc-0.81.1-p0',
@@ -461,6 +462,7 @@ const sanitizeSnapshot = (input: unknown): WorkbenchRuntimeSnapshot => {
       !isRecord(operation)
       || !OPERATION_KINDS.has(String(operation.kind))
       || !OPERATION_PHASES.has(String(operation.phase))
+      || !OPERATION_RISK_LEVELS.has(String(operation.riskLevel))
     ) {
       return contractMismatch();
     }
@@ -470,6 +472,11 @@ const sanitizeSnapshot = (input: unknown): WorkbenchRuntimeSnapshot => {
       sessionId: requiredString(operation.sessionId),
       kind: operation.kind as WorkbenchRuntimeSnapshot['pendingOperations'][number]['kind'],
       phase: operation.phase as WorkbenchRuntimeSnapshot['pendingOperations'][number]['phase'],
+      toolName: requiredString(operation.toolName),
+      arguments: requiredString(operation.arguments),
+      riskLevel: operation.riskLevel as (
+        WorkbenchRuntimeSnapshot['pendingOperations'][number]['riskLevel']
+      ),
     };
   });
 

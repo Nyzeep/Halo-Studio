@@ -299,4 +299,61 @@ describe('WorkbenchSessionScene', () => {
       content: 'Run the managed task',
     });
   });
+
+  it('offers only a one-time allow/deny control for a pending permission', async () => {
+    submitWorkbenchRuntimeIntent.mockResolvedValue({});
+    runtimeStore.setState({
+      syncStatus: 'ready',
+      snapshot: {
+        phase: 'ready',
+        adapter: { identity: 'pi-rpc-p0' },
+        workspace: { workspaceId: 'workspace-1', displayName: 'Halo Studio' },
+        sessions: [{ sessionId: 'session-1', mode: 'managed', phase: 'running' }],
+        pendingOperations: [{
+          operationId: 'operation-1',
+          taskId: 'task-1',
+          sessionId: 'session-1',
+          kind: 'permission',
+          phase: 'awaitingDecision',
+          toolName: 'browser',
+          arguments: '{"action":"[redacted]"}',
+          riskLevel: 'highRisk',
+        }],
+      },
+      stableErrorCode: null,
+    });
+
+    await act(async () => {
+      root.render(<WorkbenchSessionScene isActive />);
+    });
+
+    const decision = container.querySelector('[data-testid="workbench-permission-decision"]');
+    expect(decision).not.toBeNull();
+    expect(decision?.getAttribute('data-risk-level')).toBe('highRisk');
+    expect(container.textContent).toContain('browser');
+    expect(container.textContent).toContain('{"action":"[redacted]"}');
+    expect(container.textContent).toContain('nav.sessions.workbenchRuntime.permission.allowOnce');
+    expect(container.textContent).toContain('nav.sessions.workbenchRuntime.permission.deny');
+    expect(container.textContent).toContain('nav.sessions.workbenchRuntime.permission.highRisk');
+
+    // No permanent, session-level, or free-text approval surface is offered
+    // inside the permission control itself.
+    expect(container.textContent).not.toContain('always');
+    expect(container.textContent).not.toContain('始终允许');
+    expect(decision?.querySelector('textarea')).toBeNull();
+    expect(decision?.querySelector('input')).toBeNull();
+
+    const allow = container.querySelector<HTMLButtonElement>(
+      '[data-testid="workbench-permission-allow"]',
+    );
+    allow?.click();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(submitWorkbenchRuntimeIntent).toHaveBeenCalledWith({
+      type: 'resolveOperation',
+      operationId: 'operation-1',
+      decision: { type: 'allowOnce' },
+    });
+  });
 });

@@ -11,6 +11,7 @@ import {
 } from '@/infrastructure/workbench-runtime';
 
 import WorkbenchManagedTaskComposer from './WorkbenchManagedTaskComposer';
+import WorkbenchPermissionDecision from './WorkbenchPermissionDecision';
 import './WorkbenchSessionScene.scss';
 
 interface WorkbenchSessionSceneProps {
@@ -150,6 +151,17 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
                 ))}
               </div>
             ) : null}
+            {(snapshot.pendingOperations ?? [])
+              .filter(operation => (
+                operation.sessionId === session.sessionId
+                && operation.phase === 'awaitingDecision'
+              ))
+              .map(operation => (
+                <WorkbenchPermissionDecision
+                  key={operation.operationId}
+                  operation={operation}
+                />
+              ))}
             {session.error ? (
               <div className="bitfun-workbench-session-scene__session-error" role="alert">
                 <AlertCircle size={14} aria-hidden="true" />

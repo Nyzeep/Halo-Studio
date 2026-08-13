@@ -1,0 +1,72 @@
+﻿.bitfun-workbench-permission-decision {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-left: 24px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--color-bg-secondary);
+
+  &.is-high-risk {
+    border-color: var(--color-status-warning, #d9822b);
+  }
+
+  &__summary {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+
+    code {
+      overflow: hidden;
+      color: var(--color-text-secondary);
+      font-size: var(--font-size-xs);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &__tool {
+    flex: 0 0 auto;
+    font-weight: 600;
+  }
+
+  &__arguments {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__risk {
+    flex: 0 0 auto;
+    color: var(--color-status-warning, #d9822b);
+    font-size: var(--font-size-xs);
+  }
+
+  &__actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
+
+    button {
+      padding: 5px 12px;
+      border-radius: 5px;
+      border: 1px solid var(--border-subtle);
+      background: transparent;
+      color: var(--color-text-primary);
+      font-size: var(--font-size-sm);
+      cursor: pointer;
+
+      &:first-child {
+        border-color: var(--color-status-ok, #2f9e44);
+      }
+
+      &:last-child {
+        border-color: var(--color-status-error, #e03131);
+      }
+    }
+  }
+}
