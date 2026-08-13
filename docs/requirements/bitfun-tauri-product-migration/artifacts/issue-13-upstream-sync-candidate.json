@@ -191,4 +191,54 @@
       "No exact desktop release artifact has been recorded for license/notice inspection."
     ]
   }
+,
+  "freshRehearsal": {
+    "schemaVersion": 1,
+    "rehearsalDate": "2026-08-13",
+    "purpose": "Issue 13 part A: fresh read-only BitFun upstream synchronization rehearsal against the current upstream main HEAD, recorded independently of the previously derived 1616ccaf candidate diff.",
+    "source": {
+      "command": "git ls-remote https://github.com/GCWing/BitFun.git HEAD refs/heads/main",
+      "exitCode": 0,
+      "head": "9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6",
+      "refsHeadsMain": "9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6"
+    },
+    "base": {
+      "upstreamRepository": "https://github.com/GCWing/BitFun.git",
+      "ref": "refs/heads/main",
+      "commit": "ca56631e38f36db675583288df2bd44c540d250a",
+      "role": "initial import pinned in bitfun-upstream-manifest.json"
+    },
+    "freshCandidate": {
+      "commit": "9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6",
+      "parent": "59e06a0 (7-char prefix; full SHA not captured because GitHub API is rate-limited and the commit page truncates the parent link)",
+      "message": "perf(cargo): centralize default feature ownership",
+      "changedFiles": 41,
+      "additions": 326,
+      "deletions": 258,
+      "distinctFromInitialImport": true,
+      "distinctFromPriorCandidate": "9b05dd0e is newer than the previously recorded 1616ccaf candidate"
+    },
+    "treeDiff": {
+      "derived": false,
+      "reason": "The fresh commit tree could not be re-derived locally: git fetch (POST git-upload-pack) and codeload tarball download (large GET) are blocked in this environment, and the GitHub REST API is rate-limited (403, core remaining 0). Only git ls-remote metadata and the commit HTML page were reachable.",
+      "priorDerivedDiff": "The last fully derived path-level diff remains 1616ccaf in issue-13-upstream-sync-diff.json; it is not overwritten."
+    },
+    "changedSurfacesRepresentative": [
+      "AGENTS.md / AGENTS-CN.md (repository Rust dependency-feature rules)",
+      "Cargo.toml ([workspace.dependencies] default-features policy)",
+      "docs (workspace dependency policy guidance)",
+      "Multiple crate Cargo.toml manifests (default-features=false consolidation)"
+    ],
+    "conflictDecisions": {
+      "automatedMerge": false,
+      "upstreamWrite": false,
+      "appliedToHalo": false,
+      "retainHaloBrand": true,
+      "retainWorkbenchRuntimeInterface": true,
+      "retainPiRpcAdapterSeam": true,
+      "manualReviewRequired": "The fresh commit changes Cargo workspace dependency/feature policy; because Halo product/Halo Studio owns its own workspace and the Cargo workspace lists src/crates/adapters/pi-rpc-adapter twice (boundary defect reported but not modified), these changes require a Halo-specific three-way review and must not be auto-applied."
+    },
+    "status": "blocked"
+  }
+
 }

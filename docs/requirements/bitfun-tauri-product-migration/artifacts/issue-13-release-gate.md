@@ -151,3 +151,57 @@ artifact 和工单 13 说明。CLI 仍是独立只读审计入口，不是已接
 完整 host closure/发行文件 evidence；computed `globalThis`/`window` property access
 （含 alias 与 optional computed call）和 extension-owned distribution/release-artifact
 路径复用也 fail closed；它们不会执行 Pi、模型、联网安装或凭据读取。
+
+## 本轮补审计与上游重演练（2026-08-13）
+
+本分支 `codex/issue-13-upstream-sync-rehearsal` 基于最新 main `331903c55`，仅完成
+工单 13 的剩余部分 A/B/C。release gate 保持 `blocked`，未合并 main。
+
+### A. 上游同步重演练
+
+- 只读来源：`git ls-remote https://github.com/GCWing/BitFun.git HEAD refs/heads/main`
+  退出码 `0`，HEAD 与 `refs/heads/main` 均为
+  `9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6`。
+- 新候选 commit：`9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6`（父提交前缀
+  `59e06a0`，message `perf(cargo): centralize default feature ownership`，41 个文件
+  变更、+326/−258），**不同于初始导入** `ca56631e38f36db675583288df2bd44c540d250a`，
+  也新于既往候选 `1616ccaf73c0dabc50783344e583d304dd77622b`。
+- 树级候选 diff：**未能在本地重算**。本环境 `git fetch`（POST git-upload-pack）与
+  `codeload` tarball（大 GET）通道被阻断，GitHub REST API 被限流（403，core
+  remaining 0）；仅 `git ls-remote` 元数据与 commit HTML 页面可达。既往已完整派生的
+  路径级 diff 仍为 `1616ccaf`（`issue-13-upstream-sync-diff.json`），本次不覆盖。
+- 冲突决策：不自动 merge、不 cherry-pick、不向 BitFun 上游提交或推送；保留 Halo
+  品牌、产品裁剪、Workbench Runtime 公共 Interface 与 Pi RPC Adapter seam。新 commit
+  主要触碰 Cargo workspace 默认 feature 归属策略（`AGENTS.md`/`AGENTS-CN.md`、
+  根 `Cargo.toml`、多个 crate manifest、docs），与 Halo 自有 workspace 及已报告的
+  `src/crates/adapters/pi-rpc-adapter` 重复 member 边界缺陷重叠，必须 Halo 专属三方
+  审查，不自动应用。
+
+### B. 第一方 extension inventory 逐项补审计（对最新 main）
+
+- 源码 commit/tree/blob 与 SHA-256 重新核验：commit
+  `e8c445d6a81d90851ac03d6aac7a4f11b6b749a3`（祖先于 main，`merge-base --is-ancestor`
+  退出 `0`）、tree `f50918b6bdebc6067f409f248cc9182ff5bcdec3`、canonical blob
+  `15d6908cc30e45f8812a87c591e58799d2f7ae69`、SHA-256
+  `A6F704110E56BE3C1C0754DADDE1BE2B27F65C76EE03F2C19A1E43CD06848C0B`，与清单一致。
+- 加载参数与 include_str!：`lib.rs` 含 `include_str!("halo_permission_gate.ts")`、
+  `HALO_PI_EXTENSION_ID=halo-workbench-permission-gate`、
+  `HALO_PI_EXTENSION_VERSION=1.0.0`、`--no-approve --no-extensions --extension`。
+- 依赖边界：`@earendil-works/pi-coding-agent` 仅出现在 extension 源码第 1 行的
+  `import type` 与 `lib.rs` 注释，`rg` 在 package.json/pnpm-lock/package-lock/
+  Cargo.toml/Cargo.lock 中无命中（退出 1）；`cargo tree -p bitfun-pi-rpc-adapter`
+  无可疑运行时依赖。
+- 审计脚本 stale 修复：halo-scope.mjs 的 allowlist SHA-256 已从
+  `894652f9373a70b878e24a36dd8a787610def01a03d158fc89a9b21d64e0374f` 更新为
+  `d530b0bb45bbddbcae46d54db8e49cb960acb146c9cddf7a09cdf41d2f571bd7`（工单 05
+  修复 createSession.taskId 后该文件变更，仍是负向守卫字面量，非真实路径输入）；
+  静态检查 `adapter-runtime-load-path-unproven` 的 start-flow 断言已改为当前
+  `create_session` 流程（`install_first_party_extension` -> `Some(extension)` ->
+  `spawn_session_process` 内 `extension.as_ref().map(|e| e.path.as_path())` ->
+  `pi_rpc_args(extension_path, ...)`），不再误报。
+- 审计 CLI 当前结论仍为 `blocked`，9 项 finding：
+  `release-gate-declared-blocked`、`upstream-candidate-release-gate-blocked`、
+  `upstream-reference-tree-unavailable`、`workspace-member-duplicate`、
+  `built-in-extension-provenance-missing`、`host-source-provenance-missing`、
+  `host-license-evidence-not-release`、`host-dependency-closure-incomplete`、
+  `release-artifact-evidence-missing`。
