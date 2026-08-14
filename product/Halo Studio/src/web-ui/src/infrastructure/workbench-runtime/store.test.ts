@@ -329,6 +329,62 @@ describe('WorkbenchRuntimeStore', () => {
     expect(store.getState().snapshot).toBeNull();
   });
 
+  it('projects persisted interruption errors without exposing their summaries', async () => {
+    const secretCanary = 'interruption-history-secret';
+    const restored = snapshot();
+    restored.sessions = [
+      {
+        workspaceId: 'workspace-1',
+        taskId: 'task-application',
+        sessionId: 'session-application',
+        mode: 'managed',
+        cancellationMode: null,
+        phase: 'interrupted',
+        error: {
+          code: 'application_interrupted',
+          recoveryAction: 'start_new_run_or_review_interruption',
+          summary: secretCanary,
+        },
+      },
+      {
+        workspaceId: 'workspace-1',
+        taskId: 'task-workspace',
+        sessionId: 'session-workspace',
+        mode: 'managed',
+        cancellationMode: null,
+        phase: 'interrupted',
+        error: {
+          code: 'workspace_closed',
+          recoveryAction: 'start_new_run_or_review_interruption',
+          summary: secretCanary,
+        },
+      },
+    ];
+    const client: WorkbenchRuntimeClient = {
+      subscribe: vi.fn(async () => vi.fn()),
+      readSnapshot: vi.fn(async () => restored),
+      submitIntent: vi.fn(),
+    };
+    const store = createWorkbenchRuntimeStore(client);
+
+    await store.getState().start();
+
+    expect(store.getState().syncStatus).toBe('ready');
+    expect(store.getState().snapshot?.sessions.map(session => session.error)).toEqual([
+      {
+        code: 'application_interrupted',
+        recoveryAction: 'start_new_run_or_review_interruption',
+        summary: 'The Halo Workbench Runtime reported an error',
+      },
+      {
+        code: 'workspace_closed',
+        recoveryAction: 'start_new_run_or_review_interruption',
+        summary: 'The Halo Workbench Runtime reported an error',
+      },
+    ]);
+    expect(JSON.stringify(store.getState().snapshot)).not.toContain(secretCanary);
+  });
+
   it('strips unknown fields from snapshots and events before storing them', async () => {
     const secretCanary = 'secret-canary-value';
     let onEvent: ((value: WorkbenchRuntimeEvent) => void) | undefined;
@@ -613,6 +669,7 @@ describe('WorkbenchRuntimeStore', () => {
           sessionId: 'session-1',
           mode: 'managed' as const,
           phase: 'waitingDeveloper' as const,
+          cancellationMode: null,
         },
         {
           workspaceId: 'workspace-1',
@@ -620,6 +677,7 @@ describe('WorkbenchRuntimeStore', () => {
           sessionId: 'session-2',
           mode: 'standard' as const,
           phase: 'interrupted' as const,
+          cancellationMode: 'forced' as const,
         },
       ],
     };
@@ -643,6 +701,7 @@ describe('WorkbenchRuntimeStore', () => {
       'waitingDeveloper',
       'interrupted',
     ]);
+    expect(store.getState().snapshot?.sessions[1].cancellationMode).toBe('forced');
     expect(store.getState().lastEvent?.summary).toBe(
       'Workbench session is waiting for developer',
     );

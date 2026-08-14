@@ -1,5 +1,5 @@
 ﻿import React, { useState } from 'react';
-import { CheckCircle2, FileDiff, XCircle } from 'lucide-react';
+import { CheckCircle2, FileDiff, PauseCircle, PlayCircle, XCircle } from 'lucide-react';
 
 import { useI18n } from '@/infrastructure/i18n';
 import {
@@ -11,32 +11,89 @@ import './WorkbenchDeliveryReview.scss';
 
 interface WorkbenchDeliveryReviewProps {
   session: WorkbenchRuntimeSession;
+  onStartNewRun: () => void;
 }
 
-const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({ session }) => {
-  const { t } = useI18n('common');
+const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({
+  session,
+  onStartNewRun,
+}) => {
+  const { t, formatDate } = useI18n('common');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [keptCurrentState, setKeptCurrentState] = useState(false);
 
   if (session.mode !== 'managed') return null;
 
   const review = session.deliveryReview;
+
+  const startNewRun = () => {
+    setKeptCurrentState(false);
+    onStartNewRun();
+  };
+
+  const finishAndReview = () => {
+    setBusy(true);
+    setError(null);
+    void submitWorkbenchRuntimeIntent({
+      type: 'finishAndReview',
+      sessionId: session.sessionId,
+    })
+      .catch(() => setError('nav.sessions.workbenchRuntime.deliveryReview.actionFailed'))
+      .finally(() => setBusy(false));
+  };
+
+  if (session.phase === 'interrupted' && !review) {
+    return (
+      <div className="bitfun-workbench-delivery-review" data-testid="workbench-interruption-actions">
+        <div className="bitfun-workbench-delivery-review__actions">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={startNewRun}
+            data-testid="workbench-interruption-new-run"
+          >
+            <PlayCircle size={14} aria-hidden="true" />
+            <span>{t('nav.sessions.workbenchRuntime.interruptionDisposition.newRun')}</span>
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setKeptCurrentState(true)}
+            data-testid="workbench-interruption-keep-current"
+          >
+            <PauseCircle size={14} aria-hidden="true" />
+            <span>{t('nav.sessions.workbenchRuntime.interruptionDisposition.keepCurrent')}</span>
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={finishAndReview}
+            data-testid="workbench-interruption-review"
+          >
+            <FileDiff size={14} aria-hidden="true" />
+            <span>{t('nav.sessions.workbenchRuntime.interruptionDisposition.review')}</span>
+          </button>
+        </div>
+        {keptCurrentState ? (
+          <span className="bitfun-workbench-delivery-review__status" role="status">
+            {t('nav.sessions.workbenchRuntime.interruptionDisposition.kept')}
+          </span>
+        ) : null}
+        {error ? (
+          <span className="bitfun-workbench-delivery-review__error" role="alert">{t(error)}</span>
+        ) : null}
+      </div>
+    );
+  }
+
   if (session.phase === 'waitingDeveloper') {
     return (
       <div className="bitfun-workbench-delivery-review" data-testid="workbench-delivery-finish">
         <button
           type="button"
           disabled={busy}
-          onClick={() => {
-            setBusy(true);
-            setError(null);
-            void submitWorkbenchRuntimeIntent({
-              type: 'finishAndReview',
-              sessionId: session.sessionId,
-            })
-              .catch(() => setError('nav.sessions.workbenchRuntime.deliveryReview.actionFailed'))
-              .finally(() => setBusy(false));
-          }}
+          onClick={finishAndReview}
           data-testid="workbench-delivery-finish-button"
         >
           <FileDiff size={14} aria-hidden="true" />
@@ -49,7 +106,7 @@ const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({ sessi
     );
   }
 
-  if (session.phase !== 'reviewing' || !review) return null;
+  if ((session.phase !== 'reviewing' && session.phase !== 'interrupted') || !review) return null;
 
   return (
     <section
@@ -62,7 +119,13 @@ const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({ sessi
         <span className="bitfun-workbench-delivery-review__freshness">
           {t('nav.sessions.workbenchRuntime.deliveryReview.freshness')}
           {': '}
-          {new Date(review.evidence.capturedAtMs).toLocaleString()}
+          {formatDate(review.evidence.capturedAtMs, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
         </span>
       </header>
 

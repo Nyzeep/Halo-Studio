@@ -1,4 +1,4 @@
-﻿//! Thin runtime ports for boundaries that currently cross service and agentic
+//! Thin runtime ports for boundaries that currently cross service and agentic
 //! concrete implementations.
 //!
 //! This crate intentionally contains only DTOs and traits. It must not depend
@@ -37,18 +37,17 @@ pub use bitfun_product_domains::tool_permissions::{
 pub use halo_workbench::{
     PiCredentialSecret, PiCredentialStorePort, PiProviderCapability, PiProviderCapabilityPort,
     PiProviderCapabilityRequest, PiProviderReadiness, PiProviderReadinessPort,
-    PiRpcAvailabilitySummary, PiRpcCapability, PiRpcCapabilitySummary, PiRpcCommand,
-    PiRpcCompatibilityProfile, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision,
-    PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcOperationSummary, PiRpcPort,
-    PiRpcReply, PiRpcSessionMode, PiRpcVersion,
-    PiRpcVersionEvidenceSource, PiRpcVersionSummary, PiRpcWorkspace, PiRuntimeConfiguration,
-    PiRuntimeConfigurationManagementPort, PiRuntimeConfigurationPort, PiRuntimeConfigurationView,
-    PiStartupOptions, PiThinkingLevel, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
+    PiRpcAvailabilitySummary, PiRpcCancellationMode, PiRpcCapability, PiRpcCapabilitySummary,
+    PiRpcCommand, PiRpcCompatibilityProfile, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision,
+    PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcOperationSummary, PiRpcPort, PiRpcReply,
+    PiRpcSessionMode, PiRpcVersion, PiRpcVersionEvidenceSource, PiRpcVersionSummary,
+    PiRpcWorkspace, PiRuntimeConfiguration, PiRuntimeConfigurationManagementPort,
+    PiRuntimeConfigurationPort, PiRuntimeConfigurationView, PiStartupOptions, PiThinkingLevel,
+    WorkbenchDeliveryAttribution, WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence,
+    WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint,
+    WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
     WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort,
-    WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest, WorkbenchDeliveryAttribution,
-    WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort,
-    WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint, WorkbenchDeliveryFingerprintRequest,
-    PI_RPC_ADAPTER_IDENTITY,
+    WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest, PI_RPC_ADAPTER_IDENTITY,
 };
 pub use local_workspace_snapshot::{
     LocalWorkspaceSnapshotPort, LocalWorkspaceSnapshotSessionRequest, LocalWorkspaceSnapshotStats,

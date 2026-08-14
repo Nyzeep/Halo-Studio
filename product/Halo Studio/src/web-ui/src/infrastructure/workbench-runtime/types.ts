@@ -22,6 +22,7 @@ export interface WorkbenchRuntimeSession {
   taskId: string;
   sessionId: string;
   mode: 'standard' | 'managed';
+  cancellationMode?: WorkbenchRuntimeCancellationMode | null;
   phase:
     | 'creating'
     | 'idle'
@@ -38,6 +39,8 @@ export interface WorkbenchRuntimeSession {
   deliveryReview?: WorkbenchRuntimeDeliveryReview | null;
   error?: WorkbenchRuntimeError | null;
 }
+
+export type WorkbenchRuntimeCancellationMode = 'native' | 'forced';
 
 export interface WorkbenchRuntimeTaskBaseline {
   head: string;

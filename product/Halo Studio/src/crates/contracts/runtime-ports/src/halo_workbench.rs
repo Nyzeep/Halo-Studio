@@ -307,6 +307,18 @@ pub enum PiRpcSessionMode {
     Managed,
 }
 
+/// The observed cancellation path for a running Pi RPC turn.
+///
+/// `Native` means Pi acknowledged `abort` and settled within the bounded
+/// grace period. `Forced` means the adapter closed the owned transport and
+/// reclaimed the child after that grace period or an abort transport failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PiRpcCancellationMode {
+    Native,
+    Forced,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PiRpcOperationKind {
     Permission,
@@ -772,6 +784,7 @@ pub enum PiRpcEvent {
     SessionStopped {
         generation: u64,
         session_id: String,
+        cancellation_mode: PiRpcCancellationMode,
     },
     SessionEnded {
         generation: u64,
@@ -855,7 +868,6 @@ pub trait PiRpcPort: Send + Sync {
 
     fn subscribe(&self) -> broadcast::Receiver<PiRpcEvent>;
 }
-
 
 /// Classification for a changed path in a read-only delivery review.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

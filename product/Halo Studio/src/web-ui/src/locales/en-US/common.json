@@ -244,6 +244,24 @@
           "failed": "$t(shared:statuses.failed)"
         },
         "sessionError": "This session could not continue.",
+        "interruptionReason": {
+          "native": "Pi cancelled the managed session before completion. No work was replayed.",
+          "forced": "The Pi transport was forced closed before completion. No work was replayed.",
+          "unknown": "The managed session was interrupted before completion. No work was replayed.",
+          "applicationInterrupted": "The application closed before the managed session completed. No work was replayed.",
+          "workspaceClosed": "The workspace was closed before the managed session completed. No work was replayed.",
+          "runtimeShutdown": "The Workbench Runtime shut down before the managed session completed. No work was replayed.",
+          "runtimeFailure": "The Workbench Runtime stopped unexpectedly before the managed session completed. No work was replayed.",
+          "piTransportUnavailable": "The Pi RPC transport ended before the managed session completed. No work was replayed.",
+          "piProtocolError": "The Pi RPC protocol failed before the managed session completed. No work was replayed.",
+          "eventStreamInterrupted": "The Workbench event stream was interrupted before the managed session completed. No work was replayed."
+        },
+        "interruptionDisposition": {
+          "newRun": "Start a new run",
+          "keepCurrent": "Keep current state",
+          "review": "Review existing work",
+          "kept": "Current state retained."
+        },
         "permission": {
           "title": "Tool action needs confirmation",
           "allowOnce": "Allow this once",

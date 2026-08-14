@@ -1,16 +1,20 @@
-﻿//! Halo Workbench Runtime product assembly.
+//! Halo Workbench Runtime product assembly.
 //!
 //! P0 deliberately selects exactly one production adapter identity. This
 //! module only wires existing owners and narrow projections; runtime state and
 //! policy remain in `bitfun-agent-runtime`.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use bitfun_agent_runtime::halo_workbench::HaloWorkbenchRuntime;
+use bitfun_agent_runtime::halo_workbench::{
+    HaloWorkbenchInterruptionHistoryPort, HaloWorkbenchRuntime, HaloWorkbenchSessionMode,
+    HaloWorkbenchSessionPhase, HaloWorkbenchSessionSnapshot,
+};
 use bitfun_pi_rpc_adapter::{
     JsonFilePiRuntimeConfigurationRepository, PiRpcAdapter, PiRpcConfig,
     PiRuntimeConfigurationService,
@@ -21,11 +25,12 @@ use bitfun_runtime_ports::{
     WorkbenchDeliveryAttribution, WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence,
     WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint,
     WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
-    WorkbenchTaskBaselineRequest,
-    WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
-    WorkbenchWorkspaceTrustRequest,
+    WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort,
+    WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest,
 };
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 use crate::product_runtime::SystemProductClock;
 use crate::service::git::{GitDiffParams, GitFileStatus, GitService, GitStatus};
@@ -148,7 +153,6 @@ impl WorkbenchTaskBaselinePort for CoreWorkbenchTaskBaseline {
     }
 }
 
-
 #[derive(Clone, Copy, Default)]
 struct CoreWorkbenchDeliveryEvidence;
 
@@ -160,7 +164,9 @@ impl CoreWorkbenchDeliveryEvidence {
     ) -> PortResult<(String, WorkbenchDeliveryFingerprint)> {
         let head = GitService::resolve_revision(canonical_root, "HEAD")
             .await
-            .map_err(|_| PortError::new(PortErrorKind::Backend, "Git HEAD could not be resolved"))?;
+            .map_err(|_| {
+                PortError::new(PortErrorKind::Backend, "Git HEAD could not be resolved")
+            })?;
         let status = GitService::get_status(canonical_root).await.map_err(|_| {
             PortError::new(PortErrorKind::Backend, "Git status could not be captured")
         })?;
@@ -207,12 +213,14 @@ impl WorkbenchDeliveryEvidencePort for CoreWorkbenchDeliveryEvidence {
                 PortError::new(PortErrorKind::NotAvailable, "workspace root is unavailable")
             })?;
         let (head, fingerprint) = Self::capture_fingerprint_impl(&canonical_root).await?;
-        let diff_preview = capture_bounded_diff_preview(&canonical_root).await.map_err(|_| {
-            PortError::new(
-                PortErrorKind::Backend,
-                "Git diff preview could not be captured",
-            )
-        })?;
+        let diff_preview = capture_bounded_diff_preview(&canonical_root)
+            .await
+            .map_err(|_| {
+                PortError::new(
+                    PortErrorKind::Backend,
+                    "Git diff preview could not be captured",
+                )
+            })?;
         let attribution = attribute_changes(&request, fingerprint.changed_files.as_slice());
         Ok(WorkbenchDeliveryEvidence {
             captured_at_ms: fingerprint.captured_at_ms,
@@ -267,16 +275,22 @@ fn attribute_changes(
         .iter()
         .map(String::as_str)
         .collect();
-    let settled: Option<BTreeSet<&str>> = request
-        .settled
-        .as_ref()
-        .map(|fingerprint| fingerprint.changed_files.iter().map(String::as_str).collect());
+    let settled: Option<BTreeSet<&str>> = request.settled.as_ref().map(|fingerprint| {
+        fingerprint
+            .changed_files
+            .iter()
+            .map(String::as_str)
+            .collect()
+    });
     final_changed_files
         .iter()
         .map(|file| {
             let kind = if baseline.contains(file.as_str()) {
                 WorkbenchDeliveryAttributionKind::ExistingUserModification
-            } else if settled.as_ref().is_some_and(|set| !set.contains(file.as_str())) {
+            } else if settled
+                .as_ref()
+                .is_some_and(|set| !set.contains(file.as_str()))
+            {
                 WorkbenchDeliveryAttributionKind::ManualIntervention
             } else {
                 WorkbenchDeliveryAttributionKind::TaskModification
@@ -655,6 +669,181 @@ impl PiProviderReadinessPort for PiRpcConfiguredReadinessGate {
     }
 }
 
+const HALO_WORKBENCH_INTERRUPTION_HISTORY_SCHEMA_VERSION: u32 = 1;
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct HaloWorkbenchInterruptionHistoryFile {
+    schema_version: u32,
+    sessions: Vec<HaloWorkbenchSessionSnapshot>,
+}
+
+struct JsonFileHaloWorkbenchInterruptionHistory {
+    path: PathBuf,
+}
+
+impl JsonFileHaloWorkbenchInterruptionHistory {
+    fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    fn backup_path(&self) -> PathBuf {
+        self.path.with_extension("bak")
+    }
+
+    fn read_file(&self, path: &Path) -> PortResult<Option<HaloWorkbenchInterruptionHistoryFile>> {
+        let bytes = match fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => {
+                return Err(PortError::new(
+                    PortErrorKind::Backend,
+                    "Workbench interruption history could not be read",
+                ));
+            }
+        };
+        serde_json::from_slice(&bytes).map(Some).map_err(|_| {
+            PortError::new(
+                PortErrorKind::InvalidRequest,
+                "stored Workbench interruption history is invalid",
+            )
+        })
+    }
+}
+
+impl HaloWorkbenchInterruptionHistoryPort for JsonFileHaloWorkbenchInterruptionHistory {
+    fn load_interrupted_sessions(&self) -> PortResult<Vec<HaloWorkbenchSessionSnapshot>> {
+        let history = match self.read_file(&self.path)? {
+            Some(history) => history,
+            None => match self.read_file(&self.backup_path())? {
+                Some(history) => history,
+                None => return Ok(Vec::new()),
+            },
+        };
+        if history.schema_version != HALO_WORKBENCH_INTERRUPTION_HISTORY_SCHEMA_VERSION {
+            return Err(PortError::new(
+                PortErrorKind::InvalidRequest,
+                "stored Workbench interruption history has an unsupported schema",
+            ));
+        }
+        Ok(history.sessions)
+    }
+
+    fn replace_interrupted_sessions(
+        &self,
+        sessions: Vec<HaloWorkbenchSessionSnapshot>,
+    ) -> PortResult<()> {
+        if sessions.iter().any(|session| {
+            session.mode != HaloWorkbenchSessionMode::Managed
+                || session.phase != HaloWorkbenchSessionPhase::Interrupted
+                || !session.messages.is_empty()
+                || !session.activities.is_empty()
+        }) {
+            return Err(PortError::new(
+                PortErrorKind::InvalidRequest,
+                "Workbench interruption history must contain only interrupted managed sessions",
+            ));
+        }
+        let parent = self.path.parent().ok_or_else(|| {
+            PortError::new(
+                PortErrorKind::Backend,
+                "Workbench interruption history path has no parent",
+            )
+        })?;
+        fs::create_dir_all(parent).map_err(|_| {
+            PortError::new(
+                PortErrorKind::Backend,
+                "Workbench interruption history could not be prepared",
+            )
+        })?;
+        let bytes = serde_json::to_vec(&HaloWorkbenchInterruptionHistoryFile {
+            schema_version: HALO_WORKBENCH_INTERRUPTION_HISTORY_SCHEMA_VERSION,
+            sessions,
+        })
+        .map_err(|_| {
+            PortError::new(
+                PortErrorKind::Backend,
+                "Workbench interruption history could not be encoded",
+            )
+        })?;
+        let temporary = parent.join(format!(
+            ".halo-workbench-interruption-{}.tmp",
+            Uuid::new_v4()
+        ));
+        fs::write(&temporary, bytes).map_err(|_| {
+            PortError::new(
+                PortErrorKind::Backend,
+                "Workbench interruption history could not be written",
+            )
+        })?;
+        replace_interruption_history_file(&temporary, &self.path)
+    }
+}
+
+#[cfg(not(windows))]
+fn replace_interruption_history_file(temporary: &Path, destination: &Path) -> PortResult<()> {
+    fs::rename(temporary, destination).map_err(|_| {
+        PortError::new(
+            PortErrorKind::Backend,
+            "Workbench interruption history could not be committed",
+        )
+    })
+}
+
+#[cfg(windows)]
+fn replace_interruption_history_file(temporary: &Path, destination: &Path) -> PortResult<()> {
+    let backup = destination.with_extension("bak");
+    let had_existing = match fs::metadata(destination) {
+        Ok(_) => true,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => {
+            let _ = fs::remove_file(temporary);
+            return Err(PortError::new(
+                PortErrorKind::Backend,
+                "Workbench interruption history could not be committed",
+            ));
+        }
+    };
+    if had_existing {
+        match fs::remove_file(&backup) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => {
+                let _ = fs::remove_file(temporary);
+                return Err(PortError::new(
+                    PortErrorKind::Backend,
+                    "Workbench interruption history could not be committed",
+                ));
+            }
+        }
+        if fs::rename(destination, &backup).is_err() {
+            let _ = fs::remove_file(temporary);
+            return Err(PortError::new(
+                PortErrorKind::Backend,
+                "Workbench interruption history could not be committed",
+            ));
+        }
+    }
+    if fs::rename(temporary, destination).is_err() {
+        if had_existing {
+            let _ = fs::rename(&backup, destination);
+        }
+        let _ = fs::remove_file(temporary);
+        return Err(PortError::new(
+            PortErrorKind::Backend,
+            "Workbench interruption history could not be committed",
+        ));
+    }
+    match fs::remove_file(&backup) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err(PortError::new(
+            PortErrorKind::Backend,
+            "Workbench interruption history could not be committed",
+        )),
+    }
+}
+
 fn selected_pi_rpc(
     configuration: Arc<PiRuntimeConfigurationService>,
     credential_store: Arc<PiSystemCredentialStore>,
@@ -680,6 +869,14 @@ fn pi_configuration_path() -> Result<std::path::PathBuf, String> {
         .join("pi-runtime-configuration.json"))
 }
 
+fn halo_workbench_interruption_history_path() -> Result<PathBuf, String> {
+    let path_manager = crate::infrastructure::try_get_path_manager_arc()
+        .map_err(|error| format!("Workbench interruption history path is unavailable: {error}"))?;
+    Ok(path_manager
+        .user_config_dir()
+        .join("halo-workbench-interruption-history.json"))
+}
+
 /// Builds the runtime and the single configuration authority used by both
 /// standard and managed Pi sessions.
 pub fn build_halo_workbench_runtime_components(
@@ -694,7 +891,10 @@ pub fn build_halo_workbench_runtime_components(
             .with_credential_store(credential_store.clone()),
     );
     let adapter = selected_pi_rpc(configuration.clone(), credential_store.clone());
-    let runtime = HaloWorkbenchRuntime::new_with_delivery_evidence(
+    let interruption_history = Arc::new(JsonFileHaloWorkbenchInterruptionHistory::new(
+        halo_workbench_interruption_history_path()?,
+    ));
+    let runtime = HaloWorkbenchRuntime::try_new_with_delivery_evidence_and_interruption_history(
         adapter,
         Arc::new(CoreWorkbenchWorkspaceFacts::new(workspace_service)),
         Arc::new(PiRpcConfiguredReadinessGate {
@@ -702,8 +902,10 @@ pub fn build_halo_workbench_runtime_components(
         }),
         Arc::new(CoreWorkbenchTaskBaseline),
         Arc::new(CoreWorkbenchDeliveryEvidence),
+        interruption_history,
         Arc::new(SystemProductClock),
-    );
+    )
+    .map_err(|error| error.to_string())?;
     let configuration: Arc<dyn PiRuntimeConfigurationManagementPort> = configuration;
     Ok(HaloWorkbenchRuntimeComponents {
         runtime,
@@ -729,6 +931,11 @@ mod tests {
     use std::process::Command;
     use std::sync::{Arc, Mutex, OnceLock};
 
+    use bitfun_agent_runtime::halo_workbench::{
+        HaloWorkbenchActivityKind, HaloWorkbenchActivitySnapshot, HaloWorkbenchActivityStatus,
+        HaloWorkbenchInterruptionHistoryPort, HaloWorkbenchMessageRole,
+        HaloWorkbenchMessageSnapshot, HaloWorkbenchSessionSnapshot,
+    };
     use bitfun_runtime_ports::{
         PiCredentialSecret, PiCredentialStorePort, PiRpcCommand, PiRpcFailureKind, PiRpcPort,
         PiRpcReply, PiRpcWorkspace, PortErrorKind, WorkbenchDeliveryAttributionKind,
@@ -738,8 +945,8 @@ mod tests {
     use chrono::Utc;
 
     use super::{
-        attribute_changes, project_workspace_facts, CoreWorkbenchTaskBaseline, PiRpcAdapter,
-        PiSystemCredentialStore,
+        attribute_changes, project_workspace_facts, CoreWorkbenchTaskBaseline,
+        JsonFileHaloWorkbenchInterruptionHistory, PiRpcAdapter, PiSystemCredentialStore,
     };
     use crate::service::workspace::{
         GitInfo, WorkspaceInfo, WorkspaceKind, WorkspaceStatistics, WorkspaceStatus, WorkspaceType,
@@ -768,6 +975,127 @@ mod tests {
     }
 
     static PI_SYSTEM_STORE_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn reviewable_interrupted_session(session_id: &str) -> HaloWorkbenchSessionSnapshot {
+        serde_json::from_value(serde_json::json!({
+            "workspaceId": "workspace-1",
+            "taskId": "task-1",
+            "sessionId": session_id,
+            "mode": "managed",
+            "phase": "interrupted",
+            "cancellationMode": "native",
+            "baseline": null,
+            "messages": [],
+            "activities": [],
+            "error": null,
+            "deliveryReview": {
+                "evidence": {
+                    "capturedAtMs": 1,
+                    "head": "test-head",
+                    "workingTreeFingerprint": "test-fingerprint",
+                    "changedFiles": ["tracked.rs"],
+                    "diffPreview": "reviewed diff",
+                    "attribution": []
+                },
+                "summary": "review summary",
+                "verificationResults": "verification results",
+                "runConclusion": "run conclusion",
+                "decision": null
+            }
+        }))
+        .expect("reviewable interruption history fixture")
+    }
+
+    #[test]
+    fn interruption_history_keeps_frozen_review_and_rejects_active_session_content() {
+        let root = tempfile::tempdir().expect("interruption history root");
+        let history = JsonFileHaloWorkbenchInterruptionHistory::new(
+            root.path().join("halo-workbench-interruption-history.json"),
+        );
+        let reviewable = reviewable_interrupted_session("session-1");
+
+        history
+            .replace_interrupted_sessions(vec![reviewable.clone()])
+            .expect("frozen delivery review is durable interruption evidence");
+        assert_eq!(
+            history
+                .load_interrupted_sessions()
+                .expect("frozen delivery review is restored"),
+            vec![reviewable.clone()]
+        );
+
+        let mut message_leak = reviewable.clone();
+        message_leak.messages.push(HaloWorkbenchMessageSnapshot {
+            role: HaloWorkbenchMessageRole::User,
+            content: "must not persist active content".to_string(),
+        });
+        assert_eq!(
+            history
+                .replace_interrupted_sessions(vec![message_leak])
+                .expect_err("active messages are not durable interruption facts")
+                .kind,
+            PortErrorKind::InvalidRequest
+        );
+
+        let mut activity_leak = reviewable;
+        activity_leak
+            .activities
+            .push(HaloWorkbenchActivitySnapshot {
+                activity_id: "activity-safe-id".to_string(),
+                kind: HaloWorkbenchActivityKind::Tool,
+                label: "write".to_string(),
+                status: HaloWorkbenchActivityStatus::Started,
+                is_error: false,
+            });
+        assert_eq!(
+            history
+                .replace_interrupted_sessions(vec![activity_leak])
+                .expect_err("active activities are not durable interruption facts")
+                .kind,
+            PortErrorKind::InvalidRequest
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn interruption_history_recovery_retires_stale_backup_before_the_next_write() {
+        let root = tempfile::tempdir().expect("interruption history root");
+        let path = root.path().join("halo-workbench-interruption-history.json");
+        let backup = path.with_extension("bak");
+        let history = JsonFileHaloWorkbenchInterruptionHistory::new(path.clone());
+        let original = reviewable_interrupted_session("session-original");
+        let recovered = reviewable_interrupted_session("session-recovered");
+        let latest = reviewable_interrupted_session("session-latest");
+
+        history
+            .replace_interrupted_sessions(vec![original.clone()])
+            .expect("initial interruption evidence persists");
+        std::fs::rename(&path, &backup).expect("simulated crash leaves only the backup");
+        assert_eq!(
+            history
+                .load_interrupted_sessions()
+                .expect("backup restores interruption evidence"),
+            vec![original]
+        );
+
+        history
+            .replace_interrupted_sessions(vec![recovered.clone()])
+            .expect("first write after backup recovery persists");
+        assert!(
+            !backup.exists(),
+            "a successful replacement must retire the stale recovery backup"
+        );
+
+        history
+            .replace_interrupted_sessions(vec![latest.clone()])
+            .expect("later disposition writes remain durable");
+        assert_eq!(
+            history
+                .load_interrupted_sessions()
+                .expect("latest interruption history persists"),
+            vec![latest]
+        );
+    }
 
     #[tokio::test]
     async fn system_pi_credentials_are_provider_bound_and_delete_without_reading_secret() {
