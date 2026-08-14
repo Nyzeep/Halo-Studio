@@ -27,18 +27,18 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use bitfun_runtime_ports::{
     PiCredentialSecret, PiCredentialStorePort, PiProviderCapability, PiProviderCapabilityPort,
-    PiProviderCapabilityRequest, PiRpcAvailabilitySummary, PiRpcCommand, PiRpcEvent,
-    PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind, PiRpcOperationRiskLevel,
-    PiRpcOperationSummary, PiRpcPort, PiRpcReply,
-    PiRpcSessionMode, PiRpcVersion, PiRpcVersionEvidenceSource, PiRpcWorkspace,
-    PiRuntimeConfiguration, PiRuntimeConfigurationPort, PortError, PortErrorKind, PortResult,
-    PI_RPC_ADAPTER_IDENTITY,
+    PiProviderCapabilityRequest, PiRpcAvailabilitySummary, PiRpcCancellationMode, PiRpcCommand,
+    PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind,
+    PiRpcOperationRiskLevel, PiRpcOperationSummary, PiRpcPort, PiRpcReply, PiRpcSessionMode,
+    PiRpcVersion, PiRpcVersionEvidenceSource, PiRpcWorkspace, PiRuntimeConfiguration,
+    PiRuntimeConfigurationPort, PortError, PortErrorKind, PortResult, PI_RPC_ADAPTER_IDENTITY,
 };
+use bitfun_services_core::process_tree::ProcessTreeChild;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::process::{ChildStdin, ChildStdout, Command};
 use tokio::sync::{broadcast, oneshot, Mutex, Notify};
 use tokio::time::{sleep, timeout};
 use uuid::Uuid;
@@ -53,6 +53,9 @@ const MAX_ASSISTANT_DELTA_BYTES: usize = 8 * 1024;
 const MAX_TOOL_NAME_BYTES: usize = 128;
 const MAX_TOOL_ARGUMENTS_BYTES: usize = 512;
 const NO_FAILURE_REASON: u8 = 0;
+const SESSION_TERMINAL_OPEN: u8 = 0;
+const SESSION_TERMINAL_CANCELLING: u8 = 1;
+const SESSION_TERMINAL_FAILED: u8 = 2;
 // The compatibility profile is intentionally explicit. A successful
 // `--version` process exit is not evidence that its RPC schema is known.
 const SUPPORTED_PI_RPC_PROFILES: &[(&str, PiRpcVersion)] = &[
@@ -221,7 +224,7 @@ struct PiSession {
     _session_dir: Option<PathBuf>,
     events: broadcast::Sender<PiRpcEvent>,
     stdin: Mutex<ChildStdin>,
-    child: Mutex<Child>,
+    child: Mutex<ProcessTreeChild>,
     pending: Mutex<HashMap<String, oneshot::Sender<PortResult<Value>>>>,
     operations: Mutex<HashMap<String, PiOperationBinding>>,
     seen_extension_requests: Mutex<HashSet<String>>,
@@ -230,6 +233,7 @@ struct PiSession {
     prompt_accepted: AtomicBool,
     running: AtomicBool,
     terminated: AtomicBool,
+    terminal_disposition: AtomicU8,
     failure_reason: AtomicU8,
     settled_epoch: AtomicU64,
     settled: Notify,
@@ -490,7 +494,7 @@ impl PiRpcAdapter {
         let thinking = (!is_readiness_probe).then_some(()).and_then(|_| {
             runtime_configuration.map(|configuration| configuration.thinking_level.as_str())
         });
-        let mut child = configure_child_command(
+        let mut command = configure_child_command(
             build_pi_command(
                 executable,
                 &pi_rpc_args(
@@ -505,18 +509,19 @@ impl PiRpcAdapter {
             executable,
             Some(config_dir.path()),
             credential_value.as_deref(),
-        )
-        .current_dir(&workspace.canonical_root)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        // Pi protocol output is stdout. Child diagnostics must not reach
-        // a caller or evidence stream, so stderr is intentionally closed.
-        .stderr(Stdio::null())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|_| PiRpcFailureKind::NotInstalled)?;
-        let stdin = child.stdin.take().ok_or(PiRpcFailureKind::Transport)?;
-        let stdout = child.stdout.take().ok_or(PiRpcFailureKind::Transport)?;
+        );
+        command
+            .current_dir(&workspace.canonical_root)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            // Pi protocol output is stdout. Child diagnostics must not reach
+            // a caller or evidence stream, so stderr is intentionally closed.
+            .stderr(Stdio::null());
+        let mut child = ProcessTreeChild::spawn(&mut command)
+            .await
+            .map_err(|_| PiRpcFailureKind::NotInstalled)?;
+        let stdin = child.take_stdin().ok_or(PiRpcFailureKind::Transport)?;
+        let stdout = child.take_stdout().ok_or(PiRpcFailureKind::Transport)?;
         let session = Arc::new(PiSession {
             generation,
             task_id: Mutex::new(task_id),
@@ -537,6 +542,7 @@ impl PiRpcAdapter {
             prompt_accepted: AtomicBool::new(false),
             running: AtomicBool::new(false),
             terminated: AtomicBool::new(false),
+            terminal_disposition: AtomicU8::new(SESSION_TERMINAL_OPEN),
             failure_reason: AtomicU8::new(NO_FAILURE_REASON),
             settled_epoch: AtomicU64::new(0),
             settled: Notify::new(),
@@ -1138,10 +1144,13 @@ impl PiRpcPort for PiRpcAdapter {
                 session_id,
             } => {
                 let session = self.session(generation, &task_id, &session_id).await?;
-                session.abort_with_grace().await?;
+                let cancellation_mode = session.abort_with_grace().await?;
+                session.terminate().await;
+                self.state.lock().await.sessions.remove(&session_id);
                 self.emit(PiRpcEvent::SessionStopped {
                     generation,
                     session_id,
+                    cancellation_mode,
                 });
                 Ok(PiRpcReply::Accepted)
             }
@@ -1238,6 +1247,25 @@ impl PiRpcPort for PiRpcAdapter {
 }
 
 impl PiSession {
+    fn claim_cancellation(&self) -> PortResult<()> {
+        match self.terminal_disposition.compare_exchange(
+            SESSION_TERMINAL_OPEN,
+            SESSION_TERMINAL_CANCELLING,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => Ok(()),
+            Err(SESSION_TERMINAL_FAILED) => Err(PortError::new(
+                PortErrorKind::Backend,
+                "Pi RPC session has already failed",
+            )),
+            Err(_) => Err(PortError::new(
+                PortErrorKind::InvalidRequest,
+                "Pi RPC session cancellation is already in progress",
+            )),
+        }
+    }
+
     fn recorded_failure_reason(&self) -> Option<PiRpcFailureKind> {
         match self.failure_reason.load(Ordering::Acquire) {
             1 => Some(PiRpcFailureKind::NotInstalled),
@@ -1300,6 +1328,17 @@ impl PiSession {
         payload: Value,
         response_timeout: Duration,
     ) -> PortResult<Value> {
+        self.request_with_timeout_inner(command, payload, response_timeout, true)
+            .await
+    }
+
+    async fn request_with_timeout_inner(
+        self: &Arc<Self>,
+        command: &str,
+        payload: Value,
+        response_timeout: Duration,
+        fail_closed_on_transport_error: bool,
+    ) -> PortResult<Value> {
         let mut payload = payload.as_object().cloned().ok_or_else(|| {
             PortError::new(
                 PortErrorKind::InvalidRequest,
@@ -1325,7 +1364,7 @@ impl PiSession {
         .await;
         if write_result.is_err() {
             self.pending.lock().await.remove(&request_id);
-            if !self.terminated.load(Ordering::Acquire) {
+            if fail_closed_on_transport_error && !self.terminated.load(Ordering::Acquire) {
                 self.fail_closed(PiRpcFailureKind::Transport).await;
             }
             return Err(PortError::new(
@@ -1345,7 +1384,7 @@ impl PiSession {
             }
             Err(_) => {
                 self.pending.lock().await.remove(&request_id);
-                if !self.terminated.load(Ordering::Acquire) {
+                if fail_closed_on_transport_error && !self.terminated.load(Ordering::Acquire) {
                     self.fail_closed(PiRpcFailureKind::Transport).await;
                 }
                 return Err(PortError::new(
@@ -1404,24 +1443,24 @@ impl PiSession {
             .map_err(|_| PortError::new(PortErrorKind::Backend, "Pi RPC stdin is unavailable"))
     }
 
-    async fn abort_with_grace(self: &Arc<Self>) -> PortResult<()> {
+    async fn abort_with_grace(self: &Arc<Self>) -> PortResult<PiRpcCancellationMode> {
+        self.claim_cancellation()?;
         if !self.running.load(Ordering::Acquire) {
-            return Ok(());
+            return Ok(PiRpcCancellationMode::Native);
         }
         let observed_settlement = self.settled_epoch.load(Ordering::Acquire);
         let deadline = Instant::now() + self.abort_grace_period;
         let request_timeout = self.abort_grace_period.min(self.response_timeout);
-        if let Err(error) = self
-            .request_with_timeout("abort", json!({ "type": "abort" }), request_timeout)
+        if self
+            .request_with_timeout_inner("abort", json!({ "type": "abort" }), request_timeout, false)
             .await
+            .is_err()
         {
-            if !self.terminated.load(Ordering::Acquire) {
-                self.fail_closed(PiRpcFailureKind::Transport).await;
-            }
-            return Err(error);
+            self.terminate().await;
+            return Ok(PiRpcCancellationMode::Forced);
         }
         if !self.running.load(Ordering::Acquire) {
-            return Ok(());
+            return Ok(PiRpcCancellationMode::Native);
         }
 
         let remaining = deadline.saturating_duration_since(Instant::now());
@@ -1440,13 +1479,16 @@ impl PiSession {
         })
         .await
         .is_ok();
-        if !settled && self.running.load(Ordering::Acquire) {
+        if settled && !self.running.load(Ordering::Acquire) {
+            return Ok(PiRpcCancellationMode::Native);
+        }
+        if self.running.load(Ordering::Acquire) {
             // Explicit abort is allowed to force-reclaim a stuck child after
             // the bounded grace period. This path never reports success as a
             // completed Pi run; it only closes the owned process.
             self.terminate().await;
         }
-        Ok(())
+        Ok(PiRpcCancellationMode::Forced)
     }
 
     async fn handle_extension_ui_request(self: &Arc<Self>, value: &Value) {
@@ -1558,10 +1600,10 @@ impl PiSession {
             PiRpcFailureKind::Internal => 7,
         };
         if self
-            .failure_reason
+            .terminal_disposition
             .compare_exchange(
-                NO_FAILURE_REASON,
-                reason_code,
+                SESSION_TERMINAL_OPEN,
+                SESSION_TERMINAL_FAILED,
                 Ordering::AcqRel,
                 Ordering::Acquire,
             )
@@ -1569,6 +1611,7 @@ impl PiSession {
         {
             return;
         }
+        self.failure_reason.store(reason_code, Ordering::Release);
         self.running.store(false, Ordering::Release);
         self.settled.notify_waiters();
         let message = match reason {
@@ -1614,9 +1657,11 @@ impl PiSession {
         self.settled.notify_waiters();
         self.fail_pending("Pi RPC session closed").await;
         self.operations.lock().await.clear();
+        let mut stdin = self.stdin.lock().await;
+        let _ = stdin.shutdown().await;
+        drop(stdin);
         let mut child = self.child.lock().await;
-        let _ = child.kill().await;
-        let _ = child.wait().await;
+        let _ = child.terminate(Duration::ZERO).await;
     }
 
     async fn has_exited(&self) -> bool {

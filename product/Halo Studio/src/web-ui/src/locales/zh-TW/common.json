@@ -244,6 +244,24 @@
           "failed": "$t(shared:statuses.failed)"
         },
         "sessionError": "此會話無法繼續。",
+        "interruptionReason": {
+          "native": "Pi 已在任務完成前原生取消此受管工作階段。未重放任何工作。",
+          "forced": "Pi 通道在任務完成前被強制關閉。未重放任何工作。",
+          "unknown": "受管工作階段在完成前中斷。未重放任何工作。",
+          "applicationInterrupted": "應用程式在受管工作階段完成前已關閉。未重放任何工作。",
+          "workspaceClosed": "工作區在受管工作階段完成前已關閉。未重放任何工作。",
+          "runtimeShutdown": "Workbench Runtime 在受管工作階段完成前已關閉。未重放任何工作。",
+          "runtimeFailure": "Workbench Runtime 在受管工作階段完成前意外停止。未重放任何工作。",
+          "piTransportUnavailable": "Pi RPC 通道在受管工作階段完成前已中斷。未重放任何工作。",
+          "piProtocolError": "Pi RPC 協議在受管工作階段完成前發生錯誤。未重放任何工作。",
+          "eventStreamInterrupted": "Workbench 事件流在受管工作階段完成前已中斷。未重放任何工作。"
+        },
+        "interruptionDisposition": {
+          "newRun": "開始新執行",
+          "keepCurrent": "保持目前狀態",
+          "review": "審查現有工作",
+          "kept": "已保留目前狀態。"
+        },
         "permission": {
           "title": "工具操作需要確認",
           "allowOnce": "本次允許",

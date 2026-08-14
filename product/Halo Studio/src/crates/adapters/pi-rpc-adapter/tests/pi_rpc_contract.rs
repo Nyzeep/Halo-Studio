@@ -2,19 +2,48 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
+use std::io::Write as _;
+#[cfg(windows)]
+use std::process::Stdio;
+
 use bitfun_pi_rpc_adapter::{
     MemoryPiCredentialStore, MemoryPiRuntimeConfigurationRepository, PiRpcAdapter, PiRpcConfig,
     PiRuntimeConfigurationService,
 };
 use bitfun_runtime_ports::{
-    PiCredentialSecret, PiCredentialStorePort, PiRpcAvailabilitySummary, PiRpcCapability,
-    PiRpcCommand, PiRpcCompatibilityProfile, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision,
-    PiRpcOperationRiskLevel, PiRpcPort, PiRpcReply, PiRpcSessionMode, PiRpcVersion,
-    PiRpcVersionEvidenceSource,
-    PiRpcWorkspace, PiRuntimeConfiguration, PiStartupOptions, PiThinkingLevel, PortErrorKind,
+    PiCredentialSecret, PiCredentialStorePort, PiRpcAvailabilitySummary, PiRpcCancellationMode,
+    PiRpcCapability, PiRpcCommand, PiRpcCompatibilityProfile, PiRpcEvent, PiRpcFailureKind,
+    PiRpcOperationDecision, PiRpcOperationRiskLevel, PiRpcPort, PiRpcReply, PiRpcSessionMode,
+    PiRpcVersion, PiRpcVersionEvidenceSource, PiRpcWorkspace, PiRuntimeConfiguration,
+    PiStartupOptions, PiThinkingLevel, PortErrorKind,
 };
 use tokio::sync::broadcast;
 use tokio::time::timeout;
+
+#[cfg(windows)]
+use tokio::io::{AsyncBufReadExt, BufReader};
+#[cfg(windows)]
+use tokio::process::Command as TokioCommand;
+
+#[cfg(windows)]
+type WindowsHandle = *mut std::ffi::c_void;
+
+#[cfg(windows)]
+const PROCESS_TERMINATE: u32 = 0x0001;
+#[cfg(windows)]
+const SYNCHRONIZE: u32 = 0x0010_0000;
+#[cfg(windows)]
+const WAIT_TIMEOUT: u32 = 0x0000_0102;
+
+#[cfg(windows)]
+#[link(name = "kernel32")]
+extern "system" {
+    fn CloseHandle(handle: WindowsHandle) -> i32;
+    fn OpenProcess(access: u32, inherit: i32, process_id: u32) -> WindowsHandle;
+    fn TerminateProcess(handle: WindowsHandle, exit_code: u32) -> i32;
+    fn WaitForSingleObject(handle: WindowsHandle, milliseconds: u32) -> u32;
+}
 
 static FIXTURE_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
@@ -993,6 +1022,87 @@ async fn malformed_event_schema_fails_closed_without_projecting_public_events() 
 }
 
 #[tokio::test]
+async fn running_session_transport_and_protocol_breaks_fail_closed_without_completion() {
+    for (index, (mode, reason)) in [
+        ("running_eof", PiRpcFailureKind::Transport),
+        ("running_bad_json", PiRpcFailureKind::Protocol),
+        ("running_partial_eof", PiRpcFailureKind::Protocol),
+        ("running_exit", PiRpcFailureKind::Transport),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let _environment = fixture_environment(mode);
+        let generation = 117 + index as u64;
+        let storage_root = tempfile::tempdir().expect("adapter storage root");
+        let adapter = PiRpcAdapter::with_config(PiRpcConfig {
+            executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_pi_rpc_fixture"))),
+            extension_path: Some(fixture_extension_path()),
+            temporary_root: Some(storage_root.path().to_path_buf()),
+            response_timeout: Duration::from_millis(500),
+            operation_timeout: Duration::from_millis(100),
+            abort_grace_period: Duration::from_millis(50),
+            ..PiRpcConfig::default()
+        });
+        let mut events = adapter.subscribe();
+
+        assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+        assert_eq!(
+            create_session(&adapter, generation).await,
+            PiRpcReply::Accepted
+        );
+        assert_eq!(
+            send_input(&adapter, generation, "running interruption").await,
+            PiRpcReply::Accepted
+        );
+        wait_for_event(&mut events, |event| {
+            matches!(event, PiRpcEvent::SessionRunning { .. })
+        })
+        .await;
+
+        let failed = wait_for_event(&mut events, |event| {
+            matches!(
+                event,
+                PiRpcEvent::SessionFailed {
+                    reason: observed,
+                    ..
+                } if *observed == reason
+            )
+        })
+        .await;
+        assert!(matches!(failed, PiRpcEvent::SessionFailed { .. }));
+
+        assert!(timeout(Duration::from_millis(100), async {
+            loop {
+                match events.recv().await {
+                    Ok(PiRpcEvent::SessionStopped { .. }) => {
+                        panic!("transport/protocol failure must not look like cancellation")
+                    }
+                    Ok(_) => {}
+                    Err(error) => panic!("event stream failed: {error}"),
+                }
+            }
+        })
+        .await
+        .is_err());
+
+        assert_eq!(
+            create_session(&adapter, generation).await,
+            PiRpcReply::Accepted,
+            "failed session must be removed before a new run can use the same id"
+        );
+        shutdown(&adapter, generation).await;
+        assert_eq!(
+            std::fs::read_dir(storage_root.path())
+                .expect("adapter-owned temporary root remains inspectable")
+                .count(),
+            0,
+            "running {mode} failure must clean config and extension directories"
+        );
+    }
+}
+
+#[tokio::test]
 async fn handshake_requires_idle_state_and_requests_entries_since_cursor() {
     let _environment = fixture_environment("require_since");
     let generation = 12;
@@ -1263,10 +1373,17 @@ async fn follow_up_requires_a_prompt_and_abort_variant_crosses_the_same_seam() {
             .expect("explicit abort crosses the port"),
         PiRpcReply::Accepted
     );
-    wait_for_event(&mut events, |event| {
+    let stopped = wait_for_event(&mut events, |event| {
         matches!(event, PiRpcEvent::SessionStopped { .. })
     })
     .await;
+    assert!(matches!(
+        stopped,
+        PiRpcEvent::SessionStopped {
+            cancellation_mode: PiRpcCancellationMode::Native,
+            ..
+        }
+    ));
     shutdown(&adapter, generation).await;
 }
 
@@ -1462,6 +1579,17 @@ async fn graceful_abort_waits_for_agent_settled_and_stuck_abort_reclaims_child()
             .expect("forced stop crosses the port"),
         PiRpcReply::Accepted
     );
+    let stopped = wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::SessionStopped { .. })
+    })
+    .await;
+    assert!(matches!(
+        stopped,
+        PiRpcEvent::SessionStopped {
+            cancellation_mode: PiRpcCancellationMode::Forced,
+            ..
+        }
+    ));
     assert!(adapter
         .execute(PiRpcCommand::SendUserInput {
             generation,
@@ -1506,13 +1634,175 @@ async fn abort_response_timeout_cannot_extend_the_forced_reclaim_grace_period() 
             session_id: "session-contract".to_string(),
         })
         .await;
-    assert!(result.is_err(), "missing abort response must fail closed");
+    assert_eq!(
+        result.expect("an abort transport failure is still an accepted forced cancellation"),
+        PiRpcReply::Accepted
+    );
     assert!(
         started.elapsed() < Duration::from_millis(250),
         "abort exceeded its hard grace period: {:?}",
         started.elapsed()
     );
     shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn malformed_abort_response_is_forced_cancellation_without_failure_terminal() {
+    let _environment = fixture_environment("abort_bad_json");
+    let generation = 34;
+    let adapter = make_adapter(
+        Duration::from_millis(500),
+        Duration::from_secs(1),
+        Duration::from_millis(40),
+    );
+    let mut events = adapter.subscribe();
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "running").await,
+        PiRpcReply::Accepted
+    );
+    wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::SessionRunning { .. })
+    })
+    .await;
+
+    assert_eq!(
+        adapter
+            .execute(PiRpcCommand::AbortSession {
+                generation,
+                task_id: "session-contract".to_string(),
+                session_id: "session-contract".to_string(),
+            })
+            .await
+            .expect("malformed abort response still reaches forced cancellation"),
+        PiRpcReply::Accepted
+    );
+
+    let stopped = timeout(Duration::from_millis(250), async {
+        loop {
+            match events.recv().await {
+                Ok(PiRpcEvent::SessionStopped {
+                    cancellation_mode, ..
+                }) => return cancellation_mode,
+                Ok(PiRpcEvent::SessionFailed { .. }) => {
+                    panic!("abort response failure must not emit a second terminal state")
+                }
+                Ok(_) => {}
+                Err(error) => panic!("event stream failed: {error}"),
+            }
+        }
+    })
+    .await
+    .expect("forced cancellation emits a stopped event");
+    assert_eq!(stopped, PiRpcCancellationMode::Forced);
+    assert!(timeout(Duration::from_millis(100), async {
+        loop {
+            match events.recv().await {
+                Ok(PiRpcEvent::SessionFailed { .. }) => {
+                    panic!("abort response failure must not emit a second terminal state")
+                }
+                Ok(_) => {}
+                Err(error) => panic!("event stream failed: {error}"),
+            }
+        }
+    })
+    .await
+    .is_err());
+    shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn forced_abort_emits_only_stopped_and_removes_the_session_registry_entry() {
+    let _environment = fixture_environment("hang_abort_response");
+    let generation = 33;
+    let storage_root = tempfile::tempdir().expect("adapter storage root");
+    let adapter = PiRpcAdapter::with_config(PiRpcConfig {
+        executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_pi_rpc_fixture"))),
+        extension_path: Some(fixture_extension_path()),
+        temporary_root: Some(storage_root.path().to_path_buf()),
+        response_timeout: Duration::from_millis(500),
+        operation_timeout: Duration::from_secs(1),
+        abort_grace_period: Duration::from_millis(40),
+        ..PiRpcConfig::default()
+    });
+    let mut events = adapter.subscribe();
+
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "running").await,
+        PiRpcReply::Accepted
+    );
+    wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::SessionRunning { .. })
+    })
+    .await;
+
+    assert_eq!(
+        adapter
+            .execute(PiRpcCommand::AbortSession {
+                generation,
+                task_id: "session-contract".to_string(),
+                session_id: "session-contract".to_string(),
+            })
+            .await
+            .expect("forced abort crosses the public port"),
+        PiRpcReply::Accepted
+    );
+
+    let stopped = wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::SessionStopped { .. })
+    })
+    .await;
+    assert!(matches!(
+        stopped,
+        PiRpcEvent::SessionStopped {
+            cancellation_mode: PiRpcCancellationMode::Forced,
+            ..
+        }
+    ));
+    assert!(timeout(Duration::from_millis(100), async {
+        loop {
+            match events.recv().await {
+                Ok(PiRpcEvent::SessionFailed { .. }) => {
+                    panic!("forced cancellation must not emit a second failure terminal")
+                }
+                Ok(_) => {}
+                Err(error) => panic!("event stream failed: {error}"),
+            }
+        }
+    })
+    .await
+    .is_err());
+
+    assert_eq!(
+        adapter
+            .execute(PiRpcCommand::CreateSession {
+                generation,
+                task_id: "session-contract".to_string(),
+                session_id: "session-contract".to_string(),
+                mode: PiRpcSessionMode::Managed,
+            })
+            .await
+            .expect("the terminated session registry entry must be removed"),
+        PiRpcReply::Accepted,
+        "forced abort must remove the session from the adapter registry"
+    );
+    shutdown(&adapter, generation).await;
+    assert_eq!(
+        std::fs::read_dir(storage_root.path())
+            .expect("adapter-owned temporary root remains inspectable")
+            .count(),
+        0,
+        "forced abort and shutdown must clean config and extension directories"
+    );
 }
 
 #[tokio::test]
@@ -1917,4 +2207,164 @@ async fn extension_error_is_a_protocol_failure_and_timeout_decision_is_deny_path
         )
     ));
     shutdown(&adapter, generation).await;
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn hard_application_termination_reclaims_the_fake_pi_process_tree() {
+    if std::env::var_os("HALO_PI_RPC_JOB_HOST").is_some() {
+        run_hard_termination_job_host().await;
+        return;
+    }
+
+    let storage_root = tempfile::tempdir().expect("adapter storage root");
+    let mut host = TokioCommand::new(std::env::current_exe().expect("test executable"))
+        .arg("--exact")
+        .arg("hard_application_termination_reclaims_the_fake_pi_process_tree")
+        .arg("--nocapture")
+        .env("HALO_PI_RPC_JOB_HOST", "1")
+        .env("HALO_PI_RPC_JOB_ROOT", storage_root.path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn hard-termination fixture host");
+    let stdout = host.stdout.take().expect("fixture host stdout");
+    let mut lines = BufReader::new(stdout).lines();
+    let child_pids = match timeout(Duration::from_secs(10), async {
+        let mut pids = Vec::new();
+        loop {
+            let line = lines
+                .next_line()
+                .await
+                .expect("read fixture host stdout")
+                .expect("fixture host exited before publishing fake Pi process ids");
+            if let Some(pid) = line.strip_prefix("HALO_TEST_CHILD_PID=") {
+                pids.push(
+                    pid.parse::<u32>()
+                        .expect("fixture host published a numeric fake Pi process id"),
+                );
+                if pids.len() == 2 {
+                    return pids;
+                }
+            }
+        }
+    })
+    .await
+    {
+        Ok(pids) => pids,
+        Err(_) => {
+            let _ = host.kill().await;
+            let _ = host.wait().await;
+            panic!("fixture host did not publish root and descendant fake Pi process ids");
+        }
+    };
+    assert_eq!(child_pids.len(), 2);
+    assert_ne!(child_pids[0], child_pids[1]);
+    for child_pid in &child_pids {
+        assert!(
+            windows_process_is_alive(*child_pid),
+            "fixture must report live root and descendant fake Pi processes before the host is terminated"
+        );
+    }
+
+    host.kill().await.expect("force-terminate fixture host");
+    host.wait().await.expect("reap fixture host");
+    for child_pid in child_pids {
+        if !wait_for_windows_process_exit(child_pid).await {
+            terminate_fake_fixture_process(child_pid);
+            panic!("a fake Pi process survived hard application termination");
+        }
+    }
+}
+
+#[cfg(windows)]
+async fn run_hard_termination_job_host() {
+    std::env::set_var("HALO_PI_RPC_FIXTURE_MODE", "pid_report_descendant");
+    let storage_root =
+        PathBuf::from(std::env::var_os("HALO_PI_RPC_JOB_ROOT").expect("fixture host storage root"));
+    let adapter = PiRpcAdapter::with_config(PiRpcConfig {
+        executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_pi_rpc_fixture"))),
+        extension_path: Some(fixture_extension_path()),
+        temporary_root: Some(storage_root),
+        response_timeout: Duration::from_secs(1),
+        operation_timeout: Duration::from_secs(1),
+        abort_grace_period: Duration::from_millis(100),
+        ..PiRpcConfig::default()
+    });
+    let generation = 81;
+    let mut events = adapter.subscribe();
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "report child pid").await,
+        PiRpcReply::Accepted
+    );
+
+    loop {
+        match events.recv().await.expect("fixture host event stream") {
+            PiRpcEvent::MessageUpdated { text, .. } => {
+                let Some(pids) = text.strip_prefix("fixture-pids:") else {
+                    continue;
+                };
+                let Some((root_pid, descendant_pid)) = pids.split_once(',') else {
+                    panic!("fixture host published malformed fake Pi process ids");
+                };
+                println!("HALO_TEST_CHILD_PID={root_pid}");
+                println!("HALO_TEST_CHILD_PID={descendant_pid}");
+                std::io::stdout()
+                    .flush()
+                    .expect("flush fixture host fake Pi process ids");
+                loop {
+                    tokio::time::sleep(Duration::from_secs(60)).await;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+#[cfg(windows)]
+async fn wait_for_windows_process_exit(pid: u32) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while windows_process_is_alive(pid) {
+        if Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    true
+}
+
+#[cfg(windows)]
+fn windows_process_is_alive(pid: u32) -> bool {
+    // SAFETY: the PID was emitted by this test's controlled fake fixture; the
+    // returned process handle is checked and closed before this function exits.
+    let handle = unsafe { OpenProcess(SYNCHRONIZE, 0, pid) };
+    if handle.is_null() {
+        return false;
+    }
+    // SAFETY: `handle` is a valid process handle from `OpenProcess`; a zero
+    // timeout only queries state and cannot block the contract test.
+    let wait_result = unsafe { WaitForSingleObject(handle, 0) };
+    // SAFETY: `handle` is no longer used after this call.
+    let _ = unsafe { CloseHandle(handle) };
+    wait_result == WAIT_TIMEOUT
+}
+
+#[cfg(windows)]
+fn terminate_fake_fixture_process(pid: u32) {
+    // SAFETY: the PID was emitted by this test's fake fixture. This is an
+    // emergency cleanup path after the red assertion, never a production PID.
+    let handle = unsafe { OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, 0, pid) };
+    if handle.is_null() {
+        return;
+    }
+    // SAFETY: `handle` has PROCESS_TERMINATE access and is closed immediately.
+    let _ = unsafe { TerminateProcess(handle, 1) };
+    // SAFETY: `handle` is no longer used after this call.
+    let _ = unsafe { CloseHandle(handle) };
 }

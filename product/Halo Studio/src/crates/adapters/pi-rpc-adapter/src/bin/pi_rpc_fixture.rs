@@ -1,11 +1,20 @@
 use std::env;
 use std::io::{self, BufRead, BufWriter, Write};
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use serde_json::{json, Value};
 
 fn main() {
     let arguments = env::args().collect::<Vec<_>>();
+    if arguments
+        .iter()
+        .any(|argument| argument == "--fixture-descendant")
+    {
+        loop {
+            std::thread::sleep(Duration::from_secs(60));
+        }
+    }
     let mode = env::var("HALO_PI_RPC_FIXTURE_MODE").unwrap_or_else(|_| "happy".to_string());
     let readiness_probe = arguments.iter().any(|argument| argument == "--no-session")
         && !arguments.iter().any(|argument| argument == "--extension");
@@ -41,6 +50,23 @@ fn main() {
         println!("0.81.1");
         return;
     }
+
+    // Spawn immediately so the Windows process-tree contract proves that a
+    // child cannot escape before the fixture itself joins the kill-on-close Job.
+    let descendant_pid = if mode == "pid_report_descendant" {
+        Some(
+            Command::new(env::current_exe().expect("fixture executable path"))
+                .arg("--fixture-descendant")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("spawn fixture descendant")
+                .id(),
+        )
+    } else {
+        None
+    };
 
     if mode == "credential_projection"
         && !readiness_launch_is_valid(&arguments)
@@ -250,6 +276,38 @@ fn main() {
                 );
             }
             "prompt" | "follow_up" => match mode.as_str() {
+                "running_eof" | "running_bad_json" | "running_partial_eof" | "running_exit" => {
+                    respond(
+                        &mut stdout,
+                        request.get("id").and_then(Value::as_str),
+                        command,
+                        true,
+                        Value::Null,
+                    );
+                    send_event(&mut stdout, json!({ "type": "agent_start" }));
+                    send_event(
+                        &mut stdout,
+                        json!({
+                            "type": "message_update",
+                            "message": {},
+                            "assistantMessageEvent": {
+                                "type": "text_delta",
+                                "contentIndex": 0,
+                                "delta": "before interruption",
+                                "partial": {}
+                            }
+                        }),
+                    );
+                    match mode.as_str() {
+                        "running_eof" | "running_exit" => return,
+                        "running_bad_json" => write_raw(&mut stdout, b"not-json\n"),
+                        "running_partial_eof" => {
+                            write_raw(&mut stdout, br#"{"type":"message_update"}"#)
+                        }
+                        _ => unreachable!(),
+                    }
+                    return;
+                }
                 "out_of_order" => {
                     out_of_order_requests.push(request);
                     if out_of_order_requests.len() == 2 {
@@ -280,6 +338,7 @@ fn main() {
                 "graceful_abort"
                 | "hang_abort"
                 | "hang_abort_response"
+                | "abort_bad_json"
                 | "agent_end_without_settled" => {
                     respond(
                         &mut stdout,
@@ -291,6 +350,42 @@ fn main() {
                     send_event(&mut stdout, json!({ "type": "agent_start" }));
                     if mode == "agent_end_without_settled" {
                         send_event(&mut stdout, json!({ "type": "agent_end" }));
+                    }
+                }
+                "pid_report" | "pid_report_descendant" => {
+                    respond(
+                        &mut stdout,
+                        request.get("id").and_then(Value::as_str),
+                        command,
+                        true,
+                        Value::Null,
+                    );
+                    send_event(&mut stdout, json!({ "type": "agent_start" }));
+                    send_event(
+                        &mut stdout,
+                        json!({
+                            "type": "message_update",
+                            "message": {},
+                            "assistantMessageEvent": {
+                                "type": "text_delta",
+                                "contentIndex": 0,
+                                "delta": match descendant_pid {
+                                    Some(descendant_pid) => format!(
+                                        "fixture-pids:{},{}",
+                                        std::process::id(),
+                                        descendant_pid
+                                    ),
+                                    None => format!("fixture-pid:{}", std::process::id()),
+                                },
+                                "partial": {}
+                            }
+                        }),
+                    );
+                    // The hard-termination contract needs a non-cooperative
+                    // fake child: closing the host's stdin must not make this
+                    // fixture exit before Windows process containment does.
+                    loop {
+                        std::thread::sleep(Duration::from_secs(60));
                     }
                 }
                 "malformed_message_update" => {
@@ -438,6 +533,10 @@ fn main() {
             },
             "abort" => {
                 abort_requests += 1;
+                if mode == "abort_bad_json" && abort_requests > 1 {
+                    write_raw(&mut stdout, b"not-json\n");
+                    return;
+                }
                 if mode == "hang_abort_response" {
                     if abort_requests > 1 {
                         std::thread::sleep(Duration::from_secs(5));

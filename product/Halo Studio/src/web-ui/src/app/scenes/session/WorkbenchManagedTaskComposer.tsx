@@ -1,4 +1,4 @@
-import React, { type FormEvent, useEffect, useState } from 'react';
+import React, { type FormEvent, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, GitBranch, Loader2, ShieldCheck } from 'lucide-react';
 import { useStore } from 'zustand';
 
@@ -15,9 +15,15 @@ interface PendingFirstPrompt {
   content: string;
 }
 
-const createDefaultTaskId = (): string => `managed-task-${Date.now()}`;
+let managedTaskIdSequence = 0;
 
-const WorkbenchManagedTaskComposer: React.FC = () => {
+const createDefaultTaskId = (): string => `managed-task-${Date.now()}-${++managedTaskIdSequence}`;
+
+interface WorkbenchManagedTaskComposerProps {
+  newRunVersion: number;
+}
+
+const WorkbenchManagedTaskComposer: React.FC<WorkbenchManagedTaskComposerProps> = ({ newRunVersion }) => {
   const { t } = useI18n('common');
   const runtimeState = useStore(workbenchRuntimeStore);
   const snapshot = runtimeState.snapshot;
@@ -29,11 +35,25 @@ const WorkbenchManagedTaskComposer: React.FC = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [isSendingFirstPrompt, setIsSendingFirstPrompt] = useState(false);
   const [actionErrorKey, setActionErrorKey] = useState<string | null>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const previousNewRunVersion = useRef(newRunVersion);
 
   useEffect(() => {
     setManagedWorkspaceConfirmed(false);
     setActionErrorKey(null);
   }, [workspace?.workspaceId, workspace?.rootPath]);
+
+  useEffect(() => {
+    if (previousNewRunVersion.current === newRunVersion) return;
+
+    previousNewRunVersion.current = newRunVersion;
+    setTaskId(createDefaultTaskId());
+    setFirstPrompt('');
+    setManagedWorkspaceConfirmed(false);
+    setActionErrorKey(null);
+    promptRef.current?.focus();
+    promptRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [newRunVersion]);
 
   useEffect(() => {
     if (!pendingFirstPrompt || isSendingFirstPrompt) return undefined;
@@ -168,6 +188,7 @@ const WorkbenchManagedTaskComposer: React.FC = () => {
         <label>
           <span>{t('nav.sessions.workbenchRuntime.managedTask.firstPrompt')}</span>
           <textarea
+            ref={promptRef}
             value={firstPrompt}
             onChange={event => setFirstPrompt(event.target.value)}
             rows={3}

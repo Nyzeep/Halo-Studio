@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AlertCircle, CircleDot, Loader2 } from 'lucide-react';
 import { useStore } from 'zustand';
 
 import { useI18n } from '@/infrastructure/i18n';
 import {
   selectWorkbenchRuntimeErrorMessageKey,
+  selectWorkbenchRuntimeInterruptionReasonMessageKey,
   selectWorkbenchRuntimePhaseMessageKey,
   selectWorkbenchRuntimeSessionPhaseMessageKey,
   workbenchRuntimeStore,
@@ -27,6 +28,7 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
   const { t } = useI18n('common');
   const runtimeState = useStore(workbenchRuntimeStore);
   const snapshot = runtimeState.snapshot;
+  const [newRunVersion, setNewRunVersion] = useState(0);
   const isSyncing = runtimeState.syncStatus === 'bootstrapping'
     || runtimeState.syncStatus === 'resyncing';
   const runtimePhaseMessageKey = selectWorkbenchRuntimePhaseMessageKey(runtimeState);
@@ -61,7 +63,7 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
       </header>
 
       <div className="bitfun-workbench-session-scene__body" aria-live="polite">
-        <WorkbenchManagedTaskComposer />
+        <WorkbenchManagedTaskComposer newRunVersion={newRunVersion} />
 
         {isSyncing && !snapshot ? (
           <div className="bitfun-workbench-session-scene__state" role="status">
@@ -163,11 +165,20 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
                   operation={operation}
                 />
               ))}
-            <WorkbenchDeliveryReview session={session} />
-            {session.error ? (
+            <WorkbenchDeliveryReview
+              session={session}
+              onStartNewRun={() => setNewRunVersion(version => version + 1)}
+            />
+            {session.phase === 'interrupted' || session.error ? (
               <div className="bitfun-workbench-session-scene__session-error" role="alert">
                 <AlertCircle size={14} aria-hidden="true" />
-                <span>{t('nav.sessions.workbenchRuntime.sessionError')}</span>
+                <span
+                  data-testid={session.phase === 'interrupted' ? 'workbench-interruption-reason' : undefined}
+                >
+                  {session.phase === 'interrupted'
+                    ? t(selectWorkbenchRuntimeInterruptionReasonMessageKey(session))
+                    : t('nav.sessions.workbenchRuntime.sessionError')}
+                </span>
               </div>
             ) : null}
           </article>

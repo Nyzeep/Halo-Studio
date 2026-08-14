@@ -1,4 +1,4 @@
-﻿//! Portable owner for the Halo Workbench Runtime public seam.
+//! Portable owner for the Halo Workbench Runtime public seam.
 //!
 //! The owner exposes Halo-local state and intent types. Pi RPC protocol and
 //! process details remain behind [`PiRpcPort`].
@@ -11,16 +11,15 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use bitfun_runtime_ports::{
-    ClockPort, PiProviderReadinessPort, PiRpcAvailabilitySummary, PiRpcCapability, PiRpcCommand,
-    PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind,
-    PiRpcOperationRiskLevel, PiRpcPort,
-    PiRpcReply, PiRpcSessionMode, PiRpcVersionEvidenceSource, PiRpcVersionSummary, PiRpcWorkspace,
-    PortErrorKind, WorkbenchDeliveryAttributionKind,
-    WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest,
-    WorkbenchDeliveryFingerprint, WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline,
-    WorkbenchTaskBaselinePort, WorkbenchTaskBaselineRequest,
-    WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest,
-    PI_RPC_ADAPTER_IDENTITY,
+    ClockPort, PiProviderReadinessPort, PiRpcAvailabilitySummary, PiRpcCancellationMode,
+    PiRpcCapability, PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision,
+    PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcPort, PiRpcReply, PiRpcSessionMode,
+    PiRpcVersionEvidenceSource, PiRpcVersionSummary, PiRpcWorkspace, PortErrorKind, PortResult,
+    WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort,
+    WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint,
+    WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
+    WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
+    WorkbenchWorkspaceTrustRequest, PI_RPC_ADAPTER_IDENTITY,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -292,9 +291,33 @@ pub enum HaloWorkbenchSessionPhase {
     Failed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HaloWorkbenchCancellationMode {
+    Native,
+    Forced,
+}
+
+impl From<PiRpcCancellationMode> for HaloWorkbenchCancellationMode {
+    fn from(mode: PiRpcCancellationMode) -> Self {
+        match mode {
+            PiRpcCancellationMode::Native => Self::Native,
+            PiRpcCancellationMode::Forced => Self::Forced,
+        }
+    }
+}
+
 impl HaloWorkbenchSessionPhase {
     fn is_terminal(self) -> bool {
         matches!(self, Self::Ended | Self::Failed)
+    }
+
+    fn needs_interruption_checkpoint(self) -> bool {
+        !self.is_terminal() && self != Self::Interrupted
+    }
+
+    fn rejects_adapter_events(self) -> bool {
+        self.is_terminal() || matches!(self, Self::Interrupted | Self::Reviewing)
     }
 }
 
@@ -369,11 +392,40 @@ pub struct HaloWorkbenchSessionSnapshot {
     pub session_id: String,
     pub mode: HaloWorkbenchSessionMode,
     pub phase: HaloWorkbenchSessionPhase,
+    pub cancellation_mode: Option<HaloWorkbenchCancellationMode>,
     pub baseline: Option<HaloWorkbenchTaskBaselineSnapshot>,
     pub messages: Vec<HaloWorkbenchMessageSnapshot>,
     pub activities: Vec<HaloWorkbenchActivitySnapshot>,
     pub error: Option<HaloWorkbenchError>,
     pub delivery_review: Option<HaloWorkbenchDeliveryReviewSnapshot>,
+}
+
+impl HaloWorkbenchSessionSnapshot {
+    fn accepts_terminal_adapter_event(&self) -> bool {
+        if !self.phase.rejects_adapter_events() {
+            return true;
+        }
+        // A settled session remains exposed to a transport failure until its
+        // review evidence is frozen. Reviews entered from an interruption
+        // retain an error or cancellation fact and keep fencing late Pi events.
+        self.phase == HaloWorkbenchSessionPhase::Reviewing
+            && self.delivery_review.is_none()
+            && self.error.is_none()
+            && self.cancellation_mode.is_none()
+    }
+}
+
+/// Durable boundary for the bounded, redacted facts that must be projected as
+/// interrupted after an unexpected application loss. Implementations must
+/// never persist Pi transport state, credentials, raw RPC identifiers, or
+/// pending operations.
+pub trait HaloWorkbenchInterruptionHistoryPort: Send + Sync {
+    fn load_interrupted_sessions(&self) -> PortResult<Vec<HaloWorkbenchSessionSnapshot>>;
+
+    fn replace_interrupted_sessions(
+        &self,
+        sessions: Vec<HaloWorkbenchSessionSnapshot>,
+    ) -> PortResult<()>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -469,6 +521,30 @@ impl HaloWorkbenchError {
             "runtime_shutdown",
             "The Workbench Runtime has shut down",
             "restart_application",
+        )
+    }
+
+    fn interruption_history_unavailable() -> Self {
+        Self::new(
+            "interruption_history_unavailable",
+            "The Workbench interruption history could not be restored",
+            "restart_application",
+        )
+    }
+
+    fn workspace_closed() -> Self {
+        Self::new(
+            "workspace_closed",
+            "The Workbench workspace was closed before the task finished",
+            "start_new_run_or_review_interruption",
+        )
+    }
+
+    fn application_interrupted() -> Self {
+        Self::new(
+            "application_interrupted",
+            "The Workbench application stopped before the task finished",
+            "start_new_run_or_review_interruption",
         )
     }
 
@@ -891,18 +967,82 @@ impl Default for RuntimeState {
     }
 }
 
+impl RuntimeState {
+    fn from_interruption_history(
+        sessions: Vec<HaloWorkbenchSessionSnapshot>,
+    ) -> Result<Self, HaloWorkbenchError> {
+        let mut state = Self::default();
+        for session in sessions {
+            if session.workspace_id.is_empty()
+                || session.task_id.is_empty()
+                || session.session_id.is_empty()
+                || session.mode != HaloWorkbenchSessionMode::Managed
+                || session.phase != HaloWorkbenchSessionPhase::Interrupted
+                || !session.messages.is_empty()
+                || !session.activities.is_empty()
+            {
+                return Err(HaloWorkbenchError::interruption_history_unavailable());
+            }
+            if state
+                .sessions
+                .insert(session.session_id.clone(), session)
+                .is_some()
+            {
+                return Err(HaloWorkbenchError::interruption_history_unavailable());
+            }
+        }
+        Ok(state)
+    }
+}
+
+struct InterruptionHistoryState {
+    persisted_sessions: Vec<HaloWorkbenchSessionSnapshot>,
+    // State is snapshotted before persistence so adapters cannot block the
+    // runtime lock. This high-water mark prevents a delayed old snapshot from
+    // overwriting a later interruption fact.
+    last_observed_state_version: u64,
+}
+
+impl InterruptionHistoryState {
+    fn new(persisted_sessions: Vec<HaloWorkbenchSessionSnapshot>) -> Self {
+        Self {
+            persisted_sessions,
+            last_observed_state_version: 0,
+        }
+    }
+
+    fn should_persist(
+        &mut self,
+        state_version: u64,
+        sessions: &[HaloWorkbenchSessionSnapshot],
+    ) -> bool {
+        if state_version < self.last_observed_state_version {
+            return false;
+        }
+        self.last_observed_state_version = state_version;
+        self.persisted_sessions.as_slice() != sessions
+    }
+
+    fn mark_persisted(&mut self, sessions: Vec<HaloWorkbenchSessionSnapshot>) {
+        self.persisted_sessions = sessions;
+    }
+}
+
 struct HaloWorkbenchRuntimeInner {
     adapter: Arc<dyn PiRpcPort>,
     workspace_facts: Arc<dyn WorkbenchWorkspaceFactsPort>,
     task_baseline: Arc<dyn WorkbenchTaskBaselinePort>,
     delivery_evidence: Arc<dyn WorkbenchDeliveryEvidencePort>,
+    interruption_history: Arc<dyn HaloWorkbenchInterruptionHistoryPort>,
     provider_readiness: Arc<dyn PiProviderReadinessPort>,
     clock: Arc<dyn ClockPort>,
     state: Mutex<RuntimeState>,
+    interruption_history_state: Mutex<InterruptionHistoryState>,
     requests: tokio::sync::Mutex<RequestLedger>,
     cleanups: tokio::sync::Mutex<HashMap<u64, CleanupRecord>>,
     lifecycle_actions: tokio::sync::Mutex<()>,
     adapter_actions: tokio::sync::Mutex<()>,
+    prompt_actions: tokio::sync::Mutex<()>,
     events: broadcast::Sender<HaloWorkbenchEvent>,
     adapter_events_started: AtomicBool,
     shutdown_result: OnceCell<Result<(), HaloWorkbenchError>>,
@@ -955,7 +1095,47 @@ impl WorkbenchDeliveryEvidencePort for UnavailableDeliveryEvidencePort {
     }
 }
 
+struct EmptyInterruptionHistoryPort;
+
+impl HaloWorkbenchInterruptionHistoryPort for EmptyInterruptionHistoryPort {
+    fn load_interrupted_sessions(&self) -> PortResult<Vec<HaloWorkbenchSessionSnapshot>> {
+        Ok(Vec::new())
+    }
+
+    fn replace_interrupted_sessions(
+        &self,
+        _sessions: Vec<HaloWorkbenchSessionSnapshot>,
+    ) -> PortResult<()> {
+        Ok(())
+    }
+}
+
 impl HaloWorkbenchRuntimeInner {
+    fn persist_interruption_history(
+        &self,
+        state_version: u64,
+        sessions: Vec<HaloWorkbenchSessionSnapshot>,
+    ) {
+        let mut history = self
+            .interruption_history_state
+            .lock()
+            .expect("Halo Workbench interruption history lock");
+        if !history.should_persist(state_version, &sessions) {
+            return;
+        }
+        if let Err(error) = self
+            .interruption_history
+            .replace_interrupted_sessions(sessions.clone())
+        {
+            log::warn!(
+                "Halo Workbench interruption history persistence failed: operation=replace_interrupted_sessions session_count={} error={error}",
+                sessions.len()
+            );
+            return;
+        }
+        history.mark_persisted(sessions);
+    }
+
     fn snapshot(&self) -> HaloWorkbenchSnapshot {
         let state = self.state.lock().expect("Halo Workbench state lock");
         HaloWorkbenchSnapshot {
@@ -996,28 +1176,33 @@ impl HaloWorkbenchRuntimeInner {
         operation_id: Option<String>,
         mutate: impl FnOnce(&mut RuntimeState) -> bool,
     ) -> bool {
-        let mut state = self.state.lock().expect("Halo Workbench state lock");
-        if !mutate(&mut state) {
-            return false;
-        }
-        state.sequence = state
-            .sequence
-            .checked_add(1)
-            .expect("Halo Workbench event sequence exhausted");
-        state.state_version = state
-            .state_version
-            .checked_add(1)
-            .expect("Halo Workbench state version exhausted");
-        let event = HaloWorkbenchEvent {
-            sequence: state.sequence,
-            state_version: state.state_version,
-            correlation_id: correlation_id.map(str::to_string),
-            kind,
-            summary: summary.to_string(),
-            session_id,
-            operation_id,
-            occurred_at_ms: self.clock.now_unix_millis(),
+        let (event, interrupted_sessions) = {
+            let mut state = self.state.lock().expect("Halo Workbench state lock");
+            if !mutate(&mut state) {
+                return false;
+            }
+            state.sequence = state
+                .sequence
+                .checked_add(1)
+                .expect("Halo Workbench event sequence exhausted");
+            state.state_version = state
+                .state_version
+                .checked_add(1)
+                .expect("Halo Workbench state version exhausted");
+            let event = HaloWorkbenchEvent {
+                sequence: state.sequence,
+                state_version: state.state_version,
+                correlation_id: correlation_id.map(str::to_string),
+                kind,
+                summary: summary.to_string(),
+                session_id,
+                operation_id,
+                occurred_at_ms: self.clock.now_unix_millis(),
+            };
+            let interrupted_sessions = interruption_history_snapshots(&state);
+            (event, interrupted_sessions)
         };
+        self.persist_interruption_history(event.state_version, interrupted_sessions);
         let _ = self.events.send(event);
         true
     }
@@ -1068,13 +1253,12 @@ impl HaloWorkbenchRuntimeInner {
                     "Workbench session is waiting for developer",
                 );
             }
-            PiRpcEvent::SessionStopped { session_id, .. } => {
-                self.set_session_phase(
-                    generation,
-                    &session_id,
-                    HaloWorkbenchSessionPhase::Interrupted,
-                    "Workbench session was interrupted",
-                );
+            PiRpcEvent::SessionStopped {
+                session_id,
+                cancellation_mode,
+                ..
+            } => {
+                self.set_session_interrupted(generation, &session_id, cancellation_mode.into());
             }
             PiRpcEvent::SessionRunning { session_id, .. } => {
                 self.set_session_phase(
@@ -1090,12 +1274,16 @@ impl HaloWorkbenchRuntimeInner {
             PiRpcEvent::SessionFailed {
                 session_id, reason, ..
             } => {
-                self.set_session_failure(
-                    generation,
-                    &session_id,
-                    adapter_failure(reason),
-                    HaloWorkbenchSessionPhase::Failed,
-                );
+                let phase = self
+                    .state
+                    .lock()
+                    .expect("Halo Workbench state lock")
+                    .sessions
+                    .get(&session_id)
+                    .filter(|session| session.mode == HaloWorkbenchSessionMode::Managed)
+                    .map(|_| HaloWorkbenchSessionPhase::Interrupted)
+                    .unwrap_or(HaloWorkbenchSessionPhase::Failed);
+                self.set_session_failure(generation, &session_id, adapter_failure(reason), phase);
             }
             PiRpcEvent::MessageUpdated {
                 session_id, text, ..
@@ -1173,7 +1361,7 @@ impl HaloWorkbenchRuntimeInner {
                             || state
                                 .sessions
                                 .get(&session_id)
-                                .is_none_or(|session| session.phase.is_terminal())
+                                .is_none_or(|session| session.phase.rejects_adapter_events())
                             || state.pending_operations.contains_key(&operation_id)
                         {
                             return false;
@@ -1348,11 +1536,53 @@ impl HaloWorkbenchRuntimeInner {
                 }
                 session.phase = phase;
                 session.error = None;
+                if phase != HaloWorkbenchSessionPhase::Interrupted {
+                    session.cancellation_mode = None;
+                }
                 if phase.is_terminal() {
                     state
                         .pending_operations
                         .retain(|_, operation| operation.session_id != owned_session_id);
                 }
+                true
+            },
+        );
+    }
+
+    fn set_session_interrupted(
+        &self,
+        generation: u64,
+        session_id: &str,
+        cancellation_mode: HaloWorkbenchCancellationMode,
+    ) {
+        let owned_session_id = session_id.to_string();
+        self.publish_transition(
+            None,
+            HaloWorkbenchEventKind::SessionStateChanged,
+            "Workbench session was interrupted",
+            Some(owned_session_id.clone()),
+            None,
+            move |state| {
+                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&owned_session_id) else {
+                    return false;
+                };
+                if !session.accepts_terminal_adapter_event()
+                    || !valid_session_transition(
+                        session.phase,
+                        HaloWorkbenchSessionPhase::Interrupted,
+                    )
+                {
+                    return false;
+                }
+                session.phase = HaloWorkbenchSessionPhase::Interrupted;
+                session.error = None;
+                session.cancellation_mode = Some(cancellation_mode);
+                state
+                    .pending_operations
+                    .retain(|_, operation| operation.session_id != owned_session_id);
                 true
             },
         );
@@ -1366,10 +1596,14 @@ impl HaloWorkbenchRuntimeInner {
         phase: HaloWorkbenchSessionPhase,
     ) {
         let owned_session_id = session_id.to_string();
+        let summary = match phase {
+            HaloWorkbenchSessionPhase::Interrupted => "Workbench session was interrupted",
+            _ => "Workbench session failed",
+        };
         self.publish_transition(
             None,
             HaloWorkbenchEventKind::SessionStateChanged,
-            "Workbench session failed",
+            summary,
             Some(owned_session_id.clone()),
             None,
             move |state| {
@@ -1379,11 +1613,14 @@ impl HaloWorkbenchRuntimeInner {
                 let Some(session) = state.sessions.get_mut(&owned_session_id) else {
                     return false;
                 };
-                if session.phase.is_terminal() || !valid_session_transition(session.phase, phase) {
+                if !session.accepts_terminal_adapter_event()
+                    || !valid_session_transition(session.phase, phase)
+                {
                     return false;
                 }
                 session.phase = phase;
                 session.error = Some(error);
+                session.cancellation_mode = None;
                 state
                     .pending_operations
                     .retain(|_, operation| operation.session_id != owned_session_id);
@@ -1408,6 +1645,7 @@ impl HaloWorkbenchRuntimeInner {
                 if state.generation != generation {
                     return false;
                 }
+                interrupt_managed_sessions(state, &error);
                 state.phase = HaloWorkbenchPhase::Failed;
                 state.adapter_available = false;
                 state.error = Some(error);
@@ -1416,27 +1654,39 @@ impl HaloWorkbenchRuntimeInner {
         )
     }
 
-    fn fail_adapter_event_gap(&self) {
-        self.fail_active_adapter_stream(HaloWorkbenchError::new(
-            "adapter_event_gap",
-            "The Workbench execution event stream has a gap",
-            "restart_runtime",
-        ));
+    async fn fail_adapter_event_gap(self: &Arc<Self>) {
+        self.fail_active_runtime(
+            HaloWorkbenchError::new(
+                "adapter_event_gap",
+                "The Workbench execution event stream has a gap",
+                "restart_runtime",
+            ),
+            "Workbench Runtime event stream failed",
+        )
+        .await;
     }
 
-    fn fail_adapter_event_stream_closed(&self) {
-        self.fail_active_adapter_stream(HaloWorkbenchError::new(
-            "adapter_event_stream_closed",
-            "The Workbench execution event stream closed unexpectedly",
-            "restart_runtime",
-        ));
+    async fn fail_adapter_event_stream_closed(self: &Arc<Self>) {
+        self.fail_active_runtime(
+            HaloWorkbenchError::new(
+                "adapter_event_stream_closed",
+                "The Workbench execution event stream closed unexpectedly",
+                "restart_runtime",
+            ),
+            "Workbench Runtime event stream failed",
+        )
+        .await;
     }
 
-    fn fail_active_adapter_stream(&self, error: HaloWorkbenchError) {
-        self.publish_transition(
+    async fn fail_active_runtime(
+        self: &Arc<Self>,
+        error: HaloWorkbenchError,
+        summary: &'static str,
+    ) {
+        let transitioned = self.publish_transition(
             None,
             HaloWorkbenchEventKind::RuntimeStateChanged,
-            "Workbench Runtime event stream failed",
+            summary,
             None,
             None,
             move |state| {
@@ -1450,12 +1700,26 @@ impl HaloWorkbenchRuntimeInner {
                 {
                     return false;
                 }
+                interrupt_managed_sessions(state, &error);
                 state.phase = HaloWorkbenchPhase::Failed;
                 state.adapter_available = false;
                 state.error = Some(error);
                 true
             },
         );
+        let cleanup_generation = transitioned.then(|| {
+            self.state
+                .lock()
+                .expect("Halo Workbench state lock")
+                .adapter_generation
+        });
+        if let Some(generation) = cleanup_generation.flatten() {
+            if let Err(error) = self.execute_cleanup_once(generation).await {
+                log::warn!(
+                    "Halo Workbench Runtime cleanup failed: operation=shutdown generation={generation} error={error}"
+                );
+            }
+        }
     }
 
     fn capture_settled_fingerprint(&self, generation: u64, session_id: &str) {
@@ -1514,18 +1778,98 @@ impl HaloWorkbenchRuntimeInner {
                 // A finished managed task remains in read-only delivery review
                 // until the developer accepts or rejects the result.
                 if session.phase == HaloWorkbenchSessionPhase::Reviewing
+                    || session.phase == HaloWorkbenchSessionPhase::Interrupted
                     || session.phase.is_terminal()
                 {
                     return false;
                 }
                 session.phase = HaloWorkbenchSessionPhase::Ended;
                 session.error = None;
+                session.cancellation_mode = None;
                 state
                     .pending_operations
                     .retain(|_, operation| operation.session_id != session_id_owned);
                 true
             },
         );
+    }
+
+    async fn execute_cleanup_once(self: &Arc<Self>, generation: u64) -> CleanupResult {
+        let mut result = {
+            let mut cleanups = self.cleanups.lock().await;
+            match cleanups.get(&generation) {
+                Some(CleanupRecord::Complete(result)) => return result.clone(),
+                Some(CleanupRecord::InFlight { result }) => result.subscribe(),
+                None => {
+                    let (sender, receiver) = watch::channel(None);
+                    cleanups.insert(
+                        generation,
+                        CleanupRecord::InFlight {
+                            result: sender.clone(),
+                        },
+                    );
+                    self.state
+                        .lock()
+                        .expect("Halo Workbench state lock")
+                        .cleanup_started
+                        .insert(generation);
+                    let inner = Arc::clone(self);
+                    tokio::spawn(async move {
+                        let cleanup_result = {
+                            let _action = inner.adapter_actions.lock().await;
+                            match inner
+                                .adapter
+                                .execute(PiRpcCommand::Shutdown { generation })
+                                .await
+                            {
+                                Ok(PiRpcReply::Accepted)
+                                | Ok(PiRpcReply::Available { .. })
+                                | Ok(PiRpcReply::Ready { .. }) => Ok(()),
+                                Ok(PiRpcReply::Unavailable { .. }) => Err(HaloWorkbenchError::new(
+                                    "cleanup_failed",
+                                    "Workbench Runtime cleanup did not complete",
+                                    "restart_application",
+                                )),
+                                Err(error) => Err(port_failure(error.kind)),
+                            }
+                        };
+                        sender.send_replace(Some(cleanup_result.clone()));
+                        let mut cleanups = inner.cleanups.lock().await;
+                        cleanups.insert(generation, CleanupRecord::Complete(cleanup_result));
+                        while cleanups
+                            .values()
+                            .filter(|record| matches!(record, CleanupRecord::Complete(_)))
+                            .count()
+                            > MAX_COMPLETED_CLEANUP_RECORDS
+                        {
+                            let Some(generation) =
+                                cleanups.iter().find_map(|(generation, record)| {
+                                    matches!(record, CleanupRecord::Complete(_))
+                                        .then_some(*generation)
+                                })
+                            else {
+                                break;
+                            };
+                            cleanups.remove(&generation);
+                        }
+                    });
+                    receiver
+                }
+            }
+        };
+
+        loop {
+            if let Some(cleanup_result) = result.borrow().clone() {
+                return cleanup_result;
+            }
+            if result.changed().await.is_err() {
+                return Err(HaloWorkbenchError::new(
+                    "cleanup_failed",
+                    "Workbench Runtime cleanup did not complete",
+                    "restart_application",
+                ));
+            }
+        }
     }
 }
 
@@ -1601,25 +1945,58 @@ impl HaloWorkbenchRuntime {
         delivery_evidence: Arc<dyn WorkbenchDeliveryEvidencePort>,
         clock: Arc<dyn ClockPort>,
     ) -> Self {
+        Self::try_new_with_delivery_evidence_and_interruption_history(
+            adapter,
+            workspace_facts,
+            provider_readiness,
+            task_baseline,
+            delivery_evidence,
+            Arc::new(EmptyInterruptionHistoryPort),
+            clock,
+        )
+        .expect("the empty interruption history port is infallible")
+    }
+
+    /// Constructs the runtime with the durable, redacted interruption facts
+    /// that are safe to surface after an application restart. This boundary
+    /// deliberately excludes native Pi session state and pending operations.
+    pub fn try_new_with_delivery_evidence_and_interruption_history(
+        adapter: Arc<dyn PiRpcPort>,
+        workspace_facts: Arc<dyn WorkbenchWorkspaceFactsPort>,
+        provider_readiness: Arc<dyn PiProviderReadinessPort>,
+        task_baseline: Arc<dyn WorkbenchTaskBaselinePort>,
+        delivery_evidence: Arc<dyn WorkbenchDeliveryEvidencePort>,
+        interruption_history: Arc<dyn HaloWorkbenchInterruptionHistoryPort>,
+        clock: Arc<dyn ClockPort>,
+    ) -> Result<Self, HaloWorkbenchError> {
+        let restored_interruption_history = interruption_history
+            .load_interrupted_sessions()
+            .map_err(|_| HaloWorkbenchError::interruption_history_unavailable())?;
+        let state = RuntimeState::from_interruption_history(restored_interruption_history.clone())?;
         let (events, _) = broadcast::channel(256);
-        Self {
+        Ok(Self {
             inner: Arc::new(HaloWorkbenchRuntimeInner {
                 adapter,
                 workspace_facts,
                 task_baseline,
                 delivery_evidence,
+                interruption_history,
                 provider_readiness,
                 clock,
-                state: Mutex::new(RuntimeState::default()),
+                state: Mutex::new(state),
+                interruption_history_state: Mutex::new(InterruptionHistoryState::new(
+                    restored_interruption_history,
+                )),
                 requests: tokio::sync::Mutex::new(RequestLedger::default()),
                 cleanups: tokio::sync::Mutex::new(HashMap::new()),
                 lifecycle_actions: tokio::sync::Mutex::new(()),
                 adapter_actions: tokio::sync::Mutex::new(()),
+                prompt_actions: tokio::sync::Mutex::new(()),
                 events,
                 adapter_events_started: AtomicBool::new(false),
                 shutdown_result: OnceCell::new(),
             }),
-        }
+        })
     }
 
     pub fn snapshot(&self) -> HaloWorkbenchSnapshot {
@@ -1714,11 +2091,21 @@ impl HaloWorkbenchRuntime {
             });
             let result = match execution.await {
                 Ok(result) => result,
-                Err(_) => Err(HaloWorkbenchError::new(
-                    "runtime_internal",
-                    "The Workbench request execution stopped unexpectedly",
-                    "retry",
-                )),
+                Err(_) => {
+                    let error = HaloWorkbenchError::new(
+                        "runtime_internal",
+                        "The Workbench request execution stopped unexpectedly",
+                        "restart_application",
+                    );
+                    runtime
+                        .inner
+                        .fail_active_runtime(
+                            error.clone(),
+                            "Workbench Runtime request execution stopped unexpectedly",
+                        )
+                        .await;
+                    Err(error)
+                }
             };
             sender.send_replace(Some(result.clone()));
             let mut ledger = runtime.inner.requests.lock().await;
@@ -1772,13 +2159,13 @@ impl HaloWorkbenchRuntime {
                         let Some(inner) = inner.upgrade() else {
                             break;
                         };
-                        inner.fail_adapter_event_gap();
+                        inner.fail_adapter_event_gap().await;
                     }
                     Err(broadcast::error::RecvError::Closed) => {
                         let Some(inner) = inner.upgrade() else {
                             break;
                         };
-                        inner.fail_adapter_event_stream_closed();
+                        inner.fail_adapter_event_stream_closed().await;
                         break;
                     }
                 }
@@ -1873,6 +2260,7 @@ impl HaloWorkbenchRuntime {
                 return Err(HaloWorkbenchError::runtime_shutdown());
             }
             let cleanup_generation = state.adapter_generation;
+            interrupt_managed_sessions(&mut state, &HaloWorkbenchError::workspace_closed());
             state.generation = state.generation.saturating_add(1);
             state.cleanup_started.clear();
             if cleanup_generation.is_some() || state.phase != HaloWorkbenchPhase::Disconnected {
@@ -1950,7 +2338,7 @@ impl HaloWorkbenchRuntime {
                 state.workspace = Some(public_workspace);
                 state.adapter_generation = Some(generation);
                 state.managed_workspace_confirmation = None;
-                state.sessions.clear();
+                retain_managed_interruption_facts(state);
                 state.pending_operations.clear();
                 state.phase = HaloWorkbenchPhase::Probing;
                 state.adapter_available = false;
@@ -2156,6 +2544,12 @@ impl HaloWorkbenchRuntime {
                 state.adapter_readiness = None;
                 state.error = None;
             }
+            let close_error = if terminate {
+                HaloWorkbenchError::runtime_shutdown()
+            } else {
+                HaloWorkbenchError::workspace_closed()
+            };
+            interrupt_managed_sessions(&mut state, &close_error);
             (cleanup_generation, state.generation)
         };
         if let Some(cleanup_generation) = cleanup_generation {
@@ -2172,7 +2566,6 @@ impl HaloWorkbenchRuntime {
                     if state.generation != generation
                         || (state.phase == HaloWorkbenchPhase::Disconnected
                             && state.workspace.is_none()
-                            && state.sessions.is_empty()
                             && state.pending_operations.is_empty()
                             && state.error.is_none())
                     {
@@ -2183,7 +2576,7 @@ impl HaloWorkbenchRuntime {
                     state.adapter_readiness = None;
                     state.managed_workspace_confirmation = None;
                     state.workspace = None;
-                    state.sessions.clear();
+                    retain_managed_interruption_facts(state);
                     state.pending_operations.clear();
                     state.error = None;
                     true
@@ -2213,7 +2606,7 @@ impl HaloWorkbenchRuntime {
                 true
             },
         );
-        let result = self.execute_cleanup_once(cleanup_generation).await;
+        let result = self.inner.execute_cleanup_once(cleanup_generation).await;
         if !self.is_current_generation(fence_generation) {
             return Ok(());
         }
@@ -2245,91 +2638,13 @@ impl HaloWorkbenchRuntime {
                     state.adapter_generation = None;
                 }
                 state.workspace = None;
-                state.sessions.clear();
+                retain_managed_interruption_facts(state);
                 state.pending_operations.clear();
                 state.error = None;
                 true
             },
         );
         Ok(())
-    }
-
-    async fn execute_cleanup_once(&self, generation: u64) -> CleanupResult {
-        let mut result = {
-            let mut cleanups = self.inner.cleanups.lock().await;
-            match cleanups.get(&generation) {
-                Some(CleanupRecord::Complete(result)) => return result.clone(),
-                Some(CleanupRecord::InFlight { result }) => result.subscribe(),
-                None => {
-                    let (sender, receiver) = watch::channel(None);
-                    cleanups.insert(
-                        generation,
-                        CleanupRecord::InFlight {
-                            result: sender.clone(),
-                        },
-                    );
-                    self.inner
-                        .state
-                        .lock()
-                        .expect("Halo Workbench state lock")
-                        .cleanup_started
-                        .insert(generation);
-                    let inner = self.inner.clone();
-                    tokio::spawn(async move {
-                        let cleanup_result = match {
-                            let _actions = inner.adapter_actions.lock().await;
-                            inner
-                                .adapter
-                                .execute(PiRpcCommand::Shutdown { generation })
-                                .await
-                        } {
-                            Ok(PiRpcReply::Accepted)
-                            | Ok(PiRpcReply::Available { .. })
-                            | Ok(PiRpcReply::Ready { .. }) => Ok(()),
-                            Ok(PiRpcReply::Unavailable { .. }) => Err(HaloWorkbenchError::new(
-                                "cleanup_failed",
-                                "Workbench Runtime cleanup did not complete",
-                                "restart_application",
-                            )),
-                            Err(error) => Err(port_failure(error.kind)),
-                        };
-                        sender.send_replace(Some(cleanup_result.clone()));
-                        let mut cleanups = inner.cleanups.lock().await;
-                        cleanups.insert(generation, CleanupRecord::Complete(cleanup_result));
-                        while cleanups
-                            .values()
-                            .filter(|record| matches!(record, CleanupRecord::Complete(_)))
-                            .count()
-                            > MAX_COMPLETED_CLEANUP_RECORDS
-                        {
-                            let Some(generation) =
-                                cleanups.iter().find_map(|(generation, record)| {
-                                    matches!(record, CleanupRecord::Complete(_))
-                                        .then_some(*generation)
-                                })
-                            else {
-                                break;
-                            };
-                            cleanups.remove(&generation);
-                        }
-                    });
-                    receiver
-                }
-            }
-        };
-
-        loop {
-            if let Some(cleanup_result) = result.borrow().clone() {
-                return cleanup_result;
-            }
-            if result.changed().await.is_err() {
-                return Err(HaloWorkbenchError::new(
-                    "cleanup_failed",
-                    "Workbench Runtime cleanup did not complete",
-                    "restart_application",
-                ));
-            }
-        }
     }
 
     async fn confirm_managed_workspace(
@@ -2469,6 +2784,7 @@ impl HaloWorkbenchRuntime {
                         session_id: state_session_id,
                         mode,
                         phase: HaloWorkbenchSessionPhase::Creating,
+                        cancellation_mode: None,
                         baseline: None,
                         messages: Vec::new(),
                         activities: Vec::new(),
@@ -2818,7 +3134,30 @@ impl HaloWorkbenchRuntime {
             self.ensure_managed_workspace_trusted(generation).await?;
         }
         self.ensure_session_transport_allowed(generation, task_id, session_id)?;
-        let result = {
+        let result = if matches!(&command, PiRpcCommand::AbortSession { .. }) {
+            // A running prompt can legitimately wait for a Pi response. Abort
+            // must still reach that session before the bounded response wait
+            // completes; PiRpcAdapter serializes JSONL writes itself.
+            self.ensure_session_transport_allowed(generation, task_id, session_id)?;
+            self.inner
+                .adapter
+                .execute(command)
+                .await
+                .map_err(|error| port_failure(error.kind))
+        } else if matches!(
+            &command,
+            PiRpcCommand::SendUserInput { .. } | PiRpcCommand::FollowUp { .. }
+        ) {
+            // Prompts retain their existing cross-session serialization without
+            // blocking a shutdown from fencing a running decision action.
+            let _prompt = self.inner.prompt_actions.lock().await;
+            self.ensure_session_transport_allowed(generation, task_id, session_id)?;
+            self.inner
+                .adapter
+                .execute(command)
+                .await
+                .map_err(|error| port_failure(error.kind))
+        } else {
             let _action = self.inner.adapter_actions.lock().await;
             self.ensure_session_transport_allowed(generation, task_id, session_id)?;
             self.inner
@@ -3150,11 +3489,25 @@ impl HaloWorkbenchRuntime {
                 let Some(session) = state.sessions.get_mut(&session_id) else {
                     return false;
                 };
-                if session.phase.is_terminal() {
+                if session.phase.rejects_adapter_events() {
                     return false;
                 }
-                session.phase = failure_phase;
+                let projected_phase = if session.mode == HaloWorkbenchSessionMode::Managed
+                    && failure_phase == HaloWorkbenchSessionPhase::Failed
+                {
+                    HaloWorkbenchSessionPhase::Interrupted
+                } else {
+                    failure_phase
+                };
+                if !valid_session_transition(session.phase, projected_phase) {
+                    return false;
+                }
+                session.phase = projected_phase;
                 session.error = Some(session_error);
+                session.cancellation_mode = None;
+                state
+                    .pending_operations
+                    .retain(|_, operation| operation.session_id != session_id);
                 true
             },
         );
@@ -3266,12 +3619,13 @@ impl HaloWorkbenchRuntime {
         }
     }
 
-    /// Explicitly closes the logical session for delivery review. This is not
-    /// an abort: it stops accepting new prompts and follow-ups, freezes the
-    /// bounded/redacted delivery evidence, then releases the adapter session.
+    /// Explicitly closes the logical session for delivery review. A settled
+    /// session releases its adapter session after freezing bounded/redacted
+    /// evidence. An interrupted session is already transport-isolated, so its
+    /// explicit review path must not contact Pi again.
     async fn finish_and_review(&self, request_id: &str, session_id: &str) -> IntentResult {
         let generation = self.ready_generation()?;
-        if !self.enter_delivery_review(generation, request_id, session_id) {
+        let Some(entry) = self.enter_delivery_review(generation, request_id, session_id) else {
             let state = self.inner.state.lock().expect("Halo Workbench state lock");
             return if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
                 Err(HaloWorkbenchError::runtime_not_ready())
@@ -3280,26 +3634,59 @@ impl HaloWorkbenchRuntime {
             } else {
                 Err(HaloWorkbenchError::delivery_review_not_ready())
             };
-        }
+        };
 
-        let settled = self.await_settled_fingerprint(generation, session_id).await;
+        let settled = match entry {
+            DeliveryReviewEntry::Settled => {
+                self.await_settled_fingerprint(generation, session_id).await
+            }
+            DeliveryReviewEntry::Interrupted => None,
+        };
         let evidence = match self
             .capture_delivery_evidence(generation, session_id, settled)
             .await
         {
             Ok(evidence) => evidence,
             Err(error) => {
-                self.fail_session_phase(generation, request_id, session_id, error.clone());
+                self.handle_delivery_review_failure(
+                    entry,
+                    generation,
+                    request_id,
+                    session_id,
+                    error.clone(),
+                );
                 return Err(error);
             }
         };
-        let review = self.build_delivery_review(generation, session_id, evidence)?;
+        let review = match self.build_delivery_review(generation, session_id, evidence) {
+            Ok(review) => review,
+            Err(error) => {
+                self.handle_delivery_review_failure(
+                    entry,
+                    generation,
+                    request_id,
+                    session_id,
+                    error.clone(),
+                );
+                return Err(error);
+            }
+        };
         if !self.attach_delivery_review(generation, request_id, session_id, review) {
-            return Err(HaloWorkbenchError::session_not_found());
+            let error = HaloWorkbenchError::session_not_found();
+            self.handle_delivery_review_failure(
+                entry,
+                generation,
+                request_id,
+                session_id,
+                error.clone(),
+            );
+            return Err(error);
         }
 
-        self.release_adapter_session(generation, request_id, session_id)
-            .await?;
+        if entry == DeliveryReviewEntry::Settled {
+            self.release_adapter_session(generation, request_id, session_id)
+                .await?;
+        }
         Ok(self.inner.receipt(request_id, Some(session_id.to_string())))
     }
 
@@ -3312,7 +3699,6 @@ impl HaloWorkbenchRuntime {
         session_id: &str,
         decision: HaloWorkbenchDeliveryDecision,
     ) -> IntentResult {
-        let generation = self.ready_generation()?;
         let session_id_owned = session_id.to_string();
         if self.inner.publish_transition(
             Some(request_id),
@@ -3321,13 +3707,20 @@ impl HaloWorkbenchRuntime {
             Some(session_id_owned.clone()),
             None,
             move |state| {
-                if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
+                if state.terminated {
                     return false;
                 }
                 let Some(session) = state.sessions.get_mut(&session_id_owned) else {
                     return false;
                 };
-                if session.phase != HaloWorkbenchSessionPhase::Reviewing {
+                let active_review = state.phase == HaloWorkbenchPhase::Ready
+                    && session.phase == HaloWorkbenchSessionPhase::Reviewing;
+                let interrupted_history = state.phase != HaloWorkbenchPhase::Stopping
+                    && session.phase == HaloWorkbenchSessionPhase::Interrupted
+                    && session.delivery_review.is_some();
+                if session.mode != HaloWorkbenchSessionMode::Managed
+                    || (!active_review && !interrupted_history)
+                {
                     return false;
                 }
                 let Some(review) = session.delivery_review.as_mut() else {
@@ -3348,10 +3741,17 @@ impl HaloWorkbenchRuntime {
             Ok(self.inner.receipt(request_id, Some(session_id.to_string())))
         } else {
             let state = self.inner.state.lock().expect("Halo Workbench state lock");
-            if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
-                Err(HaloWorkbenchError::runtime_not_ready())
+            if state.terminated {
+                Err(HaloWorkbenchError::runtime_shutdown())
             } else if !state.sessions.contains_key(session_id) {
                 Err(HaloWorkbenchError::session_not_found())
+            } else if state.phase != HaloWorkbenchPhase::Ready
+                && state
+                    .sessions
+                    .get(session_id)
+                    .is_some_and(|session| session.phase != HaloWorkbenchSessionPhase::Interrupted)
+            {
+                Err(HaloWorkbenchError::runtime_not_ready())
             } else {
                 Err(HaloWorkbenchError::delivery_decision_not_ready())
             }
@@ -3363,30 +3763,48 @@ impl HaloWorkbenchRuntime {
         generation: u64,
         request_id: &str,
         session_id: &str,
-    ) -> bool {
+    ) -> Option<DeliveryReviewEntry> {
         let session_id_owned = session_id.to_string();
-        self.inner.publish_transition(
+        let mut entry = None;
+        let transitioned = self.inner.publish_transition(
             Some(request_id),
             HaloWorkbenchEventKind::SessionStateChanged,
             "Workbench session is in delivery review",
             Some(session_id_owned.clone()),
             None,
-            move |state| {
+            |state| {
                 if state.generation != generation || state.phase != HaloWorkbenchPhase::Ready {
                     return false;
                 }
+                let active_workspace_id = state
+                    .workspace
+                    .as_ref()
+                    .map(|workspace| workspace.workspace_id.clone());
                 let Some(session) = state.sessions.get_mut(&session_id_owned) else {
                     return false;
                 };
                 if session.mode != HaloWorkbenchSessionMode::Managed
-                    || session.phase != HaloWorkbenchSessionPhase::WaitingDeveloper
+                    || active_workspace_id.as_deref() != Some(session.workspace_id.as_str())
                 {
                     return false;
                 }
+                let review_entry = match session.phase {
+                    HaloWorkbenchSessionPhase::WaitingDeveloper
+                        if session.delivery_review.is_none() =>
+                    {
+                        DeliveryReviewEntry::Settled
+                    }
+                    HaloWorkbenchSessionPhase::Interrupted if session.delivery_review.is_none() => {
+                        DeliveryReviewEntry::Interrupted
+                    }
+                    _ => return false,
+                };
                 session.phase = HaloWorkbenchSessionPhase::Reviewing;
+                entry = Some(review_entry);
                 true
             },
-        )
+        );
+        transitioned.then_some(entry).flatten()
     }
 
     fn attach_delivery_review(
@@ -3440,11 +3858,62 @@ impl HaloWorkbenchRuntime {
                 let Some(session) = state.sessions.get_mut(&session_id_owned) else {
                     return false;
                 };
-                if session.phase.is_terminal() {
+                if session.phase.is_terminal()
+                    || session.phase == HaloWorkbenchSessionPhase::Interrupted
+                {
                     return false;
                 }
                 session.phase = HaloWorkbenchSessionPhase::Failed;
                 session.error = Some(error);
+                true
+            },
+        );
+    }
+
+    fn handle_delivery_review_failure(
+        &self,
+        entry: DeliveryReviewEntry,
+        generation: u64,
+        request_id: &str,
+        session_id: &str,
+        error: HaloWorkbenchError,
+    ) {
+        match entry {
+            DeliveryReviewEntry::Settled => {
+                self.fail_session_phase(generation, request_id, session_id, error);
+            }
+            DeliveryReviewEntry::Interrupted => {
+                self.restore_interrupted_delivery_review(generation, request_id, session_id);
+            }
+        }
+    }
+
+    fn restore_interrupted_delivery_review(
+        &self,
+        generation: u64,
+        request_id: &str,
+        session_id: &str,
+    ) {
+        let session_id_owned = session_id.to_string();
+        self.inner.publish_transition(
+            Some(request_id),
+            HaloWorkbenchEventKind::SessionStateChanged,
+            "Interrupted delivery review remains available",
+            Some(session_id_owned.clone()),
+            None,
+            move |state| {
+                if state.generation != generation {
+                    return false;
+                }
+                let Some(session) = state.sessions.get_mut(&session_id_owned) else {
+                    return false;
+                };
+                if session.phase != HaloWorkbenchSessionPhase::Reviewing
+                    || session.delivery_review.is_some()
+                {
+                    return false;
+                }
+                session.phase = HaloWorkbenchSessionPhase::Interrupted;
                 true
             },
         );
@@ -3651,6 +4120,64 @@ enum SessionIntent {
     End,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeliveryReviewEntry {
+    Settled,
+    Interrupted,
+}
+
+fn interrupt_managed_sessions(state: &mut RuntimeState, error: &HaloWorkbenchError) {
+    let mut interrupted_session_ids = HashSet::new();
+    for session in state.sessions.values_mut() {
+        if session.mode != HaloWorkbenchSessionMode::Managed
+            || session.phase.is_terminal()
+            || !valid_session_transition(session.phase, HaloWorkbenchSessionPhase::Interrupted)
+        {
+            continue;
+        }
+        session.phase = HaloWorkbenchSessionPhase::Interrupted;
+        session.cancellation_mode = None;
+        session.error = Some(error.clone());
+        interrupted_session_ids.insert(session.session_id.clone());
+    }
+    state
+        .pending_operations
+        .retain(|_, operation| !interrupted_session_ids.contains(&operation.session_id));
+}
+
+fn retain_managed_interruption_facts(state: &mut RuntimeState) {
+    state.sessions.retain(|_, session| {
+        session.mode == HaloWorkbenchSessionMode::Managed
+            && session.phase == HaloWorkbenchSessionPhase::Interrupted
+    });
+}
+
+fn interruption_history_snapshots(state: &RuntimeState) -> Vec<HaloWorkbenchSessionSnapshot> {
+    state
+        .sessions
+        .values()
+        .filter_map(|session| {
+            if session.mode != HaloWorkbenchSessionMode::Managed || session.phase.is_terminal() {
+                return None;
+            }
+            // The durable record is deliberately a post-crash projection, not
+            // a resumable transport checkpoint. It can only return as an
+            // explicit Interrupted disposition after process loss. Frozen
+            // delivery evidence and the task baseline remain reviewable, but
+            // active session content never crosses this persistence boundary.
+            let mut checkpoint = session.clone();
+            if checkpoint.phase.needs_interruption_checkpoint() {
+                checkpoint.phase = HaloWorkbenchSessionPhase::Interrupted;
+                checkpoint.cancellation_mode = None;
+                checkpoint.error = Some(HaloWorkbenchError::application_interrupted());
+            }
+            checkpoint.messages.clear();
+            checkpoint.activities.clear();
+            Some(checkpoint)
+        })
+        .collect()
+}
+
 fn valid_session_transition(
     from: HaloWorkbenchSessionPhase,
     to: HaloWorkbenchSessionPhase,
@@ -3659,15 +4186,20 @@ fn valid_session_transition(
 
     matches!(
         (from, to),
-        (Creating, Idle | Running | Stopping | Ended | Failed)
-            | (Idle, Running | Stopping | Ended | Failed)
+        (
+            Creating,
+            Idle | Running | Interrupted | Stopping | Ended | Failed
+        ) | (Idle, Running | Interrupted | Stopping | Ended | Failed)
             | (
                 Running,
                 WaitingDeveloper | Interrupted | Stopping | Ended | Failed
             )
-            | (WaitingDeveloper, Reviewing | Interrupted | Stopping | Ended | Failed)
-            | (Reviewing, Failed)
-            | (Interrupted, Ended | Failed)
+            | (
+                WaitingDeveloper,
+                Reviewing | Interrupted | Stopping | Ended | Failed
+            )
+            | (Reviewing, Interrupted | Failed)
+            | (Interrupted, Reviewing | Ended | Failed)
             | (Stopping, Interrupted | Ended | Failed)
     )
 }
@@ -3710,6 +4242,40 @@ fn validate_workspace_confirmation(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod interruption_history_tests {
+    use super::*;
+
+    fn interrupted_session(session_id: &str) -> HaloWorkbenchSessionSnapshot {
+        HaloWorkbenchSessionSnapshot {
+            workspace_id: "workspace-1".to_string(),
+            task_id: "task-1".to_string(),
+            session_id: session_id.to_string(),
+            mode: HaloWorkbenchSessionMode::Managed,
+            phase: HaloWorkbenchSessionPhase::Interrupted,
+            cancellation_mode: None,
+            baseline: None,
+            messages: Vec::new(),
+            activities: Vec::new(),
+            error: None,
+            delivery_review: None,
+        }
+    }
+
+    #[test]
+    fn an_older_checkpoint_cannot_replace_newer_interruption_history() {
+        let newer = vec![interrupted_session("newer-session")];
+        let older = vec![interrupted_session("older-session")];
+        let mut history = InterruptionHistoryState::new(Vec::new());
+
+        assert!(history.should_persist(2, &newer));
+        history.mark_persisted(newer.clone());
+
+        assert!(!history.should_persist(1, &older));
+        assert_eq!(history.persisted_sessions, newer);
+    }
 }
 
 fn validate_task_baseline(baseline: &WorkbenchTaskBaseline) -> Result<(), ()> {

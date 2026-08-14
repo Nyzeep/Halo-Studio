@@ -1,27 +1,28 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use bitfun_agent_runtime::halo_workbench::{
-    HaloWorkbenchActivityStatus, HaloWorkbenchCapability, HaloWorkbenchDeliveryDecision,
-    HaloWorkbenchIntent, HaloWorkbenchIntentRequest,
-    HaloWorkbenchMessageRole, HaloWorkbenchOperationDecision, HaloWorkbenchOperationRiskLevel,
-    HaloWorkbenchPendingOperationPhase, HaloWorkbenchPhase, HaloWorkbenchRuntime,
-    HaloWorkbenchSessionMode, HaloWorkbenchSessionPhase, HaloWorkbenchWorkspaceInput,
-    HALO_WORKBENCH_SCHEMA_VERSION,
+    HaloWorkbenchActivityStatus, HaloWorkbenchCancellationMode, HaloWorkbenchCapability,
+    HaloWorkbenchDeliveryDecision, HaloWorkbenchIntent, HaloWorkbenchIntentRequest,
+    HaloWorkbenchInterruptionHistoryPort, HaloWorkbenchMessageRole, HaloWorkbenchOperationDecision,
+    HaloWorkbenchOperationRiskLevel, HaloWorkbenchPendingOperationPhase, HaloWorkbenchPhase,
+    HaloWorkbenchRuntime, HaloWorkbenchSessionMode, HaloWorkbenchSessionPhase,
+    HaloWorkbenchSessionSnapshot, HaloWorkbenchWorkspaceInput, HALO_WORKBENCH_SCHEMA_VERSION,
 };
 use bitfun_runtime_ports::{
-    ClockPort, PiProviderReadiness, PiProviderReadinessPort, PiRpcAvailabilitySummary, PiRpcCommand,
-    PiRpcEvent, PiRpcFailureKind, PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcOperationSummary,
-    PiRpcPort, PiRpcReply, PiRpcVersion, PiRpcVersionEvidenceSource, PortError, PortErrorKind,
-    PortResult, RuntimeServiceCapability, RuntimeServicePort, WorkbenchDeliveryAttribution,
-    WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort,
-    WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint, WorkbenchDeliveryFingerprintRequest,
-    WorkbenchTaskBaseline, WorkbenchTaskBaselinePort, WorkbenchWorkspaceFacts,
-    WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, PI_RPC_ADAPTER_IDENTITY,
+    ClockPort, PiProviderReadiness, PiProviderReadinessPort, PiRpcAvailabilitySummary,
+    PiRpcCancellationMode, PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationKind,
+    PiRpcOperationRiskLevel, PiRpcOperationSummary, PiRpcPort, PiRpcReply, PiRpcVersion,
+    PiRpcVersionEvidenceSource, PortError, PortErrorKind, PortResult, RuntimeServiceCapability,
+    RuntimeServicePort, WorkbenchDeliveryAttribution, WorkbenchDeliveryAttributionKind,
+    WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest,
+    WorkbenchDeliveryFingerprint, WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline,
+    WorkbenchTaskBaselinePort, WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort,
+    WorkbenchWorkspaceFactsRequest, PI_RPC_ADAPTER_IDENTITY,
 };
 use tokio::sync::{broadcast, Notify, Semaphore};
 
@@ -106,6 +107,7 @@ struct DeterministicPiRpc {
     events: Mutex<Option<broadcast::Sender<PiRpcEvent>>>,
     commands: Mutex<Vec<PiRpcCommand>>,
     replies: Mutex<VecDeque<PortResult<PiRpcReply>>>,
+    panic_command: Mutex<Option<CommandKind>>,
     probe_gate: CommandGate,
     start_gate: CommandGate,
     create_session_gate: CommandGate,
@@ -123,6 +125,7 @@ impl DeterministicPiRpc {
             events: Mutex::new(Some(events)),
             commands: Mutex::new(Vec::new()),
             replies: Mutex::new(VecDeque::new()),
+            panic_command: Mutex::new(None),
             probe_gate: CommandGate::new(),
             start_gate: CommandGate::new(),
             create_session_gate: CommandGate::new(),
@@ -138,6 +141,19 @@ impl DeterministicPiRpc {
         self.replies.lock().expect("replies lock").push_back(reply);
     }
 
+    fn panic_on(&self, command: CommandKind) {
+        *self.panic_command.lock().expect("panic command lock") = Some(command);
+    }
+
+    fn take_panic_for(&self, command: &PiRpcCommand) -> bool {
+        let mut panic_command = self.panic_command.lock().expect("panic command lock");
+        if CommandKind::of(command) != *panic_command {
+            return false;
+        }
+        panic_command.take();
+        true
+    }
+
     fn emit(&self, event: PiRpcEvent) {
         self.events
             .lock()
@@ -146,6 +162,10 @@ impl DeterministicPiRpc {
             .expect("runtime event source is open")
             .send(event)
             .expect("runtime listener is active");
+    }
+
+    fn close_events(&self) {
+        self.events.lock().expect("events lock").take();
     }
 
     fn commands(&self) -> Vec<PiRpcCommand> {
@@ -221,6 +241,9 @@ impl PiRpcPort for DeterministicPiRpc {
             .lock()
             .expect("commands lock")
             .push(command.clone());
+        if self.take_panic_for(&command) {
+            panic!("controlled Pi RPC test failure");
+        }
         self.gate(&command).await;
         self.replies
             .lock()
@@ -299,6 +322,7 @@ impl WorkbenchTaskBaselinePort for MismatchedTaskBaseline {
     }
 }
 
+#[derive(Clone)]
 struct FixedDeliveryEvidence {
     fingerprint: WorkbenchDeliveryFingerprint,
     evidence: WorkbenchDeliveryEvidence,
@@ -314,7 +338,10 @@ impl FixedDeliveryEvidence {
         Self {
             fingerprint: WorkbenchDeliveryFingerprint {
                 head: "test-head".to_string(),
-                changed_files: settled_changed_files.into_iter().map(str::to_string).collect(),
+                changed_files: settled_changed_files
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
                 working_tree_fingerprint: "c".repeat(64),
                 captured_at_ms: 2_000,
             },
@@ -347,6 +374,58 @@ impl WorkbenchDeliveryEvidencePort for FixedDeliveryEvidence {
         _request: WorkbenchDeliveryFingerprintRequest,
     ) -> PortResult<WorkbenchDeliveryFingerprint> {
         Ok(self.fingerprint.clone())
+    }
+}
+
+struct ControlledDeliveryEvidence {
+    fixed: FixedDeliveryEvidence,
+    fail_capture: AtomicBool,
+    capture_gate: CommandGate,
+}
+
+impl ControlledDeliveryEvidence {
+    fn new(fixed: FixedDeliveryEvidence) -> Self {
+        Self {
+            fixed,
+            fail_capture: AtomicBool::new(false),
+            capture_gate: CommandGate::new(),
+        }
+    }
+
+    fn fail_capture(&self) {
+        self.fail_capture.store(true, Ordering::Release);
+    }
+
+    fn allow_capture(&self) {
+        self.fail_capture.store(false, Ordering::Release);
+    }
+
+    fn block_capture(&self) {
+        self.capture_gate.block();
+    }
+}
+
+#[async_trait]
+impl WorkbenchDeliveryEvidencePort for ControlledDeliveryEvidence {
+    async fn capture(
+        &self,
+        _request: WorkbenchDeliveryEvidenceRequest,
+    ) -> PortResult<WorkbenchDeliveryEvidence> {
+        self.capture_gate.wait_if_enabled().await;
+        if self.fail_capture.load(Ordering::Acquire) {
+            return Err(PortError::new(
+                PortErrorKind::Backend,
+                "controlled delivery evidence failure",
+            ));
+        }
+        Ok(self.fixed.evidence.clone())
+    }
+
+    async fn capture_fingerprint(
+        &self,
+        _request: WorkbenchDeliveryFingerprintRequest,
+    ) -> PortResult<WorkbenchDeliveryFingerprint> {
+        Ok(self.fixed.fingerprint.clone())
     }
 }
 
@@ -412,6 +491,37 @@ impl ClockPort for FixedClock {
     }
 }
 
+#[derive(Default)]
+struct InMemoryInterruptionHistory {
+    sessions: Mutex<Vec<HaloWorkbenchSessionSnapshot>>,
+    writes: AtomicUsize,
+}
+
+impl InMemoryInterruptionHistory {
+    fn write_count(&self) -> usize {
+        self.writes.load(Ordering::Acquire)
+    }
+}
+
+impl HaloWorkbenchInterruptionHistoryPort for InMemoryInterruptionHistory {
+    fn load_interrupted_sessions(&self) -> PortResult<Vec<HaloWorkbenchSessionSnapshot>> {
+        Ok(self
+            .sessions
+            .lock()
+            .expect("interruption history lock")
+            .clone())
+    }
+
+    fn replace_interrupted_sessions(
+        &self,
+        sessions: Vec<HaloWorkbenchSessionSnapshot>,
+    ) -> PortResult<()> {
+        *self.sessions.lock().expect("interruption history lock") = sessions;
+        self.writes.fetch_add(1, Ordering::Release);
+        Ok(())
+    }
+}
+
 fn build_runtime(adapter: Arc<DeterministicPiRpc>) -> HaloWorkbenchRuntime {
     build_runtime_with_provider_readiness(adapter, Arc::new(AvailableProviderReadiness))
 }
@@ -461,6 +571,42 @@ fn build_runtime_with_delivery_evidence(
         Arc::new(FixedTaskBaseline),
         delivery_evidence,
         Arc::new(FixedClock),
+    )
+}
+
+fn build_runtime_with_delivery_evidence_and_interruption_history(
+    adapter: Arc<DeterministicPiRpc>,
+    delivery_evidence: Arc<dyn WorkbenchDeliveryEvidencePort>,
+    interruption_history: Arc<dyn HaloWorkbenchInterruptionHistoryPort>,
+) -> HaloWorkbenchRuntime {
+    HaloWorkbenchRuntime::try_new_with_delivery_evidence_and_interruption_history(
+        adapter,
+        Arc::new(TrustedWorkspaceFacts),
+        Arc::new(AvailableProviderReadiness),
+        Arc::new(FixedTaskBaseline),
+        delivery_evidence,
+        interruption_history,
+        Arc::new(FixedClock),
+    )
+    .expect("interruption history is restored")
+}
+
+fn build_runtime_with_interruption_history(
+    adapter: Arc<DeterministicPiRpc>,
+    interruption_history: Arc<dyn HaloWorkbenchInterruptionHistoryPort>,
+) -> HaloWorkbenchRuntime {
+    build_runtime_with_delivery_evidence_and_interruption_history(
+        adapter,
+        Arc::new(FixedDeliveryEvidence::new(
+            "history diff",
+            vec!["tracked.rs"],
+            vec![(
+                "tracked.rs".to_string(),
+                WorkbenchDeliveryAttributionKind::TaskModification,
+            )],
+            vec!["tracked.rs"],
+        )),
+        interruption_history,
     )
 }
 
@@ -1199,6 +1345,164 @@ async fn session_snapshot_binds_workspace_task_and_session_and_rejects_duplicate
 }
 
 #[tokio::test]
+async fn abort_reaches_adapter_while_a_prompt_response_is_pending() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(&runtime, &adapter, "open-abort-priority", "abort-priority").await;
+    let session_id =
+        create_idle_session(&runtime, &adapter, generation, "abort-priority-session").await;
+
+    adapter.send_user_input_gate.block();
+    let prompt_runtime = runtime.clone();
+    let prompt_session_id = session_id.clone();
+    let prompt = tokio::spawn(async move {
+        prompt_runtime
+            .submit(HaloWorkbenchIntentRequest {
+                request_id: "blocked-prompt".to_string(),
+                intent: HaloWorkbenchIntent::SendUserInput {
+                    session_id: prompt_session_id,
+                    content: "wait for the abort".to_string(),
+                },
+            })
+            .await
+    });
+    adapter.send_user_input_gate.wait_until_started().await;
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Running).await;
+
+    let abort_runtime = runtime.clone();
+    let abort_session_id = session_id.clone();
+    let abort = tokio::spawn(async move {
+        abort_runtime
+            .submit(HaloWorkbenchIntentRequest {
+                request_id: "abort-before-prompt-response".to_string(),
+                intent: HaloWorkbenchIntent::AbortSession {
+                    session_id: abort_session_id,
+                },
+            })
+            .await
+    });
+    let abort_dispatched = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if adapter.count(CommandKind::AbortSession) == 1 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .is_ok();
+    if !abort_dispatched {
+        adapter.send_user_input_gate.release();
+    }
+    assert!(
+        abort_dispatched,
+        "abort must cross the Pi RPC port before an in-flight prompt response completes"
+    );
+
+    abort
+        .await
+        .expect("abort task")
+        .expect("abort command is accepted");
+    adapter.emit(PiRpcEvent::SessionStopped {
+        generation,
+        session_id: session_id.clone(),
+        cancellation_mode: PiRpcCancellationMode::Native,
+    });
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::Interrupted,
+    )
+    .await;
+    adapter.send_user_input_gate.release();
+    let _ = prompt.await.expect("prompt task");
+    assert_eq!(adapter.count(CommandKind::SendUserInput), 1);
+    assert_eq!(adapter.count(CommandKind::AbortSession), 1);
+}
+
+#[tokio::test]
+async fn shutdown_reclaims_a_managed_prompt_before_its_response_returns() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-shutdown-priority",
+        "shutdown-priority",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-shutdown-priority".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "shutdown-priority".to_string(),
+                root_path: PathBuf::from("C:/work/shutdown-priority"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        "shutdown-priority-session",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+
+    adapter.send_user_input_gate.block();
+    let prompt_runtime = runtime.clone();
+    let prompt_session_id = session_id.clone();
+    let prompt = tokio::spawn(async move {
+        prompt_runtime
+            .submit(HaloWorkbenchIntentRequest {
+                request_id: "blocked-managed-prompt".to_string(),
+                intent: HaloWorkbenchIntent::SendUserInput {
+                    session_id: prompt_session_id,
+                    content: "shut down before this returns".to_string(),
+                },
+            })
+            .await
+    });
+    adapter.send_user_input_gate.wait_until_started().await;
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Running).await;
+
+    let shutdown_runtime = runtime.clone();
+    let shutdown = tokio::spawn(async move { shutdown_runtime.shutdown().await });
+    let shutdown_dispatched = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if adapter.count(CommandKind::Shutdown) == 1 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .is_ok();
+    if !shutdown_dispatched {
+        adapter.send_user_input_gate.release();
+    }
+    assert!(
+        shutdown_dispatched,
+        "application shutdown must reclaim the Pi generation before an in-flight prompt response returns"
+    );
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::Interrupted,
+    )
+    .await;
+
+    adapter.send_user_input_gate.release();
+    let _ = prompt.await.expect("prompt task");
+    shutdown
+        .await
+        .expect("shutdown task")
+        .expect("shutdown is accepted");
+    assert_eq!(runtime.snapshot().phase, HaloWorkbenchPhase::Disconnected);
+}
+
+#[tokio::test]
 async fn prompt_settled_follow_up_and_abort_obey_non_replay_lifecycle() {
     let adapter = Arc::new(DeterministicPiRpc::new());
     let runtime = build_runtime(adapter.clone());
@@ -1368,6 +1672,7 @@ async fn prompt_settled_follow_up_and_abort_obey_non_replay_lifecycle() {
     adapter.emit(PiRpcEvent::SessionStopped {
         generation,
         session_id: abort_target.clone(),
+        cancellation_mode: PiRpcCancellationMode::Native,
     });
     wait_for_session_phase(
         &runtime,
@@ -1375,6 +1680,15 @@ async fn prompt_settled_follow_up_and_abort_obey_non_replay_lifecycle() {
         HaloWorkbenchSessionPhase::Interrupted,
     )
     .await;
+    assert_eq!(
+        runtime
+            .snapshot()
+            .sessions
+            .iter()
+            .find(|session| session.session_id == abort_target)
+            .and_then(|session| session.cancellation_mode),
+        Some(HaloWorkbenchCancellationMode::Native)
+    );
 
     let repeated_abort = runtime
         .submit(HaloWorkbenchIntentRequest {
@@ -1842,6 +2156,1220 @@ async fn terminal_sessions_do_not_regress_accept_commands_or_keep_operations() {
 }
 
 #[tokio::test]
+async fn managed_transport_failure_is_interrupted_and_fences_late_events() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime_with_delivery_evidence(
+        adapter.clone(),
+        Arc::new(FixedDeliveryEvidence::new(
+            "diff",
+            vec!["tracked.rs"],
+            vec![(
+                "tracked.rs".to_string(),
+                WorkbenchDeliveryAttributionKind::TaskModification,
+            )],
+            vec!["tracked.rs"],
+        )),
+    );
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-managed-interruption",
+        "managed-interruption",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-managed-interruption".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "managed-interruption".to_string(),
+                root_path: PathBuf::from("C:/work/managed-interruption"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        "create-managed-interruption",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "send-managed-interruption".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "preserve this user input".to_string(),
+            },
+        })
+        .await
+        .expect("the managed session has an in-flight turn");
+    assert_eq!(
+        runtime
+            .snapshot()
+            .sessions
+            .iter()
+            .find(|session| session.session_id == session_id)
+            .expect("managed session remains projected")
+            .phase,
+        HaloWorkbenchSessionPhase::Running
+    );
+
+    adapter.emit(PiRpcEvent::SessionFailed {
+        generation,
+        session_id: session_id.clone(),
+        reason: PiRpcFailureKind::Transport,
+    });
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::Interrupted,
+    )
+    .await;
+    let interrupted_snapshot = runtime.snapshot();
+    let interrupted_version = interrupted_snapshot.state_version;
+    let interrupted = interrupted_snapshot
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("interrupted managed session remains visible for review");
+    assert_eq!(interrupted.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert_eq!(
+        interrupted.error.as_ref().map(|error| error.code.as_str()),
+        Some("pi_transport_unavailable")
+    );
+    assert_eq!(interrupted.messages.len(), 1);
+    assert_eq!(interrupted.messages[0].content, "preserve this user input");
+
+    adapter.emit(PiRpcEvent::SessionIdle {
+        generation,
+        session_id: session_id.clone(),
+    });
+    adapter.emit(PiRpcEvent::SessionEnded {
+        generation,
+        session_id: session_id.clone(),
+    });
+    adapter.emit(PiRpcEvent::SessionFailed {
+        generation,
+        session_id: session_id.clone(),
+        reason: PiRpcFailureKind::Protocol,
+    });
+    adapter.emit(PiRpcEvent::MessageUpdated {
+        generation,
+        session_id: session_id.clone(),
+        text: "late-message-must-not-append".to_string(),
+    });
+    adapter.emit(PiRpcEvent::OperationRequested {
+        generation,
+        session_id: session_id.clone(),
+        operation_id: "late-operation-must-not-appear".to_string(),
+        kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "late-tool".to_string(),
+            arguments: "{}".to_string(),
+            risk_level: PiRpcOperationRiskLevel::Standard,
+        },
+        redacted_tool_call_id: None,
+    });
+    adapter.emit(PiRpcEvent::AgentSettled {
+        generation,
+        session_id,
+    });
+    tokio::task::yield_now().await;
+    let after_late_events = runtime.snapshot();
+    assert_eq!(after_late_events.state_version, interrupted_version);
+    let after_late_session = after_late_events
+        .sessions
+        .iter()
+        .find(|session| session.task_id == "create-managed-interruption")
+        .expect("interrupted managed session remains isolated from late events");
+    assert_eq!(
+        after_late_session.phase,
+        HaloWorkbenchSessionPhase::Interrupted
+    );
+    assert_eq!(after_late_session.messages.len(), 1);
+    assert!(after_late_events.pending_operations.is_empty());
+    assert!(!serde_json::to_string(&after_late_events)
+        .expect("interrupted snapshot serializes")
+        .contains("late-message-must-not-append"));
+}
+
+#[tokio::test]
+async fn managed_command_transport_failure_is_interrupted_before_a_late_adapter_failure_event() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-command-failure-interruption",
+        "command-failure-interruption",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-command-failure-interruption".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "command-failure-interruption".to_string(),
+                root_path: PathBuf::from("C:/work/command-failure-interruption"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        "create-command-failure-interruption",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+
+    adapter.push_reply(Err(PortError::new(
+        PortErrorKind::Backend,
+        "controlled transport closure",
+    )));
+    let error = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "send-command-failure-interruption".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "keep this input as a non-replayed interruption".to_string(),
+            },
+        })
+        .await
+        .expect_err("the closed transport is reported to the request owner");
+    assert_eq!(error.code, "adapter_unavailable");
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::Interrupted,
+    )
+    .await;
+
+    let interrupted_snapshot = runtime.snapshot();
+    let interrupted_version = interrupted_snapshot.state_version;
+    adapter.emit(PiRpcEvent::SessionFailed {
+        generation,
+        session_id: session_id.clone(),
+        reason: PiRpcFailureKind::Transport,
+    });
+    tokio::task::yield_now().await;
+
+    let after_late_event = runtime.snapshot();
+    assert_eq!(after_late_event.state_version, interrupted_version);
+    assert!(after_late_event.sessions.iter().any(|session| {
+        session.session_id == session_id
+            && session.phase == HaloWorkbenchSessionPhase::Interrupted
+            && session.messages.len() == 1
+    }));
+    assert_eq!(adapter.count(CommandKind::SendUserInput), 1);
+}
+
+#[tokio::test]
+async fn managed_adapter_failure_event_cannot_be_overwritten_by_the_inflight_command_result() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-event-first-interruption",
+        "event-first-interruption",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-event-first-interruption".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "event-first-interruption".to_string(),
+                root_path: PathBuf::from("C:/work/event-first-interruption"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        "create-event-first-interruption",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+
+    adapter.send_user_input_gate.block();
+    let request_runtime = runtime.clone();
+    let request_session_id = session_id.clone();
+    let request = tokio::spawn(async move {
+        request_runtime
+            .submit(HaloWorkbenchIntentRequest {
+                request_id: "send-event-first-interruption".to_string(),
+                intent: HaloWorkbenchIntent::SendUserInput {
+                    session_id: request_session_id,
+                    content: "do not let the late command result rewrite interruption".to_string(),
+                },
+            })
+            .await
+    });
+    adapter.send_user_input_gate.wait_until_started().await;
+
+    adapter.emit(PiRpcEvent::SessionFailed {
+        generation,
+        session_id: session_id.clone(),
+        reason: PiRpcFailureKind::Protocol,
+    });
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::Interrupted,
+    )
+    .await;
+    let interrupted_version = runtime.snapshot().state_version;
+
+    adapter.push_reply(Err(PortError::new(
+        PortErrorKind::Backend,
+        "controlled protocol closure",
+    )));
+    adapter.send_user_input_gate.release();
+    let error = request
+        .await
+        .expect("request task joins")
+        .expect_err("the in-flight command observes its adapter failure");
+    assert_eq!(error.code, "adapter_unavailable");
+
+    let snapshot = runtime.snapshot();
+    assert_eq!(snapshot.state_version, interrupted_version);
+    assert!(snapshot.sessions.iter().any(|session| {
+        session.session_id == session_id
+            && session.phase == HaloWorkbenchSessionPhase::Interrupted
+            && session
+                .error
+                .as_ref()
+                .is_some_and(|error| error.code == "pi_protocol_error")
+    }));
+    assert_eq!(adapter.count(CommandKind::SendUserInput), 1);
+}
+
+#[tokio::test]
+async fn interrupted_managed_session_enters_delivery_review_without_replaying_pi() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime_with_delivery_evidence(
+        adapter.clone(),
+        Arc::new(FixedDeliveryEvidence::new(
+            "interrupted diff",
+            vec!["tracked.rs"],
+            vec![(
+                "tracked.rs".to_string(),
+                WorkbenchDeliveryAttributionKind::TaskModification,
+            )],
+            vec!["tracked.rs"],
+        )),
+    );
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-interrupted-review",
+        "interrupted-review",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-interrupted-review".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "interrupted-review".to_string(),
+                root_path: PathBuf::from("C:/work/interrupted-review"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        "create-interrupted-review",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "send-interrupted-review".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "keep this interrupted work reviewable".to_string(),
+            },
+        })
+        .await
+        .expect("managed request is accepted");
+    adapter.emit(PiRpcEvent::SessionFailed {
+        generation,
+        session_id: session_id.clone(),
+        reason: PiRpcFailureKind::Transport,
+    });
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::Interrupted,
+    )
+    .await;
+    adapter.clear_commands();
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "review-interrupted-session".to_string(),
+            intent: HaloWorkbenchIntent::FinishAndReview {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("interrupted managed work can enter explicit delivery review");
+
+    let review_snapshot = runtime.snapshot();
+    let reviewed = review_snapshot
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("interrupted session remains visible for review");
+    assert_eq!(reviewed.phase, HaloWorkbenchSessionPhase::Reviewing);
+    assert_eq!(
+        reviewed.error.as_ref().map(|error| error.code.as_str()),
+        Some("pi_transport_unavailable")
+    );
+    assert!(reviewed.delivery_review.is_some());
+    assert!(adapter.commands().is_empty());
+
+    let review_version = review_snapshot.state_version;
+    adapter.emit(PiRpcEvent::OperationRequested {
+        generation,
+        session_id: session_id.clone(),
+        operation_id: "late-operation-after-review".to_string(),
+        kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "late-write".to_string(),
+            arguments: "{}".to_string(),
+            risk_level: PiRpcOperationRiskLevel::Standard,
+        },
+        redacted_tool_call_id: None,
+    });
+    adapter.emit(PiRpcEvent::SessionFailed {
+        generation,
+        session_id,
+        reason: PiRpcFailureKind::Protocol,
+    });
+    tokio::task::yield_now().await;
+    let after_late_events = runtime.snapshot();
+    assert_eq!(after_late_events.state_version, review_version);
+    assert!(after_late_events.pending_operations.is_empty());
+    assert_eq!(adapter.commands().len(), 0);
+}
+
+#[tokio::test]
+async fn shutdown_preserves_managed_interruption_facts_after_pi_cleanup() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-shutdown-interruption",
+        "shutdown-interruption",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-shutdown-interruption".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "shutdown-interruption".to_string(),
+                root_path: PathBuf::from("C:/work/shutdown-interruption"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        "create-shutdown-interruption",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "send-shutdown-interruption".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "preserve across shutdown".to_string(),
+            },
+        })
+        .await
+        .expect("managed prompt is accepted");
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Running).await;
+
+    runtime
+        .shutdown()
+        .await
+        .expect("runtime shutdown is accepted");
+
+    let snapshot = runtime.snapshot();
+    assert_eq!(snapshot.phase, HaloWorkbenchPhase::Disconnected);
+    assert!(snapshot.pending_operations.is_empty());
+    let session = snapshot
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("managed interruption remains visible after shutdown");
+    assert_eq!(session.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert_eq!(
+        session.error.as_ref().map(|error| error.code.as_str()),
+        Some("runtime_shutdown")
+    );
+    assert_eq!(session.messages.len(), 1);
+    assert_eq!(session.messages[0].content, "preserve across shutdown");
+    assert!(session.baseline.is_some());
+    assert_eq!(adapter.count(CommandKind::Shutdown), 1);
+}
+
+#[tokio::test]
+async fn restarted_runtime_does_not_replay_interrupted_managed_work_or_operations() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let interruption_history = Arc::new(InMemoryInterruptionHistory::default());
+    let runtime =
+        build_runtime_with_interruption_history(adapter.clone(), interruption_history.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-restart-non-replay",
+        "restart-non-replay",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-restart-non-replay".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "restart-non-replay".to_string(),
+                root_path: PathBuf::from("C:/work/restart-non-replay"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        "create-restart-non-replay",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "send-restart-non-replay".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "do not replay this managed request".to_string(),
+            },
+        })
+        .await
+        .expect("managed request is accepted");
+    adapter.emit(PiRpcEvent::OperationRequested {
+        generation,
+        session_id: session_id.clone(),
+        operation_id: "restart-non-replay-operation".to_string(),
+        kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "write".to_string(),
+            arguments: "{}".to_string(),
+            risk_level: PiRpcOperationRiskLevel::Standard,
+        },
+        redacted_tool_call_id: None,
+    });
+    wait_for_pending_operation(&runtime, "restart-non-replay-operation").await;
+
+    runtime
+        .shutdown()
+        .await
+        .expect("runtime shutdown is accepted");
+    let shutdown_snapshot = runtime.snapshot();
+    assert!(shutdown_snapshot.pending_operations.is_empty());
+    assert!(shutdown_snapshot.sessions.iter().any(|session| {
+        session.session_id == session_id && session.phase == HaloWorkbenchSessionPhase::Interrupted
+    }));
+    let commands_after_shutdown = adapter.commands().len();
+
+    let restarted = build_runtime_with_interruption_history(adapter.clone(), interruption_history);
+    tokio::task::yield_now().await;
+
+    let restarted_snapshot = restarted.snapshot();
+    assert_eq!(restarted_snapshot.phase, HaloWorkbenchPhase::Disconnected);
+    assert!(restarted_snapshot.pending_operations.is_empty());
+    let restored = restarted_snapshot
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("restart restores only the sanitized interrupted Halo history");
+    assert_eq!(restored.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert_eq!(restored.mode, HaloWorkbenchSessionMode::Managed);
+    assert_eq!(
+        restored.error.as_ref().map(|error| error.code.as_str()),
+        Some("runtime_shutdown")
+    );
+    assert!(restored.baseline.is_some());
+    assert!(restored.messages.is_empty());
+    assert!(restored.activities.is_empty());
+    assert!(restored.delivery_review.is_none());
+    assert_eq!(
+        adapter.commands().len(),
+        commands_after_shutdown,
+        "restart must not reconnect, resend input, or resolve an interrupted operation"
+    );
+}
+
+#[tokio::test]
+async fn restart_retains_frozen_delivery_review_without_active_session_content() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let interruption_history = Arc::new(InMemoryInterruptionHistory::default());
+    let runtime = build_runtime_with_delivery_evidence_and_interruption_history(
+        adapter.clone(),
+        Arc::new(FixedDeliveryEvidence::new(
+            "reviewed diff",
+            vec!["tracked.rs"],
+            vec![(
+                "tracked.rs".to_string(),
+                WorkbenchDeliveryAttributionKind::TaskModification,
+            )],
+            vec!["tracked.rs"],
+        )),
+        interruption_history.clone(),
+    );
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-restart-frozen-review",
+        "restart-frozen-review",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-restart-frozen-review".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "restart-frozen-review".to_string(),
+                root_path: PathBuf::from("C:/work/restart-frozen-review"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        "create-restart-frozen-review",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "send-restart-frozen-review".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "do not retain this active request after restart".to_string(),
+            },
+        })
+        .await
+        .expect("managed input is accepted");
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Running).await;
+    adapter.emit(PiRpcEvent::ToolExecutionStarted {
+        generation,
+        session_id: session_id.clone(),
+        redacted_tool_call_id: "restart-frozen-review-tool".to_string(),
+        tool_name: "write".to_string(),
+    });
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let has_activity = runtime
+                .snapshot()
+                .sessions
+                .iter()
+                .find(|session| session.session_id == session_id)
+                .is_some_and(|session| !session.activities.is_empty());
+            if has_activity {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("managed activity is projected before the interruption");
+    adapter.emit(PiRpcEvent::AgentSettled {
+        generation,
+        session_id: session_id.clone(),
+    });
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::WaitingDeveloper,
+    )
+    .await;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "finish-restart-frozen-review".to_string(),
+            intent: HaloWorkbenchIntent::FinishAndReview {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("delivery review is accepted");
+    let active_session = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("active session remains visible before application loss");
+    assert!(!active_session.messages.is_empty());
+    assert!(!active_session.activities.is_empty());
+    assert!(active_session.delivery_review.is_some());
+
+    drop(runtime);
+
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if adapter.count(CommandKind::Shutdown) == 1 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("dropping the old runtime completes its one cleanup command");
+    let commands_before_restart = adapter.commands().len();
+    let restarted = build_runtime_with_interruption_history(adapter.clone(), interruption_history);
+    let restored = restarted
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("restart restores the interrupted delivery review fact");
+    assert_eq!(restored.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert!(restored.baseline.is_some());
+    assert!(restored.messages.is_empty());
+    assert!(restored.activities.is_empty());
+    let frozen_history = restored.clone();
+    let review = restored
+        .delivery_review
+        .as_ref()
+        .expect("frozen delivery evidence remains available for explicit review");
+    assert_eq!(review.decision, None);
+    assert_eq!(review.evidence.diff_preview, "reviewed diff");
+    assert_eq!(review.evidence.changed_files, vec!["tracked.rs"]);
+
+    let receipt = restarted
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "accept-restarted-frozen-review".to_string(),
+            intent: HaloWorkbenchIntent::AcceptDelivery {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("a frozen interrupted review can be accepted without restarting Pi");
+    assert_eq!(receipt.session_id.as_deref(), Some(session_id.as_str()));
+
+    let resolved = restarted
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("accepted interruption history remains observable for this runtime");
+    assert_eq!(resolved.phase, HaloWorkbenchSessionPhase::Ended);
+    assert_eq!(
+        resolved
+            .delivery_review
+            .as_ref()
+            .and_then(|review| review.decision),
+        Some(HaloWorkbenchDeliveryDecision::Accepted)
+    );
+    assert_eq!(restarted.snapshot().phase, HaloWorkbenchPhase::Disconnected);
+    assert_eq!(
+        adapter.commands().len(),
+        commands_before_restart,
+        "review disposition must not reconnect, replay, or issue a Pi command"
+    );
+
+    let duplicate_history = Arc::new(InMemoryInterruptionHistory {
+        sessions: Mutex::new(vec![frozen_history]),
+        writes: AtomicUsize::new(0),
+    });
+    let duplicate_runtime =
+        build_runtime_with_interruption_history(adapter.clone(), duplicate_history);
+    open_ready(
+        &duplicate_runtime,
+        &adapter,
+        "reopen-restart-frozen-review",
+        "restart-frozen-review",
+    )
+    .await;
+    let commands_before_duplicate_review = adapter.commands().len();
+    let duplicate_review = duplicate_runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "duplicate-restart-frozen-review".to_string(),
+            intent: HaloWorkbenchIntent::FinishAndReview {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect_err("an existing frozen review cannot be recaptured");
+    assert_eq!(duplicate_review.code, "delivery_review_not_ready");
+    let preserved = duplicate_runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("the interrupted review remains available after the rejected duplicate");
+    assert_eq!(preserved.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert_eq!(
+        preserved
+            .delivery_review
+            .as_ref()
+            .map(|review| review.evidence.diff_preview.as_str()),
+        Some("reviewed diff")
+    );
+    assert_eq!(adapter.commands().len(), commands_before_duplicate_review);
+    duplicate_runtime
+        .shutdown()
+        .await
+        .expect("duplicate-review runtime is shut down");
+}
+
+#[tokio::test]
+async fn forced_runtime_loss_restores_active_managed_work_as_interrupted_without_replay() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let interruption_history = Arc::new(InMemoryInterruptionHistory::default());
+    let runtime =
+        build_runtime_with_interruption_history(adapter.clone(), interruption_history.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-forced-runtime-loss",
+        "forced-runtime-loss",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-forced-runtime-loss".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "forced-runtime-loss".to_string(),
+                root_path: PathBuf::from("C:/work/forced-runtime-loss"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        "create-forced-runtime-loss",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "send-forced-runtime-loss".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "preserve this work after abrupt application loss".to_string(),
+            },
+        })
+        .await
+        .expect("managed input is accepted");
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Running).await;
+    adapter.emit(PiRpcEvent::OperationRequested {
+        generation,
+        session_id: session_id.clone(),
+        operation_id: "forced-runtime-loss-operation".to_string(),
+        kind: PiRpcOperationKind::Permission,
+        summary: PiRpcOperationSummary {
+            tool_name: "write".to_string(),
+            arguments: "{}".to_string(),
+            risk_level: PiRpcOperationRiskLevel::Standard,
+        },
+        redacted_tool_call_id: None,
+    });
+    wait_for_pending_operation(&runtime, "forced-runtime-loss-operation").await;
+    let commands_before_loss = adapter.commands().len();
+
+    drop(runtime);
+
+    let restarted = build_runtime_with_interruption_history(adapter.clone(), interruption_history);
+    let restarted_snapshot = restarted.snapshot();
+    assert_eq!(restarted_snapshot.phase, HaloWorkbenchPhase::Disconnected);
+    assert!(restarted_snapshot.pending_operations.is_empty());
+    let interrupted = restarted_snapshot
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("restart projects an abrupt-loss managed checkpoint as interrupted");
+    assert_eq!(interrupted.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert_eq!(interrupted.mode, HaloWorkbenchSessionMode::Managed);
+    assert_eq!(interrupted.cancellation_mode, None);
+    assert_eq!(
+        interrupted.error.as_ref().map(|error| error.code.as_str()),
+        Some("application_interrupted")
+    );
+    assert!(interrupted.baseline.is_some());
+    assert!(interrupted.messages.is_empty());
+    assert!(interrupted.activities.is_empty());
+    assert_eq!(adapter.commands().len(), commands_before_loss);
+}
+
+#[tokio::test]
+async fn opening_a_new_workspace_interrupts_the_previous_managed_run_without_replay() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let first_generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-first-managed-interruption",
+        "first-managed-interruption",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-first-managed-interruption".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "first-managed-interruption".to_string(),
+                root_path: PathBuf::from("C:/work/first-managed-interruption"),
+            },
+        })
+        .await
+        .expect("first managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        first_generation,
+        "create-first-managed-interruption",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "send-first-managed-interruption".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "must not replay in the next workspace".to_string(),
+            },
+        })
+        .await
+        .expect("first managed run is accepted");
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Running).await;
+    let sent_before_replacement = adapter.count(CommandKind::SendUserInput);
+
+    open_ready(
+        &runtime,
+        &adapter,
+        "open-second-managed-interruption",
+        "second-managed-interruption",
+    )
+    .await;
+
+    let interrupted_snapshot = runtime.snapshot();
+    let interrupted = interrupted_snapshot
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("the previous managed session remains available for explicit disposition");
+    assert_eq!(interrupted.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert_eq!(
+        interrupted.error.as_ref().map(|error| error.code.as_str()),
+        Some("workspace_closed")
+    );
+    assert_eq!(interrupted.messages.len(), 1);
+    assert_eq!(
+        interrupted.messages[0].content,
+        "must not replay in the next workspace"
+    );
+    assert!(interrupted.baseline.is_some());
+    assert!(adapter.commands().iter().any(|command| {
+        matches!(
+            command,
+            PiRpcCommand::Shutdown { generation } if *generation == first_generation
+        )
+    }));
+    assert_eq!(
+        adapter.count(CommandKind::SendUserInput),
+        sent_before_replacement
+    );
+
+    adapter.emit(PiRpcEvent::MessageUpdated {
+        generation: first_generation,
+        session_id: session_id.clone(),
+        text: "late-old-generation-message".to_string(),
+    });
+    adapter.emit(PiRpcEvent::SessionFailed {
+        generation: first_generation,
+        session_id: session_id.clone(),
+        reason: PiRpcFailureKind::Transport,
+    });
+    tokio::task::yield_now().await;
+    let after_late_events = runtime.snapshot();
+    let after_late_session = after_late_events
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("late events do not discard the interrupted session");
+    assert_eq!(
+        after_late_session.phase,
+        HaloWorkbenchSessionPhase::Interrupted
+    );
+    assert_eq!(after_late_session.messages.len(), 1);
+    assert_eq!(
+        adapter.count(CommandKind::SendUserInput),
+        sent_before_replacement
+    );
+}
+
+#[tokio::test]
+async fn interrupted_session_from_replaced_workspace_cannot_enter_delivery_review() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime_with_delivery_evidence(
+        adapter.clone(),
+        Arc::new(FixedDeliveryEvidence::new(
+            "interrupted diff",
+            vec!["tracked.rs"],
+            vec![(
+                "tracked.rs".to_string(),
+                WorkbenchDeliveryAttributionKind::TaskModification,
+            )],
+            vec!["tracked.rs"],
+        )),
+    );
+    let first_generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-old-interrupted-review",
+        "old-interrupted-review",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-old-interrupted-review".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "old-interrupted-review".to_string(),
+                root_path: PathBuf::from("C:/work/old-interrupted-review"),
+            },
+        })
+        .await
+        .expect("first managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        first_generation,
+        "create-old-interrupted-review",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "send-old-interrupted-review".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "keep the old workspace isolated".to_string(),
+            },
+        })
+        .await
+        .expect("first managed request is accepted");
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Running).await;
+
+    open_ready(
+        &runtime,
+        &adapter,
+        "open-current-interrupted-review",
+        "current-interrupted-review",
+    )
+    .await;
+    let commands_before_review = adapter.commands().len();
+
+    let error = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "review-old-interrupted-session".to_string(),
+            intent: HaloWorkbenchIntent::FinishAndReview {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect_err("an old workspace session cannot enter the current delivery review");
+    assert_eq!(error.code, "delivery_review_not_ready");
+
+    let old_session = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("old interrupted session remains a read-only fact");
+    assert_eq!(old_session.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert_eq!(
+        old_session.error.as_ref().map(|error| error.code.as_str()),
+        Some("workspace_closed")
+    );
+    assert!(old_session.delivery_review.is_none());
+    assert_eq!(adapter.commands().len(), commands_before_review);
+}
+
+#[tokio::test]
+async fn request_execution_panic_interrupts_the_active_managed_session_without_replay() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-join-panic-interruption",
+        "join-panic-interruption",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-join-panic-interruption".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "join-panic-interruption".to_string(),
+                root_path: PathBuf::from("C:/work/join-panic-interruption"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        "create-join-panic-interruption",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+    let request = HaloWorkbenchIntentRequest {
+        request_id: "send-join-panic-interruption".to_string(),
+        intent: HaloWorkbenchIntent::SendUserInput {
+            session_id: session_id.clone(),
+            content: "preserve the interrupted request without replay".to_string(),
+        },
+    };
+    let sent_before_panic = adapter.count(CommandKind::SendUserInput);
+    adapter.panic_on(CommandKind::SendUserInput);
+
+    let error = runtime
+        .submit(request.clone())
+        .await
+        .expect_err("the request owner reports the join panic");
+    assert_eq!(error.code, "runtime_internal");
+    wait_for_phase(&runtime, HaloWorkbenchPhase::Failed).await;
+
+    let interrupted_snapshot = runtime.snapshot();
+    let interrupted = interrupted_snapshot
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("managed session remains available for explicit disposition");
+    assert_eq!(interrupted.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert_eq!(
+        interrupted.error.as_ref().map(|error| error.code.as_str()),
+        Some("runtime_internal")
+    );
+    assert_eq!(interrupted.messages.len(), 1);
+    assert!(interrupted.baseline.is_some());
+    assert_eq!(
+        adapter.count(CommandKind::SendUserInput),
+        sent_before_panic + 1
+    );
+    assert_eq!(
+        adapter.count(CommandKind::Shutdown),
+        1,
+        "a runtime panic must reclaim the active Pi generation"
+    );
+
+    assert_eq!(
+        runtime
+            .submit(request)
+            .await
+            .expect_err("the failed request is not retried automatically")
+            .code,
+        "runtime_internal"
+    );
+    assert_eq!(
+        adapter.count(CommandKind::SendUserInput),
+        sent_before_panic + 1
+    );
+}
+
+#[tokio::test]
+async fn closed_adapter_event_stream_interrupts_active_managed_work_and_cleans_up_once() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-closed-event-stream",
+        "closed-event-stream",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-closed-event-stream".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "closed-event-stream".to_string(),
+                root_path: PathBuf::from("C:/work/closed-event-stream"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        "create-closed-event-stream",
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "send-closed-event-stream".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "preserve this interrupted work without replay".to_string(),
+            },
+        })
+        .await
+        .expect("managed input is accepted");
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Running).await;
+
+    adapter.close_events();
+    wait_for_phase(&runtime, HaloWorkbenchPhase::Failed).await;
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::Interrupted,
+    )
+    .await;
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if adapter.count(CommandKind::Shutdown) == 1 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("closed event stream triggers one cleanup");
+
+    let snapshot = runtime.snapshot();
+    let interrupted = snapshot
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("managed session remains available for explicit disposition");
+    assert_eq!(interrupted.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert_eq!(
+        interrupted.error.as_ref().map(|error| error.code.as_str()),
+        Some("adapter_event_stream_closed")
+    );
+    assert_eq!(adapter.count(CommandKind::SendUserInput), 1);
+    assert_eq!(adapter.count(CommandKind::Shutdown), 1);
+    tokio::task::yield_now().await;
+    assert_eq!(adapter.count(CommandKind::Shutdown), 1);
+}
+
+#[tokio::test]
 async fn operation_resolution_must_match_the_owning_session() {
     let adapter = Arc::new(DeterministicPiRpc::new());
     let runtime = build_runtime(adapter.clone());
@@ -2074,7 +3602,10 @@ async fn pending_operation_projects_redacted_summary_and_risk_level() {
         .find(|operation| operation.operation_id == "high-risk-operation")
         .expect("pending high-risk operation");
     assert_eq!(operation.tool_name, "browser");
-    assert_eq!(operation.risk_level, HaloWorkbenchOperationRiskLevel::HighRisk);
+    assert_eq!(
+        operation.risk_level,
+        HaloWorkbenchOperationRiskLevel::HighRisk
+    );
     assert!(operation.arguments.contains("[redacted]"));
     assert!(!operation.arguments.contains("https://example.test/submit"));
 }
@@ -2153,7 +3684,6 @@ async fn adapter_failures_and_debug_output_strip_sensitive_fields() {
     }
 }
 
-
 async fn settle_managed_session(
     runtime: &HaloWorkbenchRuntime,
     adapter: &Arc<DeterministicPiRpc>,
@@ -2161,7 +3691,13 @@ async fn settle_managed_session(
     task_id: &str,
     request_prefix: &str,
 ) -> (u64, String) {
-    let generation = open_ready(runtime, adapter, &format!("open-{request_prefix}"), workspace_id).await;
+    let generation = open_ready(
+        runtime,
+        adapter,
+        &format!("open-{request_prefix}"),
+        workspace_id,
+    )
+    .await;
     runtime
         .submit(HaloWorkbenchIntentRequest {
             request_id: format!("confirm-{request_prefix}"),
@@ -2203,17 +3739,284 @@ async fn settle_managed_session(
         generation,
         session_id: session_id.clone(),
     });
-    wait_for_session_phase(runtime, &session_id, HaloWorkbenchSessionPhase::WaitingDeveloper).await;
+    wait_for_session_phase(
+        runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::WaitingDeveloper,
+    )
+    .await;
     (generation, session_id)
 }
 
-fn delivery_evidence_for(session_id: &str, runtime: &HaloWorkbenchRuntime) -> Option<bitfun_agent_runtime::halo_workbench::HaloWorkbenchDeliveryReviewSnapshot> {
+fn delivery_evidence_for(
+    session_id: &str,
+    runtime: &HaloWorkbenchRuntime,
+) -> Option<bitfun_agent_runtime::halo_workbench::HaloWorkbenchDeliveryReviewSnapshot> {
     runtime
         .snapshot()
         .sessions
         .iter()
         .find(|session| session.session_id == session_id)
         .and_then(|session| session.delivery_review.clone())
+}
+
+#[tokio::test]
+async fn failed_interrupted_review_preserves_history_and_allows_explicit_retry() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let evidence = Arc::new(ControlledDeliveryEvidence::new(FixedDeliveryEvidence::new(
+        "interrupted review diff",
+        vec!["tracked.rs"],
+        vec![(
+            "tracked.rs".to_string(),
+            WorkbenchDeliveryAttributionKind::TaskModification,
+        )],
+        vec!["tracked.rs"],
+    )));
+    evidence.fail_capture();
+    let history = Arc::new(InMemoryInterruptionHistory::default());
+    let runtime = build_runtime_with_delivery_evidence_and_interruption_history(
+        adapter.clone(),
+        evidence.clone(),
+        history.clone(),
+    );
+    let (generation, session_id) = settle_managed_session(
+        &runtime,
+        &adapter,
+        "interrupted-review-failure",
+        "interrupted-review-failure-task",
+        "interrupted-review-failure",
+    )
+    .await;
+    adapter.emit(PiRpcEvent::SessionFailed {
+        generation,
+        session_id: session_id.clone(),
+        reason: PiRpcFailureKind::Transport,
+    });
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::Interrupted,
+    )
+    .await;
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if history
+                .sessions
+                .lock()
+                .expect("interruption history lock")
+                .iter()
+                .any(|session| {
+                    session.session_id == session_id
+                        && session.phase == HaloWorkbenchSessionPhase::Interrupted
+                })
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the interrupted session is persisted before review");
+    let writes_before_failed_review = history.write_count();
+    let commands_before_review = adapter.commands().len();
+
+    let error = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "failed-interrupted-review".to_string(),
+            intent: HaloWorkbenchIntent::FinishAndReview {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect_err("a failed read-only review is reported to the developer");
+    assert_eq!(error.code, "delivery_evidence_unavailable");
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if history.write_count() > writes_before_failed_review {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the failed review transition is persisted");
+
+    let after_failed_review = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("interrupted session remains available after a failed review");
+    assert_eq!(
+        after_failed_review.phase,
+        HaloWorkbenchSessionPhase::Interrupted
+    );
+    assert_eq!(
+        after_failed_review
+            .error
+            .as_ref()
+            .map(|error| error.code.as_str()),
+        Some("pi_transport_unavailable")
+    );
+    assert!(after_failed_review.baseline.is_some());
+    assert!(after_failed_review.delivery_review.is_none());
+    assert!(
+        history
+            .sessions
+            .lock()
+            .expect("interruption history lock")
+            .iter()
+            .any(|session| {
+                session.session_id == session_id
+                    && session.phase == HaloWorkbenchSessionPhase::Interrupted
+            }),
+        "a failed review must not erase the durable interruption fact"
+    );
+
+    let restarted_adapter = Arc::new(DeterministicPiRpc::new());
+    let restarted = build_runtime_with_delivery_evidence_and_interruption_history(
+        restarted_adapter.clone(),
+        evidence.clone(),
+        history,
+    );
+    let restored = restarted
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("restart restores the failed-review interruption fact");
+    assert_eq!(restored.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert!(restored.baseline.is_some());
+    assert_eq!(
+        restored.error.as_ref().map(|error| error.code.as_str()),
+        Some("pi_transport_unavailable")
+    );
+    assert!(restarted_adapter.commands().is_empty());
+
+    evidence.allow_capture();
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "retry-interrupted-review".to_string(),
+            intent: HaloWorkbenchIntent::FinishAndReview {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("an interrupted review may be retried explicitly");
+    let retried = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("retried interruption remains projected");
+    assert_eq!(retried.phase, HaloWorkbenchSessionPhase::Reviewing);
+    assert!(retried.delivery_review.is_some());
+    assert_eq!(adapter.commands().len(), commands_before_review);
+}
+
+#[tokio::test]
+async fn pi_failure_during_unfrozen_delivery_review_interrupts_and_can_be_retried() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let evidence = Arc::new(ControlledDeliveryEvidence::new(FixedDeliveryEvidence::new(
+        "unfrozen review diff",
+        vec!["tracked.rs"],
+        vec![(
+            "tracked.rs".to_string(),
+            WorkbenchDeliveryAttributionKind::TaskModification,
+        )],
+        vec!["tracked.rs"],
+    )));
+    evidence.block_capture();
+    let runtime = build_runtime_with_delivery_evidence(adapter.clone(), evidence.clone());
+    let (generation, session_id) = settle_managed_session(
+        &runtime,
+        &adapter,
+        "unfrozen-review-failure",
+        "unfrozen-review-failure-task",
+        "unfrozen-review-failure",
+    )
+    .await;
+    let commands_before_review = adapter.commands().len();
+    let review_runtime = runtime.clone();
+    let review_session_id = session_id.clone();
+    let review = tokio::spawn(async move {
+        review_runtime
+            .submit(HaloWorkbenchIntentRequest {
+                request_id: "review-while-pi-fails".to_string(),
+                intent: HaloWorkbenchIntent::FinishAndReview {
+                    session_id: review_session_id,
+                },
+            })
+            .await
+    });
+    evidence.capture_gate.wait_until_started().await;
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Reviewing).await;
+
+    adapter.emit(PiRpcEvent::SessionFailed {
+        generation,
+        session_id: session_id.clone(),
+        reason: PiRpcFailureKind::Transport,
+    });
+    let interrupted = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if runtime.snapshot().sessions.iter().any(|session| {
+                session.session_id == session_id
+                    && session.phase == HaloWorkbenchSessionPhase::Interrupted
+            }) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .is_ok();
+    if !interrupted {
+        evidence.capture_gate.release();
+    }
+    assert!(
+        interrupted,
+        "a Pi failure before evidence is frozen must be projected as interrupted"
+    );
+
+    let interrupted_session = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("the interrupted session remains available for review");
+    assert!(interrupted_session.baseline.is_some());
+    assert!(interrupted_session.delivery_review.is_none());
+    assert_eq!(
+        interrupted_session
+            .error
+            .as_ref()
+            .map(|error| error.code.as_str()),
+        Some("pi_transport_unavailable")
+    );
+
+    evidence.capture_gate.release();
+    review
+        .await
+        .expect("review task")
+        .expect_err("the unfrozen review cannot attach evidence after Pi fails");
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "retry-after-pi-failure".to_string(),
+            intent: HaloWorkbenchIntent::FinishAndReview {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("the interrupted session can be reviewed explicitly after the Pi failure");
+    let retried = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("retried session remains projected");
+    assert_eq!(retried.phase, HaloWorkbenchSessionPhase::Reviewing);
+    assert!(retried.delivery_review.is_some());
+    assert_eq!(adapter.commands().len(), commands_before_review);
 }
 
 #[tokio::test]
@@ -2225,8 +4028,14 @@ async fn finish_and_review_freezes_evidence_and_releases_adapter_session() {
             "diff --git a/tracked.rs b/tracked.rs\n+new content",
             vec!["tracked.rs", "new-file.rs"],
             vec![
-                ("already-tracked.rs".to_string(), WorkbenchDeliveryAttributionKind::ExistingUserModification),
-                ("tracked.rs".to_string(), WorkbenchDeliveryAttributionKind::TaskModification),
+                (
+                    "already-tracked.rs".to_string(),
+                    WorkbenchDeliveryAttributionKind::ExistingUserModification,
+                ),
+                (
+                    "tracked.rs".to_string(),
+                    WorkbenchDeliveryAttributionKind::TaskModification,
+                ),
             ],
             vec!["tracked.rs"],
         )),
@@ -2258,9 +4067,15 @@ async fn finish_and_review_freezes_evidence_and_releases_adapter_session() {
         .find(|session| session.session_id == session_id)
         .expect("managed session remains");
     assert_eq!(session.phase, HaloWorkbenchSessionPhase::Reviewing);
-    let review = session.delivery_review.as_ref().expect("delivery review is frozen");
+    let review = session
+        .delivery_review
+        .as_ref()
+        .expect("delivery review is frozen");
     assert_eq!(review.decision, None);
-    assert_eq!(review.evidence.changed_files, vec!["tracked.rs", "new-file.rs"]);
+    assert_eq!(
+        review.evidence.changed_files,
+        vec!["tracked.rs", "new-file.rs"]
+    );
     assert_eq!(review.evidence.attribution.len(), 2);
     assert_eq!(adapter.count(CommandKind::EndSession), 1);
 }
@@ -2318,7 +4133,10 @@ async fn accept_delivery_records_conclusion_without_new_adapter_commands() {
         Arc::new(FixedDeliveryEvidence::new(
             "diff",
             vec!["tracked.rs"],
-            vec![("tracked.rs".to_string(), WorkbenchDeliveryAttributionKind::TaskModification)],
+            vec![(
+                "tracked.rs".to_string(),
+                WorkbenchDeliveryAttributionKind::TaskModification,
+            )],
             vec!["tracked.rs"],
         )),
     );
@@ -2358,8 +4176,14 @@ async fn accept_delivery_records_conclusion_without_new_adapter_commands() {
         .find(|session| session.session_id == session_id)
         .expect("managed session remains");
     assert_eq!(session.phase, HaloWorkbenchSessionPhase::Ended);
-    let review = session.delivery_review.as_ref().expect("delivery review remains frozen");
-    assert_eq!(review.decision, Some(HaloWorkbenchDeliveryDecision::Accepted));
+    let review = session
+        .delivery_review
+        .as_ref()
+        .expect("delivery review remains frozen");
+    assert_eq!(
+        review.decision,
+        Some(HaloWorkbenchDeliveryDecision::Accepted)
+    );
     assert_eq!(
         adapter.commands().len(),
         commands_after_finish,
@@ -2375,7 +4199,10 @@ async fn reject_delivery_records_conclusion_and_ends_session() {
         Arc::new(FixedDeliveryEvidence::new(
             "diff",
             vec!["tracked.rs"],
-            vec![("tracked.rs".to_string(), WorkbenchDeliveryAttributionKind::TaskModification)],
+            vec![(
+                "tracked.rs".to_string(),
+                WorkbenchDeliveryAttributionKind::TaskModification,
+            )],
             vec!["tracked.rs"],
         )),
     );
@@ -2429,7 +4256,10 @@ async fn finish_and_review_is_rejected_outside_waiting_developer() {
         Arc::new(FixedDeliveryEvidence::new(
             "diff",
             vec!["tracked.rs"],
-            vec![("tracked.rs".to_string(), WorkbenchDeliveryAttributionKind::TaskModification)],
+            vec![(
+                "tracked.rs".to_string(),
+                WorkbenchDeliveryAttributionKind::TaskModification,
+            )],
             vec!["tracked.rs"],
         )),
     );
@@ -2466,4 +4296,3 @@ async fn finish_and_review_is_rejected_outside_waiting_developer() {
     assert_eq!(error.code, "delivery_review_not_ready");
     assert_eq!(adapter.count(CommandKind::EndSession), 0);
 }
-

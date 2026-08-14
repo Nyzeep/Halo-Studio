@@ -4,6 +4,7 @@ import type { WorkbenchRuntimeStoreState } from './store';
 import {
   selectWorkbenchRuntimeConnected,
   selectWorkbenchRuntimeErrorMessageKey,
+  selectWorkbenchRuntimeInterruptionReasonMessageKey,
   selectWorkbenchRuntimePhase,
   selectWorkbenchRuntimePhaseMessageKey,
   selectWorkbenchRuntimeSessionNeedsDecision,
@@ -127,5 +128,51 @@ describe('workbench runtime selectors', () => {
     expect(selectWorkbenchRuntimeSessionPhaseMessageKey('interrupted')).toBe(
       'nav.sessions.workbenchRuntime.sessionPhase.interrupted',
     );
+  });
+
+  it('keeps known interruption facts visible without exposing the error summary', () => {
+    const interrupted = {
+      ...snapshot('disconnected').sessions[0],
+      mode: 'managed' as const,
+      phase: 'interrupted' as const,
+      cancellationMode: null,
+      error: {
+        code: 'application_interrupted',
+        recoveryAction: 'start_new_run_or_review_interruption',
+        summary: 'untrusted raw runtime detail',
+      },
+    };
+
+    expect(selectWorkbenchRuntimeInterruptionReasonMessageKey(interrupted)).toBe(
+      'nav.sessions.workbenchRuntime.interruptionReason.applicationInterrupted',
+    );
+    expect(selectWorkbenchRuntimeInterruptionReasonMessageKey({
+      ...interrupted,
+      error: { ...interrupted.error, code: 'workspace_closed' },
+    })).toBe('nav.sessions.workbenchRuntime.interruptionReason.workspaceClosed');
+    expect(selectWorkbenchRuntimeInterruptionReasonMessageKey({
+      ...interrupted,
+      cancellationMode: 'forced',
+    })).toBe('nav.sessions.workbenchRuntime.interruptionReason.forced');
+    expect(selectWorkbenchRuntimeInterruptionReasonMessageKey({
+      ...interrupted,
+      error: { ...interrupted.error, code: 'runtime_shutdown' },
+    })).toBe('nav.sessions.workbenchRuntime.interruptionReason.runtimeShutdown');
+    expect(selectWorkbenchRuntimeInterruptionReasonMessageKey({
+      ...interrupted,
+      error: { ...interrupted.error, code: 'runtime_internal' },
+    })).toBe('nav.sessions.workbenchRuntime.interruptionReason.runtimeFailure');
+    expect(selectWorkbenchRuntimeInterruptionReasonMessageKey({
+      ...interrupted,
+      error: { ...interrupted.error, code: 'pi_transport_unavailable' },
+    })).toBe('nav.sessions.workbenchRuntime.interruptionReason.piTransportUnavailable');
+    expect(selectWorkbenchRuntimeInterruptionReasonMessageKey({
+      ...interrupted,
+      error: { ...interrupted.error, code: 'pi_protocol_error' },
+    })).toBe('nav.sessions.workbenchRuntime.interruptionReason.piProtocolError');
+    expect(selectWorkbenchRuntimeInterruptionReasonMessageKey({
+      ...interrupted,
+      error: { ...interrupted.error, code: 'adapter_event_stream_closed' },
+    })).toBe('nav.sessions.workbenchRuntime.interruptionReason.eventStreamInterrupted');
   });
 });

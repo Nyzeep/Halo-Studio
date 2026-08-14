@@ -34,6 +34,7 @@ const RUNTIME_PHASES = new Set([
   'stopping',
 ]);
 const SESSION_MODES = new Set(['standard', 'managed']);
+const CANCELLATION_MODES = new Set(['native', 'forced']);
 const SESSION_PHASES = new Set([
   'creating',
   'idle',
@@ -137,6 +138,7 @@ const WORKBENCH_ERROR_CODES = new Set([
   'adapter_event_stream_closed',
   'adapter_timeout',
   'adapter_unavailable',
+  'application_interrupted',
   'cleanup_failed',
   'delivery_decision_not_ready',
   'delivery_evidence_unavailable',
@@ -165,6 +167,7 @@ const WORKBENCH_ERROR_CODES = new Set([
   'session_terminal',
   'task_baseline_unavailable',
   'task_already_active',
+  'workspace_closed',
   'workspace_facts_unavailable',
   'workspace_identity_mismatch',
   'workspace_untrusted',
@@ -185,6 +188,7 @@ const WORKBENCH_ERROR_RECOVERY_ACTIONS = new Set([
   'retry',
   'retry_after_runtime_ready',
   'review_system_permissions',
+  'start_new_run_or_review_interruption',
   'upgrade_pi',
   'wait_for_operation_confirmation',
   'wait_for_agent_settled',
@@ -522,6 +526,14 @@ const sanitizeSnapshot = (input: unknown): WorkbenchRuntimeSnapshot => {
       taskId: requiredString(session.taskId),
       sessionId: requiredString(session.sessionId),
       mode: session.mode as WorkbenchRuntimeSnapshot['sessions'][number]['mode'],
+      cancellationMode: session.cancellationMode === undefined || session.cancellationMode === null
+        ? null
+        : (() => {
+            if (!CANCELLATION_MODES.has(String(session.cancellationMode))) {
+              return contractMismatch();
+            }
+            return session.cancellationMode as WorkbenchRuntimeSession['cancellationMode'];
+          })(),
       phase: session.phase as WorkbenchRuntimeSnapshot['sessions'][number]['phase'],
       baseline: sanitizeTaskBaseline(session.baseline),
       messages: sanitizeSessionMessages(session.messages),
