@@ -18,7 +18,20 @@
       "resolvedCommit": null,
       "objectType": null,
       "exitCode": 128,
-      "reason": "The shallow/grafted candidate reference checkout does not contain the pinned base object; this is not treated as ancestry evidence."
+      "reason": "The shallow/grafted candidate reference checkout does not contain the pinned base object; this is not treated as ancestry evidence.",
+      "primarySourceVerification": {
+        "status": "resolved-via-primary-source",
+        "commit": "ca56631e38f36db675583288df2bd44c540d250a",
+        "tree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
+        "source": "https://api.github.com/repos/GCWing/BitFun/git/commits/ca56631e38f36db675583288df2bd44c540d250a",
+        "verifiedAt": "2026-08-15"
+      }
+    },
+    "treeReconciliation": {
+      "reconciledOn": "2026-08-15",
+      "previousDeclaredTree": "fba189b8b3db23c45a4bfed18c0250018b251387",
+      "verifiedTree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
+      "method": "Initial-import manifest entries re-derived with the audit gitTreeOidFromEntries algorithm produce f6a559f4; the GitHub REST API (GET /repos/GCWing/BitFun/git/commits/ca56631e38f36db675583288df2bd44c540d250a) returns tree f6a559f4 for the pinned base commit. The previous declared value fba189b8 is recorded as a superseded declared tree, not a verified upstream tree."
     }
   },
   "candidate": {
@@ -190,8 +203,7 @@
       "The Pi host reference tree has no Git commit/tag evidence.",
       "No exact desktop release artifact has been recorded for license/notice inspection."
     ]
-  }
-,
+  },
   "freshRehearsal": {
     "schemaVersion": 1,
     "rehearsalDate": "2026-08-13",
@@ -239,6 +251,44 @@
       "manualReviewRequired": "The fresh commit changes Cargo workspace dependency/feature policy; because Halo product/Halo Studio owns its own workspace and the Cargo workspace lists src/crates/adapters/pi-rpc-adapter twice (boundary defect reported but not modified), these changes require a Halo-specific three-way review and must not be auto-applied."
     },
     "status": "blocked"
+  },
+  "rehearsal20260815": {
+    "rehearsalDate": "2026-08-15",
+    "purpose": "Gate-closure session: primary-source verification of BitFun upstream candidate 9b05dd0e and base ca56631e.",
+    "lsRemote": {
+      "head": "142d7e38729b3d646ae305c162e6848d0d44fff9",
+      "refsHeadsMain": "142d7e38729b3d646ae305c162e6848d0d44fff9"
+    },
+    "baseCommit": {
+      "sha": "ca56631e38f36db675583288df2bd44c540d250a",
+      "tree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
+      "message": "fix(session): surface cross-process writer conflicts"
+    },
+    "candidateCommit": {
+      "sha": "9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6",
+      "tree": "74c1ff43695ee7273383df113759cce66365b280",
+      "parent": "59e06a0e544f55b8152e62440be1a476e7633572",
+      "message": "perf(cargo): centralize default feature ownership",
+      "changedFiles": 41,
+      "additions": 326,
+      "deletions": 258
+    },
+    "ancestry": {
+      "status": "proven-via-primary-source",
+      "behindBy": 0,
+      "aheadBy": 584,
+      "totalCommits": 584
+    },
+    "pathLevelDiff": {
+      "baseEntries": 5254,
+      "candidateBlobEntries": 6005,
+      "identical": 3042,
+      "modified": 1827,
+      "added": 1136,
+      "removed": 385,
+      "changedEntries": 3348,
+      "artifactPath": "docs/requirements/bitfun-tauri-product-migration/artifacts/issue-13-upstream-sync-diff-9b05dd0e.json"
+    },
+    "note": "The recorded candidate evidence (1616ccaf) remains the locally derivable candidate because the shallow reference tree cannot resolve 9b05dd0e; this section records the fresh primary-source verification separately, without overwriting the historical 1616ccaf diff."
   }
-
 }
