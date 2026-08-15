@@ -333,3 +333,74 @@ gate 仍为 `blocked`（9 findings / 16 blocking reasons），剩余项全部属
 `release-artifact-evidence-missing`（D：环境/发行通道）。
 
 政策依据：`docs/adr/0073-issue-13-release-gate-exclusions.md`。
+
+### 收口会话 2（2026-08-15，D 项解除）
+
+本次基于 `origin/main`（`edaa87f97c55b9d701ce3380d53e73370433ac5e`）在仓库 `.worktrees/` 下新建
+worktree/branch `codex/issue-13-gate-closure-2-20260815` 完成 D 项（`release-artifact-evidence-missing`）。
+
+#### D 项修复（vendor checksum 对齐）
+
+- 新增可审计脚本 `product/Halo Studio/scripts/align-vendor-checksums.mjs`（+6 contract tests，audit+align
+  全套 104/104 通过）：仅重算 `vendor/cargo/<crate>/.cargo-checksum.json` 的 `files` map SHA-256 与磁盘
+  文件对齐；`package` 字段原样保留（git 依赖为 `null`，其余保持 64-hex）；缺失条目移除；vendor 源码与
+  lockfile 一律不改。
+- 统计：55 个 crate / 1,237 个文件 SHA-256 更新、3 个缺失条目移除（`lzma-sys/xz-5.2/windows/vs2013|2017|2019/xz_win.sln`）、
+  0 新增；55 个改动文件 `package` 字段与 HEAD 逐项比对全部一致。
+- 复核：全量再扫 1,091 个 crate → 0 mismatch / 0 missing / 0 extra。
+- 观察确认：`desktop:build:fast` 从 exit 1（tauri CLI 路径 vendor checksum 校验失败）变为 exit 0；
+  直接 cargo build 与 tauri CLI 路径均通过，实际 vendor 文件内容可构建（强证据）。
+
+#### 构建与发行物证据
+
+| 项 | 退出码 | 结果 |
+| --- | ---: | --- |
+| `pnpm run desktop:build:fast` | 0 | debug 构建完成，`target/debug/halo-studio.exe`（212,368,384 B，MZ） |
+| `pnpm run desktop:build:exe` | 0 | release 构建完成（39m09s），`target/release/halo-studio.exe`（183,025,152 B，MZ） |
+| 发行物 zip | — | `product/Halo Studio/release/halo-studio-0.2.14-desktop-windows-x86_64.zip`，80,741,988 B，SHA-256 `bdc3eab6745667d0ad802e0717d575773c98b9f9207a9d249381418bd64d516d`；包含 `LICENSE`、`THIRD_PARTY_NOTICES.md`、`Halo Studio.exe`（windows-pe，SHA-256 `089a53a435cb579d129ca935bbbcafa2cb003a2fe998abe56f49812c32db6bc9`） |
+| inventory `releaseArtifactEvidence` | — | 已按审计 schema 记录（artifactType/artifactFormat/sha256/size/includedFiles/payload/requiredText） |
+
+`release-artifact-evidence-missing` finding 已消除。
+
+#### 验证矩阵（2026-08-15 收口会话 2）
+
+| 命令/检查 | 退出码 | 结果 |
+| --- | ---: | --- |
+| `node --test scripts/pi-extension-audit.test.mjs scripts/align-vendor-checksums.test.mjs` | 0 | 104/104 |
+| `pnpm run check:repo-hygiene` | 0 | passed（issue-12 矩阵 passed） |
+| `pnpm run product:check` | 0 | ok |
+| `pnpm run product:test` | 0 | 17/17 |
+| `pnpm run type-check:web` | 0 | tsc --noEmit passed |
+| `pnpm --dir src/web-ui run test:run` | 0 | 363 files / 2,396 tests passed |
+| workbench-runtime contract tests（指定两个文件） | 0 | 通过（含于全量） |
+| `cargo test -p bitfun-agent-runtime --test workbench_runtime_contracts` | 0 | 46 passed |
+| `cargo tree -p bitfun-pi-rpc-adapter`（--offline） | 0 | 正常；无 `@earendil-works/pi-coding-agent` 运行时依赖 |
+| `cargo test -p bitfun-pi-rpc-adapter extension_decision_is_redacted_one_shot_and_duplicate_request_fails_closed` | 0 | 1 passed |
+| `rg -F '@earendil-works/pi-coding-agent'` 四个 lockfile/manifest | 1 | 无命中（期望） |
+| `git diff --check` | 0 | passed |
+
+#### 审计 CLI 状态（D 解除后、C 裁决前）
+
+- `status=blocked`，8 findings（6 项 `blocking:false` 排除记录 + 2 项真实阻断），blockingReasons 4（declared 3 + generated 1）。
+- 真实阻断：`release-gate-declared-blocked`（收尾时按裁决更新）、`upstream-initial-import-tree-mismatch`（C：待维护者裁决）。
+- 已消除：`release-artifact-evidence-missing`。
+
+#### 边界与未启动项
+
+根工作树未改动；未读取凭据；未启动真实 Pi RPC；未发送真实模型请求；未修改 lockfile / i18n baseline /
+历史证据（`1616cca` diff、`fba189b8` 声明保持原样）；vendor 源码未改（仅 `.cargo-checksum.json` 元数据
+重算）。发行物 zip 位于 `product/Halo Studio/release/`（可入库路径；约 77 MB，本次未入库，可由
+`desktop:build:exe` + 打包步骤复现）。工单 14 未启动。
+
+### C2 裁决与 gate 放行（2026-08-15）
+
+维护者在收口会话 2 中确认选择 C2（接受追加式更正）：
+
+- `issue-13-upstream-sync-candidate.json` 更新：`base.initialImportTree` → `f6a559f45e266945921913f9752eb0e5b4609bdb`、
+  `base.treeBindingStatus` → `matched`；`treeReconciliation.previousDeclaredTree = fba189b8b3db23c45a4bfed18c0250018b251387`
+  完整保留，并新增 `adjudication` 字段记录本次裁决。
+- `pi-first-party-extension-inventory.json`：`releaseGate.status` → `passed`，`blockingReasons` 清空。
+- 审计 CLI（同一命令、同一环境变量）：`status=eligible`，6 项 `blocking:false` 显式排除记录，
+  `blockingReasons=[]`，退出码 0。
+- 剩余 6 项均为 ADR-0073 裁决的排除记录（上游候选 rehearsal-only 4 项 + Pi host 排除 2 项），不阻断。
+- 工单 14 条件性 handoff 前提已满足（gate eligible）；真实 Pi RPC / 凭据 / 模型请求仍须用户届时单独授权。
