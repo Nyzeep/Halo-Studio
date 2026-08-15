@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "issue": "14",
+  "artifactType": "issue-14-real-native-ui-acceptance-status",
+  "ownerIssue": "14",
+  "sourceLocator": "docs/requirements/bitfun-tauri-product-migration/issues/14-complete-real-pi-rpc-native-ui-acceptance.md",
+  "recordedByIssue": "12",
+  "status": "not-run",
+  "classification": "real-native-ui-not-run",
+  "reason": "No authorized real Pi RPC session has been run through the Halo native Tauri UI. This deidentified status artifact contains no credential, raw RPC, session, entry, or tool-call data."
+}

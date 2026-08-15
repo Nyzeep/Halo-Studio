@@ -10,20 +10,28 @@
 
 发布结论保持 `blocked`。工单 `14` 的真实 Pi RPC 原生 UI 验收为 `not-run`，分类为 `real-native-ui-not-run`：Only Issue 14 may record an authorized real Pi RPC session through the Halo native Tauri UI; this Issue 12 work uses no real credential, Pi RPC process, or model request.
 
+**真实原生验收结论证据**
+
+- `deidentified-status-artifact`: `not-run`
+  - locator: `docs/verification/issue-12-real-native-ui-acceptance-status.json`
+  - classification: `real-native-ui-not-run`
+
 自动化证据只证明公开 Runtime、PiRpcPort、Tauri command/event 和 Web infrastructure contract。受控 fixture、历史 OpenCode runtime/HTTP/SSE、旧 Sidecar JSONL、Pi TUI、Unix/CBOR PiServer、多执行器产品设想、Pi 内部源码、原始 session/entry/toolCall 标识及静态页面均为历史或范围外材料，不能替代真实原生 UI 结论。
 
 ## 本轮验证记录
 
 | 命令 | 状态 | 退出码 | 分类 | 摘要 |
 | --- | --- | ---: | --- | --- |
-| `node --test scripts/verify-old-six-behavior-equivalence.test.mjs` | `passed` | 0 |  | 10/10 matrix contract tests passed. |
-| `pnpm --dir "product/Halo Studio" run check:repo-hygiene` | `passed` | 0 |  | Repository hygiene and the Issue 12 matrix validator passed. |
+| `node --test "product/Halo Studio/scripts/verify-old-six-behavior-equivalence.test.mjs"` | `passed` | 0 |  | 22 matrix contract tests passed. |
+| `pnpm --dir "product/Halo Studio" run check:repo-hygiene` | `passed` | 0 |  | Repository hygiene and the Issue 12 matrix verifier passed. |
 | `pnpm --dir "product/Halo Studio" run type-check:web` | `passed` | 0 |  | Web TypeScript type check passed. |
 | `pnpm --dir "product/Halo Studio/src/web-ui" run test:run -- src/infrastructure/workbench-runtime/client.test.ts src/infrastructure/workbench-runtime/formalPath.contract.test.ts` | `passed` | 0 |  | The package runner executed 363 test files and 2,396 tests successfully. |
 | `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter` | `passed` | 0 |  | 9 Pi configuration contracts and 43 Pi RPC adapter contracts passed with controlled fixtures. |
 | `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-agent-runtime --test workbench_runtime_contracts` | `passed` | 0 |  | 46 public Workbench Runtime contracts passed with the injected PiRpcPort fixture. |
-| `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-desktop --test halo_workbench_runtime_contracts` | `blocked` | 124 | `desktop-mobile-web-resource-missing` | The harness timed out while Cargo waited for jobs; bitfun-desktop build script exited 1 because relative resource path src/mobile-web/dist is absent and untracked in the initially clean worktree. |
-| `pnpm --dir "product/Halo Studio" run desktop:build:fast` | `blocked` | 1 | `vendor-checksum-mismatch` | Frontend build completed, then Cargo rejected vendor/cargo/allocator-api2/src/stable/unique.rs because the declared checksum differs from the file; vendor and lockfiles were not changed. |
+| `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-desktop --test halo_workbench_runtime_contracts` | `blocked` | 1 | `desktop-mobile-web-resource-missing` | The bitfun-desktop build script exited 1 because the required src/mobile-web/dist resource is absent; Cargo then remained waiting on sherpa-onnx-sys until the already-failed command was manually stopped, so no desktop contract test ran. |
+| `pnpm --dir "product/Halo Studio" run desktop:build:fast` | `blocked` | 1 | `vendor-checksum-mismatch` | Frontend build completed, then Cargo rejected vendor/cargo/allocator-api2/src/stable/vec/set_len_on_drop.rs because its declared checksum differs from the file; vendor and lockfiles were not changed. |
+| `rg -n 'GitHub #9|GitHub #10|GitHub #11|GitHub #12|GitHub #13|GitHub #14' docs/requirements/bitfun-tauri-product-migration docs/verification` | `passed` | 0 |  | The reference scan emitted matches across the historical range; the matrix contract independently enforces one canonical GitHub locator for each issue #9-#14. |
+| `git diff --check` | `passed` | 0 |  | The Issue 12 change has no whitespace errors. |
 
 ## 主测试 Seam
 
@@ -70,6 +78,12 @@ Halo Workbench Runtime public Tauri snapshot/intent commands and one ordered eve
 
 **当前结论:** `blocked`
 
+**结论证据**
+
+- `deidentified-status-artifact`: `not-run`
+  - locator: `docs/verification/issue-12-real-native-ui-acceptance-status.json`
+  - classification: `real-native-ui-not-run`
+
 - `real-native-ui-not-run`: Automated contract evidence cannot replace the authorized real Pi RPC native UI acceptance owned by Issue 14.
 
 ### GitHub #10: Managed OpenCode 1.x compatible startup
@@ -102,6 +116,12 @@ Halo projects only non-sensitive configuration and Pi readiness facts through th
   - classification: `desktop-mobile-web-resource-missing`
 
 **当前结论:** `blocked`
+
+**结论证据**
+
+- `deidentified-status-artifact`: `not-run`
+  - locator: `docs/verification/issue-12-real-native-ui-acceptance-status.json`
+  - classification: `real-native-ui-not-run`
 
 - `real-native-ui-not-run`: Controlled protocol fixtures prove the fail-closed seam but cannot prove a real locally installed Pi through Halo native UI.
 
@@ -139,6 +159,12 @@ Managed session intents and snapshots expose a Halo-local session state, redacte
 
 **当前结论:** `blocked`
 
+**结论证据**
+
+- `deidentified-status-artifact`: `not-run`
+  - locator: `docs/verification/issue-12-real-native-ui-acceptance-status.json`
+  - classification: `real-native-ui-not-run`
+
 - `real-native-ui-not-run`: The controlled first-turn fixture is not a real Pi model response or native UI acceptance.
 
 ### GitHub #12: One-time Agent action requests
@@ -171,6 +197,12 @@ A Workbench Runtime pending operation projects a task-local redacted summary and
   - classification: `desktop-mobile-web-resource-missing`
 
 **当前结论:** `blocked`
+
+**结论证据**
+
+- `deidentified-status-artifact`: `not-run`
+  - locator: `docs/verification/issue-12-real-native-ui-acceptance-status.json`
+  - classification: `real-native-ui-not-run`
 
 - `real-native-ui-not-run`: The first-party extension fixture is evidence of the controlled contract, not an authorized real tool gate in Halo native UI.
 
@@ -208,6 +240,12 @@ The public intent surface admits follow-up only from waitingDeveloper, separates
 
 **当前结论:** `blocked`
 
+**结论证据**
+
+- `deidentified-status-artifact`: `not-run`
+  - locator: `docs/verification/issue-12-real-native-ui-acceptance-status.json`
+  - classification: `real-native-ui-not-run`
+
 - `real-native-ui-not-run`: No authorized real Pi session has produced a disposable acceptance-workspace change and native review flow.
 
 ### GitHub #14: Interruption truthfulness and real-session release acceptance
@@ -241,6 +279,12 @@ Interrupted is a first-class public session outcome whose restart path creates n
 
 **当前结论:** `blocked`
 
+**结论证据**
+
+- `deidentified-status-artifact`: `not-run`
+  - locator: `docs/verification/issue-12-real-native-ui-acceptance-status.json`
+  - classification: `real-native-ui-not-run`
+
 - `real-native-ui-not-run`: Real interruption and cleanup acceptance through the Halo native UI remains the restricted Issue 14 responsibility.
 
 ## 排除项
@@ -258,4 +302,4 @@ Interrupted is a first-class public session outcome whose restart path creates n
 - `static-http-page`
 - `controlled-fixture-as-real-native-acceptance`
 
-所有旧六票恰好映射一次，所有 P0 工单 04-11 均有覆盖。任一失败、环境阻断或未运行项都必须带分类；校验由 `pnpm --dir "product/Halo Studio" run check:repo-hygiene` 执行。
+所有旧六票恰好映射一次，所有 P0 工单 04-11 均有覆盖。任一失败、环境阻断或未运行项都必须带分类；`pnpm --dir "product/Halo Studio" run verify:old-six-behavior-equivalence` 执行 focused contract tests 和矩阵校验，规格入口 `check:repo-hygiene` 同样串联矩阵校验。

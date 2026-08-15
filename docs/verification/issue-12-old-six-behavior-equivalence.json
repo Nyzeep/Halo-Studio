@@ -17,20 +17,28 @@
     "issue": "14",
     "status": "not-run",
     "classification": "real-native-ui-not-run",
-    "reason": "Only Issue 14 may record an authorized real Pi RPC session through the Halo native Tauri UI; this Issue 12 work uses no real credential, Pi RPC process, or model request."
+    "reason": "Only Issue 14 may record an authorized real Pi RPC session through the Halo native Tauri UI; this Issue 12 work uses no real credential, Pi RPC process, or model request.",
+    "evidence": [
+      {
+        "kind": "deidentified-status-artifact",
+        "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+        "status": "not-run",
+        "classification": "real-native-ui-not-run"
+      }
+    ]
   },
   "verification": [
     {
-      "command": "node --test scripts/verify-old-six-behavior-equivalence.test.mjs",
+      "command": "node --test \"product/Halo Studio/scripts/verify-old-six-behavior-equivalence.test.mjs\"",
       "status": "passed",
       "exitCode": 0,
-      "summary": "10/10 matrix contract tests passed."
+      "summary": "22 matrix contract tests passed."
     },
     {
       "command": "pnpm --dir \"product/Halo Studio\" run check:repo-hygiene",
       "status": "passed",
       "exitCode": 0,
-      "summary": "Repository hygiene and the Issue 12 matrix validator passed."
+      "summary": "Repository hygiene and the Issue 12 matrix verifier passed."
     },
     {
       "command": "pnpm --dir \"product/Halo Studio\" run type-check:web",
@@ -59,16 +67,28 @@
     {
       "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-desktop --test halo_workbench_runtime_contracts",
       "status": "blocked",
-      "exitCode": 124,
+      "exitCode": 1,
       "classification": "desktop-mobile-web-resource-missing",
-      "summary": "The harness timed out while Cargo waited for jobs; bitfun-desktop build script exited 1 because relative resource path src/mobile-web/dist is absent and untracked in the initially clean worktree."
+      "summary": "The bitfun-desktop build script exited 1 because the required src/mobile-web/dist resource is absent; Cargo then remained waiting on sherpa-onnx-sys until the already-failed command was manually stopped, so no desktop contract test ran."
     },
     {
       "command": "pnpm --dir \"product/Halo Studio\" run desktop:build:fast",
       "status": "blocked",
       "exitCode": 1,
       "classification": "vendor-checksum-mismatch",
-      "summary": "Frontend build completed, then Cargo rejected vendor/cargo/allocator-api2/src/stable/unique.rs because the declared checksum differs from the file; vendor and lockfiles were not changed."
+      "summary": "Frontend build completed, then Cargo rejected vendor/cargo/allocator-api2/src/stable/vec/set_len_on_drop.rs because its declared checksum differs from the file; vendor and lockfiles were not changed."
+    },
+    {
+      "command": "rg -n 'GitHub #9|GitHub #10|GitHub #11|GitHub #12|GitHub #13|GitHub #14' docs/requirements/bitfun-tauri-product-migration docs/verification",
+      "status": "passed",
+      "exitCode": 0,
+      "summary": "The reference scan emitted matches across the historical range; the matrix contract independently enforces one canonical GitHub locator for each issue #9-#14."
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "exitCode": 0,
+      "summary": "The Issue 12 change has no whitespace errors."
     }
   ],
   "entries": [
@@ -107,6 +127,14 @@
       ],
       "conclusion": {
         "status": "blocked",
+        "evidence": [
+          {
+            "kind": "deidentified-status-artifact",
+            "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+            "status": "not-run",
+            "classification": "real-native-ui-not-run"
+          }
+        ],
         "blockers": [
           {
             "classification": "real-native-ui-not-run",
@@ -156,6 +184,14 @@
       ],
       "conclusion": {
         "status": "blocked",
+        "evidence": [
+          {
+            "kind": "deidentified-status-artifact",
+            "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+            "status": "not-run",
+            "classification": "real-native-ui-not-run"
+          }
+        ],
         "blockers": [
           {
             "classification": "real-native-ui-not-run",
@@ -211,6 +247,14 @@
       ],
       "conclusion": {
         "status": "blocked",
+        "evidence": [
+          {
+            "kind": "deidentified-status-artifact",
+            "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+            "status": "not-run",
+            "classification": "real-native-ui-not-run"
+          }
+        ],
         "blockers": [
           {
             "classification": "real-native-ui-not-run",
@@ -260,6 +304,14 @@
       ],
       "conclusion": {
         "status": "blocked",
+        "evidence": [
+          {
+            "kind": "deidentified-status-artifact",
+            "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+            "status": "not-run",
+            "classification": "real-native-ui-not-run"
+          }
+        ],
         "blockers": [
           {
             "classification": "real-native-ui-not-run",
@@ -315,6 +367,14 @@
       ],
       "conclusion": {
         "status": "blocked",
+        "evidence": [
+          {
+            "kind": "deidentified-status-artifact",
+            "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+            "status": "not-run",
+            "classification": "real-native-ui-not-run"
+          }
+        ],
         "blockers": [
           {
             "classification": "real-native-ui-not-run",
@@ -364,6 +424,14 @@
       ],
       "conclusion": {
         "status": "blocked",
+        "evidence": [
+          {
+            "kind": "deidentified-status-artifact",
+            "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+            "status": "not-run",
+            "classification": "real-native-ui-not-run"
+          }
+        ],
         "blockers": [
           {
             "classification": "real-native-ui-not-run",
