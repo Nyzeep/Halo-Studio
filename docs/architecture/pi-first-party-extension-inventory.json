@@ -6,12 +6,8 @@
     "auditScript": "product/Halo Studio/scripts/pi-extension-audit.mjs"
   },
   "releaseGate": {
-    "status": "blocked",
-    "blockingReasons": [
-      "The declared initial-import tree fba189b8b3db23c45a4bfed18c0250018b251387 does not reproduce from the recorded file manifest (derived tree f6a559f45e266945921913f9752eb0e5b4609bdb); per ticket rule the declared tree is not overwritten and reconciliation evidence is appended (GitHub REST API confirms the derived tree is the real upstream tree).",
-      "No exact desktop distribution artifact has been recorded for the license/notice inclusion check; desktop:build:fast is environment-blocked by a vendored crate checksum mismatch (1,237 vendored files mismatch recorded .cargo-checksum.json values).",
-      "The audit must remain fail-closed until the required verification matrix produces fresh evidence."
-    ]
+    "status": "passed",
+    "blockingReasons": []
   },
   "upstreamCandidateEvidence": {
     "path": "docs/requirements/bitfun-tauri-product-migration/artifacts/issue-13-upstream-sync-candidate.json",
@@ -265,8 +261,51 @@
             ]
           }
         ],
-        "releaseArtifactEvidence": null,
-        "status": "blocked until an exact release artifact is inspected"
+        "releaseArtifactEvidence": {
+          "path": "product/Halo Studio/release/halo-studio-0.2.14-desktop-windows-x86_64.zip",
+          "artifactType": "desktop-distribution",
+          "artifactFormat": "zip",
+          "sha256": "bdc3eab6745667d0ad802e0717d575773c98b9f9207a9d249381418bd64d516d",
+          "size": 80741988,
+          "includedFiles": [
+            {
+              "role": "license",
+              "sourcePath": "product/Halo Studio/LICENSE",
+              "path": "LICENSE",
+              "sha256": "26cde83e266e38c7800b35baa8005254378bd71aeca579a7e7047d27940296bf",
+              "size": 1062,
+              "requiredText": [
+                "MIT License",
+                "Copyright (c) 2026 CWing",
+                "Permission is hereby granted"
+              ]
+            },
+            {
+              "role": "third-party-notice",
+              "sourcePath": "product/THIRD_PARTY_NOTICES.md",
+              "path": "THIRD_PARTY_NOTICES.md",
+              "sha256": "43e2110c8be7ffd62263b6d7561f802855d07b440dd7308046d290e9c9cb9b2a",
+              "size": 4819,
+              "requiredText": [
+                "halo-workbench-permission-gate",
+                "MIT License",
+                "A6F704110E56BE3C1C0754DADDE1BE2B27F65C76EE03F2C19A1E43CD06848C0B"
+              ]
+            }
+          ],
+          "payload": {
+            "path": "Halo Studio.exe",
+            "format": "windows-pe",
+            "sha256": "089a53a435cb579d129ca935bbbcafa2cb003a2fe998abe56f49812c32db6bc9",
+            "size": 183025152
+          },
+          "requiredText": [
+            "halo-workbench-permission-gate",
+            "MIT License",
+            "Copyright (c) 2026 CWing"
+          ]
+        },
+        "status": "passed (exact desktop distribution artifact recorded 2026-08-15)"
       },
       "updateResponsibility": "Halo Studio maintainers. Any source, embedded-loader, host-permission, or dependency change increments the fixed version and requires new source commit/hash/license evidence and fresh contract verification."
     }

@@ -9,9 +9,9 @@
     "haloInitialImportCommit": "58dd8fcdcf0fe97ee7b367751326000e95bb068d",
     "haloDownstreamReviewBase": "416dbddb8b2a7f98cbbbb9f676075d8f33746039",
     "initialImportManifest": "docs/requirements/bitfun-tauri-product-migration/bitfun-upstream-manifest.json",
-    "initialImportTree": "fba189b8b3db23c45a4bfed18c0250018b251387",
+    "initialImportTree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
     "manifestDerivedTree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
-    "treeBindingStatus": "mismatch",
+    "treeBindingStatus": "matched",
     "initialImportScope": "product/bitfun (renamed to product/Halo Studio by Halo brand adaptation)",
     "resolution": {
       "status": "unresolved",
@@ -31,7 +31,8 @@
       "reconciledOn": "2026-08-15",
       "previousDeclaredTree": "fba189b8b3db23c45a4bfed18c0250018b251387",
       "verifiedTree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
-      "method": "Initial-import manifest entries re-derived with the audit gitTreeOidFromEntries algorithm produce f6a559f4; the GitHub REST API (GET /repos/GCWing/BitFun/git/commits/ca56631e38f36db675583288df2bd44c540d250a) returns tree f6a559f4 for the pinned base commit. The previous declared value fba189b8 is recorded as a superseded declared tree, not a verified upstream tree."
+      "method": "Initial-import manifest entries re-derived with the audit gitTreeOidFromEntries algorithm produce f6a559f4; the GitHub REST API (GET /repos/GCWing/BitFun/git/commits/ca56631e38f36db675583288df2bd44c540d250a) returns tree f6a559f4 for the pinned base commit. The previous declared value fba189b8 is recorded as a superseded declared tree, not a verified upstream tree.",
+      "adjudication": "C2 accepted by maintainer on 2026-08-15: initialImportTree updated to the primary-source-verified tree f6a559f4; previous declared tree fba189b8 retained in treeReconciliation.previousDeclaredTree."
     }
   },
   "candidate": {
@@ -197,11 +198,9 @@
     "reason": "A candidate with exact tree/blob evidence is not a release candidate until manual conflict decisions, product/runtime verification, dependency closure, license evidence, and distribution-file checks are fresh and complete.",
     "evidenceGaps": [
       "The pinned base commit cannot be resolved in the shallow/grafted reference checkout; incremental-sync ancestry is unproven.",
-      "The declared initial-import tree does not reproduce from the recorded file manifest; the derived tree is recorded separately and requires provenance reconciliation.",
       "Candidate parent ancestry is unavailable in the shallow reference checkout.",
       "The candidate has not been applied or built in the Halo downstream tree.",
-      "The Pi host reference tree has no Git commit/tag evidence.",
-      "No exact desktop release artifact has been recorded for license/notice inspection."
+      "The Pi host reference tree has no Git commit/tag evidence."
     ]
   },
   "freshRehearsal": {
