@@ -60,6 +60,33 @@ test('the matrix rejects a historical issue remapped to the wrong P0 work', () =
   );
 });
 
+test('every matrix row includes evidence from the Pi RPC Adapter seam', () => {
+  const runtimeOnlyAdapterEvidence = readMatrix();
+  runtimeOnlyAdapterEvidence.entries[1].piRpcAdapterEvidence = [
+    runtimeOnlyAdapterEvidence.entries[0].piRpcAdapterEvidence[0],
+  ];
+
+  assert.throws(
+    () => validateOldSixBehaviorEquivalence(runtimeOnlyAdapterEvidence),
+    /Pi RPC Adapter contract/,
+  );
+});
+
+test('the follow-up row records its native UI gap and delivery review coverage', () => {
+  const overstatedFollowUpCoverage = readMatrix();
+  const followUpEntry = overstatedFollowUpCoverage.entries
+    .find((entry) => entry.legacyIssue === 13);
+  followUpEntry.desktopPathEvidence = followUpEntry.desktopPathEvidence
+    .filter((evidence) => !['web-gap-contract', 'web-delivery-review-contract'].includes(evidence.kind));
+  followUpEntry.conclusion.blockers = followUpEntry.conclusion.blockers
+    .filter((blocker) => blocker.classification !== 'managed-follow-up-ui-missing');
+
+  assert.throws(
+    () => validateOldSixBehaviorEquivalence(overstatedFollowUpCoverage),
+    /managed follow-up UI gap and delivery review coverage/,
+  );
+});
+
 test('the matrix binds every historical issue to its canonical GitHub evidence', () => {
   const mismatchedHistoricalEvidence = readMatrix();
   mismatchedHistoricalEvidence.entries[0].legacyEvidence[0].locator

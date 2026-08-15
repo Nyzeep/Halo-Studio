@@ -32,7 +32,7 @@
       "command": "node --test \"product/Halo Studio/scripts/verify-old-six-behavior-equivalence.test.mjs\"",
       "status": "passed",
       "exitCode": 0,
-      "summary": "22 matrix contract tests passed."
+      "summary": "24 matrix contract tests passed."
     },
     {
       "command": "pnpm --dir \"product/Halo Studio\" run check:repo-hygiene",
@@ -51,6 +51,12 @@
       "status": "passed",
       "exitCode": 0,
       "summary": "The package runner executed 363 test files and 2,396 tests successfully."
+    },
+    {
+      "command": "pnpm --dir \"product/Halo Studio/src/web-ui\" run test:run src/app/scenes/session/WorkbenchSessionScene.test.tsx",
+      "status": "passed",
+      "exitCode": 0,
+      "summary": "The native Workbench session scene contract passed 12 tests."
     },
     {
       "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-pi-rpc-adapter",
@@ -76,7 +82,7 @@
       "status": "blocked",
       "exitCode": 1,
       "classification": "vendor-checksum-mismatch",
-      "summary": "Frontend build completed, then Cargo rejected vendor/cargo/allocator-api2/src/stable/vec/set_len_on_drop.rs because its declared checksum differs from the file; vendor and lockfiles were not changed."
+      "summary": "Frontend build completed, then Cargo rejected vendor/cargo/allocator-api2/src/nightly.rs because its declared checksum differs from the file; vendor and lockfiles were not changed."
     },
     {
       "command": "rg -n 'GitHub #9|GitHub #10|GitHub #11|GitHub #12|GitHub #13|GitHub #14' docs/requirements/bitfun-tauri-product-migration docs/verification",
@@ -113,6 +119,12 @@
           "kind": "public-runtime-contract",
           "locator": "product/Halo Studio/src/crates/execution/agent-runtime/tests/workbench_runtime_contracts.rs::managed_task_requires_confirmation_and_records_existing_git_baseline_before_starting",
           "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-agent-runtime --test workbench_runtime_contracts",
+          "status": "passed"
+        },
+        {
+          "kind": "pi-rpc-adapter-contract",
+          "locator": "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/tests/pi_rpc_contract.rs::configured_task_session_projects_authority_after_non_secret_readiness",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-pi-rpc-adapter",
           "status": "passed"
         }
       ],
@@ -348,13 +360,26 @@
           "locator": "product/Halo Studio/src/crates/execution/agent-runtime/tests/workbench_runtime_contracts.rs::finish_and_review_freezes_evidence_and_releases_adapter_session",
           "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-agent-runtime --test workbench_runtime_contracts",
           "status": "passed"
+        },
+        {
+          "kind": "pi-rpc-adapter-contract",
+          "locator": "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/tests/pi_rpc_contract.rs::follow_up_requires_a_prompt_and_abort_variant_crosses_the_same_seam",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-pi-rpc-adapter",
+          "status": "passed"
         }
       ],
       "desktopPathEvidence": [
         {
-          "kind": "web-formal-path-contract",
-          "locator": "product/Halo Studio/src/web-ui/src/infrastructure/workbench-runtime/formalPath.contract.test.ts::keeps public phase and error presentation behind semantic selectors and i18n",
-          "command": "pnpm --dir \"product/Halo Studio/src/web-ui\" run test:run -- src/infrastructure/workbench-runtime/client.test.ts src/infrastructure/workbench-runtime/formalPath.contract.test.ts",
+          "kind": "web-gap-contract",
+          "locator": "product/Halo Studio/src/web-ui/src/app/scenes/session/WorkbenchSessionScene.test.tsx::leaves a settled managed task waiting without exposing follow-up controls",
+          "command": "pnpm --dir \"product/Halo Studio/src/web-ui\" run test:run src/app/scenes/session/WorkbenchSessionScene.test.tsx",
+          "status": "passed",
+          "classification": "managed-follow-up-ui-missing"
+        },
+        {
+          "kind": "web-delivery-review-contract",
+          "locator": "product/Halo Studio/src/web-ui/src/app/scenes/session/WorkbenchSessionScene.test.tsx::renders a read-only delivery review and dispatches accept and reject decisions",
+          "command": "pnpm --dir \"product/Halo Studio/src/web-ui\" run test:run src/app/scenes/session/WorkbenchSessionScene.test.tsx",
           "status": "passed"
         },
         {
@@ -376,6 +401,10 @@
           }
         ],
         "blockers": [
+          {
+            "classification": "managed-follow-up-ui-missing",
+            "reason": "The native Workbench waiting-developer view currently exposes finish-and-review but no follow-up input control; Runtime and Adapter contracts alone do not establish user-observable equivalence."
+          },
           {
             "classification": "real-native-ui-not-run",
             "reason": "No authorized real Pi session has produced a disposable acceptance-workspace change and native review flow."

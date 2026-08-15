@@ -22,14 +22,15 @@
 
 | 命令 | 状态 | 退出码 | 分类 | 摘要 |
 | --- | --- | ---: | --- | --- |
-| `node --test "product/Halo Studio/scripts/verify-old-six-behavior-equivalence.test.mjs"` | `passed` | 0 |  | 22 matrix contract tests passed. |
+| `node --test "product/Halo Studio/scripts/verify-old-six-behavior-equivalence.test.mjs"` | `passed` | 0 |  | 24 matrix contract tests passed. |
 | `pnpm --dir "product/Halo Studio" run check:repo-hygiene` | `passed` | 0 |  | Repository hygiene and the Issue 12 matrix verifier passed. |
 | `pnpm --dir "product/Halo Studio" run type-check:web` | `passed` | 0 |  | Web TypeScript type check passed. |
 | `pnpm --dir "product/Halo Studio/src/web-ui" run test:run -- src/infrastructure/workbench-runtime/client.test.ts src/infrastructure/workbench-runtime/formalPath.contract.test.ts` | `passed` | 0 |  | The package runner executed 363 test files and 2,396 tests successfully. |
+| `pnpm --dir "product/Halo Studio/src/web-ui" run test:run src/app/scenes/session/WorkbenchSessionScene.test.tsx` | `passed` | 0 |  | The native Workbench session scene contract passed 12 tests. |
 | `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter` | `passed` | 0 |  | 9 Pi configuration contracts and 43 Pi RPC adapter contracts passed with controlled fixtures. |
 | `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-agent-runtime --test workbench_runtime_contracts` | `passed` | 0 |  | 46 public Workbench Runtime contracts passed with the injected PiRpcPort fixture. |
 | `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-desktop --test halo_workbench_runtime_contracts` | `blocked` | 1 | `desktop-mobile-web-resource-missing` | The bitfun-desktop build script exited 1 because the required src/mobile-web/dist resource is absent; Cargo then remained waiting on sherpa-onnx-sys until the already-failed command was manually stopped, so no desktop contract test ran. |
-| `pnpm --dir "product/Halo Studio" run desktop:build:fast` | `blocked` | 1 | `vendor-checksum-mismatch` | Frontend build completed, then Cargo rejected vendor/cargo/allocator-api2/src/stable/vec/set_len_on_drop.rs because its declared checksum differs from the file; vendor and lockfiles were not changed. |
+| `pnpm --dir "product/Halo Studio" run desktop:build:fast` | `blocked` | 1 | `vendor-checksum-mismatch` | Frontend build completed, then Cargo rejected vendor/cargo/allocator-api2/src/nightly.rs because its declared checksum differs from the file; vendor and lockfiles were not changed. |
 | `rg -n 'GitHub #9|GitHub #10|GitHub #11|GitHub #12|GitHub #13|GitHub #14' docs/requirements/bitfun-tauri-product-migration docs/verification` | `passed` | 0 |  | The reference scan emitted matches across the historical range; the matrix contract independently enforces one canonical GitHub locator for each issue #9-#14. |
 | `git diff --check` | `passed` | 0 |  | The Issue 12 change has no whitespace errors. |
 
@@ -68,6 +69,9 @@ Halo Workbench Runtime public Tauri snapshot/intent commands and one ordered eve
 - `public-runtime-contract`: `passed`
   - locator: `product/Halo Studio/src/crates/execution/agent-runtime/tests/workbench_runtime_contracts.rs::managed_task_requires_confirmation_and_records_existing_git_baseline_before_starting`
   - command: `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-agent-runtime --test workbench_runtime_contracts`
+- `pi-rpc-adapter-contract`: `passed`
+  - locator: `product/Halo Studio/src/crates/adapters/pi-rpc-adapter/tests/pi_rpc_contract.rs::configured_task_session_projects_authority_after_non_secret_readiness`
+  - command: `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter`
 
 **当前原生桌面路径**
 
@@ -227,12 +231,19 @@ The public intent surface admits follow-up only from waitingDeveloper, separates
 - `public-runtime-contract`: `passed`
   - locator: `product/Halo Studio/src/crates/execution/agent-runtime/tests/workbench_runtime_contracts.rs::finish_and_review_freezes_evidence_and_releases_adapter_session`
   - command: `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-agent-runtime --test workbench_runtime_contracts`
+- `pi-rpc-adapter-contract`: `passed`
+  - locator: `product/Halo Studio/src/crates/adapters/pi-rpc-adapter/tests/pi_rpc_contract.rs::follow_up_requires_a_prompt_and_abort_variant_crosses_the_same_seam`
+  - command: `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter`
 
 **当前原生桌面路径**
 
-- `web-formal-path-contract`: `passed`
-  - locator: `product/Halo Studio/src/web-ui/src/infrastructure/workbench-runtime/formalPath.contract.test.ts::keeps public phase and error presentation behind semantic selectors and i18n`
-  - command: `pnpm --dir "product/Halo Studio/src/web-ui" run test:run -- src/infrastructure/workbench-runtime/client.test.ts src/infrastructure/workbench-runtime/formalPath.contract.test.ts`
+- `web-gap-contract`: `passed`
+  - locator: `product/Halo Studio/src/web-ui/src/app/scenes/session/WorkbenchSessionScene.test.tsx::leaves a settled managed task waiting without exposing follow-up controls`
+  - command: `pnpm --dir "product/Halo Studio/src/web-ui" run test:run src/app/scenes/session/WorkbenchSessionScene.test.tsx`
+  - classification: `managed-follow-up-ui-missing`
+- `web-delivery-review-contract`: `passed`
+  - locator: `product/Halo Studio/src/web-ui/src/app/scenes/session/WorkbenchSessionScene.test.tsx::renders a read-only delivery review and dispatches accept and reject decisions`
+  - command: `pnpm --dir "product/Halo Studio/src/web-ui" run test:run src/app/scenes/session/WorkbenchSessionScene.test.tsx`
 - `tauri-command-event-contract`: `blocked`
   - locator: `product/Halo Studio/src/apps/desktop/tests/halo_workbench_runtime_contracts.rs::tauri_exposes_two_commands_and_one_ordered_event_stream`
   - command: `cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-desktop --test halo_workbench_runtime_contracts`
@@ -246,6 +257,7 @@ The public intent surface admits follow-up only from waitingDeveloper, separates
   - locator: `docs/verification/issue-12-real-native-ui-acceptance-status.json`
   - classification: `real-native-ui-not-run`
 
+- `managed-follow-up-ui-missing`: The native Workbench waiting-developer view currently exposes finish-and-review but no follow-up input control; Runtime and Adapter contracts alone do not establish user-observable equivalence.
 - `real-native-ui-not-run`: No authorized real Pi session has produced a disposable acceptance-workspace change and native review flow.
 
 ### GitHub #14: Interruption truthfulness and real-session release acceptance

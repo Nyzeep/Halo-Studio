@@ -36,6 +36,7 @@ const EXPECTED_P0_BY_LEGACY_ISSUE = new Map([
 ]);
 const MATRIX_CONTRACT_TEST_COMMAND = 'node --test "product/Halo Studio/scripts/verify-old-six-behavior-equivalence.test.mjs"';
 const WEB_RUNTIME_TEST_COMMAND = 'pnpm --dir "product/Halo Studio/src/web-ui" run test:run -- src/infrastructure/workbench-runtime/client.test.ts src/infrastructure/workbench-runtime/formalPath.contract.test.ts';
+const WEB_SESSION_SCENE_TEST_COMMAND = 'pnpm --dir "product/Halo Studio/src/web-ui" run test:run src/app/scenes/session/WorkbenchSessionScene.test.tsx';
 const PI_RPC_ADAPTER_TEST_COMMAND = 'cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter';
 const WORKBENCH_RUNTIME_TEST_COMMAND = 'cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-agent-runtime --test workbench_runtime_contracts';
 const NATIVE_DESKTOP_CONTRACT_COMMAND = 'cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-desktop --test halo_workbench_runtime_contracts';
@@ -44,6 +45,7 @@ const EXPECTED_VERIFICATION_COMMANDS = [
   'pnpm --dir "product/Halo Studio" run check:repo-hygiene',
   'pnpm --dir "product/Halo Studio" run type-check:web',
   WEB_RUNTIME_TEST_COMMAND,
+  WEB_SESSION_SCENE_TEST_COMMAND,
   PI_RPC_ADAPTER_TEST_COMMAND,
   WORKBENCH_RUNTIME_TEST_COMMAND,
   NATIVE_DESKTOP_CONTRACT_COMMAND,
@@ -61,6 +63,8 @@ const CURRENT_EVIDENCE_KINDS = new Set([
   'tauri-snapshot-event-contract',
   'web-formal-path-contract',
   'web-infrastructure-contract',
+  'web-gap-contract',
+  'web-delivery-review-contract',
 ]);
 const EXPECTED_EXCLUDED_EVIDENCE_AUTHORITIES = [
   'legacy-sidecar-jsonl',
@@ -83,6 +87,12 @@ const EVIDENCE_LOCATOR_FILES_BY_COMMAND = new Map([
     new Set([
       'product/Halo Studio/src/web-ui/src/infrastructure/workbench-runtime/client.test.ts',
       'product/Halo Studio/src/web-ui/src/infrastructure/workbench-runtime/formalPath.contract.test.ts',
+    ]),
+  ],
+  [
+    WEB_SESSION_SCENE_TEST_COMMAND,
+    new Set([
+      'product/Halo Studio/src/web-ui/src/app/scenes/session/WorkbenchSessionScene.test.tsx',
     ]),
   ],
   [
@@ -224,6 +234,38 @@ function validateCurrentEvidence(evidence, label, verificationByCommand, reposit
     if (!allowedLocatorFiles?.has(relativeLocator)) {
       fail(`${label}[${index}].locator must be exercised by its exact command`);
     }
+  }
+}
+
+function validatePiRpcAdapterEvidence(evidence, label, verificationByCommand, repositoryRoot) {
+  validateCurrentEvidence(evidence, label, verificationByCommand, repositoryRoot);
+  if (!evidence.some((item) => (
+    item.command === PI_RPC_ADAPTER_TEST_COMMAND && item.kind.startsWith('pi-rpc-')
+  ))) {
+    fail(`${label} must include a Pi RPC Adapter contract`);
+  }
+}
+
+function validateKnownBehaviorGaps(entry) {
+  if (entry.legacyIssue !== 13) return;
+
+  const sceneTestLocator = 'product/Halo Studio/src/web-ui/src/app/scenes/session/WorkbenchSessionScene.test.tsx';
+  const hasFollowUpGap = entry.desktopPathEvidence.some((item) => (
+    item.kind === 'web-gap-contract'
+    && item.command === WEB_SESSION_SCENE_TEST_COMMAND
+    && item.classification === 'managed-follow-up-ui-missing'
+    && item.locator === `${sceneTestLocator}::leaves a settled managed task waiting without exposing follow-up controls`
+  ));
+  const hasDeliveryReview = entry.desktopPathEvidence.some((item) => (
+    item.kind === 'web-delivery-review-contract'
+    && item.command === WEB_SESSION_SCENE_TEST_COMMAND
+    && item.locator === `${sceneTestLocator}::renders a read-only delivery review and dispatches accept and reject decisions`
+  ));
+  const hasFollowUpBlocker = entry.conclusion.blockers.some(
+    (blocker) => blocker.classification === 'managed-follow-up-ui-missing',
+  );
+  if (!hasFollowUpGap || !hasDeliveryReview || !hasFollowUpBlocker) {
+    fail('GitHub #13 must record its managed follow-up UI gap and delivery review coverage');
   }
 }
 
@@ -403,7 +445,7 @@ export function validateOldSixBehaviorEquivalence(
     requireArray(entry.p0Issues, `GitHub #${entry.legacyIssue}.p0Issues`);
     coveredP0Issues.push(...entry.p0Issues);
     requireString(entry.runtimeInterface, `GitHub #${entry.legacyIssue}.runtimeInterface`);
-    validateCurrentEvidence(
+    validatePiRpcAdapterEvidence(
       entry.piRpcAdapterEvidence,
       `GitHub #${entry.legacyIssue}.piRpcAdapterEvidence`,
       verificationByCommand,
@@ -441,6 +483,7 @@ export function validateOldSixBehaviorEquivalence(
         `GitHub #${entry.legacyIssue}.conclusion.blockers[${index}].reason`,
       );
     }
+    validateKnownBehaviorGaps(entry);
   }
 
   assertExactSet(coveredP0Issues, EXPECTED_P0_ISSUES, 'P0 issue coverage');
