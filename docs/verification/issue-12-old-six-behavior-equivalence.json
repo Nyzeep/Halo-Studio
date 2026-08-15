@@ -1,0 +1,444 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "blocked",
+  "excludedEvidenceAuthorities": [
+    "legacy-sidecar-jsonl",
+    "legacy-opencode-http-sse",
+    "legacy-opencode-runtime",
+    "pi-internal-source",
+    "pi-tui",
+    "unix-cbor-pi-server",
+    "multi-executor-product-design",
+    "raw-session-entry-or-tool-call-identifiers",
+    "static-http-page",
+    "controlled-fixture-as-real-native-acceptance"
+  ],
+  "realNativeUiAcceptance": {
+    "issue": "14",
+    "status": "not-run",
+    "classification": "real-native-ui-not-run",
+    "reason": "Only Issue 14 may record an authorized real Pi RPC session through the Halo native Tauri UI; this Issue 12 work uses no real credential, Pi RPC process, or model request.",
+    "evidence": [
+      {
+        "kind": "deidentified-status-artifact",
+        "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+        "status": "not-run",
+        "classification": "real-native-ui-not-run"
+      }
+    ]
+  },
+  "verification": [
+    {
+      "command": "node --test \"product/Halo Studio/scripts/verify-old-six-behavior-equivalence.test.mjs\"",
+      "status": "passed",
+      "exitCode": 0,
+      "summary": "22 matrix contract tests passed."
+    },
+    {
+      "command": "pnpm --dir \"product/Halo Studio\" run check:repo-hygiene",
+      "status": "passed",
+      "exitCode": 0,
+      "summary": "Repository hygiene and the Issue 12 matrix verifier passed."
+    },
+    {
+      "command": "pnpm --dir \"product/Halo Studio\" run type-check:web",
+      "status": "passed",
+      "exitCode": 0,
+      "summary": "Web TypeScript type check passed."
+    },
+    {
+      "command": "pnpm --dir \"product/Halo Studio/src/web-ui\" run test:run -- src/infrastructure/workbench-runtime/client.test.ts src/infrastructure/workbench-runtime/formalPath.contract.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "summary": "The package runner executed 363 test files and 2,396 tests successfully."
+    },
+    {
+      "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-pi-rpc-adapter",
+      "status": "passed",
+      "exitCode": 0,
+      "summary": "9 Pi configuration contracts and 43 Pi RPC adapter contracts passed with controlled fixtures."
+    },
+    {
+      "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-agent-runtime --test workbench_runtime_contracts",
+      "status": "passed",
+      "exitCode": 0,
+      "summary": "46 public Workbench Runtime contracts passed with the injected PiRpcPort fixture."
+    },
+    {
+      "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-desktop --test halo_workbench_runtime_contracts",
+      "status": "blocked",
+      "exitCode": 1,
+      "classification": "desktop-mobile-web-resource-missing",
+      "summary": "The bitfun-desktop build script exited 1 because the required src/mobile-web/dist resource is absent; Cargo then remained waiting on sherpa-onnx-sys until the already-failed command was manually stopped, so no desktop contract test ran."
+    },
+    {
+      "command": "pnpm --dir \"product/Halo Studio\" run desktop:build:fast",
+      "status": "blocked",
+      "exitCode": 1,
+      "classification": "vendor-checksum-mismatch",
+      "summary": "Frontend build completed, then Cargo rejected vendor/cargo/allocator-api2/src/stable/vec/set_len_on_drop.rs because its declared checksum differs from the file; vendor and lockfiles were not changed."
+    },
+    {
+      "command": "rg -n 'GitHub #9|GitHub #10|GitHub #11|GitHub #12|GitHub #13|GitHub #14' docs/requirements/bitfun-tauri-product-migration docs/verification",
+      "status": "passed",
+      "exitCode": 0,
+      "summary": "The reference scan emitted matches across the historical range; the matrix contract independently enforces one canonical GitHub locator for each issue #9-#14."
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "exitCode": 0,
+      "summary": "The Issue 12 change has no whitespace errors."
+    }
+  ],
+  "entries": [
+    {
+      "legacyIssue": 9,
+      "legacyTitle": "Specification: real OpenCode managed task session (P0)",
+      "legacyBehavior": "Trusted acceptance workspace, bounded managed-task lifecycle, redacted activity, explicit human review, and no automatic Git delivery.",
+      "legacyEvidence": [
+        {
+          "kind": "historical-github-issue",
+          "locator": "https://github.com/Nyzeep/Halo-Studio/issues/9"
+        },
+        {
+          "kind": "historical-baseline",
+          "locator": "docs/verification/migratable-capability-baseline/traceability.md"
+        }
+      ],
+      "p0Issues": ["04", "05"],
+      "runtimeInterface": "Halo Workbench Runtime public Tauri snapshot/intent commands and one ordered event stream; no direct Pi transport or legacy session owner enters the renderer.",
+      "piRpcAdapterEvidence": [
+        {
+          "kind": "public-runtime-contract",
+          "locator": "product/Halo Studio/src/crates/execution/agent-runtime/tests/workbench_runtime_contracts.rs::managed_task_requires_confirmation_and_records_existing_git_baseline_before_starting",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-agent-runtime --test workbench_runtime_contracts",
+          "status": "passed"
+        }
+      ],
+      "desktopPathEvidence": [
+        {
+          "kind": "tauri-command-event-contract",
+          "locator": "product/Halo Studio/src/apps/desktop/tests/halo_workbench_runtime_contracts.rs::tauri_exposes_two_commands_and_one_ordered_event_stream",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-desktop --test halo_workbench_runtime_contracts",
+          "status": "blocked",
+          "classification": "desktop-mobile-web-resource-missing"
+        }
+      ],
+      "conclusion": {
+        "status": "blocked",
+        "evidence": [
+          {
+            "kind": "deidentified-status-artifact",
+            "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+            "status": "not-run",
+            "classification": "real-native-ui-not-run"
+          }
+        ],
+        "blockers": [
+          {
+            "classification": "real-native-ui-not-run",
+            "reason": "Automated contract evidence cannot replace the authorized real Pi RPC native UI acceptance owned by Issue 14."
+          }
+        ]
+      }
+    },
+    {
+      "legacyIssue": 10,
+      "legacyTitle": "Managed OpenCode 1.x compatible startup",
+      "legacyBehavior": "Non-secret launch configuration, credential-reference boundary, compatibility-gated executable startup, and truthful recovery guidance.",
+      "legacyEvidence": [
+        {
+          "kind": "historical-github-issue",
+          "locator": "https://github.com/Nyzeep/Halo-Studio/issues/10"
+        },
+        {
+          "kind": "historical-baseline",
+          "locator": "docs/verification/migratable-capability-baseline/traceability.md"
+        }
+      ],
+      "p0Issues": ["06", "07"],
+      "runtimeInterface": "Halo projects only non-sensitive configuration and Pi readiness facts through the Workbench Runtime interface; credential material stays behind the system credential port and adapter launch boundary.",
+      "piRpcAdapterEvidence": [
+        {
+          "kind": "pi-rpc-adapter-contract",
+          "locator": "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/tests/pi_rpc_contract.rs::version_probe_uses_private_config_and_cleans_it_on_success_or_failure",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-pi-rpc-adapter",
+          "status": "passed"
+        },
+        {
+          "kind": "pi-rpc-adapter-contract",
+          "locator": "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/tests/pi_rpc_contract.rs::start_fails_closed_when_a_required_readiness_capability_is_missing",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-pi-rpc-adapter",
+          "status": "passed"
+        }
+      ],
+      "desktopPathEvidence": [
+        {
+          "kind": "tauri-configuration-contract",
+          "locator": "product/Halo Studio/src/apps/desktop/tests/halo_workbench_runtime_contracts.rs::pi_credential_response_and_errors_are_stable_and_redacted",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-desktop --test halo_workbench_runtime_contracts",
+          "status": "blocked",
+          "classification": "desktop-mobile-web-resource-missing"
+        }
+      ],
+      "conclusion": {
+        "status": "blocked",
+        "evidence": [
+          {
+            "kind": "deidentified-status-artifact",
+            "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+            "status": "not-run",
+            "classification": "real-native-ui-not-run"
+          }
+        ],
+        "blockers": [
+          {
+            "classification": "real-native-ui-not-run",
+            "reason": "Controlled protocol fixtures prove the fail-closed seam but cannot prove a real locally installed Pi through Halo native UI."
+          }
+        ]
+      }
+    },
+    {
+      "legacyIssue": 11,
+      "legacyTitle": "Initial managed task session and waiting developer",
+      "legacyBehavior": "A first task message establishes one managed session, projects redacted replies and activity, and settles only into waiting for the developer.",
+      "legacyEvidence": [
+        {
+          "kind": "historical-github-issue",
+          "locator": "https://github.com/Nyzeep/Halo-Studio/issues/11"
+        },
+        {
+          "kind": "historical-baseline",
+          "locator": "docs/verification/migratable-capability-baseline/traceability.md"
+        }
+      ],
+      "p0Issues": ["08"],
+      "runtimeInterface": "Managed session intents and snapshots expose a Halo-local session state, redacted messages, ordered activity, and waitingDeveloper without Pi session or entry identifiers.",
+      "piRpcAdapterEvidence": [
+        {
+          "kind": "public-runtime-contract",
+          "locator": "product/Halo Studio/src/crates/execution/agent-runtime/tests/workbench_runtime_contracts.rs::managed_first_turn_projects_redacted_activity_and_fences_late_events",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-agent-runtime --test workbench_runtime_contracts",
+          "status": "passed"
+        },
+        {
+          "kind": "pi-rpc-adapter-contract",
+          "locator": "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/tests/pi_rpc_contract.rs::port_projects_crlf_tail_unicode_message_and_tool_events_without_raw_ids",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-pi-rpc-adapter",
+          "status": "passed"
+        }
+      ],
+      "desktopPathEvidence": [
+        {
+          "kind": "web-infrastructure-contract",
+          "locator": "product/Halo Studio/src/web-ui/src/infrastructure/workbench-runtime/client.test.ts::exposes the runtime through two commands and one ordered event stream",
+          "command": "pnpm --dir \"product/Halo Studio/src/web-ui\" run test:run -- src/infrastructure/workbench-runtime/client.test.ts src/infrastructure/workbench-runtime/formalPath.contract.test.ts",
+          "status": "passed"
+        },
+        {
+          "kind": "tauri-command-event-contract",
+          "locator": "product/Halo Studio/src/apps/desktop/tests/halo_workbench_runtime_contracts.rs::tauri_exposes_two_commands_and_one_ordered_event_stream",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-desktop --test halo_workbench_runtime_contracts",
+          "status": "blocked",
+          "classification": "desktop-mobile-web-resource-missing"
+        }
+      ],
+      "conclusion": {
+        "status": "blocked",
+        "evidence": [
+          {
+            "kind": "deidentified-status-artifact",
+            "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+            "status": "not-run",
+            "classification": "real-native-ui-not-run"
+          }
+        ],
+        "blockers": [
+          {
+            "classification": "real-native-ui-not-run",
+            "reason": "The controlled first-turn fixture is not a real Pi model response or native UI acceptance."
+          }
+        ]
+      }
+    },
+    {
+      "legacyIssue": 12,
+      "legacyTitle": "One-time Agent action requests",
+      "legacyBehavior": "A current task-scoped permission decision is one-time, matched to the request, redacted, and fails closed on duplicate or invalid resolution.",
+      "legacyEvidence": [
+        {
+          "kind": "historical-github-issue",
+          "locator": "https://github.com/Nyzeep/Halo-Studio/issues/12"
+        },
+        {
+          "kind": "historical-baseline",
+          "locator": "docs/verification/migratable-capability-baseline/traceability.md#12-一次性-agent-操作请求"
+        }
+      ],
+      "p0Issues": ["09"],
+      "runtimeInterface": "A Workbench Runtime pending operation projects a task-local redacted summary and accepts only one allow or deny intent after adapter confirmation.",
+      "piRpcAdapterEvidence": [
+        {
+          "kind": "pi-rpc-extension-contract",
+          "locator": "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/tests/pi_rpc_contract.rs::extension_decision_is_redacted_one_shot_and_duplicate_request_fails_closed",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-pi-rpc-adapter",
+          "status": "passed"
+        }
+      ],
+      "desktopPathEvidence": [
+        {
+          "kind": "public-runtime-contract",
+          "locator": "product/Halo Studio/src/crates/execution/agent-runtime/tests/workbench_runtime_contracts.rs::operation_decision_remains_pending_until_the_adapter_confirms_it",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-agent-runtime --test workbench_runtime_contracts",
+          "status": "passed"
+        },
+        {
+          "kind": "tauri-snapshot-event-contract",
+          "locator": "product/Halo Studio/src/apps/desktop/tests/halo_workbench_runtime_contracts.rs::snapshot_and_event_wire_shapes_are_camel_case_and_redacted",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-desktop --test halo_workbench_runtime_contracts",
+          "status": "blocked",
+          "classification": "desktop-mobile-web-resource-missing"
+        }
+      ],
+      "conclusion": {
+        "status": "blocked",
+        "evidence": [
+          {
+            "kind": "deidentified-status-artifact",
+            "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+            "status": "not-run",
+            "classification": "real-native-ui-not-run"
+          }
+        ],
+        "blockers": [
+          {
+            "classification": "real-native-ui-not-run",
+            "reason": "The first-party extension fixture is evidence of the controlled contract, not an authorized real tool gate in Halo native UI."
+          }
+        ]
+      }
+    },
+    {
+      "legacyIssue": 13,
+      "legacyTitle": "Follow-up, explicit finish, and delivery review",
+      "legacyBehavior": "The developer can follow up in the same task, explicitly end it, inspect frozen read-only evidence, and record a decision without automatic Git changes.",
+      "legacyEvidence": [
+        {
+          "kind": "historical-github-issue",
+          "locator": "https://github.com/Nyzeep/Halo-Studio/issues/13"
+        },
+        {
+          "kind": "historical-baseline",
+          "locator": "docs/verification/migratable-capability-baseline/traceability.md#13-追问显式结束与交付审查"
+        }
+      ],
+      "p0Issues": ["10"],
+      "runtimeInterface": "The public intent surface admits follow-up only from waitingDeveloper, separates finish-and-review from abort, and projects immutable review evidence for an explicit accept or reject decision.",
+      "piRpcAdapterEvidence": [
+        {
+          "kind": "public-runtime-contract",
+          "locator": "product/Halo Studio/src/crates/execution/agent-runtime/tests/workbench_runtime_contracts.rs::prompt_settled_follow_up_and_abort_obey_non_replay_lifecycle",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-agent-runtime --test workbench_runtime_contracts",
+          "status": "passed"
+        },
+        {
+          "kind": "public-runtime-contract",
+          "locator": "product/Halo Studio/src/crates/execution/agent-runtime/tests/workbench_runtime_contracts.rs::finish_and_review_freezes_evidence_and_releases_adapter_session",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-agent-runtime --test workbench_runtime_contracts",
+          "status": "passed"
+        }
+      ],
+      "desktopPathEvidence": [
+        {
+          "kind": "web-formal-path-contract",
+          "locator": "product/Halo Studio/src/web-ui/src/infrastructure/workbench-runtime/formalPath.contract.test.ts::keeps public phase and error presentation behind semantic selectors and i18n",
+          "command": "pnpm --dir \"product/Halo Studio/src/web-ui\" run test:run -- src/infrastructure/workbench-runtime/client.test.ts src/infrastructure/workbench-runtime/formalPath.contract.test.ts",
+          "status": "passed"
+        },
+        {
+          "kind": "tauri-command-event-contract",
+          "locator": "product/Halo Studio/src/apps/desktop/tests/halo_workbench_runtime_contracts.rs::tauri_exposes_two_commands_and_one_ordered_event_stream",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-desktop --test halo_workbench_runtime_contracts",
+          "status": "blocked",
+          "classification": "desktop-mobile-web-resource-missing"
+        }
+      ],
+      "conclusion": {
+        "status": "blocked",
+        "evidence": [
+          {
+            "kind": "deidentified-status-artifact",
+            "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+            "status": "not-run",
+            "classification": "real-native-ui-not-run"
+          }
+        ],
+        "blockers": [
+          {
+            "classification": "real-native-ui-not-run",
+            "reason": "No authorized real Pi session has produced a disposable acceptance-workspace change and native review flow."
+          }
+        ]
+      }
+    },
+    {
+      "legacyIssue": 14,
+      "legacyTitle": "Interruption truthfulness and real-session release acceptance",
+      "legacyBehavior": "Unexpected exits become interrupted without reconnect, prompt replay, operation replay, or duplicate writes; retained review facts remain truthful.",
+      "legacyEvidence": [
+        {
+          "kind": "historical-github-issue",
+          "locator": "https://github.com/Nyzeep/Halo-Studio/issues/14"
+        },
+        {
+          "kind": "historical-baseline",
+          "locator": "docs/archive/legacy-pyside-sidecar-baseline/requirements/07-real-opencode-managed-task-session-tickets/05-real-opencode-release-acceptance-checklist.md"
+        }
+      ],
+      "p0Issues": ["11"],
+      "runtimeInterface": "Interrupted is a first-class public session outcome whose restart path creates new work rather than restoring private Pi state or replaying active intents.",
+      "piRpcAdapterEvidence": [
+        {
+          "kind": "public-runtime-contract",
+          "locator": "product/Halo Studio/src/crates/execution/agent-runtime/tests/workbench_runtime_contracts.rs::restarted_runtime_does_not_replay_interrupted_managed_work_or_operations",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-agent-runtime --test workbench_runtime_contracts",
+          "status": "passed"
+        },
+        {
+          "kind": "pi-rpc-adapter-contract",
+          "locator": "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/tests/pi_rpc_contract.rs::eof_and_protocol_failures_are_fail_closed_at_the_port",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-pi-rpc-adapter",
+          "status": "passed"
+        }
+      ],
+      "desktopPathEvidence": [
+        {
+          "kind": "tauri-command-event-contract",
+          "locator": "product/Halo Studio/src/apps/desktop/tests/halo_workbench_runtime_contracts.rs::workspace_switch_and_exit_delegate_cleanup_before_host_teardown",
+          "command": "cargo test --manifest-path \"product/Halo Studio/Cargo.toml\" -p bitfun-desktop --test halo_workbench_runtime_contracts",
+          "status": "blocked",
+          "classification": "desktop-mobile-web-resource-missing"
+        }
+      ],
+      "conclusion": {
+        "status": "blocked",
+        "evidence": [
+          {
+            "kind": "deidentified-status-artifact",
+            "locator": "docs/verification/issue-12-real-native-ui-acceptance-status.json",
+            "status": "not-run",
+            "classification": "real-native-ui-not-run"
+          }
+        ],
+        "blockers": [
+          {
+            "classification": "real-native-ui-not-run",
+            "reason": "Real interruption and cleanup acceptance through the Halo native UI remains the restricted Issue 14 responsibility."
+          }
+        ]
+      }
+    }
+  ]
+}
