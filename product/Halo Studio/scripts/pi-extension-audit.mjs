@@ -164,6 +164,8 @@ function collectEvidenceLocators(manifest) {
   add("manifest.scope.auditScript", manifest?.scope?.auditScript, "audit-script");
   add("manifest.upstreamCandidateEvidence.path", manifest?.upstreamCandidateEvidence?.path, "candidate-evidence");
   add("manifest.dependencyBoundary.workspaceManifest", manifest?.dependencyBoundary?.workspaceManifest, "dependency-boundary");
+  add("manifest.releasePolicy.upstreamCandidate.policySource", manifest?.releasePolicy?.upstreamCandidate?.policySource, "release-policy");
+  add("manifest.releasePolicy.hostPackage.policySource", manifest?.releasePolicy?.hostPackage?.policySource, "release-policy");
   add("manifest.runtime.adapterPath", manifest?.runtime?.adapterPath, "runtime-adapter");
   for (const [index, scanPath] of (manifest?.runtime?.scanPaths ?? []).entries()) {
     add(`manifest.runtime.scanPaths[${index}]`, scanPath, "runtime-input");
@@ -1983,6 +1985,72 @@ function manifestPathInsideRepo(repoRoot, manifestPath) {
   }
 }
 
+
+const REHEARSAL_ONLY_SCOPE = "rehearsal-only";
+const UPSTREAM_CANDIDATE_EXCLUDED_FINDINGS = new Set([
+  "upstream-candidate-release-gate-blocked",
+  "upstream-history-boundary-untrusted",
+  "upstream-base-commit-unresolved",
+  "upstream-ancestry-unproven",
+]);
+const HOST_EXCLUDED_FINDINGS = new Set([
+  "host-license-evidence-not-release",
+  "host-dependency-closure-incomplete",
+]);
+
+function checkReleasePolicy(manifest, findings) {
+  const policy = manifest?.releasePolicy;
+  const result = { upstreamRehearsalOnly: false, hostExcluded: false };
+  if (policy === undefined || policy === null) {
+    addFinding(findings, "release-policy-invalid", "Release policy must be declared; absence keeps every exclusion-type finding blocking");
+    return result;
+  }
+  if (typeof policy !== "object" || Array.isArray(policy)) {
+    addFinding(findings, "release-policy-invalid", "Release policy must be an object when declared");
+    return result;
+  }
+  const schemaValid = policy.schemaVersion === 1;
+  if (!schemaValid) {
+    addFinding(findings, "release-policy-invalid", "Release policy must declare schemaVersion 1");
+  }
+  const upstream = policy.upstreamCandidate;
+  if (upstream !== undefined && upstream !== null) {
+    const valid = typeof upstream === "object" && !Array.isArray(upstream)
+      && upstream.scope === REHEARSAL_ONLY_SCOPE
+      && typeof upstream.reason === "string" && upstream.reason.trim() !== ""
+      && typeof upstream.policySource === "string" && upstream.policySource.trim() !== "";
+    if (!valid) {
+      addFinding(findings, "release-policy-invalid", "Rehearsal-only upstream scope requires scope, reason, and policySource");
+    } else if (schemaValid) {
+      result.upstreamRehearsalOnly = true;
+    }
+  }
+  const host = policy.hostPackage;
+  if (host !== undefined && host !== null) {
+    const valid = typeof host === "object" && !Array.isArray(host)
+      && host.excludedFromRelease === true
+      && typeof host.reason === "string" && host.reason.trim() !== ""
+      && typeof host.policySource === "string" && host.policySource.trim() !== "";
+    if (!valid) {
+      addFinding(findings, "release-policy-invalid", "Host exclusion requires excludedFromRelease true, reason, and policySource");
+    } else if (schemaValid) {
+      result.hostExcluded = true;
+    }
+  }
+  return result;
+}
+
+function applyReleasePolicyFindings(findings, policy) {
+  for (const finding of findings) {
+    if (policy.upstreamRehearsalOnly && UPSTREAM_CANDIDATE_EXCLUDED_FINDINGS.has(finding.code)) {
+      finding.blocking = false;
+    }
+    if (policy.hostExcluded && HOST_EXCLUDED_FINDINGS.has(finding.code)) {
+      finding.blocking = false;
+    }
+  }
+}
+
 export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot = DEFAULT_REPO_ROOT } = {}) {
   const findings = [];
   if (typeof repoRoot !== "string" || repoRoot.trim() === "") {
@@ -2100,8 +2168,11 @@ export function auditInventory({ manifestPath = DEFAULT_MANIFEST_PATH, repoRoot 
     }
   }
 
+  const releasePolicy = checkReleasePolicy(manifest, findings);
+  applyReleasePolicyFindings(findings, releasePolicy);
+
   return {
-    status: findings.length === 0 ? "passed" : "blocked",
+    status: findings.some((finding) => finding.blocking !== false) ? "blocked" : "passed",
     findings,
     manifestPath: "<manifest>",
     extensionCount: manifest.extensions?.length ?? 0,
@@ -2116,7 +2187,7 @@ export function auditReleaseGate(options = {}) {
   try {
     const inventoryReport = auditInventory(options);
     const generatedReasons = inventoryReport.findings
-      .filter((finding) => finding.code !== "release-gate-declared-blocked")
+      .filter((finding) => finding.code !== "release-gate-declared-blocked" && finding.blocking !== false)
       .map((finding) => finding.message)
       .filter((reason) => typeof reason === "string" && reason.trim() !== "");
     const blockingReasons = [...new Set([

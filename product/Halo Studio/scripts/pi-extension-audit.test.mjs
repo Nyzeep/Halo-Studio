@@ -215,6 +215,7 @@ function createFixture(overrides = {}) {
       auditScript: "product/Halo Studio/scripts/pi-extension-audit.mjs",
     },
     releaseGate: { status: "passed", blockingReasons: [] },
+    releasePolicy: { schemaVersion: 1 },
     upstreamCandidateEvidence: {
       path: "docs/issue-13-upstream-sync-candidate.json",
       baseCommit: "a".repeat(40),
@@ -534,6 +535,170 @@ test("a blocked upstream candidate cannot make the release gate eligible", () =>
 
   assert.equal(report.status, "blocked");
   assert.ok(report.findings.some((finding) => finding.code === "upstream-candidate-release-gate-blocked"));
+});
+
+
+test("a valid rehearsal-only upstream scope records upstream candidate findings as non-blocking exclusions", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const candidateEvidencePath = path.join(fixture.root, fixture.manifest.upstreamCandidateEvidence.path);
+  const candidateEvidence = JSON.parse(readFileSync(candidateEvidencePath, "utf8"));
+  candidateEvidence.releaseGate = { status: "blocked", evidenceGaps: ["candidate validation is incomplete"] };
+  writeFileSync(candidateEvidencePath, JSON.stringify(candidateEvidence, null, 2));
+  fixture.manifest.releasePolicy = {
+    schemaVersion: 1,
+    upstreamCandidate: {
+      scope: "rehearsal-only",
+      reason: "The BitFun upstream candidate stays a read-only rehearsal record for this release.",
+      policySource: "docs/adr/0073-issue-13-release-gate-exclusions.md",
+    },
+  };
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  const upstreamFinding = report.findings.find((finding) => finding.code === "upstream-candidate-release-gate-blocked");
+  assert.ok(upstreamFinding, "upstream-candidate-release-gate-blocked must remain recorded");
+  assert.equal(upstreamFinding.blocking, false);
+  assert.ok(!report.blockingReasons.includes(upstreamFinding.message));
+  assert.equal(report.status, "eligible", JSON.stringify(report.findings, null, 2));
+});
+
+test("a valid host exclusion marks host license and closure findings non-blocking", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const host = fixture.manifest.extensions[0].dependencies.host;
+  host.dependencyClosure = {
+    status: "incomplete",
+    direct: [],
+    transitive: [],
+    evidence: "The Pi host lockfiles are outside Halo's lockfile boundary; host closure is not admitted.",
+  };
+  host.licenseEvidence = {
+    observedSpdx: "MIT",
+    evidencePath: "readonly-evidence://pi-main/LICENSE",
+    evidencePathRole: "read-only-evidence",
+    releaseStatus: "Not a Halo distribution artifact; do not infer or treat as Halo release evidence.",
+    releaseFiles: [],
+  };
+  fixture.manifest.releasePolicy = {
+    schemaVersion: 1,
+    hostPackage: {
+      excludedFromRelease: true,
+      reason: "Pi host is user-installed and not distributed with Halo P0.",
+      policySource: "docs/adr/0073-issue-13-release-gate-exclusions.md",
+    },
+  };
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  for (const code of ["host-license-evidence-not-release", "host-dependency-closure-incomplete"]) {
+    const finding = report.findings.find((item) => item.code === code);
+    assert.ok(finding, code);
+    assert.equal(finding.blocking, false, code);
+  }
+  assert.ok(!report.blockingReasons.some((reason) => reason.includes("host package license evidence is observed outside Halo release files")));
+  assert.ok(!report.blockingReasons.some((reason) => reason.includes("host package direct/transitive dependency closure is not complete")));
+  assert.equal(report.status, "eligible", JSON.stringify(report.findings, null, 2));
+});
+
+test("an invalid release policy cannot waive blockers", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const candidateEvidencePath = path.join(fixture.root, fixture.manifest.upstreamCandidateEvidence.path);
+  const candidateEvidence = JSON.parse(readFileSync(candidateEvidencePath, "utf8"));
+  candidateEvidence.releaseGate = { status: "blocked", evidenceGaps: ["candidate validation is incomplete"] };
+  writeFileSync(candidateEvidencePath, JSON.stringify(candidateEvidence, null, 2));
+  fixture.manifest.releasePolicy = { schemaVersion: 1, upstreamCandidate: { scope: "rehearsal-only" } };
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "release-policy-invalid"));
+  const upstreamFinding = report.findings.find((finding) => finding.code === "upstream-candidate-release-gate-blocked");
+  assert.ok(upstreamFinding);
+  assert.notEqual(upstreamFinding.blocking, false);
+  assert.equal(report.status, "blocked");
+});
+
+
+test("a missing release policy keeps every exclusion-type finding blocking", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const candidateEvidencePath = path.join(fixture.root, fixture.manifest.upstreamCandidateEvidence.path);
+  const candidateEvidence = JSON.parse(readFileSync(candidateEvidencePath, "utf8"));
+  candidateEvidence.releaseGate = { status: "blocked", evidenceGaps: ["candidate validation is incomplete"] };
+  writeFileSync(candidateEvidencePath, JSON.stringify(candidateEvidence, null, 2));
+  delete fixture.manifest.releasePolicy;
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "release-policy-invalid"));
+  const upstreamFinding = report.findings.find((finding) => finding.code === "upstream-candidate-release-gate-blocked");
+  assert.ok(upstreamFinding);
+  assert.notEqual(upstreamFinding.blocking, false);
+  assert.ok(report.blockingReasons.includes(upstreamFinding.message));
+  assert.equal(report.status, "blocked");
+});
+
+test("an invalid release policy schema withholds all waivers", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  const candidateEvidencePath = path.join(fixture.root, fixture.manifest.upstreamCandidateEvidence.path);
+  const candidateEvidence = JSON.parse(readFileSync(candidateEvidencePath, "utf8"));
+  candidateEvidence.releaseGate = { status: "blocked", evidenceGaps: ["candidate validation is incomplete"] };
+  writeFileSync(candidateEvidencePath, JSON.stringify(candidateEvidence, null, 2));
+  const host = fixture.manifest.extensions[0].dependencies.host;
+  host.dependencyClosure = { status: "incomplete", direct: [], transitive: [], evidence: "not admitted" };
+  host.licenseEvidence = {
+    observedSpdx: "MIT",
+    evidencePath: "readonly-evidence://pi-main/LICENSE",
+    evidencePathRole: "read-only-evidence",
+    releaseStatus: "Not a Halo distribution artifact.",
+    releaseFiles: [],
+  };
+  fixture.manifest.releasePolicy = {
+    schemaVersion: 2,
+    upstreamCandidate: {
+      scope: "rehearsal-only",
+      reason: "x",
+      policySource: "docs/adr/0073-issue-13-release-gate-exclusions.md",
+    },
+    hostPackage: {
+      excludedFromRelease: true,
+      reason: "x",
+      policySource: "docs/adr/0073-issue-13-release-gate-exclusions.md",
+    },
+  };
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  assert.ok(report.findings.some((finding) => finding.code === "release-policy-invalid"));
+  for (const code of ["upstream-candidate-release-gate-blocked", "host-license-evidence-not-release", "host-dependency-closure-incomplete"]) {
+    const finding = report.findings.find((item) => item.code === code);
+    assert.ok(finding, code);
+    assert.notEqual(finding.blocking, false, code);
+  }
+  assert.equal(report.status, "blocked");
+});
+
+test("host exclusion cannot waive missing host provenance", () => {
+  const fixture = createUpstreamFixture({ invalidRecord: false });
+  fixture.manifest.extensions[0].dependencies.host.sourceCommit = null;
+  fixture.manifest.releasePolicy = {
+    schemaVersion: 1,
+    hostPackage: {
+      excludedFromRelease: true,
+      reason: "Pi host is user-installed and not distributed with Halo P0.",
+      policySource: "docs/adr/0073-issue-13-release-gate-exclusions.md",
+    },
+  };
+  writeFileSync(fixture.manifestPath, JSON.stringify(fixture.manifest, null, 2));
+
+  const report = auditReleaseGate({ manifestPath: fixture.manifestPath, repoRoot: fixture.root });
+
+  const finding = report.findings.find((item) => item.code === "host-source-provenance-missing");
+  assert.ok(finding);
+  assert.notEqual(finding.blocking, false);
+  assert.equal(report.status, "blocked");
 });
 
 test("audit exceptions return a structured blocked release-gate result", () => {
@@ -1692,3 +1857,4 @@ test("a declared blocked release gate remains blocked even when static evidence 
   assert.equal(report.status, "blocked");
   assert.ok(report.findings.some((finding) => finding.code === "release-gate-declared-blocked"));
 });
+

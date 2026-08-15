@@ -307,3 +307,29 @@ vendored source 复核（2026-08-15）：对 `product/Halo Studio/vendor/cargo/*
 gate 仍为 `blocked`（9 findings / 16 blocking reasons），剩余项全部属于「外部只读证据/环境」或「发布政策裁决」；
 本会话未启动真实 Pi RPC、未发送真实模型请求、未读取凭据、未修改 vendor/lockfile/i18n baseline/历史证据/根工作树。
 工单 14 未启动。
+
+### A/B 政策实施（2026-08-15 追加提交，ADR-0073）
+
+维护者按推荐方案裁决后，审计 CLI 新增「显式排除」语义（TDD：+6 contract tests，全套 98/98 通过；缺失/非法 releasePolicy 一律 fail-closed 并新增 `release-policy-invalid`，不应用任何豁免）：
+
+- `releasePolicy.upstreamCandidate.scope = "rehearsal-only"`（附 reason/policySource）→ 上游候选类
+  finding（candidate release gate、history boundary、base-commit unresolved、ancestry unproven）标记
+  `blocking: false`，仍记录但不再阻断。
+- `releasePolicy.hostPackage.excludedFromRelease = true`（附 reason/policySource）→ host license /
+  closure finding 标记 `blocking: false`。
+- 排除 fail closed：`releasePolicy` 缺失/schema 错/缺 reason/policySource 时保持原阻断并新增
+  `release-policy-invalid`；排除不豁免真实缺口（host provenance 缺失仍阻断）。
+
+实施后 CLI 结果（同一命令、同一环境变量）：
+
+| 项 | 值 |
+| --- | --- |
+| status | `blocked` |
+| findings | 9（6 项 `blocking: false` 排除记录 + 3 项真实阻断） |
+| blockingReasons | 5（declared 3 + generated 2） |
+
+真实阻断（保持 blocked 的 3 项 finding）：
+`release-gate-declared-blocked`、`upstream-initial-import-tree-mismatch`（C：声明不覆盖，追加证据）、
+`release-artifact-evidence-missing`（D：环境/发行通道）。
+
+政策依据：`docs/adr/0073-issue-13-release-gate-exclusions.md`。

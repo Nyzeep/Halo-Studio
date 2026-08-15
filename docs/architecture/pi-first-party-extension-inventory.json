@@ -8,13 +8,8 @@
   "releaseGate": {
     "status": "blocked",
     "blockingReasons": [
-      "The upstream candidate is recorded for review but has not been merged or validated against the Halo product tree.",
-      "The pinned initial-import base commit cannot be resolved in the shallow/grafted read-only candidate tree, so local incremental-sync ancestry is unproven (primary-source ancestry is verified via the GitHub compare API: ca56631e is an ancestor of 9b05dd0e, behind_by=0).",
       "The declared initial-import tree fba189b8b3db23c45a4bfed18c0250018b251387 does not reproduce from the recorded file manifest (derived tree f6a559f45e266945921913f9752eb0e5b4609bdb); per ticket rule the declared tree is not overwritten and reconciliation evidence is appended (GitHub REST API confirms the derived tree is the real upstream tree).",
-      "The canonical UTF-8 candidate diff is recorded separately and still requires manual product/runtime review.",
-      "Pi 0.83.0 always loads the built-in llama.cpp inline extension; it is not disabled by --no-extensions and is excluded from the Halo release until its capability boundary is separately approved.",
-      "The Pi host package is not a Halo lockfile dependency and its complete transitive license/closure evidence is not a Halo release artifact; source provenance is pinned (tag v0.83.0 = commit 845d6ff1f6643aba440341cce877ce1c43ebbc39) but license/closure evidence is not admitted to the Halo release.",
-      "No exact desktop distribution artifact has been recorded for the license/notice inclusion check; desktop:build:fast is environment-blocked by a vendored crate checksum mismatch.",
+      "No exact desktop distribution artifact has been recorded for the license/notice inclusion check; desktop:build:fast is environment-blocked by a vendored crate checksum mismatch (1,237 vendored files mismatch recorded .cargo-checksum.json values).",
       "The audit must remain fail-closed until the required verification matrix produces fresh evidence."
     ]
   },
@@ -369,5 +364,18 @@
       "manualReviewRequired": "The candidate spans 3348 path changes vs the initial import and touches Cargo workspace dependency/feature policy, desktop/runtime, runtime-ports, and lockfiles; Halo-specific three-way review required before any application."
     },
     "status": "blocked"
+  },
+  "releasePolicy": {
+    "schemaVersion": 1,
+    "upstreamCandidate": {
+      "scope": "rehearsal-only",
+      "reason": "BitFun upstream candidate stays a read-only synchronization rehearsal record (candidate 9b05dd0e, base ca56631e ancestor, verified via GitHub REST API on 2026-08-15); Halo release proceeds on the current pinned base. No automatic merge or application.",
+      "policySource": "docs/adr/0073-issue-13-release-gate-exclusions.md"
+    },
+    "hostPackage": {
+      "excludedFromRelease": true,
+      "reason": "Ticket 13 policy: Pi host @earendil-works/pi-coding-agent is user-installed and not distributed with Halo P0; its license/dependency closure is not admitted as Halo release evidence. Source provenance remains pinned (v0.83.0 = commit 845d6ff1f6643aba440341cce877ce1c43ebbc39).",
+      "policySource": "docs/adr/0073-issue-13-release-gate-exclusions.md"
+    }
   }
 }
