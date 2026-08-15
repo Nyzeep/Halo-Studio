@@ -205,3 +205,131 @@ artifact 和工单 13 说明。CLI 仍是独立只读审计入口，不是已接
   `built-in-extension-provenance-missing`、`host-source-provenance-missing`、
   `host-license-evidence-not-release`、`host-dependency-closure-incomplete`、
   `release-artifact-evidence-missing`。
+
+## 2026-08-15 gate-closure 会话（worktree issue-13-gate-closure-20260815，基于 origin/main fea500ca270aaaf487b6f2da52457d27928c2fd4）
+
+本会话按工单 13 收尾授权在独立 D: worktree 完成；根工作树只读。审计 CLI 仍为唯一机器判定入口：
+`node "product/Halo Studio/scripts/pi-extension-audit.mjs" --json`（`HALO_BITFUN_REFERENCE_ROOT=<matching read-only checkout for readonly-evidence://bitfun-latest>`）。
+
+### 修复前 vs 修复后（同一命令、同一环境变量）
+
+| 状态 | findings | blocking reasons |
+| --- | ---: | ---: |
+| 修复前（main fea500ca 原样） | 14 | 23 |
+| 修复后（本会话变更后） | 9 | 16 |
+
+修复前 14 项 finding：`release-gate-declared-blocked`、`upstream-candidate-release-gate-blocked`、
+`upstream-history-boundary-untrusted`、`upstream-base-commit-unresolved`、`upstream-ancestry-unproven`、
+`upstream-initial-import-tree-mismatch`、`workspace-member-duplicate`、
+`built-in-extension-provenance-missing`、`host-source-provenance-missing`、
+`host-license-evidence-not-release`、`host-dependency-closure-incomplete`、
+`license-lockfile-hash-mismatch`、`license-lockfile-size-mismatch`、`release-artifact-evidence-missing`。
+（2026-08-15 早前 handoff 记录的 11/20 是 issue-12 合并前状态；Cargo.lock 变更后新增 2 项 lockfile finding。）
+
+### 仓库内可修复项（本会话已修复）
+
+1. `workspace-member-duplicate` — 删除 `product/Halo Studio/Cargo.toml` `[workspace].members` 中重复的
+   `"src/crates/adapters/pi-rpc-adapter"`（保留 1 条）。`cargo metadata --no-deps` 退出 0。
+2. `license-lockfile-hash-mismatch` / `license-lockfile-size-mismatch` — 刷新
+   `docs/architecture/pi-first-party-extension-inventory.json` 中 Cargo.lock 的 SHA-256/size
+   （当前 `F46652CB71E3346585E20B191D1C296976C1279E437F92068E5099F200A3CCC0` / 301136）；pnpm-lock 与
+   package-lock 记录仍与现文件一致，未改。
+3. `upstream-initial-import-tree-mismatch` — 基于主证据对账（追加式 reconciliation，不覆盖旧证据）：GitHub REST API
+   （`GET /repos/GCWing/BitFun/git/commits/ca56631e…`）返回初始导入 base `ca56631e` 的真实 tree 为
+   `f6a559f45e266945921913f9752eb0e5b4609bdb`，与 manifest 条目用审计算法重算一致；按工单规则「不能用新 hash 覆盖
+   旧证据」，`issue-13-upstream-sync-candidate.json` 的 `base.initialImportTree`（`fba189b8`）与
+   `treeBindingStatus`（`mismatch`）保持原值，核验结果以新增 `base.treeReconciliation`、
+   `base.resolution.primarySourceVerification` 和 `rehearsal20260815` 追加记录；finding 仍按工单要求保持 blocked。
+4. `built-in-extension-provenance-missing` / `host-source-provenance-missing` — Pi host
+   `@earendil-works/pi-coding-agent` 0.83.0 来源现可精确固定：GitHub REST API 返回 tag `v0.83.0`（lightweight）
+   直接指向 commit `845d6ff1f6643aba440341cce877ce1c43ebbc39`（tree `1ff6b68b…`，parent `44b26c9b…`，
+   message "Release v0.83.0"）；该 commit 的 `packages/coding-agent/package.json` 声明 0.83.0。inventory 已为
+   host 与 llama.cpp built-in 记录 sourceCommit/sourceTag（仅作 provenance，不把 Pi 许可证/closure 推断为 Halo release）。
+
+### 需要外部只读证据（已尽力取得；网络通道限制如实记录）
+
+- BitFun 上游候选 `9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6`：
+  - `git ls-remote`：2026-08-15 上游 `HEAD`/`refs/heads/main` 已前移到 `142d7e38729b3d646ae305c162e6848d0d44fff9`（tree `b4365d5a…`），9b05dd0e 不再是 HEAD。
+  - commit API：9b05dd0e tree `74c1ff43695ee7273383df113759cce66365b280`，**直接父提交是
+    `59e06a0e544f55b8152e62440be1a476e7633572`（merge of 33a0d094 + dc34e5fe），不是 ca56631e**；
+    message `perf(cargo): centralize default feature ownership`，41 files，+326/−258，unsigned。
+  - compare API `ca56631e...9b05dd0e`：status `ahead`、`behind_by=0`、`ahead_by=584`、`total_commits=584`，
+    证明 **ca56631e 是 9b05dd0e 的祖先**（584 个提交之隔），但直接父不是它。
+  - 路径级 diff（与 1616ccaf 同法：初始 manifest 条目 vs GitHub recursive trees API 的候选 tree）：
+    base 5,254 / candidate blobs 6,005；identical 3,042、modified 1,827、added 1,136、removed 385、changed 3,348。
+    完整记录新增 `issue-13-upstream-sync-diff-9b05dd0e.json`（不覆盖 1616ccaf 的既有 diff）。
+  - 本地 `git fetch`（POST git-upload-pack）挂起、codeload tarball 仅 ~2.1MB/120s 后超时：本地 reference tree
+    仍无法解析 9b05dd0e/ca56631e，因此 `upstream-history-boundary-untrusted`、`upstream-base-commit-unresolved`、
+    `upstream-ancestry-unproven` 三个 finding 保持阻断（以本地只读树为准），但主证据已记录。
+- Pi host 来源：如上，tag/commit/tree/版本全部由 GitHub REST API 核验（无真实 Pi RPC、无凭据读取、无模型请求）。
+
+### 需要发布政策裁决（本会话不擅自改动 audit fail-closed 语义）
+
+1. `release-gate-declared-blocked` — inventory 仍声明 blocked；只有全部证据 fresh 且维护者放行后才可置 passed。
+2. `upstream-candidate-release-gate-blocked` — 候选未应用/未构建验证；工单禁止自动 merge。需裁决：候选继续保留为
+   只读演练记录（release 以当前 base 为准），或授权一次独立候选应用+验证。
+3. `host-license-evidence-not-release` / `host-dependency-closure-incomplete` — 工单 13 明确规定 Pi host 许可证/
+   closure 不得推断为 Halo release 证据、Pi 二进制不随 Halo P0 分发；audit 对这两项 fail-closed。需裁决是否将
+   “host excluded” 作为显式排除（inventory 已记录 provenance，但 release 证据仍为空）。
+4. `release-artifact-evidence-missing` — 无精确 desktop 发行物；`desktop:build:fast` 被 vendor checksum 差异环境阻断
+   （`src/stable/vec/splice.rs` 等），按边界不修改 vendor。需在可构建环境产出发行物并核对 LICENSE/notice 后放行。
+
+### 本会话验证命令（均在 worktree 内执行）
+
+| 命令/检查 | 退出码 | 结果 |
+| --- | ---: | --- |
+| `node "product/Halo Studio/scripts/pi-extension-audit.mjs" --json`（env 指向 BitFun-latest） | 1 | blocked，8 findings / 14 reasons（修复后） |
+| `node --test "product/Halo Studio/scripts/pi-extension-audit.test.mjs"` | 0 | 92/92 |
+| `Get-FileHash -Algorithm SHA256 halo_permission_gate.ts` | 0 | `A6F704110E56BE3C1C0754DADDE1BE2B27F65C76EE03F2C19A1E43CD06848C0B` |
+| `git hash-object -- halo_permission_gate.ts` | 0 | `15d6908cc30e45f8812a87c591e58799d2f7ae69` |
+| source commit/tree/blob 核验 | 0 | e8c445d6 / f50918b6 / 15d6908c，`merge-base --is-ancestor` 退出 0 |
+| `rg` lib.rs 加载/边界 tokens | 0 | include_str!、HALO_PI_EXTENSION_ID/VERSION/PERMISSIONS、--no-extensions、--extension 均在 |
+| `rg -F '@earendil-works/pi-coding-agent'` 四个 lockfile/manifest | 1 | 无命中（期望） |
+| `cargo metadata --no-deps` / `cargo tree -p bitfun-pi-rpc-adapter`（--offline） | 0 | workspace 解析正常，member 唯一 |
+| `cargo test -p bitfun-pi-rpc-adapter extension_decision_is_redacted_one_shot_and_duplicate_request_fails_closed` | 0 | 1 passed |
+| `pnpm --dir "product/Halo Studio" run check:repo-hygiene` | 0 | passed；issue-12 矩阵 passed（release blocked） |
+| `pnpm --dir "product/Halo Studio" run product:check` | 0 | ok |
+| `pnpm --dir "product/Halo Studio" run product:test` | 0 | 17/17 |
+| `pnpm --dir "product/Halo Studio" run type-check:web` | 0 | tsc --noEmit passed |
+| `pnpm --dir "product/Halo Studio" run desktop:build:fast` | 1 | Web 构建完成（vite built in 33.59s）；cargo 在 tauri CLI 路径下校验 vendored source checksum 失败：`allocator-api2/Cargo.toml.orig` expected `c1688fbd…` actual `64ee4a15…`；vendor 未修改 |
+| `git diff --check` | 0 | passed |
+
+
+vendored source 复核（2026-08-15）：对 `product/Halo Studio/vendor/cargo/*/.cargo-checksum.json` 全量比对，
+1,237 个文件与其声明 SHA-256 不一致（首个：`allocator-api2/src/stable/vec/splice.rs` declared
+`95a460b3…` actual `7ce9fa74…`）。观测：直接 `cargo build --offline -p halo-tauri-desktop` 与 `-p allocator-api2`
+均 exit 0（cargo 未校验 directory-source checksum），但工单命令 `desktop:build:fast`（tauri CLI
+`tauri build --features custom-protocol`）在 cargo 读取 vendored source 时触发 checksum 校验并失败，exit 1。
+按边界未修改 vendor，`release-artifact-evidence-missing` 保持环境阻断。
+
+### 结论
+
+gate 仍为 `blocked`（9 findings / 16 blocking reasons），剩余项全部属于「外部只读证据/环境」或「发布政策裁决」；
+本会话未启动真实 Pi RPC、未发送真实模型请求、未读取凭据、未修改 vendor/lockfile/i18n baseline/历史证据/根工作树。
+工单 14 未启动。
+
+### A/B 政策实施（2026-08-15 追加提交，ADR-0073）
+
+维护者按推荐方案裁决后，审计 CLI 新增「显式排除」语义（TDD：+6 contract tests，全套 98/98 通过；缺失/非法 releasePolicy 一律 fail-closed 并新增 `release-policy-invalid`，不应用任何豁免）：
+
+- `releasePolicy.upstreamCandidate.scope = "rehearsal-only"`（附 reason/policySource）→ 上游候选类
+  finding（candidate release gate、history boundary、base-commit unresolved、ancestry unproven）标记
+  `blocking: false`，仍记录但不再阻断。
+- `releasePolicy.hostPackage.excludedFromRelease = true`（附 reason/policySource）→ host license /
+  closure finding 标记 `blocking: false`。
+- 排除 fail closed：`releasePolicy` 缺失/schema 错/缺 reason/policySource 时保持原阻断并新增
+  `release-policy-invalid`；排除不豁免真实缺口（host provenance 缺失仍阻断）。
+
+实施后 CLI 结果（同一命令、同一环境变量）：
+
+| 项 | 值 |
+| --- | --- |
+| status | `blocked` |
+| findings | 9（6 项 `blocking: false` 排除记录 + 3 项真实阻断） |
+| blockingReasons | 5（declared 3 + generated 2） |
+
+真实阻断（保持 blocked 的 3 项 finding）：
+`release-gate-declared-blocked`、`upstream-initial-import-tree-mismatch`（C：声明不覆盖，追加证据）、
+`release-artifact-evidence-missing`（D：环境/发行通道）。
+
+政策依据：`docs/adr/0073-issue-13-release-gate-exclusions.md`。

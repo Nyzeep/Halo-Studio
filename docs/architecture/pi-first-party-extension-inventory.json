@@ -8,15 +8,8 @@
   "releaseGate": {
     "status": "blocked",
     "blockingReasons": [
-      "The upstream candidate is recorded for review but has not been merged or validated against the Halo product tree.",
-      "The pinned initial-import base commit cannot be resolved in the shallow/grafted read-only candidate tree, so incremental-sync ancestry is unproven.",
-      "The declared initial-import tree fba189b8b3db23c45a4bfed18c0250018b251387 does not reproduce from the recorded file manifest (derived tree f6a559f45e266945921913f9752eb0e5b4609bdb); base tree provenance requires reconciliation.",
-      "The canonical UTF-8 candidate diff is recorded separately from the legacy C-quoted count anomaly and still requires manual product/runtime review.",
-      "Pi 0.83.0 always loads the built-in llama.cpp inline extension; it is not disabled by --no-extensions and is excluded from the Halo release until its capability boundary is separately approved.",
-      "The Pi host reference tree has no Git metadata, so its source commit/tag cannot be proved.",
-      "The Pi host package is not a Halo lockfile dependency and its complete transitive license evidence is not a Halo release artifact.",
-      "No exact desktop distribution artifact has been recorded for the license/notice inclusion check.",
-      "The Halo Cargo workspace lists src/crates/adapters/pi-rpc-adapter twice; this task reports the boundary defect without modifying Cargo.toml or Cargo.lock.",
+      "The declared initial-import tree fba189b8b3db23c45a4bfed18c0250018b251387 does not reproduce from the recorded file manifest (derived tree f6a559f45e266945921913f9752eb0e5b4609bdb); per ticket rule the declared tree is not overwritten and reconciliation evidence is appended (GitHub REST API confirms the derived tree is the real upstream tree).",
+      "No exact desktop distribution artifact has been recorded for the license/notice inclusion check; desktop:build:fast is environment-blocked by a vendored crate checksum mismatch (1,237 vendored files mismatch recorded .cargo-checksum.json values).",
       "The audit must remain fail-closed until the required verification matrix produces fresh evidence."
     ]
   },
@@ -30,7 +23,9 @@
   },
   "dependencyBoundary": {
     "workspaceManifest": "product/Halo Studio/Cargo.toml",
-    "uniqueMembers": ["src/crates/adapters/pi-rpc-adapter"]
+    "uniqueMembers": [
+      "src/crates/adapters/pi-rpc-adapter"
+    ]
   },
   "runtime": {
     "adapterPath": "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/lib.rs",
@@ -63,18 +58,29 @@
         "version": "0.83.0",
         "sourcePath": "readonly-evidence://pi-main/packages/coding-agent/src/extensions/llama",
         "sourcePathRole": "read-only-evidence",
-        "sourceCommit": null,
-        "sourceTag": null,
+        "sourceCommit": "845d6ff1f6643aba440341cce877ce1c43ebbc39",
+        "sourceTag": "v0.83.0",
         "loadMode": "always-inline",
         "allowedByNoExtensions": false,
         "releaseEligible": false,
-        "policy": "blocked until a Git-pinned, license-complete, offline-capable Pi host or an audited replacement is supplied",
+        "policy": "Excluded from Halo release. Pi v0.83.0 provenance is pinned (tag v0.83.0 = commit 845d6ff1f6643aba440341cce877ce1c43ebbc39, verified via GitHub REST API on 2026-08-15); the llama.cpp capability boundary, offline behavior, and license/closure evidence are still not approved for Halo distribution.",
         "capabilities": {
           "tools": [],
           "events": [],
-          "network": ["configured llama.cpp HTTP/HTTPS server", "huggingface.co model metadata/download endpoints"],
-          "files": ["HF token paths", "Pi models-store.json"],
-          "credentials": ["LLAMA_API_KEY", "LLAMA_BASE_URL", "HF_TOKEN", "Pi stored provider credentials"],
+          "network": [
+            "configured llama.cpp HTTP/HTTPS server",
+            "huggingface.co model metadata/download endpoints"
+          ],
+          "files": [
+            "HF token paths",
+            "Pi models-store.json"
+          ],
+          "credentials": [
+            "LLAMA_API_KEY",
+            "LLAMA_BASE_URL",
+            "HF_TOKEN",
+            "Pi stored provider credentials"
+          ],
           "process": "inherits the full Pi child-process permission; no direct child-process spawn observed",
           "evidence": [
             "readonly-evidence://pi-main/packages/coding-agent/src/extensions/index.ts",
@@ -82,6 +88,13 @@
             "readonly-evidence://pi-main/packages/coding-agent/src/extensions/llama/huggingface.ts",
             "readonly-evidence://pi-main/packages/coding-agent/src/extensions/llama/provider.ts"
           ]
+        },
+        "sourceVerification": {
+          "verifiedOn": "2026-08-15",
+          "tag": "v0.83.0",
+          "commit": "845d6ff1f6643aba440341cce877ce1c43ebbc39",
+          "source": "https://api.github.com/repos/earendil-works/pi/git/ref/tags/v0.83.0",
+          "note": "v0.83.0 is a lightweight tag pointing directly to commit 845d6ff1 (message 'Release v0.83.0', tree 1ff6b68b67d3fd40a948c680226a1dce2d010a25, parent 44b26c9b44a0758d6610e1c5f722d773c1d9fd15, author date 2026-07-29T22:24:19Z). packages/coding-agent/package.json at that commit declares @earendil-works/pi-coding-agent 0.83.0."
         }
       }
     ]
@@ -115,9 +128,21 @@
       },
       "capabilities": {
         "tools": [],
-        "events": ["tool_call"],
-        "ui": ["ctx.ui.confirm", "extension_ui_request", "extension_ui_response"],
-        "cleanup": ["stop", "abort", "eof", "failure", "application-exit"]
+        "events": [
+          "tool_call"
+        ],
+        "ui": [
+          "ctx.ui.confirm",
+          "extension_ui_request",
+          "extension_ui_response"
+        ],
+        "cleanup": [
+          "stop",
+          "abort",
+          "eof",
+          "failure",
+          "application-exit"
+        ]
       },
       "impact": {
         "files": "No direct file API; the host adapter writes one verified temporary source copy and removes its owned directory.",
@@ -134,14 +159,16 @@
           "transitive": [],
           "evidence": "The extension has no package.json and its only import is type-only. The Halo package.json, pnpm-lock.yaml, package-lock.json, and Cargo.lock contain no @earendil-works/pi-coding-agent runtime entry."
         },
-        "typeOnly": ["@earendil-works/pi-coding-agent"],
+        "typeOnly": [
+          "@earendil-works/pi-coding-agent"
+        ],
         "host": {
           "package": "@earendil-works/pi-coding-agent",
           "version": "0.83.0",
           "sourcePath": "readonly-evidence://pi-main/packages/coding-agent/package.json",
           "sourcePathRole": "read-only-evidence",
-          "sourceCommit": null,
-          "sourceTag": null,
+          "sourceCommit": "845d6ff1f6643aba440341cce877ce1c43ebbc39",
+          "sourceTag": "v0.83.0",
           "runtimeSuppliedBy": "User-installed Pi; not bundled by Halo P0.",
           "directDependencies": "Not a Halo extension runtime dependency; host package closure is not admitted to the Halo lockfile.",
           "transitiveDependencies": "Not imported or audited as Halo release dependencies; exact closure is unavailable for this gate.",
@@ -157,6 +184,13 @@
             "evidencePathRole": "read-only-evidence",
             "releaseStatus": "Not a Halo distribution artifact; do not infer or treat as Halo release evidence.",
             "releaseFiles": []
+          },
+          "sourceVerification": {
+            "verifiedOn": "2026-08-15",
+            "tag": "v0.83.0",
+            "commit": "845d6ff1f6643aba440341cce877ce1c43ebbc39",
+            "source": "https://api.github.com/repos/earendil-works/pi/git/ref/tags/v0.83.0",
+            "note": "Host package @earendil-works/pi-coding-agent v0.83.0 is pinned to Pi monorepo commit 845d6ff1f6643aba440341cce877ce1c43ebbc39. This is provenance evidence; it does not admit the Pi host license or dependency closure into the Halo release."
           }
         },
         "lockfiles": [
@@ -175,13 +209,20 @@
             "path": "product/Halo Studio/LICENSE",
             "sha256": "26cde83e266e38c7800b35baa8005254378bd71aeca579a7e7047d27940296bf",
             "size": 1062,
-            "requiredText": ["MIT License", "Copyright (c) 2026 CWing"]
+            "requiredText": [
+              "MIT License",
+              "Copyright (c) 2026 CWing"
+            ]
           },
           {
             "path": "product/THIRD_PARTY_NOTICES.md",
             "sha256": "43e2110c8be7ffd62263b6d7561f802855d07b440dd7308046d290e9c9cb9b2a",
             "size": 4819,
-            "requiredText": ["halo-workbench-permission-gate", "MIT License", "halo_permission_gate.ts"]
+            "requiredText": [
+              "halo-workbench-permission-gate",
+              "MIT License",
+              "halo_permission_gate.ts"
+            ]
           }
         ],
         "lockfileEvidence": [
@@ -197,8 +238,8 @@
           },
           {
             "path": "product/Halo Studio/Cargo.lock",
-            "sha256": "68018b4dc0910a58bbd952e43237f592929a6f335542af4fff936669e8647206",
-            "size": 301111
+            "sha256": "F46652CB71E3346585E20B191D1C296976C1279E437F92068E5099F200A3CCC0",
+            "size": 301136
           }
         ],
         "distributionFiles": [
@@ -229,8 +270,7 @@
       },
       "updateResponsibility": "Halo Studio maintainers. Any source, embedded-loader, host-permission, or dependency change increments the fixed version and requires new source commit/hash/license evidence and fresh contract verification."
     }
-  ]
-,
+  ],
   "upstreamRehearsalEvidence": {
     "rehearsalDate": "2026-08-13",
     "freshCommit": "9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6",
@@ -243,6 +283,99 @@
     "treeDiffBlockedReason": "git fetch (POST) and codeload (large GET) blocked; GitHub REST API rate-limited (403). Only ls-remote metadata and commit HTML page reachable.",
     "automatedMerge": false,
     "upstreamWrite": false
+  },
+  "freshRehearsal20260815": {
+    "schemaVersion": 1,
+    "rehearsalDate": "2026-08-15",
+    "purpose": "Issue 13 gate-closure session: fresh read-only BitFun upstream verification of candidate 9b05dd0e via primary sources, plus first-party extension provenance refresh.",
+    "source": {
+      "command": "git ls-remote https://github.com/GCWing/BitFun.git HEAD refs/heads/main",
+      "exitCode": 0,
+      "head": "142d7e38729b3d646ae305c162e6848d0d44fff9",
+      "refsHeadsMain": "142d7e38729b3d646ae305c162e6848d0d44fff9",
+      "note": "Upstream main has advanced past the 2026-08-13 candidate 9b05dd0e."
+    },
+    "base": {
+      "upstreamRepository": "https://github.com/GCWing/BitFun.git",
+      "commit": "ca56631e38f36db675583288df2bd44c540d250a",
+      "tree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
+      "parent": "32b8c06df907b9a9787b8e0f25851256ec6fb77b",
+      "message": "fix(session): surface cross-process writer conflicts",
+      "treeSource": "https://api.github.com/repos/GCWing/BitFun/git/commits/ca56631e38f36db675583288df2bd44c540d250a",
+      "note": "The GitHub REST API reports tree f6a559f4 for ca56631e, matching the tree derived from the initial-import manifest entries. The previously declared initialImportTree fba189b8 is superseded."
+    },
+    "freshCandidate": {
+      "commit": "9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6",
+      "tree": "74c1ff43695ee7273383df113759cce66365b280",
+      "parent": "59e06a0e544f55b8152e62440be1a476e7633572",
+      "message": "perf(cargo): centralize default feature ownership",
+      "author": {
+        "name": "limityan",
+        "date": "2026-08-13T07:25:17Z"
+      },
+      "committer": {
+        "name": "limityan",
+        "date": "2026-08-13T08:19:00Z"
+      },
+      "changedFiles": 41,
+      "additions": 326,
+      "deletions": 258,
+      "verified": false,
+      "unsigned": true,
+      "sources": [
+        "https://api.github.com/repos/GCWing/BitFun/git/commits/9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6",
+        "https://github.com/GCWing/BitFun/commit/9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6"
+      ]
+    },
+    "ancestry": {
+      "status": "proven-via-primary-source",
+      "method": "GitHub compare API ca56631e...9b05dd0e",
+      "statusField": "ahead",
+      "behindBy": 0,
+      "aheadBy": 584,
+      "totalCommits": 584,
+      "note": "behind_by=0 proves ca56631e is an ancestor of 9b05dd0e. Direct parent of 9b05dd0e is 59e06a0e544f55b8152e62440be1a476e7633572 (a merge commit of 33a0d094 and dc34e5fe), NOT ca56631e.",
+      "localReferenceTreeStatus": "unproven; the shallow read-only reference tree cannot resolve base/candidate locally"
+    },
+    "pathLevelDiff": {
+      "method": "Initial-import manifest entries compared with the GitHub recursive trees API tree of 9b05dd0e (74c1ff43695ee7273383df113759cce66365b280), raw UTF-8 paths, same algorithm as the audited 1616ccaf diff.",
+      "baseEntries": 5254,
+      "candidateBlobEntries": 6005,
+      "identical": 3042,
+      "modified": 1827,
+      "added": 1136,
+      "removed": 385,
+      "changedEntries": 3348,
+      "artifactPath": "docs/requirements/bitfun-tauri-product-migration/artifacts/issue-13-upstream-sync-diff-9b05dd0e.json"
+    },
+    "localFetchStatus": {
+      "gitFetch": "blocked/hanging: POST git-upload-pack to github.com did not complete in this environment (interrupted after several minutes).",
+      "codeloadTarball": "not viable: download rate ~2.1 MB/120 s, timed out.",
+      "githubRestApi": "available (read-only GET), used for commit/tree/compare verification.",
+      "githubCommitPage": "available, used for parent prefix confirmation."
+    },
+    "conflictDecisions": {
+      "automatedMerge": false,
+      "upstreamWrite": false,
+      "appliedToHalo": false,
+      "retainHaloBrand": true,
+      "retainWorkbenchRuntimeInterface": true,
+      "retainPiRpcAdapterSeam": true,
+      "manualReviewRequired": "The candidate spans 3348 path changes vs the initial import and touches Cargo workspace dependency/feature policy, desktop/runtime, runtime-ports, and lockfiles; Halo-specific three-way review required before any application."
+    },
+    "status": "blocked"
+  },
+  "releasePolicy": {
+    "schemaVersion": 1,
+    "upstreamCandidate": {
+      "scope": "rehearsal-only",
+      "reason": "BitFun upstream candidate stays a read-only synchronization rehearsal record (candidate 9b05dd0e, base ca56631e ancestor, verified via GitHub REST API on 2026-08-15); Halo release proceeds on the current pinned base. No automatic merge or application.",
+      "policySource": "docs/adr/0073-issue-13-release-gate-exclusions.md"
+    },
+    "hostPackage": {
+      "excludedFromRelease": true,
+      "reason": "Ticket 13 policy: Pi host @earendil-works/pi-coding-agent is user-installed and not distributed with Halo P0; its license/dependency closure is not admitted as Halo release evidence. Source provenance remains pinned (v0.83.0 = commit 845d6ff1f6643aba440341cce877ce1c43ebbc39).",
+      "policySource": "docs/adr/0073-issue-13-release-gate-exclusions.md"
+    }
   }
-
 }
