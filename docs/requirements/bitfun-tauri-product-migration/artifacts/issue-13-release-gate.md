@@ -291,7 +291,16 @@ artifact 和工单 13 说明。CLI 仍是独立只读审计入口，不是已接
 | `pnpm --dir "product/Halo Studio" run product:check` | 0 | ok |
 | `pnpm --dir "product/Halo Studio" run product:test` | 0 | 17/17 |
 | `pnpm --dir "product/Halo Studio" run type-check:web` | 0 | tsc --noEmit passed |
+| `pnpm --dir "product/Halo Studio" run desktop:build:fast` | 1 | Web 构建完成（vite built in 33.59s）；cargo 在 tauri CLI 路径下校验 vendored source checksum 失败：`allocator-api2/Cargo.toml.orig` expected `c1688fbd…` actual `64ee4a15…`；vendor 未修改 |
 | `git diff --check` | 0 | passed |
+
+
+vendored source 复核（2026-08-15）：对 `product/Halo Studio/vendor/cargo/*/.cargo-checksum.json` 全量比对，
+1,237 个文件与其声明 SHA-256 不一致（首个：`allocator-api2/src/stable/vec/splice.rs` declared
+`95a460b3…` actual `7ce9fa74…`）。观测：直接 `cargo build --offline -p halo-tauri-desktop` 与 `-p allocator-api2`
+均 exit 0（cargo 未校验 directory-source checksum），但工单命令 `desktop:build:fast`（tauri CLI
+`tauri build --features custom-protocol`）在 cargo 读取 vendored source 时触发 checksum 校验并失败，exit 1。
+按边界未修改 vendor，`release-artifact-evidence-missing` 保持环境阻断。
 
 ### 结论
 
