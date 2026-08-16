@@ -17,8 +17,6 @@
 /.superpowers/
 __pycache__/
 *.py[cod]
-/sidecar/target/
-/app/.pytest_cache/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

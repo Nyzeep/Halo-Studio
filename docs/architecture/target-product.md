@@ -44,6 +44,6 @@ Pi TUI、Unix/CBOR PiServer、HTTP/SSE、历史 OpenCode Server 和 ACP 均不�
 
 ## 迁移门槛
 
-旧 PySide/QML 与 Rust Sidecar 在迁移期间只作为可迁移能力基线保留。只有 Tauri 构建与打包、行为等价矩阵、上游同步演练、Pi 第一方 extension 的依赖/权限/许可证审计和真实 Pi RPC 原生 UI 验收全部完成后，才能通过独立收缩变更删除旧产品实现并重新执行完整发布验证。OpenCode Server 相关内容只作为历史比较对象，不是当前验收门槛。
+历史 PySide/QML 与 Rust Sidecar 基线已通过工单 15 的独立收缩变更移除，仅 `docs/archive/legacy-pyside-sidecar-baseline/` 保留为历史比较对象；仓库、脚本与发布配置只指向 `product/Halo Studio` Tauri 产品。完整发布验证仍以工单 14 真实 Pi RPC 原生 UI 验收和工单 15 复验记录为准。OpenCode Server 相关内容只作为历史比较对象，不是当前验收门槛。
 
 具体决策以 ADR-0065 至 ADR-0072 为入口，实施顺序以 BitFun/Tauri 迁移规格和工单为准；新的实现入口是 03B → 04。

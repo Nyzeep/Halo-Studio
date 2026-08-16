@@ -316,8 +316,8 @@ fn read_gemini_env_model(gemini_home: &Path) -> Option<String> {
 
 /// Code Assist (`cloudcode-pa.googleapis.com`) does not expose a list-models
 /// endpoint; the upstream `gemini-cli` ships a hard-coded `VALID_GEMINI_MODELS`
-/// set in `packages/core/src/config/models.ts`. We mirror its stable entries and
-/// preserve the user's local configured model when present.
+/// set. We mirror its stable entries and preserve the user's local configured
+/// model when present.
 pub(crate) async fn list_models(_client: &AIClient) -> Result<Vec<RemoteModelInfo>> {
     let mut models = Vec::new();
 

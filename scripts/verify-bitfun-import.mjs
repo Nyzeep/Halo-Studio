@@ -22,7 +22,6 @@ const formalScanRoots = [
   "package.json",
   "package-lock.json",
   "scripts",
-  "sidecar",
   "product",
 ];
 
