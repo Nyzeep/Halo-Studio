@@ -221,79 +221,95 @@ impl AppState {
             .as_ref()
             .map(|workspace| workspace.root_path.clone());
 
-        // Initialize SSH Remote services synchronously so they're ready before app starts
-        let ssh_data_dir = dirs::data_local_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("BitFun")
-            .join("ssh");
-        let ssh_manager = Arc::new(RwLock::new(None));
-        let ssh_manager_clone = ssh_manager.clone();
-        let remote_file_service = Arc::new(RwLock::new(None));
-        let remote_file_service_clone = remote_file_service.clone();
-        let remote_terminal_manager = Arc::new(RwLock::new(None));
-        let remote_terminal_manager_clone = remote_terminal_manager.clone();
-        // Create remote_workspace before spawn so we can pass it in
-        let remote_workspace = Arc::new(RwLock::new(None));
-        let remote_workspace_clone = remote_workspace.clone();
+        #[cfg(not(feature = "halo-local-coding"))]
+        let (ssh_manager, remote_file_service, remote_terminal_manager, remote_workspace) = {
+            // Initialize SSH Remote services synchronously so they're ready before app starts
+            let ssh_data_dir = dirs::data_local_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("BitFun")
+                .join("ssh");
+            let ssh_manager = Arc::new(RwLock::new(None));
+            let ssh_manager_clone = ssh_manager.clone();
+            let remote_file_service = Arc::new(RwLock::new(None));
+            let remote_file_service_clone = remote_file_service.clone();
+            let remote_terminal_manager = Arc::new(RwLock::new(None));
+            let remote_terminal_manager_clone = remote_terminal_manager.clone();
+            // Create remote_workspace before spawn so we can pass it in
+            let remote_workspace = Arc::new(RwLock::new(None));
+            let remote_workspace_clone = remote_workspace.clone();
 
-        // Initialize SSH services synchronously (not spawned) so they're ready before app starts
-        let manager = SSHConnectionManager::new(ssh_data_dir.clone());
-        if let Err(e) = manager.load_saved_connections().await {
-            log::error!("Failed to load saved SSH connections: {}", e);
-        } else {
-            log::info!("SSH connections loaded successfully");
-        }
-        if let Err(e) = manager.load_known_hosts().await {
-            log::error!("Failed to load known hosts: {}", e);
-        }
+            // Initialize SSH services synchronously (not spawned) so they're ready before app starts
+            let manager = SSHConnectionManager::new(ssh_data_dir.clone());
+            if let Err(e) = manager.load_saved_connections().await {
+                log::error!("Failed to load saved SSH connections: {}", e);
+            } else {
+                log::info!("SSH connections loaded successfully");
+            }
+            if let Err(e) = manager.load_known_hosts().await {
+                log::error!("Failed to load known hosts: {}", e);
+            }
 
-        // Load persisted remote workspaces (may be multiple)
-        match manager.load_remote_workspace().await {
-            Ok(_) => {
-                // Do not prune restore metadata on startup. A saved connection
-                // may be temporarily unavailable because an older profile needs
-                // migration, its password vault cannot be decrypted, or its
-                // config failed to load. Explicit connection deletion already
-                // removes the corresponding workspace records.
-                let workspaces = manager.get_remote_workspaces().await;
-                if !workspaces.is_empty() {
-                    log::info!("Loaded {} persisted remote workspace(s)", workspaces.len());
-                    // Use the first one for the legacy single-workspace field
-                    let first = &workspaces[0];
-                    let app_workspace = RemoteWorkspace {
-                        connection_id: first.connection_id.clone(),
-                        remote_path: first.remote_path.clone(),
-                        connection_name: first.connection_name.clone(),
-                        ssh_host: first.ssh_host.clone(),
-                    };
-                    *remote_workspace_clone.write().await = Some(app_workspace);
+            // Load persisted remote workspaces (may be multiple)
+            match manager.load_remote_workspace().await {
+                Ok(_) => {
+                    // Do not prune restore metadata on startup. A saved connection
+                    // may be temporarily unavailable because an older profile needs
+                    // migration, its password vault cannot be decrypted, or its
+                    // config failed to load. Explicit connection deletion already
+                    // removes the corresponding workspace records.
+                    let workspaces = manager.get_remote_workspaces().await;
+                    if !workspaces.is_empty() {
+                        log::info!("Loaded {} persisted remote workspace(s)", workspaces.len());
+                        // Use the first one for the legacy single-workspace field
+                        let first = &workspaces[0];
+                        let app_workspace = RemoteWorkspace {
+                            connection_id: first.connection_id.clone(),
+                            remote_path: first.remote_path.clone(),
+                            connection_name: first.connection_name.clone(),
+                            ssh_host: first.ssh_host.clone(),
+                        };
+                        *remote_workspace_clone.write().await = Some(app_workspace);
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to load remote workspace: {}", e);
                 }
             }
-            Err(e) => {
-                log::warn!("Failed to load remote workspace: {}", e);
-            }
-        }
 
-        let manager_arc = Arc::new(manager);
-        let manager_for_fs = Arc::new(tokio::sync::RwLock::new(Some(manager_arc.as_ref().clone())));
-        let fs = RemoteFileService::new(manager_for_fs.clone());
-        let tm = RemoteTerminalManager::new(manager_arc.as_ref().clone());
+            let manager_arc = Arc::new(manager);
+            let manager_for_fs =
+                Arc::new(tokio::sync::RwLock::new(Some(manager_arc.as_ref().clone())));
+            let fs = RemoteFileService::new(manager_for_fs.clone());
+            let tm = RemoteTerminalManager::new(manager_arc.as_ref().clone());
 
-        // Clone for storing in AppState
-        let fs_for_state = fs.clone();
-        let tm_for_state = tm.clone();
+            // Clone for storing in AppState
+            let fs_for_state = fs.clone();
+            let tm_for_state = tm.clone();
 
-        *ssh_manager_clone.write().await = Some((*manager_arc).clone());
-        *remote_file_service_clone.write().await = Some(fs_for_state);
-        *remote_terminal_manager_clone.write().await = Some(tm_for_state);
+            *ssh_manager_clone.write().await = Some((*manager_arc).clone());
+            *remote_file_service_clone.write().await = Some(fs_for_state);
+            *remote_terminal_manager_clone.write().await = Some(tm_for_state);
 
-        // Note: We do NOT activate the global remote workspace state here because
-        // there is no live SSH connection yet. The persisted workspace info is loaded
-        // into self.remote_workspace so the frontend can query it via remote_get_workspace_info
-        // and drive the reconnection flow. The global state will be activated when the
-        // frontend successfully reconnects and calls remote_open_workspace → set_remote_workspace.
+            log::info!("SSH Remote services initialized with SFTP, PTY, and known hosts support");
 
-        log::info!("SSH Remote services initialized with SFTP, PTY, and known hosts support");
+            (
+                ssh_manager,
+                remote_file_service,
+                remote_terminal_manager,
+                remote_workspace,
+            )
+        };
+
+        // The Halo local coding runtime never reads another product's SSH
+        // profile, saved connections, known hosts, or persisted remote
+        // workspaces. Its state slots stay empty and fail closed if reached.
+        #[cfg(feature = "halo-local-coding")]
+        let (ssh_manager, remote_file_service, remote_terminal_manager, remote_workspace) = (
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(None)),
+        );
 
         let app_state = Self {
             ai_client,

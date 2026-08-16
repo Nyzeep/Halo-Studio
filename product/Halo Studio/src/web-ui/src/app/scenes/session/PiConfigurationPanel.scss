@@ -1,0 +1,124 @@
+.bitfun-pi-configuration {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--color-bg-secondary);
+
+  &__header,
+  &__status,
+  &__policy {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__header {
+    justify-content: space-between;
+
+    h2 {
+      margin: 0;
+      font-size: var(--font-size-sm);
+    }
+
+    p {
+      margin: 3px 0 0;
+      color: var(--color-text-tertiary);
+      font-size: var(--font-size-xs);
+    }
+
+    > svg {
+      color: var(--color-accent);
+    }
+  }
+
+  &__status {
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+  }
+
+  &__form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 12px;
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+      color: var(--color-text-secondary);
+      font-size: var(--font-size-xs);
+    }
+
+    input,
+    select {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--border-subtle);
+      border-radius: 5px;
+      padding: 7px 8px;
+      background: var(--color-bg-primary);
+      color: var(--color-text-primary);
+      font: inherit;
+    }
+
+    small {
+      color: var(--color-text-tertiary);
+      font-size: var(--font-size-xs);
+    }
+
+    button {
+      display: inline-flex;
+      grid-column: 1 / -1;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      justify-self: start;
+      min-height: 30px;
+      border: 0;
+      border-radius: 5px;
+      padding: 0 11px;
+      background: var(--color-accent);
+      color: var(--color-text-on-accent);
+      cursor: pointer;
+      font: inherit;
+      font-size: var(--font-size-xs);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+  }
+
+  &__policy {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-xs);
+  }
+
+  &__notice,
+  &__error {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+  }
+
+  &__error {
+    color: var(--color-status-error);
+  }
+}
+
+@media (max-width: 760px) {
+  .bitfun-pi-configuration__form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

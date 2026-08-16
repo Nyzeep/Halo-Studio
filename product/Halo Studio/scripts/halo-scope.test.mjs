@@ -101,6 +101,7 @@ test('Halo keeps runtime logging and storage cleanup on its own log root', () =>
   const storageCleanup = read('src/crates/assembly/core/src/infrastructure/storage/cleanup.rs');
   const pathManager = read('src/crates/assembly/core/src/infrastructure/app_paths/path_manager.rs');
   const haloCargo = read('src/apps/halo-desktop/Cargo.toml');
+  const nativeSmoke = read('scripts/halo-native-smoke-03a1.mjs');
 
   assert.match(haloMain, /product_logs_root\("Halo Studio"\)/);
   assert.match(haloMain, /DesktopRunOptions::with_logs_root/);
@@ -115,12 +116,32 @@ test('Halo keeps runtime logging and storage cleanup on its own log root', () =>
     /pub async fn initialize_user_directories[\s\S]*?self\.logs_dir\(\)/
   );
   assert.doesNotMatch(haloMain, /BITFUN_LOG_DIR|BITFUN_E2E_LOG_DIR/);
+  assert.match(haloMain, /HALO_USER_ROOT/);
+  assert.match(haloMain, /HALO_HOME/);
+  assert.match(haloMain, /std::env::set_var\("BITFUN_USER_ROOT", user_root\)/);
+  assert.match(haloMain, /std::env::set_var\("BITFUN_HOME", home_root\)/);
+  assert.match(nativeSmoke, /HALO_USER_ROOT: e2eUserRoot/);
+  assert.match(nativeSmoke, /HALO_HOME: e2eHomeRoot/);
+  assert.doesNotMatch(nativeSmoke, /BITFUN_USER_ROOT: e2eUserRoot|BITFUN_HOME: e2eHomeRoot/);
   for (const dependency of [
     'tauri-plugin-log.workspace = true',
     'tauri-plugin-window-state.workspace = true',
   ]) {
     assert.match(haloCargo, new RegExp(dependency.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
+});
+
+test('Halo local coding startup does not initialize legacy BitFun SSH state', () => {
+  const appState = read('src/apps/desktop/src/api/app_state.rs');
+
+  assert.match(
+    appState,
+    /#\[cfg\(not\(feature = "halo-local-coding"\)\)\]\s*let \(ssh_manager, remote_file_service, remote_terminal_manager, remote_workspace\) = \{/,
+  );
+  assert.match(
+    appState,
+    /#\[cfg\(feature = "halo-local-coding"\)\]\s*let \(ssh_manager, remote_file_service, remote_terminal_manager, remote_workspace\) = \(/,
+  );
 });
 
 test('Halo uses its product identifier for the default WebView2 profile', () => {
@@ -176,6 +197,31 @@ test('Halo preview launches the debug binary beside the Web UI dev server', () =
   assert.match(preview, /--force-rebuild/);
   assert.match(preview, /http:\/\/localhost:1422/);
   assert.doesNotMatch(preview, /tauri(?:\.cmd)?\s+dev/);
+});
+
+test('retired static workbench entries refuse to start a demo shell', () => {
+  const staticHtml = read(join('src', 'halo-workbench', 'index.html'));
+  assert.match(staticHtml, /static demo has been retired/);
+  assert.doesNotMatch(staticHtml, /app\.js/);
+  assert.doesNotMatch(staticHtml, /data-halo-scope/);
+
+  for (const entry of [
+    'halo-workbench-build.mjs',
+    'halo-workbench-preview.mjs',
+    'halo-workbench-dev-server.mjs',
+    'halo-workbench-smoke.mjs',
+  ]) {
+    const source = read(join('scripts', entry));
+    assert.match(source, /retireHaloWorkbenchEntry/);
+    assert.doesNotMatch(source, /src['"], 'halo-workbench'/);
+
+    const result = spawnSync(process.execPath, [join('scripts', entry)], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /only serves the obsolete static demo/);
+  }
 });
 
 test('Halo Web UI assembly omits visible out-of-scope navigation and settings tabs', () => {

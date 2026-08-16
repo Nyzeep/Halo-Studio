@@ -3,13 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#11181b" />
-    <title>Halo Studio - 编码工作台</title>
-    <link rel="icon" href="/halo-icon.svg" />
-    <link rel="stylesheet" href="/styles.css" />
+    <title>Halo Studio - Retired static demo</title>
+    <style>
+      body {
+        margin: 0;
+        background: #f5f7f8;
+        color: #172126;
+        font-family: system-ui, sans-serif;
+      }
+
+      main {
+        box-sizing: border-box;
+        max-width: 680px;
+        margin: 15vh auto;
+        padding: 32px;
+      }
+
+      h1 { font-size: 24px; }
+      code { font-family: ui-monospace, monospace; }
+    </style>
   </head>
   <body>
-    <div id="app" data-halo-scope="local-coding" data-product="halo-studio"></div>
-    <script type="module" src="/app.js"></script>
+    <main>
+      <p>Halo Studio</p>
+      <h1>此静态演示已退役</h1>
+      <p>The static demo has been retired. Start the native workbench with <code>pnpm run desktop:dev</code>.</p>
+    </main>
   </body>
 </html>

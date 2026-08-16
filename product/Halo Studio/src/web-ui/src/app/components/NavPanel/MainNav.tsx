@@ -25,7 +25,6 @@ import { getRecentWorkspaceLineParts } from '@/shared/utils/recentWorkspaceDispl
 import { computeFixedPopoverPosition } from '@/shared/utils/fixedPopoverViewport';
 import { useShortcut } from '@/infrastructure/hooks/useShortcut';
 import { ALL_SHORTCUTS } from '@/shared/constants/shortcuts';
-import { useStore } from 'zustand';
 import {
   createWorkbenchRuntimeRequestId,
   workbenchRuntimeStore,
@@ -73,7 +72,6 @@ const MainNav: React.FC<MainNavProps> = ({
   const [workspaceMenuPos, setWorkspaceMenuPos] = useState({ top: 0, left: 0 });
   const [searchOpen, setSearchOpen] = useState(false);
   const setSessionMode = useSessionModeStore(s => s.setMode);
-  const runtimeSnapshot = useStore(workbenchRuntimeStore, state => state.snapshot);
   const legacyNavigationEnabled = !isHaloLocalCodingScope();
 
   const localProjectWorkspaces = useMemo(
@@ -89,8 +87,7 @@ const MainNav: React.FC<MainNavProps> = ({
       ?? localProjectWorkspaces[0],
     [currentWorkspace?.id, localProjectWorkspaces],
   );
-  const canCreateWorkbenchSession = runtimeSnapshot?.phase === 'ready'
-    && runtimeSnapshot.workspace?.workspaceId === sessionTargetWorkspace?.id;
+  const canOpenWorkbenchSession = Boolean(sessionTargetWorkspace);
 
   const toggleSection = useCallback((id: string) => {
     setExpandedSections(prev => {
@@ -205,6 +202,8 @@ const MainNav: React.FC<MainNavProps> = ({
         return;
       }
 
+      openScene('session');
+      switchLeftPanelTab('sessions');
       const snapshot = workbenchRuntimeStore.getState().snapshot;
       if (snapshot?.phase !== 'ready' || snapshot.workspace?.workspaceId !== target.id) return;
       const requestId = createWorkbenchRuntimeRequestId('create-session');
@@ -411,7 +410,7 @@ const MainNav: React.FC<MainNavProps> = ({
             type="button"
             className="bitfun-nav-panel__top-action-btn"
             onClick={() => { void handleCreateCodeSession(); }}
-            disabled={!legacyNavigationEnabled && !canCreateWorkbenchSession}
+            disabled={!legacyNavigationEnabled && !canOpenWorkbenchSession}
             aria-label={createCodeTooltip}
             data-testid="nav-new-code-session-btn"
           >

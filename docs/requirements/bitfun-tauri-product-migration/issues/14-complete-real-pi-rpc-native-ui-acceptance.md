@@ -11,6 +11,7 @@
 - 本票是唯一允许真实 Pi 模型请求的真实验收票；必须使用可删除 Git 工作区、明确的系统凭据和交互式非受限 Windows 宿主。
 - 验收只观察 Halo 原生 Tauri UI、Runtime 脱敏事件、Git 前后事实和进程清理；不保存原始 Pi RPC/session/extension 数据。
 - 任何外部写入必须在验收前单独授权；接受/拒绝不触发 Git 写入，未执行或无法脱敏的步骤直接阻断 P0。
+- 上游 UI 参考（流程补充，非验收证据）：可只读使用独立克隆 `D:\Halo Studio\BitFun-latest`（`https://github.com/GCWing/BitFun.git` 的 `main`）作为最新 UI 布局参考；仅借鉴布局与交互，不复制其目录结构、配置、凭据或构建依赖。该目录不参与构建、不作为验收工作区，也不构成放行证据；需要最新参考时先在该克隆中 fetch 并 fast-forward。若采纳整树 UI 同步，须另立跟进工单并重跑 halo-scope 守卫。
 
 ## 验收前授权
 

@@ -49,8 +49,14 @@ describe('Halo workbench formal path', () => {
     expect(permissionHookSource).toContain('if (isHaloLocalCodingScope()) return;');
     expect(mainNavSource).toContain('workbenchRuntimeStore');
     expect(mainNavSource).not.toContain('flowChatManager');
+    expect(mainNavSource).toContain('const canOpenWorkbenchSession = Boolean(sessionTargetWorkspace);');
+    expect(mainNavSource).toContain("openScene('session');\n      switchLeftPanelTab('sessions');");
+    expect(mainNavSource).toContain('disabled={!legacyNavigationEnabled && !canOpenWorkbenchSession}');
     expect(workspaceItemSource).toContain('WorkbenchSessionsSection');
     expect(workspaceItemSource).not.toContain('flowChatManager');
+    expect(workspaceItemSource).toContain('const canOpenWorkbenchSession = Boolean(workspace.rootPath);');
+    expect(workspaceItemSource).toContain("openScene('session');\n      switchLeftPanelTab('sessions');");
+    expect(workspaceItemSource).toContain('disabled={!legacyNavigationEnabled && !canOpenWorkbenchSession}');
   });
 
   it('keeps the Halo composition seam out of the legacy session graph', () => {
