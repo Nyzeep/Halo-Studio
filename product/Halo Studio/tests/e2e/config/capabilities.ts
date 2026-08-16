@@ -21,11 +21,11 @@ export function getApplicationPath(): string {
   let appName: string;
   
   if (isWindows) {
-    appName = 'bitfun-desktop.exe';
+    appName = 'halo-studio.exe';
   } else if (isMac) {
-    appName = 'BitFun.app/Contents/MacOS/BitFun';
+    appName = 'Halo Studio.app/Contents/MacOS/halo-studio';
   } else {
-    appName = 'bitfun-desktop';
+    appName = 'halo-studio';
   }
   
   return path.resolve(__dirname, '..', '..', '..', 'target', 'debug', appName);
