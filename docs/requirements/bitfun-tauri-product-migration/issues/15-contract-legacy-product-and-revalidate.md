@@ -11,6 +11,7 @@
 - 收缩只删除经过引用审计、行为等价和 14 验收证明已替代的旧入口与实现；不删除用户数据、凭据、分支、提交或远端。
 - Pi RPC Adapter、第一方 extension、Tauri 产品树和验证证据必须在删除旧实现后继续被正式构建和测试引用。
 - 删除是独立变更；若任一门槛失败，停止收缩并保留现状，不用 destructive git 操作掩盖缺口。
+- 决策记录：产品树 OpenCode 全量移除（15b）延后至 DeepSeek Harness 基座迁移，见 `docs/adr/0074-defer-opencode-removal-until-deepseek-harness-migration.md`；过渡期冻结新增 OpenCode 功能与引用，迁移完成后在新基座执行最终扫描。
 
 ## 验收标准
 
