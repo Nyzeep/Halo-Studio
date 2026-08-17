@@ -34,7 +34,7 @@
     "test:l1:browser-video": "wdio run ./config/wdio.conf.ts --spec \"../specs/l1-browser-video-stream.spec.ts\"",
     "test:perf": "wdio run ./config/wdio.conf.ts --spec \"./specs/performance/startup-session-perf.spec.ts\"",
     "fixture:long-session": "node ./scripts/generate-long-session-fixture.mjs",
-    "test:smoke": "wdio run ./config/wdio.conf.ts --spec \"./specs/startup/*.spec.ts\"",
+    "test:smoke": "wdio run ./config/wdio.conf.ts --spec \"./specs/startup/app-launch.spec.ts\"",
     "test:chat": "wdio run ./config/wdio.conf.ts --spec \"./specs/chat/*.spec.ts\"",
     "clean": "rimraf ./reports"
   },

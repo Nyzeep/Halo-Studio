@@ -54,6 +54,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
   const setSessionMode = useSessionModeStore(s => s.setMode);
   const runtimeSnapshot = useStore(workbenchRuntimeStore, state => state.snapshot);
   const legacyNavigationEnabled = !isHaloLocalCodingScope();
+  const canOpenWorkbenchSession = Boolean(workspace.rootPath);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
@@ -104,6 +105,9 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
         return;
       }
 
+      await activateWorkspace();
+      openScene('session');
+      switchLeftPanelTab('sessions');
       if (!canCreateWorkbenchSession) return;
       const requestId = createWorkbenchRuntimeRequestId('create-session');
       await workbenchRuntimeStore.getState().submitIntent({
@@ -278,7 +282,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
                   type="button"
                   className="bitfun-nav-panel__workspace-item-menu-item"
                   onClick={() => { void handleCreateCodeSession(); }}
-                  disabled={!legacyNavigationEnabled && !canCreateWorkbenchSession}
+                  disabled={!legacyNavigationEnabled && !canOpenWorkbenchSession}
                   data-testid="nav-workspace-menu-create-code-session"
                 >
                   <Plus size={13} />

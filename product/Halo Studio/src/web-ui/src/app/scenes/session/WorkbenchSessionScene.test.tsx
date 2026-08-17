@@ -149,7 +149,7 @@ describe('WorkbenchSessionScene', () => {
     const trust = container.querySelector<HTMLInputElement>(
       '[data-testid="workbench-managed-task-trust"]',
     );
-    const form = container.querySelector('form');
+    const form = container.querySelector('[data-testid="workbench-managed-task-composer"] form');
     expect(prompt).not.toBeNull();
     expect(trust).not.toBeNull();
     expect(form).not.toBeNull();
@@ -225,7 +225,7 @@ describe('WorkbenchSessionScene', () => {
     const trust = container.querySelector<HTMLInputElement>(
       '[data-testid="workbench-managed-task-trust"]',
     );
-    const form = container.querySelector('form');
+    const form = container.querySelector('[data-testid="workbench-managed-task-composer"] form');
     expect(prompt).not.toBeNull();
     expect(trust).not.toBeNull();
     expect(form).not.toBeNull();

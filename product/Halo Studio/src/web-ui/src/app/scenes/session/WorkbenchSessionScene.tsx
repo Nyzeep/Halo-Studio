@@ -8,12 +8,14 @@ import {
   selectWorkbenchRuntimeInterruptionReasonMessageKey,
   selectWorkbenchRuntimePhaseMessageKey,
   selectWorkbenchRuntimeSessionPhaseMessageKey,
+  submitWorkbenchRuntimeIntent,
   workbenchRuntimeStore,
 } from '@/infrastructure/workbench-runtime';
 
 import WorkbenchDeliveryReview from './WorkbenchDeliveryReview';
 import WorkbenchManagedTaskComposer from './WorkbenchManagedTaskComposer';
 import WorkbenchPermissionDecision from './WorkbenchPermissionDecision';
+import PiConfigurationPanel from './PiConfigurationPanel';
 import './WorkbenchSessionScene.scss';
 
 interface WorkbenchSessionSceneProps {
@@ -28,6 +30,7 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
   const { t } = useI18n('common');
   const runtimeState = useStore(workbenchRuntimeStore);
   const snapshot = runtimeState.snapshot;
+  const workspace = snapshot?.workspace;
   const [newRunVersion, setNewRunVersion] = useState(0);
   const isSyncing = runtimeState.syncStatus === 'bootstrapping'
     || runtimeState.syncStatus === 'resyncing';
@@ -63,6 +66,24 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
       </header>
 
       <div className="bitfun-workbench-session-scene__body" aria-live="polite">
+        <PiConfigurationPanel
+          version={snapshot?.adapter.readiness?.version.version}
+          profile={snapshot?.adapter.readiness?.version.profile}
+          verifiedCapabilities={snapshot?.adapter.readiness?.capabilities.verified.length ?? 0}
+          requiredCapabilities={snapshot?.adapter.readiness?.capabilities.required.length ?? 0}
+          runtimeReady={snapshot?.phase === 'ready'}
+          onConfigured={async () => {
+            if (!workspace) return;
+            await submitWorkbenchRuntimeIntent({
+              type: 'openWorkspace',
+              workspace: {
+                workspaceId: workspace.workspaceId,
+                displayName: workspace.displayName,
+                rootPath: workspace.rootPath,
+              },
+            });
+          }}
+        />
         <WorkbenchManagedTaskComposer newRunVersion={newRunVersion} />
 
         {isSyncing && !snapshot ? (

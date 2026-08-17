@@ -387,3 +387,80 @@ async fn configured_readiness_resolves_the_credential_reference_before_reporting
         PortErrorKind::NotFound
     );
 }
+
+#[tokio::test]
+async fn update_rejects_a_credential_reference_bound_to_a_different_provider_before_persisting() {
+    let repository = Arc::new(MemoryPiRuntimeConfigurationRepository::new());
+    let credentials = Arc::new(MemoryPiCredentialStore::new());
+    let current_reference = credentials
+        .write(
+            "openai",
+            PiCredentialSecret::new("synthetic-current-credential"),
+        )
+        .await
+        .expect("current credential fixture");
+    let foreign_reference = credentials
+        .write(
+            "anthropic",
+            PiCredentialSecret::new("synthetic-foreign-credential"),
+        )
+        .await
+        .expect("foreign credential fixture");
+    let service = PiRuntimeConfigurationService::new_without_capabilities(repository.clone())
+        .with_credential_store(credentials);
+
+    let mut current = configuration("gpt-5", None);
+    current.credential_ref = current_reference.clone();
+    service
+        .create(current.clone())
+        .await
+        .expect("current provider-bound credential is accepted");
+
+    let mut attempted_update = current;
+    attempted_update.credential_ref = foreign_reference;
+    assert_eq!(
+        service
+            .update(attempted_update)
+            .await
+            .expect_err("foreign provider reference must fail before persistence")
+            .kind,
+        PortErrorKind::PermissionDenied
+    );
+    let mut expected = configuration("gpt-5", None);
+    expected.credential_ref = current_reference;
+    assert_eq!(
+        repository
+            .load()
+            .await
+            .expect("configuration read")
+            .expect("current configuration remains"),
+        expected
+    );
+}
+
+#[tokio::test]
+async fn update_preserves_an_unset_write_only_base_url() {
+    let repository = Arc::new(MemoryPiRuntimeConfigurationRepository::new());
+    let service = PiRuntimeConfigurationService::new(repository.clone(), capabilities());
+    let initial = configuration("gpt-5", Some("https://api.example.test/v1"));
+
+    service
+        .create(initial.clone())
+        .await
+        .expect("initial configuration");
+    service
+        .update(configuration("gpt-5", None))
+        .await
+        .expect("an unset write-only endpoint is an update, not a clear");
+
+    let stored = repository
+        .load()
+        .await
+        .expect("repository read")
+        .expect("configuration remains");
+    assert_eq!(
+        stored.base_url.as_deref(),
+        Some("https://api.example.test/v1"),
+        "an unset base URL must preserve the existing endpoint"
+    );
+}

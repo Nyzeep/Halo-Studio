@@ -317,14 +317,22 @@ impl PiRuntimeConfigurationService {
         let previous = self.repository.load().await?.ok_or_else(|| {
             PortError::new(PortErrorKind::NotFound, "Pi configuration is missing")
         })?;
-        self.validate(&configuration).await?;
-        self.repository.save(&configuration).await?;
+        // The base URL is write-only from the Renderer: an unset field means
+        // "keep the existing endpoint", never "clear it". This keeps the
+        // persisted authority the single owner of the full endpoint.
+        let mut next = configuration;
+        if next.base_url.is_none() {
+            next.base_url = previous.base_url.clone();
+        }
+        self.validate(&next).await?;
+        self.validate_credential_binding(&next).await?;
+        self.repository.save(&next).await?;
         if let Err(error) = self.repository.save_rollback(Some(&previous)).await {
             let _ = self.repository.save(&previous).await;
             return Err(error);
         }
         *self.previous.lock().await = Some(previous);
-        *self.current.lock().await = Some(configuration);
+        *self.current.lock().await = Some(next);
         Ok(())
     }
 
@@ -377,11 +385,7 @@ impl PiRuntimeConfigurationService {
             PortError::new(PortErrorKind::NotFound, "Pi configuration is missing")
         })?;
         self.validate(&configuration).await?;
-        if let Some(credential_store) = self.credential_store.as_ref() {
-            credential_store
-                .read(&configuration.provider_id, &configuration.credential_ref)
-                .await?;
-        }
+        self.validate_credential_binding(&configuration).await?;
         Ok(PiProviderReadiness { available: true })
     }
 
@@ -405,6 +409,21 @@ impl PiRuntimeConfigurationService {
             {
                 return Err(invalid_error("Pi provider/model capability does not match"));
             }
+        }
+        Ok(())
+    }
+
+    async fn validate_credential_binding(
+        &self,
+        configuration: &PiRuntimeConfiguration,
+    ) -> PortResult<()> {
+        if let Some(credential_store) = self.credential_store.as_ref() {
+            // The reference must resolve and belong to the selected provider
+            // before any configuration mutation is persisted. The secret is
+            // dropped immediately and never enters the projection.
+            let _secret = credential_store
+                .read(&configuration.provider_id, &configuration.credential_ref)
+                .await?;
         }
         Ok(())
     }
