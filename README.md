@@ -1,15 +1,13 @@
 # Halo Studio
 
-Halo Studio 是面向本地开发者的原生开发工作台。产品正在从已验证的 PySide/QML + Rust Sidecar 能力基线迁移到 Halo 品牌的 BitFun/Tauri 工作台；新功能只能面向目标产品实现，旧运行时仅用于行为等价核对。
+Halo Studio 是面向本地开发者的原生开发工作台。唯一正式产品入口是受跟踪的 `product/Halo Studio` Tauri 桌面产品，P0 执行链为 `Halo Workbench Runtime → 受控 Pi 子进程 → pi --mode rpc → stdin/stdout JSONL`。历史 PySide/QML 与 Rust Sidecar 基线已按工单 15 的独立收缩变更移除，仅保留归档文档作为历史比较对象；旧入口不再可运行，也不构成验收证据。
 
 ## 当前状态
 
-- **当前可运行基线：** `app/` 与 `sidecar/` 仍可用于旧六票的自动化复验，但不是最终产品入口。
-- **唯一目标产品：** 受跟踪的 `product/` 产品树、Tauri 桌面入口和 Tauri seam 上的 Halo Workbench Runtime Module；BitFun 仍是产品基座，不是第二个 P0 执行权威。
-- **发布状态：** BitFun/Tauri 迁移尚未完成，真实 Pi RPC 原生 UI 验收尚未执行，P0 未放行。
+- **唯一正式产品：** `product/Halo Studio`（Tauri 桌面入口 + Tauri seam 上的 Halo Workbench Runtime Module）；BitFun 仍是产品基座，不是第二个 P0 执行权威。
+- **发布状态：** 工单 14 的真实 Pi RPC 原生 UI 验收记录为 `not-run`，P0 未放行；工单 15 收缩后的完整复验以 `docs/verification/` 记录为准。
 - **P0 执行链：** `Halo Workbench Runtime → 受控 Pi 子进程 → pi --mode rpc → stdin/stdout JSONL`。
-- **外部上游参考：** `D:\BitFun-main` 只用于获取和检查 BitFun 上游，不是构建依赖或 Halo 提交位置。
-- **Pi 协议参考：** `D:\pi-main` 只读用于核对 Pi RPC、extension、模型和 session 行为，不复制源码、不建立依赖、不修改该目录。
+- **外部上游参考：** `D:\BitFun-main` 只用于获取和检查 BitFun 上游，不是构建依赖或 Halo 提交位置；`D:\pi-main` 只读用于核对 Pi RPC 行为，不复制源码、不建立依赖。
 
 ## 文档入口
 
@@ -17,21 +15,9 @@ Halo Studio 是面向本地开发者的原生开发工作台。产品正在从�
 - [领域词汇](CONTEXT.md)
 - [目标产品架构](docs/architecture/target-product.md)
 - [BitFun/Tauri 迁移规格与工单](docs/requirements/bitfun-tauri-product-migration/README.md)
-- [可迁移能力基线](docs/verification/migratable-capability-baseline/README.md)
-- [历史 PySide/Sidecar 基线](docs/archive/legacy-pyside-sidecar-baseline/README.md)
+- [可迁移能力基线（历史）](docs/verification/migratable-capability-baseline/README.md)
+- [历史 PySide/Sidecar 基线（归档）](docs/archive/legacy-pyside-sidecar-baseline/README.md)
 
-## 基线复验
+## 验证
 
-以下命令只验证迁移输入，不代表目标 Tauri 产品通过验收。Rust 命令必须在 Visual Studio Build Tools 开发环境中运行。
-
-```powershell
-cd sidecar
-cargo check --workspace
-cargo test --workspace
-
-cd ..
-.\.venv\Scripts\python.exe -m pytest app/tests
-.\scripts\smoke-windows.ps1
-```
-
-目标产品的构建和启动命令将在迁移工单建立正式 Tauri 入口后加入。不得把旧 `scripts/dev.ps1` 启动结果作为目标 UI 验收。
+正式构建、测试与验收命令见 `product/Halo Studio/package.json` 和工单 15 的精确验证清单；根目录不再提供旧基线命令。

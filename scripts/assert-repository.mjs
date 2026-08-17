@@ -66,6 +66,7 @@ function git(args, options = {}) {
   return spawnSync("git", ["-c", `safe.directory=${repositoryRoot}`, ...args], {
     cwd: repositoryRoot,
     encoding: "utf8",
+    maxBuffer: 128 * 1024 * 1024,
     ...options,
   });
 }
@@ -99,7 +100,11 @@ function isTestOrDocumentationPath(file) {
 }
 
 function isRuntimeSource(file) {
-  if (file === "scripts/assert-repository.mjs" || isTestOrDocumentationPath(file)) {
+  if (
+    file === "scripts/assert-repository.mjs"
+    || file === "scripts/verify-bitfun-import.mjs"
+    || isTestOrDocumentationPath(file)
+  ) {
     return false;
   }
 

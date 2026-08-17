@@ -66,7 +66,7 @@ pnpm --dir "product/Halo Studio" run e2e:test:smoke
 | 历史检查 | 当前含义 |
 | --- | --- |
 | OpenCode Server、`opencode serve`、回环 HTTP/SSE、Basic Auth、SSE heartbeat/dispose | 仅用于解释 ADR-0071 和迁移前行为，当前 P0 明确不执行、不维护、不作为 release gate。 |
-| 旧 `sidecar/crates/halo-runtime/src/opencode.rs`、旧 JSONL 和 `agent-opencode` 测试夹具 | 只用于工单 12 的用户可观察行为对比；不得作为 Pi RPC 协议或生产 Adapter 输入。 |
+| 旧 `sidecar/crates/halo-runtime/src/opencode.rs`、旧 JSONL 和 `agent-opencode` 测试夹具 | 已于工单 15 收缩移除；历史行为对比见工单 12 记录与归档文档，不得作为 Pi RPC 协议或生产 Adapter 输入。 |
 | Pi TUI、Unix/CBOR PiServer、ACP 或任意新传输 | 范围外；必须先有独立 ADR 和 Windows 可用性证明，不能由当前测试矩阵默认为兼容。 |
 
 任何活动规格中的 OpenCode 字样都必须能归入上述历史、比较或 superseded 分类；未标记的 OpenCode 生产命令、健康检查、认证或 Adapter 绑定均为扫描失败。

@@ -1,6 +1,0 @@
-singleton Theme 1.0 Theme.qml
-SectionCard 1.0 SectionCard.qml
-StatusBadge 1.0 StatusBadge.qml
-DiffViewer 1.0 DiffViewer.qml
-RuntimeCard 1.0 RuntimeCard.qml
-ErrorLabel 1.0 ErrorLabel.qml

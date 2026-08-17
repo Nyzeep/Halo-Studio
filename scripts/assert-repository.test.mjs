@@ -63,7 +63,7 @@ test("detects forbidden paths case-insensitively in staged content", (t) => {
 
 test("detects legacy integration markers in staged runtime source", (t) => {
   const env = createTemporaryIndex(t);
-  const blob = runGit(["rev-parse", "HEAD:packages/contracts/src/contracts.test.ts"], env);
+  const blob = runGit(["rev-parse", "HEAD:scripts/assert-repository.mjs"], env);
   runGit(
     ["update-index", "--add", "--cacheinfo", `100644,${blob},packages/core/src/deprecated-runtime-probe.ts`],
     env,
