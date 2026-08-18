@@ -4,8 +4,8 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 
-const REMOTE_TOTAL_LINES_MARKER: &str = "__BITFUN_TOTAL_LINES__=";
-const REMOTE_HIT_TOTAL_CHAR_LIMIT_MARKER: &str = "__BITFUN_HIT_TOTAL_CHAR_LIMIT__=";
+const REMOTE_TOTAL_LINES_MARKER: &str = "__HALO_TOTAL_LINES__=";
+const REMOTE_HIT_TOTAL_CHAR_LIMIT_MARKER: &str = "__HALO_HIT_TOTAL_CHAR_LIMIT__=";
 
 #[derive(Debug)]
 pub struct ReadFileResult {
@@ -415,7 +415,7 @@ mod tests {
         let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
         let process_id = std::process::id();
         let path = std::env::temp_dir().join(format!(
-            "bitfun-read-file-test-{process_id}-{timestamp}-{counter}.txt"
+            "halo-read-file-test-{process_id}-{timestamp}-{counter}.txt"
         ));
         fs::write(&path, contents).expect("temp file should be written");
         path

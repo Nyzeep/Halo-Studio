@@ -1,7 +1,7 @@
 mod prompt_builder_impl;
 mod user_context;
 
-pub use bitfun_agent_runtime::prompt::{
+pub use halo_agent_runtime::prompt::{
     PrependedPromptReminders, RemoteExecutionHints, RuntimeContextNeeds, ToolListingSections,
 };
 pub use prompt_builder_impl::{

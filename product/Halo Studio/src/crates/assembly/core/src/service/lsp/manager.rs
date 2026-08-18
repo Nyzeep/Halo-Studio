@@ -1,5 +1,5 @@
 //! Compatibility re-exports for LSP protocol-layer manager.
 //!
-//! The reusable LSP manager lives in `bitfun-services-core`.
+//! The reusable LSP manager lives in `halo-services-core`.
 
-pub use bitfun_services_core::lsp::manager::LspManager;
+pub use halo_services_core::lsp::manager::LspManager;

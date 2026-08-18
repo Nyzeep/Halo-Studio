@@ -3,9 +3,9 @@
 //! Used to create and store plan files during the planning phase
 
 use crate::agentic::tools::framework::{Tool, ToolExposure, ToolResult, ToolUseContext};
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
-use bitfun_agent_runtime::remote_file_delivery::{
+use halo_agent_runtime::remote_file_delivery::{
     computer_link as build_computer_link, user_file_link, TOOL_CONTEXT_REMOTE_FILE_DELIVERY_KEY,
 };
 use serde::Serialize;
@@ -52,7 +52,7 @@ impl Tool for CreatePlanTool {
         "CreatePlan"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(r###"Use this tool to create a concise plan for accomplishing the user's request. This tool should be called at the end of the planning phase to finalize and store the plan for user approval.
 
 The plan should be:
@@ -72,7 +72,7 @@ You should provide a structured list of implementation todos:
 
 UPDATING THE PLAN:
 - This tool creates a NEW plan file each time it is called
-- The plan file path returned in the tool result may be an absolute runtime path (local) or a `bitfun://runtime/...` URI (remote)
+- The plan file path returned in the tool result may be an absolute runtime path (local) or a `halo://runtime/...` URI (remote)
 - To update an existing plan, read and edit the plan file directly using your file editing tools
 - Do NOT call CreatePlan again to update an existing plan
 
@@ -153,22 +153,22 @@ Additional guidelines:
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         // Parse parameters
         let name = input
             .get("name")
             .and_then(|v| v.as_str())
-            .ok_or(BitFunError::validation("Missing required field: name"))?;
+            .ok_or(HaloError::validation("Missing required field: name"))?;
 
         let overview = input
             .get("overview")
             .and_then(|v| v.as_str())
-            .ok_or(BitFunError::validation("Missing required field: overview"))?;
+            .ok_or(HaloError::validation("Missing required field: overview"))?;
 
         let plan = input
             .get("plan")
             .and_then(|v| v.as_str())
-            .ok_or(BitFunError::validation("Missing required field: plan"))?;
+            .ok_or(HaloError::validation("Missing required field: plan"))?;
 
         let todos = input.get("todos").and_then(|v| v.as_array());
 
@@ -196,7 +196,7 @@ Additional guidelines:
         let plan_file_path = plans_dir.join(&plan_file_name);
         fs::write(&plan_file_path, &file_content)
             .await
-            .map_err(|e| BitFunError::tool(format!("Failed to write plan file: {}", e)))?;
+            .map_err(|e| HaloError::tool(format!("Failed to write plan file: {}", e)))?;
         let plan_file_path_str = plan_file_path.to_string_lossy().to_string();
 
         // Process todos for return result

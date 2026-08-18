@@ -2,13 +2,13 @@
 
 Scope: this guide applies to `src/crates/adapters/transport`.
 
-`bitfun-transport` owns the event delivery abstraction and adapters used by
+`halo-transport` owns the event delivery abstraction and adapters used by
 current product hosts. It bridges owned event projections to concrete delivery
 channels without owning product logic or future protocol plans.
 
 ## Guardrails
 
-- Do not depend on `bitfun-core`, API handlers, app crates, product domains,
+- Do not depend on `halo-core`, API handlers, app crates, product domains,
   concrete services, AI providers, terminal, or tool-runtime implementations.
 - Keep host adapter features explicit. Retaining a production adapter requires
   a production construction point, a current consumer, and host lifecycle
@@ -27,7 +27,7 @@ channels without owning product logic or future protocol plans.
 ## Verification
 
 ```bash
-cargo check -p bitfun-transport
+cargo check -p halo-transport
 node scripts/check-core-boundaries.mjs
 ```
 

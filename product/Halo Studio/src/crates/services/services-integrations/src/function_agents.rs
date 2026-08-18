@@ -2,17 +2,17 @@
 //!
 //! Product-domain crates own prompt, parser, and facade policy. This module
 //! owns concrete Git snapshots for function agents without depending on
-//! `bitfun-core`.
+//! `halo-core`.
 
 use std::path::{Path, PathBuf};
 
-use bitfun_product_domains::function_agents::common::{AgentError, AgentResult};
-use bitfun_product_domains::function_agents::git_func_agent::ContextAnalyzer;
-use bitfun_product_domains::function_agents::ports::{
+use halo_product_domains::function_agents::common::{AgentError, AgentResult};
+use halo_product_domains::function_agents::git_func_agent::ContextAnalyzer;
+use halo_product_domains::function_agents::ports::{
     GitCommitSnapshot, StartchatGitSnapshot, StartchatTimeSnapshot,
 };
-use bitfun_product_domains::function_agents::startchat_func_agent::AheadBehind;
-use bitfun_services_core::process_manager;
+use halo_product_domains::function_agents::startchat_func_agent::AheadBehind;
+use halo_services_core::process_manager;
 
 use crate::git::{GitDiffParams, GitService};
 

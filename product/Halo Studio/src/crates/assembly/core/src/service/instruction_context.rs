@@ -1,17 +1,17 @@
 use crate::util::errors::*;
-use bitfun_runtime_ports::WorkspaceFileSystem;
-use bitfun_services_core::workspace_instructions::WorkspaceInstructionFile;
+use halo_runtime_ports::WorkspaceFileSystem;
+use halo_services_core::workspace_instructions::WorkspaceInstructionFile;
 use std::path::Path;
 
 pub(crate) async fn build_workspace_instruction_files_context(
     workspace_root: &Path,
-) -> BitFunResult<Option<String>> {
+) -> HaloResult<Option<String>> {
     let instruction_files =
-        bitfun_services_core::workspace_instructions::read_workspace_instruction_files(
+        halo_services_core::workspace_instructions::read_workspace_instruction_files(
             workspace_root,
         )
         .await
-        .map_err(BitFunError::service)?;
+        .map_err(HaloError::service)?;
     Ok(render_workspace_instruction_files_section(
         &instruction_files,
     ))
@@ -20,14 +20,14 @@ pub(crate) async fn build_workspace_instruction_files_context(
 pub(crate) async fn build_workspace_instruction_files_context_with_fs(
     fs: &dyn WorkspaceFileSystem,
     workspace_root: &str,
-) -> BitFunResult<Option<String>> {
+) -> HaloResult<Option<String>> {
     let instruction_files =
-        bitfun_services_core::workspace_instructions::read_workspace_instruction_files_with_fs(
+        halo_services_core::workspace_instructions::read_workspace_instruction_files_with_fs(
             fs,
             workspace_root,
         )
         .await
-        .map_err(BitFunError::service)?;
+        .map_err(HaloError::service)?;
     Ok(render_workspace_instruction_files_section(
         &instruction_files,
     ))

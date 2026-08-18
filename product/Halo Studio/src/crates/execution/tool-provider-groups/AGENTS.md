@@ -2,7 +2,7 @@
 
 Scope: this guide applies to `src/crates/execution/tool-provider-groups`.
 
-`bitfun-tool-packs` owns tool feature-group scaffold metadata, the product tool
+`halo-tool-packs` owns tool feature-group scaffold metadata, the product tool
 provider group plan, and provider-group plan selection by id. It does not own
 concrete tool implementations yet.
 
@@ -11,7 +11,7 @@ concrete tool implementations yet.
 - Keep `default = []`; `product-full` may aggregate feature groups but must not
   silently enable new runtime behavior. Boundary checks enforce the current
   feature-group list.
-- Do not depend on `bitfun-core`, concrete service crates, app crates, Tauri,
+- Do not depend on `halo-core`, concrete service crates, app crates, Tauri,
   Git, MCP, network clients, or CLI UI dependencies unless a reviewed tool
   runtime owner move explicitly changes this boundary.
 - Do not own manifest/exposure contracts, concrete runtime manifest assembly,
@@ -26,7 +26,7 @@ concrete tool implementations yet.
 ## Verification
 
 ```bash
-cargo test -p bitfun-tool-packs --features basic
-cargo check -p bitfun-tool-packs --features product-full
+cargo test -p halo-tool-packs --features basic
+cargo check -p halo-tool-packs --features product-full
 node scripts/check-core-boundaries.mjs
 ```

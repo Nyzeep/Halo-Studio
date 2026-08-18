@@ -1,16 +1,16 @@
-use bitfun_product_domains::external_integration_policy::{
+use halo_product_domains::external_integration_policy::{
     evaluate_external_integration_policy, external_integration_policy_snapshot,
     ExternalEcosystemPolicy, ExternalEcosystemPolicyOverride, ExternalIntegrationAccess,
     ExternalIntegrationCapabilityDescriptor, ExternalIntegrationEcosystemDescriptor,
     ExternalIntegrationMode, ExternalIntegrationPolicyDocument, ExternalIntegrationPolicyOverride,
     ExternalIntegrationPolicyStatus,
 };
-use bitfun_product_domains::external_source_control::{
+use halo_product_domains::external_source_control::{
     ExternalSourceControlActionV1, ExternalSourceControlRequestV1, ExternalSourceControlSnapshotV1,
     ExternalSourceDesiredState, ExternalSourceDiscoveryState, ExternalSourceOperationStage,
     ExternalSourceRecoveryActionV1, ExternalSourceReviewState, EXTERNAL_SOURCE_CONTROL_SCHEMA_V1,
 };
-use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_sources::{
     external_mcp_approval_key, external_mcp_conflict_key, external_tool_approval_key,
     external_tool_conflict_key, prompt_command_conflict_key, EcosystemId, ExecutionDomainId,
     ExpandedPromptCommand, ExternalIntegrationCapabilityId, ExternalMcpActivationState,
@@ -31,7 +31,7 @@ use bitfun_product_domains::external_sources::{
     PromptCommandSourceProvider, SecretValue, SourceKey, SourceQualifiedCommandId,
     SourceQualifiedMcpServerId, SourceQualifiedToolId, SourceQualifiedToolTargetId,
 };
-use bitfun_product_domains::external_subagents::{
+use halo_product_domains::external_subagents::{
     external_subagent_approval_key, external_subagent_candidate_id, external_subagent_conflict_key,
     ExternalSubagentBehaviorVersion, ExternalSubagentCandidateId,
     ExternalSubagentCompatibilityState, ExternalSubagentContributionId,
@@ -934,7 +934,7 @@ fn external_mcp_decisions_change_only_with_behavior_domain_or_conflict_participa
         "/workspace-a",
         "github",
         [
-            ("bitfun:github", "native-v1"),
+            ("halo:github", "native-v1"),
             (stable_id.as_str(), "behavior-v1"),
         ],
     );
@@ -944,7 +944,7 @@ fn external_mcp_decisions_change_only_with_behavior_domain_or_conflict_participa
         "GITHUB",
         [
             (stable_id.as_str(), "behavior-v1"),
-            ("bitfun:github", "native-v1"),
+            ("halo:github", "native-v1"),
         ],
     );
     let participant_updated = external_mcp_conflict_key(
@@ -952,7 +952,7 @@ fn external_mcp_decisions_change_only_with_behavior_domain_or_conflict_participa
         "/workspace-a",
         "github",
         [
-            ("bitfun:github", "native-v1"),
+            ("halo:github", "native-v1"),
             (stable_id.as_str(), "behavior-v2"),
         ],
     );
@@ -965,7 +965,7 @@ fn external_mcp_decisions_change_only_with_behavior_domain_or_conflict_participa
             "/workspace-b",
             "github",
             [
-                ("bitfun:github", "native-v1"),
+                ("halo:github", "native-v1"),
                 (stable_id.as_str(), "behavior-v1"),
             ],
         )
@@ -1011,7 +1011,7 @@ fn external_mcp_product_view_is_version_guarded_and_contains_only_disclosed_fiel
         candidates: vec![
             ExternalMcpConflictCandidate {
                 candidate_id: "native_mcp:github".to_string(),
-                display_name: "BitFun: github".to_string(),
+                display_name: "Halo: github".to_string(),
                 external: false,
                 source: None,
                 behavior_version: "native-v1".to_string(),

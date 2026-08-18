@@ -1,6 +1,6 @@
 //! Session-scoped file read state used to gate Edit/Write reliability.
 
-use bitfun_agent_tools::{
+use halo_agent_tools::{
     file_read_facts_are_fresh, file_read_facts_content_matches, FileReadFreshnessFacts,
 };
 use dashmap::DashMap;

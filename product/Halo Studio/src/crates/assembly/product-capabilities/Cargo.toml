@@ -1,23 +1,23 @@
 [package]
-name = "bitfun-product-capabilities"
+name = "halo-product-capabilities"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "BitFun product capability pack contracts"
+description = "Halo product capability pack contracts"
 
 [lib]
-name = "bitfun_product_capabilities"
+name = "halo_product_capabilities"
 crate-type = ["rlib"]
 
 [dependencies]
-bitfun-harness = { path = "../../execution/harness" }
-bitfun-runtime-ports = { path = "../../contracts/runtime-ports" }
-bitfun-runtime-services = { path = "../../execution/runtime-services" }
-bitfun-tool-packs = { path = "../../execution/tool-provider-groups", default-features = false }
+halo-harness = { path = "../../execution/harness" }
+halo-runtime-ports = { path = "../../contracts/runtime-ports" }
+halo-runtime-services = { path = "../../execution/runtime-services" }
+halo-tool-packs = { path = "../../execution/tool-provider-groups", default-features = false }
 
 [dev-dependencies]
 async-trait = { workspace = true }
-bitfun-agent-runtime = { path = "../../execution/agent-runtime" }
+halo-agent-runtime = { path = "../../execution/agent-runtime" }
 tokio = { workspace = true }
 
 [lints]

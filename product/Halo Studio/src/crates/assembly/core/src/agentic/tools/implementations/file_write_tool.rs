@@ -13,7 +13,7 @@ use crate::agentic::tools::framework::{
     ValidationResult,
 };
 use crate::agentic::tools::ToolPathOperation;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::path::Path;
@@ -45,7 +45,7 @@ impl<'a> ParsedWritePayload<'a> {
 }
 
 const WRITE_PAYLOAD_PATH_PREFIX: &str = "+++ ";
-const WRITE_FALLBACK_DIRECTORY: &str = ".bitfun/tmp";
+const WRITE_FALLBACK_DIRECTORY: &str = ".halo-studio/tmp";
 const LARGE_WRITE_SOFT_LINE_LIMIT: usize = 200;
 const LARGE_WRITE_SOFT_BYTE_LIMIT: usize = 20 * 1024;
 
@@ -142,9 +142,9 @@ impl FileWriteTool {
     async fn assert_atomic_write_freshness_if_exists(
         context: &ToolUseContext,
         resolved: &ToolPathResolution,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if let Some(error) = Self::existing_file_write_freshness_error(context, resolved).await {
-            return Err(BitFunError::tool(file_tool_guidance_message(error)));
+            return Err(HaloError::tool(file_tool_guidance_message(error)));
         }
 
         Ok(())
@@ -280,7 +280,7 @@ impl FileWriteTool {
             "properties": {
                 "payload": {
                     "type": "string",
-                    "description": "A path-first Write payload in the format `+++ {absolute_file_path_or_bitfun_uri}\n{file_content}`. Content lines do not need a leading `+`."
+                    "description": "A path-first Write payload in the format `+++ {absolute_file_path_or_halo_uri}\n{file_content}`. Content lines do not need a leading `+`."
                 }
             },
             "required": ["payload"],
@@ -294,8 +294,8 @@ impl FileWriteTool {
 Parameter: `payload` (a single string)
 - Format: `+++ {file_path}\n{file_content}`
 - This is a path-first Write payload format: the first line uses Git's `+++` marker to specify the target file, but content lines do NOT need a leading `+`. Do not include `---`, `@@`, or other Git diff headers.
-- `{file_path}` must be an absolute path or an exact `bitfun://...` URI. Everything after the first newline is the complete content to write to that file.
-- The `+++ ` marker is required. If it is missing or has no file path, the tool saves the entire `payload` unchanged to `.bitfun/tmp/write_{suffix}.tmp` in the workspace.
+- `{file_path}` must be an absolute path or an exact `halo://...` URI. Everything after the first newline is the complete content to write to that file.
+- The `+++ ` marker is required. If it is missing or has no file path, the tool saves the entire `payload` unchanged to `.halo-studio/tmp/write_{suffix}.tmp` in the workspace.
 - Do NOT pass `path`, `file_path`, or `content`, etc. They are not valid parameters for this tool. Only `payload` is accepted.
 
 Usage:
@@ -340,7 +340,7 @@ impl Tool for FileWriteTool {
         "Write"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(FileWriteTool::description())
     }
 
@@ -351,7 +351,7 @@ impl Tool for FileWriteTool {
     async fn description_with_context(
         &self,
         _context: Option<&ToolUseContext>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         Ok(FileWriteTool::description())
     }
 
@@ -382,8 +382,8 @@ impl Tool for FileWriteTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<PermissionIntent>> {
-        let parsed = Self::parse_payload(input).map_err(BitFunError::validation)?;
+    ) -> HaloResult<Vec<PermissionIntent>> {
+        let parsed = Self::parse_payload(input).map_err(HaloError::validation)?;
         let file_path = match parsed {
             ParsedWritePayload::Target { file_path, .. } => file_path.to_string(),
             ParsedWritePayload::MissingPath { .. } => Self::fallback_file_path(context),
@@ -509,9 +509,9 @@ impl Tool for FileWriteTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let ignored_parameter_names = Self::ignored_top_level_parameter_names(input);
-        let parsed = Self::parse_payload(input).map_err(BitFunError::tool)?;
+        let parsed = Self::parse_payload(input).map_err(HaloError::tool)?;
         let (file_path, content, missing_path_fallback) = match parsed {
             ParsedWritePayload::Target { file_path, content } => {
                 (file_path.to_string(), content.to_string(), false)
@@ -548,12 +548,12 @@ impl Tool for FileWriteTool {
 
         if resolved.uses_remote_workspace_backend() {
             let ws_fs = context.ws_fs().ok_or_else(|| {
-                BitFunError::tool("Remote workspace file system is unavailable".to_string())
+                HaloError::tool("Remote workspace file system is unavailable".to_string())
             })?;
             ws_fs
                 .write_file(&resolved.resolved_path, content.as_bytes())
                 .await
-                .map_err(|e| BitFunError::tool(format!("Failed to write file: {}", e)))?;
+                .map_err(|e| HaloError::tool(format!("Failed to write file: {}", e)))?;
             let timestamp_ms = file_mutation_timestamp_ms(context, &resolved).await;
             update_file_read_state_after_mutation(context, &resolved, &content, timestamp_ms);
             crate::agentic::execution::edit_constraint_guard::record_mutation_applied(
@@ -586,8 +586,8 @@ impl Tool for FileWriteTool {
         };
         let outcome = tokio::task::spawn_blocking(move || write_local_file(write_request))
             .await
-            .map_err(|error| BitFunError::tool(format!("Write task failed: {}", error)))?
-            .map_err(BitFunError::tool)?;
+            .map_err(|error| HaloError::tool(format!("Write task failed: {}", error)))?
+            .map_err(HaloError::tool)?;
 
         let timestamp_ms = file_mutation_timestamp_ms(context, &resolved).await;
         update_file_read_state_after_mutation(context, &resolved, &content, timestamp_ms);
@@ -641,7 +641,7 @@ mod tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         }
     }
 
@@ -657,7 +657,7 @@ mod tests {
 
     #[tokio::test]
     async fn preflight_write_error_allows_new_file_target() {
-        let root = std::env::temp_dir().join(format!("bitfun-write-test-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("halo-write-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp workspace");
 
         let error =
@@ -670,7 +670,7 @@ mod tests {
 
     #[tokio::test]
     async fn preflight_write_error_allows_existing_file_without_read_state_tracking() {
-        let root = std::env::temp_dir().join(format!("bitfun-write-test-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("halo-write-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp workspace");
         std::fs::write(root.join("existing.md"), "already here").expect("create existing file");
 
@@ -684,7 +684,7 @@ mod tests {
 
     #[tokio::test]
     async fn call_impl_treats_identical_existing_content_as_success() {
-        let root = std::env::temp_dir().join(format!("bitfun-write-test-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("halo-write-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp workspace");
         std::fs::write(root.join("existing.md"), "same content").expect("create existing file");
 
@@ -719,7 +719,7 @@ mod tests {
 
     #[tokio::test]
     async fn call_impl_overwrites_different_existing_content() {
-        let root = std::env::temp_dir().join(format!("bitfun-write-test-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("halo-write-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp workspace");
         std::fs::write(root.join("existing.md"), "old content").expect("create existing file");
 
@@ -747,7 +747,7 @@ mod tests {
 
     #[tokio::test]
     async fn call_impl_appends_warning_for_ignored_top_level_parameters() {
-        let root = std::env::temp_dir().join(format!("bitfun-write-test-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("halo-write-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp workspace");
 
         let tool = FileWriteTool::new();
@@ -809,7 +809,7 @@ mod tests {
 
     #[tokio::test]
     async fn call_impl_accepts_path_only_for_empty_file() {
-        let root = std::env::temp_dir().join(format!("bitfun-write-test-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("halo-write-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp workspace");
 
         let tool = FileWriteTool::new();
@@ -920,13 +920,13 @@ mod tests {
 
         assert_eq!(
             FileWriteTool::fallback_file_path(&context),
-            ".bitfun/tmp/write_456789abcdef.tmp"
+            ".halo-studio/tmp/write_456789abcdef.tmp"
         );
     }
 
     #[tokio::test]
     async fn call_impl_preserves_malformed_payload_in_workspace_temp_file() {
-        let root = std::env::temp_dir().join(format!("bitfun-write-test-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("halo-write-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp workspace");
         let original_payload = "def main():\n    print(\"Hello world\")";
 
@@ -937,7 +937,7 @@ mod tests {
             .await
             .expect("malformed payload should be preserved");
 
-        let fallback_directory = root.join(".bitfun").join("tmp");
+        let fallback_directory = root.join(".halo-studio").join("tmp");
         let entries = std::fs::read_dir(&fallback_directory)
             .expect("read workspace fallback directory")
             .collect::<Result<Vec<_>, _>>()

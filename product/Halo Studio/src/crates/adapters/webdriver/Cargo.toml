@@ -1,9 +1,9 @@
 [package]
-name = "bitfun-webdriver"
+name = "halo-webdriver"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Embedded WebDriver server for BitFun desktop"
+description = "Embedded WebDriver server for Halo desktop"
 
 [features]
 default = []

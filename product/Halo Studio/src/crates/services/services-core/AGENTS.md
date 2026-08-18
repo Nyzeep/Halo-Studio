@@ -2,7 +2,7 @@
 
 Scope: this guide applies to `src/crates/services/services-core`.
 
-`bitfun-services-core` owns cross-platform service DTOs and helpers that compile
+`halo-services-core` owns cross-platform service DTOs and helpers that compile
 without the full product runtime. This includes generic filesystem/search/JSON
 IO helpers, LSP package/protocol/watch/process primitives, session metadata
 storage helpers, and local OS action primitives such as command lookup,
@@ -13,19 +13,19 @@ crate.
 
 ## Guardrails
 
-- Do not depend on `bitfun-core`, app crates, Tauri, tool runtime, or product
+- Do not depend on `halo-core`, app crates, Tauri, tool runtime, or product
   runtime crates.
-- Prefer `bitfun-core-types` for shared DTOs and `bitfun-runtime-ports` for
+- Prefer `halo-core-types` for shared DTOs and `halo-runtime-ports` for
   cross-layer traits.
 - Keep dependency features explicit. Non-LSP consumers should use
   `default-features = false`; LSP consumers must enable the `lsp` feature.
-- LSP manifest and protocol DTOs belong in `bitfun-core-types`; reusable LSP
+- LSP manifest and protocol DTOs belong in `halo-core-types`; reusable LSP
   package, protocol, detection, debounce, watch, and process-manager helpers
   belong in `services-core`; product workspace state, event emission, global
   singletons, and file-sync orchestration stay outside this crate.
 - Runtime call sites that touch agent execution, scheduler state, workspace
   managers, filesystem orchestration, or product behavior stay outside this
-  crate. `workspace-runtime` may implement local `bitfun-runtime-ports`
+  crate. `workspace-runtime` may implement local `halo-runtime-ports`
   providers, but not workspace selection or product orchestration.
 - `runtime_ownership` owns only canonical identity plus Embedded shared-lock and
   Shared exclusive-lock primitives. It must not select workspaces, start or
@@ -46,9 +46,9 @@ crate.
 ## Verification
 
 ```bash
-cargo test -p bitfun-services-core --features lsp
-cargo test -p bitfun-services-core --features workspace-runtime workspace
-cargo test -p bitfun-services-core --features runtime-ownership --test runtime_ownership_contracts
+cargo test -p halo-services-core --features lsp
+cargo test -p halo-services-core --features workspace-runtime workspace
+cargo test -p halo-services-core --features runtime-ownership --test runtime_ownership_contracts
 node scripts/check-core-boundaries.mjs
-cargo check -p bitfun-core --features product-full
+cargo check -p halo-core --features product-full
 ```

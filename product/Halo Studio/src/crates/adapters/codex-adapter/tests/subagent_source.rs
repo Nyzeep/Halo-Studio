@@ -1,8 +1,8 @@
-use bitfun_codex_adapter::{CodexSubagentProvider, CodexSubagentProviderOptions};
-use bitfun_product_domains::external_sources::{
+use halo_codex_adapter::{CodexSubagentProvider, CodexSubagentProviderOptions};
+use halo_product_domains::external_sources::{
     ExecutionDomainId, ExternalSourceContext, ExternalSourceScope, SourceKey,
 };
-use bitfun_product_domains::external_subagents::{
+use halo_product_domains::external_subagents::{
     ExternalSubagentCompatibilityState, ExternalSubagentDiscoveryInput,
     ExternalSubagentModelRequest, ExternalSubagentSourceProvider,
 };
@@ -53,7 +53,7 @@ impl Fixture {
     fn discover(
         &self,
         suppressed_sources: BTreeSet<SourceKey>,
-    ) -> bitfun_product_domains::external_subagents::ExternalSubagentProviderSnapshot {
+    ) -> halo_product_domains::external_subagents::ExternalSubagentProviderSnapshot {
         self.provider()
             .discover(&ExternalSubagentDiscoveryInput {
                 context: self.context(),

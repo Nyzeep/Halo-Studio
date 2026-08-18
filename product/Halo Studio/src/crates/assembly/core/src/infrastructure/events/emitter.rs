@@ -1,1 +1,1 @@
-pub use bitfun_events::EventEmitter;
+pub use halo_events::EventEmitter;

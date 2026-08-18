@@ -4,7 +4,7 @@ use crate::service::snapshot::types::{
     ToolContext,
 };
 use crate::service::workspace_runtime::WorkspaceRuntimeContext;
-use bitfun_services_core::json_store::JsonFileStore;
+use halo_services_core::json_store::JsonFileStore;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -1197,7 +1197,7 @@ mod tests {
 
     async fn make_test_runtime(name: &str) -> TestRuntime {
         let root =
-            std::env::temp_dir().join(format!("bitfun_snapshot_core_{}_{}", name, Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo_snapshot_core_{}_{}", name, Uuid::new_v4()));
         let workspace = root.join("workspace");
         let runtime_root = root.join("runtime");
         fs::create_dir_all(&workspace).unwrap();

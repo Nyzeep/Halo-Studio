@@ -7,7 +7,7 @@ use crate::agentic::agents::{
     ReviewJudgeAgent, ReviewWorkerAgent, TeamMode,
 };
 use crate::agentic::memories::MemoryPhase2Agent;
-use bitfun_agent_runtime::agents as runtime_agents;
+use halo_agent_runtime::agents as runtime_agents;
 use std::sync::Arc;
 
 #[derive(Clone)]

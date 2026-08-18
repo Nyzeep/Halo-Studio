@@ -3,7 +3,7 @@ use super::flashgrep::{
     RefreshPolicyConfig, RepoConfig, RepoSession, SearchRequest, FLASHGREP_LOG_TARGET,
 };
 use async_trait::async_trait;
-use bitfun_services_core::filesystem::FileSearchOutcome;
+use halo_services_core::filesystem::FileSearchOutcome;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Component, Path, PathBuf};
@@ -471,7 +471,7 @@ impl WorkspaceSearchService {
         if let Err(error) = self.hooks.ensure_workspace_ready(&repo_root).await {
             log::warn!(
                 target: FLASHGREP_LOG_TARGET,
-                "Failed to ensure workspace .gitignore ignores .bitfun before search warmup: path={}, error={}",
+                "Failed to ensure workspace .gitignore ignores .halo-studio before search warmup: path={}, error={}",
                 repo_root.display(),
                 error
             );
@@ -722,11 +722,11 @@ fn push_exe_relative_bundle_candidates(
 
     if cfg!(target_os = "linux") {
         for binary_name in binary_names {
-            push_candidate(exe_dir.join("../lib/bitfun/flashgrep").join(binary_name));
-            push_candidate(exe_dir.join("../share/bitfun/flashgrep").join(binary_name));
+            push_candidate(exe_dir.join("../lib/halo/flashgrep").join(binary_name));
+            push_candidate(exe_dir.join("../share/halo/flashgrep").join(binary_name));
             push_candidate(
                 exe_dir
-                    .join("../share/com.bitfun.desktop/flashgrep")
+                    .join("../share/com.halostudio.desktop/flashgrep")
                     .join(binary_name),
             );
         }
@@ -735,7 +735,7 @@ fn push_exe_relative_bundle_candidates(
 
 fn default_storage_root(repo_root: &Path) -> PathBuf {
     repo_root
-        .join(".bitfun")
+        .join(".halo-studio")
         .join("search")
         .join("flashgrep-index")
 }
@@ -971,7 +971,7 @@ mod tests {
 
     #[test]
     fn glob_scope_preprocessing_extracts_static_pattern_prefix() {
-        let repo_root = std::env::temp_dir().join("bitfun-workspace-search-test-repo");
+        let repo_root = std::env::temp_dir().join("halo-workspace-search-test-repo");
         let search_path = repo_root.join("workspace");
         let (walk_root, pattern) = derive_glob_walk_root(&search_path, "src/*.rs");
 
@@ -985,7 +985,7 @@ mod tests {
 
     #[test]
     fn glob_results_are_relative_to_effective_walk_root() {
-        let repo_root = std::env::temp_dir().join("bitfun-workspace-search-test-repo");
+        let repo_root = std::env::temp_dir().join("halo-workspace-search-test-repo");
         let walk_root = repo_root.join("src");
 
         assert_eq!(

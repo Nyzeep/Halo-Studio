@@ -1,7 +1,7 @@
 //! Product-facing LSP workspace bridge and compatibility re-exports.
 //!
 //! Reusable LSP package loading, protocol, process, manager, detection, watch,
-//! and debounce helpers live in `bitfun-services-core`. This core module keeps
+//! and debounce helpers live in `halo-services-core`. This core module keeps
 //! workspace/global/file-sync orchestration, frontend event bridging, and legacy
 //! import paths.
 

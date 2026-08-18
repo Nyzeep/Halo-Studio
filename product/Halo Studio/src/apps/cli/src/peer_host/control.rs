@@ -6,7 +6,7 @@ use std::sync::{Mutex, OnceLock};
 use serde_json::{json, Value};
 use tokio::sync::{RwLock, RwLockReadGuard};
 
-use bitfun_core::service::remote_connect::DeviceIdentity;
+use halo_core::service::remote_connect::DeviceIdentity;
 
 #[derive(Default)]
 struct ControllerRegistry {

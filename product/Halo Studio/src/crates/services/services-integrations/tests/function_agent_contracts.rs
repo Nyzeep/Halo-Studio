@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use bitfun_services_integrations::function_agents::FunctionAgentGitService;
+use halo_services_integrations::function_agents::FunctionAgentGitService;
 
 struct TestTempDir {
     path: PathBuf,
@@ -18,7 +18,7 @@ impl TestTempDir {
             .unwrap()
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "bitfun-function-agent-service-{}-{}-{}",
+            "halo-function-agent-service-{}-{}-{}",
             label,
             std::process::id(),
             suffix
@@ -119,7 +119,7 @@ async fn git_service_time_snapshot_uses_last_commit_timestamp() {
 fn init_git_repo(repo: &Path) {
     git(repo, &["init", "-b", "main"]);
     git(repo, &["config", "user.email", "test@example.com"]);
-    git(repo, &["config", "user.name", "BitFun Test"]);
+    git(repo, &["config", "user.name", "Halo Test"]);
 }
 
 fn git(repo: &Path, args: &[&str]) {

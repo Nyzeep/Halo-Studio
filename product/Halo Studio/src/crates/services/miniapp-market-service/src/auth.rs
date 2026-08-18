@@ -13,8 +13,8 @@ use sqlx::Row;
 use url::Url;
 use uuid::Uuid;
 
-const WEB_SESSION_COOKIE: &str = "bitfun_market_session";
-const CSRF_COOKIE: &str = "bitfun_market_csrf";
+const WEB_SESSION_COOKIE: &str = "halo_market_session";
+const CSRF_COOKIE: &str = "halo_market_csrf";
 const OAUTH_FLOW_MINUTES: i64 = 10;
 const WEB_SESSION_DAYS: i64 = 7;
 const ACCESS_TOKEN_MINUTES: i64 = 15;
@@ -120,7 +120,7 @@ struct OAuthFlowRecord {
 impl AuthService {
     pub(crate) fn new(config: MarketConfig, db: Database) -> MarketResult<Self> {
         let client = reqwest::Client::builder()
-            .user_agent("BitFun-MiniApp-Market/1")
+            .user_agent("Halo-MiniApp-Market/1")
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(MarketError::internal)?;
@@ -695,7 +695,7 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(
             header::COOKIE,
-            HeaderValue::from_static("bitfun_market_csrf=csrf-value"),
+            HeaderValue::from_static("halo_market_csrf=csrf-value"),
         );
         headers.insert("x-csrf-token", HeaderValue::from_static("csrf-value"));
         service.require_csrf(&headers, &auth).unwrap();

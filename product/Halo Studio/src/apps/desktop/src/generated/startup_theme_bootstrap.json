@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "defaultLightThemeId": "bitfun-light",
-  "defaultDarkThemeId": "bitfun-dark",
+  "defaultLightThemeId": "halo-light",
+  "defaultDarkThemeId": "halo-dark",
   "themes": [
     {
-      "id": "bitfun-light",
+      "id": "halo-light",
       "bgPrimary": "#f3f3f5",
       "bgSecondary": "#ffffff",
       "bgScene": "#ffffff",
@@ -14,7 +14,7 @@
       "accentColor": "#64748b"
     },
     {
-      "id": "bitfun-slate",
+      "id": "halo-slate",
       "bgPrimary": "#1c1c1f",
       "bgSecondary": "#262626",
       "bgScene": "#262626",
@@ -24,7 +24,7 @@
       "accentColor": "#94a3b8"
     },
     {
-      "id": "bitfun-dark",
+      "id": "halo-dark",
       "bgPrimary": "#0e0e10",
       "bgSecondary": "#1c1c1f",
       "bgScene": "#1c1c1f",
@@ -34,7 +34,7 @@
       "accentColor": "#60a5fa"
     },
     {
-      "id": "bitfun-midnight",
+      "id": "halo-midnight",
       "bgPrimary": "#2b2d30",
       "bgSecondary": "#1c1c1f",
       "bgScene": "#2b2d30",
@@ -44,7 +44,7 @@
       "accentColor": "#60a5fa"
     },
     {
-      "id": "bitfun-china-style",
+      "id": "halo-china-style",
       "bgPrimary": "#faf8f0",
       "bgSecondary": "#f5f3e8",
       "bgScene": "#faf8f0",
@@ -54,7 +54,7 @@
       "accentColor": "#2e5e8a"
     },
     {
-      "id": "bitfun-china-night",
+      "id": "halo-china-night",
       "bgPrimary": "#1c1c1f",
       "bgSecondary": "#212019",
       "bgScene": "#1c1c1f",
@@ -64,7 +64,7 @@
       "accentColor": "#73a5cc"
     },
     {
-      "id": "bitfun-cyber",
+      "id": "halo-cyber",
       "bgPrimary": "#0e0e10",
       "bgSecondary": "#1c1c1f",
       "bgScene": "#1c1c1f",
@@ -74,7 +74,7 @@
       "accentColor": "#00e6ff"
     },
     {
-      "id": "bitfun-tokyo-night",
+      "id": "halo-tokyo-night",
       "bgPrimary": "#1a1b26",
       "bgSecondary": "#1e202e",
       "bgScene": "#1a1b26",

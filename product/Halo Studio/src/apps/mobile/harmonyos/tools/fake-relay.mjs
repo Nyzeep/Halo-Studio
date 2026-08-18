@@ -149,8 +149,8 @@ let createdSession = {
   agent_type: 'code',
 };
 let currentWorkspace = {
-  path: '/workspace/BitFun',
-  name: 'BitFun',
+  path: '/workspace/Halo',
+  name: 'Halo',
   git_branch: 'main',
   workspace_kind: 'normal',
   assistant_id: undefined,
@@ -169,20 +169,20 @@ const deletedSessions = new Set();
 
 const assistants = [
   {
-    path: '/workspace/.bitfun/assistants/daily',
+    path: '/workspace/.halo-studio/assistants/daily',
     name: 'Daily Assistant',
     assistant_id: 'assistant-daily-preview',
   },
   {
-    path: '/workspace/.bitfun/assistants/research',
+    path: '/workspace/.halo-studio/assistants/research',
     name: 'Research Assistant',
     assistant_id: 'assistant-research-preview',
   },
 ];
 
 const previewFiles = new Map([
-  ['README.md', Buffer.from('# BitFun Preview\n\nThis is a fake relay file download.\n', 'utf8')],
-  ['/workspace/BitFun/README.md', Buffer.from('# BitFun Preview\n\nThis is a fake relay file download.\n', 'utf8')],
+  ['README.md', Buffer.from('# Halo Preview\n\nThis is a fake relay file download.\n', 'utf8')],
+  ['/workspace/Halo/README.md', Buffer.from('# Halo Preview\n\nThis is a fake relay file download.\n', 'utf8')],
 ]);
 
 function isScenario(name) {
@@ -283,12 +283,12 @@ function assistantResponseItems(status = 'completed') {
 
 function activeTurnText() {
   if (isScenario('slow-active')) {
-    return 'BitFun 正在持续执行，用于验证运行态停止按钮。';
+    return 'Halo 正在持续执行，用于验证运行态停止按钮。';
   }
   if (isScenario('long-markdown')) {
     return '## 鸿蒙端聊天回归验证\n\n- 正在生成长 Markdown 响应...\n- active turn 应保持稳定。';
   }
-  return 'BitFun 正在执行...';
+  return 'Halo 正在执行...';
 }
 
 function currentModelCatalog() {
@@ -538,14 +538,14 @@ function responseFor(command) {
             workspace_kind: currentWorkspace.workspace_kind,
           },
           {
-            path: '/workspace/BitFun_mobile',
-            name: 'BitFun_mobile',
+            path: '/workspace/Halo_mobile',
+            name: 'Halo_mobile',
             last_opened: new Date(Date.now() - 86_400_000).toISOString(),
             workspace_kind: 'normal',
           },
           {
-            path: '/workspace/BitFun-docs',
-            name: 'BitFun-docs',
+            path: '/workspace/Halo-docs',
+            name: 'Halo-docs',
             last_opened: new Date(Date.now() - 2 * 86_400_000).toISOString(),
             workspace_kind: 'normal',
           },

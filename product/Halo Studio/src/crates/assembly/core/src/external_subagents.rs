@@ -1,7 +1,7 @@
 //! Product-level activation and routing for provider-neutral external subagents.
 //!
 //! Ecosystem parsing stays in adapters and discovery lifecycle stays in the
-//! external-sources coordinator. This module only resolves current BitFun
+//! external-sources coordinator. This module only resolves current Halo
 //! model/tool facts, applies persisted user decisions, and installs immutable
 //! generation entries in the existing agent registry.
 
@@ -16,11 +16,11 @@ use crate::external_tools::resolve_external_tool_for_workspace;
 use crate::service::config::global::GlobalConfigManager;
 use crate::service::config::types::{model_runtime_binding_fingerprint, AIConfig, AIModelConfig};
 use crate::service::config::SubagentModelSelection;
-use crate::util::BitFunError;
-use bitfun_external_sources::ExternalSubagentCoordinatorSnapshot;
-use bitfun_product_domains::external_sources::EcosystemId;
-use bitfun_product_domains::external_sources::{ExternalSourceScope, ProviderId, SourceKey};
-use bitfun_product_domains::external_subagents::{
+use crate::util::HaloError;
+use halo_external_sources::ExternalSubagentCoordinatorSnapshot;
+use halo_product_domains::external_sources::EcosystemId;
+use halo_product_domains::external_sources::{ExternalSourceScope, ProviderId, SourceKey};
+use halo_product_domains::external_subagents::{
     external_subagent_approval_key, external_subagent_conflict_key,
     ExternalSubagentActivationState, ExternalSubagentCompatibilityState, ExternalSubagentConflict,
     ExternalSubagentConflictCandidate, ExternalSubagentDefinition,
@@ -32,7 +32,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-pub(super) const DISABLED_SUBAGENT_CONFLICT_CHOICE: &str = "__bitfun_disabled__";
+pub(super) const DISABLED_SUBAGENT_CONFLICT_CHOICE: &str = "__halo_disabled__";
 static MODEL_CONFIG_UNAVAILABLE_LOGGED: AtomicBool = AtomicBool::new(false);
 
 pub(super) struct ExternalSubagentDecisions<'a> {
@@ -276,7 +276,7 @@ async fn gather_product_facts(
     }
 }
 
-fn log_model_config_unavailable(stage: &str, error: &BitFunError) {
+fn log_model_config_unavailable(stage: &str, error: &HaloError) {
     if claim_model_config_outage_log(&MODEL_CONFIG_UNAVAILABLE_LOGGED) {
         log::warn!(
             "External subagent model configuration unavailable: stage={}, category={}",
@@ -290,27 +290,27 @@ fn claim_model_config_outage_log(logged: &AtomicBool) -> bool {
     !logged.swap(true, Ordering::Relaxed)
 }
 
-fn model_config_error_category(error: &BitFunError) -> &'static str {
+fn model_config_error_category(error: &HaloError) -> &'static str {
     match error {
-        BitFunError::Configuration(message) if message.contains("not initialized") => {
+        HaloError::Configuration(message) if message.contains("not initialized") => {
             "service_not_initialized"
         }
-        BitFunError::Configuration(message) if message.contains("service is None") => {
+        HaloError::Configuration(message) if message.contains("service is None") => {
             "service_missing"
         }
-        BitFunError::Configuration(message)
+        HaloError::Configuration(message)
             if message.contains("Failed to deserialize config value") =>
         {
             "config_deserialization_failed"
         }
-        BitFunError::Configuration(message) if message.contains("Config path") => {
+        HaloError::Configuration(message) if message.contains("Config path") => {
             "config_path_unavailable"
         }
-        BitFunError::Configuration(_) => "configuration_error",
-        BitFunError::Deserialization(_) => "deserialization_error",
-        BitFunError::Serialization(_) => "serialization_error",
-        BitFunError::Io(_) => "io_error",
-        BitFunError::Service(_) => "service_error",
+        HaloError::Configuration(_) => "configuration_error",
+        HaloError::Deserialization(_) => "deserialization_error",
+        HaloError::Serialization(_) => "serialization_error",
+        HaloError::Io(_) => "io_error",
+        HaloError::Service(_) => "service_error",
         _ => "other_error",
     }
 }
@@ -319,9 +319,9 @@ fn local_candidate_fact(info: &AgentInfo, model: &str) -> LocalCandidateFact {
     let mut tools = info.default_tools.clone();
     tools.sort();
     let source = match info.source {
-        AgentSource::Builtin => "BitFun built-in",
-        AgentSource::User => "BitFun user",
-        AgentSource::Project => "BitFun project",
+        AgentSource::Builtin => "Halo built-in",
+        AgentSource::User => "Halo user",
+        AgentSource::Project => "Halo project",
         AgentSource::External => "External",
     };
     let path_identity = info.path.as_deref().unwrap_or_default();
@@ -425,7 +425,7 @@ fn resolve_exact_external_model(
     })
 }
 
-fn resolve_bitfun_subagent_model(
+fn resolve_halo_subagent_model(
     logical_id: &str,
     ai_config: &AIConfig,
 ) -> Option<ResolvedModelFact> {
@@ -622,7 +622,7 @@ fn resolve_external_candidate(
     workspace_root: Option<&Path>,
     execution_domain_id: &str,
     definition: &ExternalSubagentDefinition,
-    sources: &BTreeMap<SourceKey, &bitfun_product_domains::external_sources::ExternalSourceRecord>,
+    sources: &BTreeMap<SourceKey, &halo_product_domains::external_sources::ExternalSourceRecord>,
     provider_labels: &BTreeMap<ProviderId, String>,
     facts: &ProductFacts,
 ) -> ResolvedExternalCandidate {
@@ -642,7 +642,7 @@ fn resolve_external_candidate(
     let model = match facts.ai_config.as_ref() {
         Some(ai_config) => match &definition.requested_model {
             ExternalSubagentModelRequest::Default => {
-                resolve_bitfun_subagent_model(&definition.logical_id, ai_config)
+                resolve_halo_subagent_model(&definition.logical_id, ai_config)
             }
             ExternalSubagentModelRequest::Exact {
                 provider_hint,
@@ -1112,11 +1112,11 @@ mod tests {
             BTreeSet::from([EcosystemId::new("fake").expect("valid test ecosystem")])
         })
     }
-    use bitfun_product_domains::external_sources::{
+    use halo_product_domains::external_sources::{
         EcosystemId, ExecutionDomainId, ExternalSourceCatalogEntry, ExternalSourceHealth,
         ExternalSourceLifecycleState, ExternalSourceRecord,
     };
-    use bitfun_product_domains::external_subagents::{
+    use halo_product_domains::external_subagents::{
         ExternalSubagentBehaviorVersion, ExternalSubagentCandidateId,
         ExternalSubagentContributionId, ExternalSubagentContributionRole, ExternalSubagentLocalId,
         ExternalSubagentMode, ExternalSubagentProvenanceRef, ExternalSubagentToolRequest,
@@ -1288,22 +1288,22 @@ mod tests {
         config.agent_model_defaults.subagents.default_selection =
             SubagentModelSelection::fixed("model_review");
 
-        let resolved = resolve_bitfun_subagent_model("reviewer", &config)
+        let resolved = resolve_halo_subagent_model("reviewer", &config)
             .expect("configured subagent default should resolve");
         assert_eq!(resolved.runtime_id, "model_review");
         assert_eq!(resolved.display_label, "Anthropic · claude-sonnet-4");
 
         config.agent_model_defaults.subagents.default_selection = SubagentModelSelection::Inherit;
-        assert!(resolve_bitfun_subagent_model("reviewer", &config).is_none());
+        assert!(resolve_halo_subagent_model("reviewer", &config).is_none());
 
         config.agent_model_defaults.subagents.default_selection =
             SubagentModelSelection::fixed("fast");
-        assert!(resolve_bitfun_subagent_model("reviewer", &config).is_none());
+        assert!(resolve_halo_subagent_model("reviewer", &config).is_none());
 
         config.agent_model_defaults.subagents.default_selection =
             SubagentModelSelection::fixed("model_review");
         config.models[0].enabled = false;
-        assert!(resolve_bitfun_subagent_model("reviewer", &config).is_none());
+        assert!(resolve_halo_subagent_model("reviewer", &config).is_none());
     }
 
     #[test]
@@ -1351,7 +1351,7 @@ mod tests {
     }
 
     #[test]
-    fn unavailable_bitfun_model_config_is_recoverable_without_claiming_model_mismatch() {
+    fn unavailable_halo_model_config_is_recoverable_without_claiming_model_mismatch() {
         let empty_set = BTreeSet::new();
         let empty_map = BTreeMap::new();
         let definition_snapshot = snapshot("behavior-v1", "catalog-v1");
@@ -1468,7 +1468,7 @@ mod tests {
         logged.store(false, Ordering::Relaxed);
         assert!(claim_model_config_outage_log(&logged));
 
-        let error = BitFunError::config(
+        let error = HaloError::config(
             "Failed to deserialize config value at 'ai': invalid value 'sk-sensitive'",
         );
         let category = model_config_error_category(&error);
@@ -1707,7 +1707,7 @@ mod tests {
                 logical_id: "reviewer".to_string(),
                 candidate_id: "local_subagent:reviewer".to_string(),
                 display_name: "Local reviewer".to_string(),
-                source_label: "BitFun project".to_string(),
+                source_label: "Halo project".to_string(),
                 behavior_version: "local-v1".to_string(),
             },
         );
@@ -1733,7 +1733,7 @@ mod tests {
         assert_eq!(preview.conflicts[0].candidates.len(), 2);
         assert!(
             !preview.conflicts[0].candidates[0].external,
-            "the BitFun/local candidate must be shown before external candidates"
+            "the Halo/local candidate must be shown before external candidates"
         );
         let external_id = preview.conflicts[0]
             .candidates
@@ -1863,7 +1863,7 @@ mod tests {
                 logical_id: "reviewer".to_string(),
                 candidate_id: "local_subagent:reviewer".to_string(),
                 display_name: "Local reviewer".to_string(),
-                source_label: "BitFun project".to_string(),
+                source_label: "Halo project".to_string(),
                 behavior_version: "local-v1".to_string(),
             },
         );

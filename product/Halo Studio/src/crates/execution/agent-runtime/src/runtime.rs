@@ -7,9 +7,9 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use bitfun_agent_tools::{ToolRegistry, ToolRegistryItem};
-use bitfun_harness::HarnessRegistry;
-use bitfun_runtime_ports::{
+use halo_agent_tools::{ToolRegistry, ToolRegistryItem};
+use halo_harness::HarnessRegistry;
+use halo_runtime_ports::{
     AgentBackgroundResultRequest, AgentDialogTurnPort, AgentDialogTurnRequest,
     AgentInputAttachment, AgentLifecycleDeliveryPort, AgentLocalCommandTurnPort,
     AgentLocalCommandTurnRecordRequest, AgentSessionArchiveRequest,
@@ -29,12 +29,12 @@ use bitfun_runtime_ports::{
     PluginRuntimeBinding, PortError, PortErrorKind, PortResult, RuntimeEventEnvelope,
     SessionTranscript, SessionTranscriptReader, SessionTranscriptRequest, ThreadGoal,
 };
-use bitfun_runtime_services::RuntimeServices;
+use halo_runtime_services::RuntimeServices;
 
 use crate::event_source::{AgentEventReceiver, AgentEventSource, AgentSessionEventReceiver};
 use crate::permission::{PermissionRequestEventReceiver, PermissionRequestManager};
 use crate::post_call_hooks::RuntimeHookRegistry;
-use bitfun_runtime_ports::{PermissionReply, PermissionReplySource, PermissionRequest};
+use halo_runtime_ports::{PermissionReply, PermissionReplySource, PermissionRequest};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RuntimeBuildError {
@@ -1089,7 +1089,7 @@ impl AgentRuntime {
     pub async fn generate_session_usage(
         &self,
         request: AgentSessionUsageRequest,
-    ) -> Result<bitfun_core_types::SessionUsageReport, RuntimeError> {
+    ) -> Result<halo_core_types::SessionUsageReport, RuntimeError> {
         let port = self.session_usage.as_ref().ok_or_else(|| {
             RuntimeError::Port(PortError::new(
                 PortErrorKind::NotAvailable,
@@ -1366,7 +1366,7 @@ impl AgentRuntime {
 mod tests {
     use super::*;
     use crate::session_state::SessionState;
-    use bitfun_runtime_ports::{
+    use halo_runtime_ports::{
         AgentBackgroundResultRequest, AgentDialogTurnRequest, AgentLifecycleDeliveryPort,
         AgentSessionCreateResult, AgentSessionDeleteRequest, AgentSessionListRequest,
         AgentSessionManagementPort, AgentSessionModePort, AgentSessionModeUpdateRequest,
@@ -1379,7 +1379,7 @@ mod tests {
         SessionStorePort, SessionTranscript, SessionTranscriptReader, SessionTranscriptRequest,
         ThreadGoal, ThreadGoalStatus, TranscriptContent, TranscriptMessage, WorkspacePort,
     };
-    use bitfun_runtime_services::{test_support::FakeRuntimePort, RuntimeServicesBuilder};
+    use halo_runtime_services::{test_support::FakeRuntimePort, RuntimeServicesBuilder};
 
     #[derive(Debug, Default)]
     struct FakeAgentRuntimePorts {
@@ -2400,7 +2400,7 @@ mod tests {
     #[test]
     fn runtime_error_message_preserves_port_error_text() {
         let error = RuntimeError::Port(PortError::new(
-            bitfun_runtime_ports::PortErrorKind::Backend,
+            halo_runtime_ports::PortErrorKind::Backend,
             "original backend message",
         ));
 
@@ -2467,7 +2467,7 @@ mod tests {
         }
 
         #[async_trait::async_trait]
-        impl bitfun_runtime_ports::AgentDialogTurnPort for RecordingDialogTurnPort {
+        impl halo_runtime_ports::AgentDialogTurnPort for RecordingDialogTurnPort {
             async fn submit_dialog_turn(
                 &self,
                 request: AgentDialogTurnRequest,
@@ -2540,7 +2540,7 @@ mod tests {
         struct MismatchedDialogTurnPort;
 
         #[async_trait::async_trait]
-        impl bitfun_runtime_ports::AgentDialogTurnPort for MismatchedDialogTurnPort {
+        impl halo_runtime_ports::AgentDialogTurnPort for MismatchedDialogTurnPort {
             async fn submit_dialog_turn(
                 &self,
                 request: AgentDialogTurnRequest,

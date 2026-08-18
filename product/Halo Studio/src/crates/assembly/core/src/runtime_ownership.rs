@@ -1,6 +1,6 @@
 //! First-party product assembly for local Agent Runtime ownership.
 //!
-//! The reusable lock primitive lives in `bitfun-services-core`. This owner
+//! The reusable lock primitive lives in `halo-services-core`. This owner
 //! selects one deployment for the process, retains acquired workspace leases,
 //! and keeps that deployment fact out of Agent Runtime SDK and wire contracts.
 
@@ -8,15 +8,15 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-pub use bitfun_services_core::runtime_ownership::RuntimeDeployment;
-use bitfun_services_core::runtime_ownership::{
+pub use halo_services_core::runtime_ownership::RuntimeDeployment;
+use halo_services_core::runtime_ownership::{
     RuntimeOwnershipError, RuntimeOwnershipKey, WorkspaceRuntimeOwnership,
 };
 use log::{info, warn};
 
 use crate::infrastructure::PathManager;
 
-const DEFAULT_PRODUCT_IDENTITY: &str = "bitfun";
+const DEFAULT_PRODUCT_IDENTITY: &str = "halo";
 
 enum CoreRuntimeOwnershipDeployment {
     Embedded {
@@ -307,9 +307,9 @@ impl CoreRuntimeOwnershipError {
             return prefix;
         }
         let guidance = match deployment {
-            RuntimeDeployment::Embedded if entrypoint == "cli-interactive" => "A Shared TUI Runtime owns this workspace; use `bitfun chat --shared`, or close its clients and wait up to 30 seconds",
+            RuntimeDeployment::Embedded if entrypoint == "cli-interactive" => "A Shared TUI Runtime owns this workspace; use `halo chat --shared`, or close its clients and wait up to 30 seconds",
             RuntimeDeployment::Embedded => "A Shared TUI Runtime owns this workspace; close its clients and wait up to 30 seconds before retrying this application",
-            RuntimeDeployment::Shared => "An Embedded BitFun process owns this workspace; close it before using `--shared`",
+            RuntimeDeployment::Shared => "An Embedded Halo process owns this workspace; close it before using `--shared`",
         };
         format!("{prefix}. {guidance}")
     }
@@ -354,7 +354,7 @@ fn remote_scope_matches(
 }
 
 fn product_identity() -> &'static str {
-    option_env!("BITFUN_PRODUCT_BINARY_NAME").unwrap_or(DEFAULT_PRODUCT_IDENTITY)
+    option_env!("HALO_PRODUCT_BINARY_NAME").unwrap_or(DEFAULT_PRODUCT_IDENTITY)
 }
 
 fn log_acquired(entrypoint: &str, deployment: RuntimeDeployment, key: &RuntimeOwnershipKey) {

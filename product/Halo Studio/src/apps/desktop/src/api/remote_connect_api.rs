@@ -2,27 +2,27 @@
 
 use crate::api::session_storage_path::desktop_effective_session_storage_path;
 use crate::embedded_relay_host::DesktopEmbeddedRelayHost;
-use bitfun_core::agentic::coordination::{get_global_coordinator, ConversationCoordinator};
-use bitfun_core::agentic::persistence::PersistenceManager;
-use bitfun_core::agentic::tools::account_login_capability::set_account_login_available;
-use bitfun_core::agentic::tools::page_deploy_host::set_page_deploy_handler;
-use bitfun_core::agentic::tools::page_publish_host::set_page_publish_handler;
-use bitfun_core::service::remote_connect::session_store::{
+use halo_core::agentic::coordination::{get_global_coordinator, ConversationCoordinator};
+use halo_core::agentic::persistence::PersistenceManager;
+use halo_core::agentic::tools::account_login_capability::set_account_login_available;
+use halo_core::agentic::tools::page_deploy_host::set_page_deploy_handler;
+use halo_core::agentic::tools::page_publish_host::set_page_publish_handler;
+use halo_core::service::remote_connect::session_store::{
     clear_credential_hint, load_credential_hint, save_credential_hint, AccountHint,
 };
-use bitfun_core::service::remote_connect::{
+use halo_core::service::remote_connect::{
     bot::{self, weixin, BotConfig},
     lan, session_store, sync_state, AccountClient, AccountPairingVerification, AccountSession,
     ConnectionMethod, ConnectionResult, DelegatedIdentityAuthorization, DeviceIdentity,
     PairingState, RemoteConnectConfig, RemoteConnectService,
 };
-use bitfun_core::service::session::{DialogTurnData, SessionMetadata};
-use bitfun_core::service::workspace::{get_global_workspace_service, WorkspaceKind};
-use bitfun_core::service::workspace_runtime::WorkspaceRuntimeService;
-use bitfun_services_integrations::remote_connect::account::{
+use halo_core::service::session::{DialogTurnData, SessionMetadata};
+use halo_core::service::workspace::{get_global_workspace_service, WorkspaceKind};
+use halo_core::service::workspace_runtime::WorkspaceRuntimeService;
+use halo_services_integrations::remote_connect::account::{
     error_indicates_expired_token, validate_relay_base_url,
 };
-use bitfun_services_integrations::remote_connect::{
+use halo_services_integrations::remote_connect::{
     deploy_page_version_on_relay, join_relay_url, list_pages_from_relay,
     publish_page_content_on_relay,
 };
@@ -208,7 +208,7 @@ async fn cancel_and_wait_for_account_auto_sync() -> AccountContextTransitionGuar
     let transition_guard = ACCOUNT_CONTEXT_TRANSITION_LOCK.lock().await;
     let transition = AccountContextTransitionPermit::begin();
     let sync_guard = ACCOUNT_AUTO_SYNC_LOCK.lock().await;
-    bitfun_core::service::remote_connect::settings_sync::wait_for_sync_operations_idle().await;
+    halo_core::service::remote_connect::settings_sync::wait_for_sync_operations_idle().await;
     AccountContextTransitionGuard {
         sync_guard: Some(sync_guard),
         transition: Some(transition),
@@ -225,7 +225,7 @@ async fn cancel_and_wait_if_account_current(
     }
     let transition = AccountContextTransitionPermit::begin();
     let sync_guard = ACCOUNT_AUTO_SYNC_LOCK.lock().await;
-    bitfun_core::service::remote_connect::settings_sync::wait_for_sync_operations_idle().await;
+    halo_core::service::remote_connect::settings_sync::wait_for_sync_operations_idle().await;
     Some(AccountContextTransitionGuard {
         sync_guard: Some(sync_guard),
         transition: Some(transition),
@@ -312,11 +312,11 @@ async fn lock_pending_login_for_finalize(
 /// Global handle to the DialogScheduler, set during app startup. Used by the
 /// device-routing background task to execute commands received from peer
 /// devices (ExecuteOnDevice).
-static DIALOG_SCHEDULER: OnceLock<Arc<bitfun_core::agentic::coordination::DialogScheduler>> =
+static DIALOG_SCHEDULER: OnceLock<Arc<halo_core::agentic::coordination::DialogScheduler>> =
     OnceLock::new();
 
 /// Set the global scheduler handle. Called once during app startup.
-pub fn set_dialog_scheduler(scheduler: Arc<bitfun_core::agentic::coordination::DialogScheduler>) {
+pub fn set_dialog_scheduler(scheduler: Arc<halo_core::agentic::coordination::DialogScheduler>) {
     let _ = DIALOG_SCHEDULER.set(scheduler);
 }
 
@@ -479,8 +479,8 @@ async fn fanout_peer_device_event_once(item: PeerEventFanoutItem) {
     {
         return;
     }
-    use bitfun_core::service::remote_connect::encryption::encrypt_to_base64;
-    use bitfun_core::service::remote_connect::remote_server::RemoteCommand;
+    use halo_core::service::remote_connect::encryption::encrypt_to_base64;
+    use halo_core::service::remote_connect::remote_server::RemoteCommand;
     let envelope = match serde_json::to_string(&RemoteCommand::DeviceEvent {
         event: item.event.clone(),
         payload: item.payload,
@@ -552,17 +552,17 @@ pub fn maybe_fanout_peer_ui_event(event: &str, payload: serde_json::Value) {
 
 /// EventEmitter wrapper that mirrors selected UI events to Peer Mode controllers.
 pub struct PeerAwareEmitter {
-    inner: Arc<dyn bitfun_core::infrastructure::events::EventEmitter>,
+    inner: Arc<dyn halo_core::infrastructure::events::EventEmitter>,
 }
 
 impl PeerAwareEmitter {
-    pub fn new(inner: Arc<dyn bitfun_core::infrastructure::events::EventEmitter>) -> Self {
+    pub fn new(inner: Arc<dyn halo_core::infrastructure::events::EventEmitter>) -> Self {
         Self { inner }
     }
 }
 
 #[async_trait::async_trait]
-impl bitfun_core::infrastructure::events::EventEmitter for PeerAwareEmitter {
+impl halo_core::infrastructure::events::EventEmitter for PeerAwareEmitter {
     async fn emit(&self, event_name: &str, payload: serde_json::Value) -> anyhow::Result<()> {
         // Only clone the payload when a peer fanout will actually happen;
         // otherwise move it into the inner emitter zero-copy.
@@ -577,8 +577,8 @@ impl bitfun_core::infrastructure::events::EventEmitter for PeerAwareEmitter {
 }
 
 pub fn wrap_peer_aware_emitter(
-    inner: Arc<dyn bitfun_core::infrastructure::events::EventEmitter>,
-) -> Arc<dyn bitfun_core::infrastructure::events::EventEmitter> {
+    inner: Arc<dyn halo_core::infrastructure::events::EventEmitter>,
+) -> Arc<dyn halo_core::infrastructure::events::EventEmitter> {
     Arc::new(PeerAwareEmitter::new(inner))
 }
 
@@ -636,7 +636,7 @@ async fn send_rpc_envelope(
             .to_string()
         }
     };
-    use bitfun_core::service::remote_connect::encryption::encrypt_to_base64;
+    use halo_core::service::remote_connect::encryption::encrypt_to_base64;
     match encrypt_to_base64(&session.master_key, &resp_json) {
         Ok((enc_resp, resp_nonce)) => {
             if let Err(e) = send_device_message_with_routing_lease(
@@ -1111,7 +1111,7 @@ async fn register_delegated_identity_providers() {
 
     // Global provider for IM bots.
     let account_context = get_account_context().clone();
-    bitfun_core::service::remote_connect::bot::set_delegated_identity_provider(move || {
+    halo_core::service::remote_connect::bot::set_delegated_identity_provider(move || {
         let account_context = account_context.clone();
         Box::pin(async move {
             let generation = account_context_generation();
@@ -1176,7 +1176,7 @@ async fn register_account_pairing_context(service: &RemoteConnectService) {
                     .read()
                     .await
                     .clone()
-                    .ok_or_else(|| "Desktop is not logged into a BitFun account".to_string())?;
+                    .ok_or_else(|| "Desktop is not logged into a Halo account".to_string())?;
                 if !account_context_is_current(generation) {
                     return Err("Desktop account is changing; scan again".to_string());
                 }
@@ -1316,7 +1316,7 @@ pub fn init_on_startup() {
 
 /// Synchronous cleanup called when the application exits.
 pub fn cleanup_on_exit() {
-    bitfun_core::service::remote_connect::ngrok::cleanup_all_ngrok();
+    halo_core::service::remote_connect::ngrok::cleanup_all_ngrok();
     log::info!("Remote connect cleanup completed on exit");
 }
 
@@ -1348,7 +1348,7 @@ fn new_remote_connect_service(config: RemoteConnectConfig) -> anyhow::Result<Rem
 
 /// Restore any bot connections that were previously saved to disk.
 async fn restore_saved_bots() {
-    use bitfun_core::service::remote_connect::bot;
+    use halo_core::service::remote_connect::bot;
 
     let data = bot::load_bot_persistence();
     if data.connections.is_empty() {
@@ -1379,13 +1379,13 @@ async fn restore_saved_bots() {
 
 /// Auto-detect the mobile-web build output directory.
 fn detect_mobile_web_dir() -> Option<String> {
-    if let Ok(dir) = std::env::var("BITFUN_MOBILE_WEB_DIR") {
+    if let Ok(dir) = std::env::var("HALO_MOBILE_WEB_DIR") {
         let p = std::path::Path::new(&dir);
         if p.join("index.html").exists() {
-            log::info!("Using BITFUN_MOBILE_WEB_DIR: {dir}");
+            log::info!("Using HALO_MOBILE_WEB_DIR: {dir}");
             return Some(dir);
         }
-        log::warn!("BITFUN_MOBILE_WEB_DIR set but index.html not found: {dir}");
+        log::warn!("HALO_MOBILE_WEB_DIR set but index.html not found: {dir}");
     }
 
     if let Some(resource_path) = MOBILE_WEB_RESOURCE_PATH.get() {
@@ -1432,12 +1432,12 @@ fn detect_from_exe() -> Option<String> {
     candidates.push(exe_dir.join("resources/mobile-web"));
 
     if cfg!(target_os = "linux") {
-        candidates.push(exe_dir.join("../lib/bitfun/mobile-web/dist"));
-        candidates.push(exe_dir.join("../lib/bitfun/mobile-web"));
-        candidates.push(exe_dir.join("../share/bitfun/mobile-web/dist"));
-        candidates.push(exe_dir.join("../share/bitfun/mobile-web"));
-        candidates.push(exe_dir.join("../share/com.bitfun.desktop/mobile-web/dist"));
-        candidates.push(exe_dir.join("../share/com.bitfun.desktop/mobile-web"));
+        candidates.push(exe_dir.join("../lib/halo/mobile-web/dist"));
+        candidates.push(exe_dir.join("../lib/halo/mobile-web"));
+        candidates.push(exe_dir.join("../share/halo/mobile-web/dist"));
+        candidates.push(exe_dir.join("../share/halo/mobile-web"));
+        candidates.push(exe_dir.join("../share/com.halostudio.desktop/mobile-web/dist"));
+        candidates.push(exe_dir.join("../share/com.halostudio.desktop/mobile-web"));
     }
 
     check_candidates(&candidates, "exe-relative")
@@ -1525,7 +1525,7 @@ pub struct LanNetworkInfo {
 fn detect_default_gateway_ip() -> Option<String> {
     #[cfg(target_os = "macos")]
     {
-        let output = bitfun_core::util::process_manager::create_command("route")
+        let output = halo_core::util::process_manager::create_command("route")
             .args(["-n", "get", "default"])
             .output()
             .ok()?;
@@ -1541,7 +1541,7 @@ fn detect_default_gateway_ip() -> Option<String> {
 
     #[cfg(target_os = "linux")]
     {
-        let output = bitfun_core::util::process_manager::create_command("ip")
+        let output = halo_core::util::process_manager::create_command("ip")
             .args(["route", "show", "default"])
             .output()
             .ok()?;
@@ -1557,7 +1557,7 @@ fn detect_default_gateway_ip() -> Option<String> {
 
     #[cfg(target_os = "windows")]
     {
-        let output = bitfun_core::util::process_manager::create_command("route")
+        let output = halo_core::util::process_manager::create_command("route")
             .args(["print", "-4"])
             .output()
             .ok()?;
@@ -1587,7 +1587,7 @@ fn detect_interface_gateways() -> HashMap<String, String> {
 
     #[cfg(target_os = "macos")]
     {
-        if let Ok(output) = bitfun_core::util::process_manager::create_command("netstat")
+        if let Ok(output) = halo_core::util::process_manager::create_command("netstat")
             .args(["-rn", "-f", "inet"])
             .output()
         {
@@ -1611,7 +1611,7 @@ fn detect_interface_gateways() -> HashMap<String, String> {
 
     #[cfg(target_os = "linux")]
     {
-        if let Ok(output) = bitfun_core::util::process_manager::create_command("ip")
+        if let Ok(output) = halo_core::util::process_manager::create_command("ip")
             .args(["route", "show", "default"])
             .output()
         {
@@ -1642,7 +1642,7 @@ fn detect_interface_gateways() -> HashMap<String, String> {
 
     #[cfg(target_os = "windows")]
     {
-        if let Ok(output) = bitfun_core::util::process_manager::create_command("route")
+        if let Ok(output) = halo_core::util::process_manager::create_command("route")
             .args(["print", "-4"])
             .output()
         {
@@ -1748,11 +1748,11 @@ pub async fn remote_connect_get_methods() -> Result<Vec<ConnectionMethodInfo>, S
                 available: true,
                 description: "Internet via ngrok tunnel".into(),
             },
-            ConnectionMethod::BitfunServer => ConnectionMethodInfo {
-                id: "bitfun_server".into(),
-                name: "BitFun Server".into(),
+            ConnectionMethod::HaloServer => ConnectionMethodInfo {
+                id: "halo_server".into(),
+                name: "Halo Server".into(),
                 available: true,
-                description: "Official BitFun relay".into(),
+                description: "Official Halo relay".into(),
             },
             ConnectionMethod::CustomServer { url } => ConnectionMethodInfo {
                 id: "custom_server".into(),
@@ -1794,7 +1794,7 @@ fn parse_connection_method(
             ip: lan_ip.filter(|s| !s.is_empty()),
         }),
         "ngrok" => Ok(ConnectionMethod::Ngrok),
-        "bitfun_server" => Ok(ConnectionMethod::BitfunServer),
+        "halo_server" => Ok(ConnectionMethod::HaloServer),
         "custom_server" => Ok(ConnectionMethod::CustomServer {
             url: custom_url.unwrap_or_default(),
         }),
@@ -2145,7 +2145,7 @@ pub async fn account_cancel_pending_login(
 
     let transition = AccountContextTransitionPermit::begin();
     let sync_guard = ACCOUNT_AUTO_SYNC_LOCK.lock().await;
-    bitfun_core::service::remote_connect::settings_sync::wait_for_sync_operations_idle().await;
+    halo_core::service::remote_connect::settings_sync::wait_for_sync_operations_idle().await;
     let _transition_guard = AccountContextTransitionGuard {
         sync_guard: Some(sync_guard),
         transition: Some(transition),
@@ -2511,7 +2511,7 @@ pub async fn account_connect_devices() -> Result<Vec<OnlineDeviceInfo>, String> 
     let event_session = session.clone();
     let event_owner = routing_owner.clone();
     tokio::spawn(async move {
-        use bitfun_core::service::remote_connect::relay_client::RelayEvent;
+        use halo_core::service::remote_connect::relay_client::RelayEvent;
         'routing_events: while let Some(event) = event_rx.recv().await {
             if !device_routing_owner_is_current(&event_owner).await {
                 break;
@@ -2588,10 +2588,10 @@ pub async fn account_connect_devices() -> Result<Vec<OnlineDeviceInfo>, String> 
                     encrypted_data,
                     nonce,
                 } => {
-                    use bitfun_core::service::remote_connect::encryption::decrypt_from_base64;
+                    use halo_core::service::remote_connect::encryption::decrypt_from_base64;
                     match decrypt_from_base64(&event_session.master_key, &encrypted_data, &nonce) {
                         Ok(plaintext) => {
-                            use bitfun_core::service::remote_connect::remote_server::RemoteCommand;
+                            use halo_core::service::remote_connect::remote_server::RemoteCommand;
                             match serde_json::from_str::<RemoteCommand>(&plaintext) {
                                 Ok(RemoteCommand::DeviceEvent { event, payload }) => {
                                     let Some(_routing_effect) =
@@ -2622,7 +2622,7 @@ pub async fn account_connect_devices() -> Result<Vec<OnlineDeviceInfo>, String> 
                                         content.len()
                                     );
                                     if let Some(scheduler) = DIALOG_SCHEDULER.get() {
-                                        use bitfun_core::agentic::coordination::{
+                                        use halo_core::agentic::coordination::{
                                             DialogSubmissionPolicy, DialogTriggerSource,
                                         };
                                         let session_id = session_id
@@ -2847,7 +2847,7 @@ pub async fn account_send_session_to_device(
 
     // Wrap the raw session JSON in a SendSessionToDevice command envelope so the
     // receiving device knows what to do with the payload.
-    use bitfun_core::service::remote_connect::remote_server::RemoteCommand;
+    use halo_core::service::remote_connect::remote_server::RemoteCommand;
     let envelope = serde_json::to_string(&RemoteCommand::SendSessionToDevice {
         session_data: session_json,
         session_id: session_id.clone(),
@@ -2861,7 +2861,7 @@ pub async fn account_send_session_to_device(
     if !device_routing_owner_is_current(&routing_owner).await {
         return Err("device routing changed".to_string());
     }
-    use bitfun_core::service::remote_connect::encryption::encrypt_to_base64;
+    use halo_core::service::remote_connect::encryption::encrypt_to_base64;
     let (encrypted_data, nonce) =
         encrypt_to_base64(&session.master_key, &envelope).map_err(|e| format!("{e}"))?;
 
@@ -2934,7 +2934,7 @@ pub async fn account_sync_settings(settings_json: String) -> Result<(), String> 
     let generation = account_context_generation();
     let _sync_guard = lock_account_sync(generation).await?;
     let (session, relay_url) = read_account_context().await?;
-    bitfun_core::service::remote_connect::settings_sync::upload_settings_payload(
+    halo_core::service::remote_connect::settings_sync::upload_settings_payload(
         &session,
         &relay_url,
         &settings_json,
@@ -3014,7 +3014,7 @@ pub async fn account_export_local_session(
     session_id: String,
     workspace_path: String,
     app_state: State<'_, crate::api::app_state::AppState>,
-    path_manager: State<'_, Arc<bitfun_core::infrastructure::PathManager>>,
+    path_manager: State<'_, Arc<halo_core::infrastructure::PathManager>>,
 ) -> Result<(), String> {
     let generation = account_context_generation();
     let _sync_guard = lock_account_sync(generation).await?;
@@ -3076,7 +3076,7 @@ pub async fn account_export_local_session(
 pub async fn account_export_all_sessions(
     workspace_path: String,
     app_state: State<'_, crate::api::app_state::AppState>,
-    path_manager: State<'_, Arc<bitfun_core::infrastructure::PathManager>>,
+    path_manager: State<'_, Arc<halo_core::infrastructure::PathManager>>,
 ) -> Result<usize, String> {
     let generation = account_context_generation();
     let _sync_guard = lock_account_sync(generation).await?;
@@ -3165,7 +3165,7 @@ pub async fn account_import_remote_sessions(
     workspace_path: String,
     coordinator: State<'_, Arc<ConversationCoordinator>>,
     app_state: State<'_, crate::api::app_state::AppState>,
-    path_manager: State<'_, Arc<bitfun_core::infrastructure::PathManager>>,
+    path_manager: State<'_, Arc<halo_core::infrastructure::PathManager>>,
 ) -> Result<Vec<String>, String> {
     let generation = account_context_generation();
     let _sync_guard = lock_account_sync(generation).await?;
@@ -3243,7 +3243,7 @@ pub async fn account_fetch_session_turns(
     workspace_path: String,
     coordinator: State<'_, Arc<ConversationCoordinator>>,
     app_state: State<'_, crate::api::app_state::AppState>,
-    path_manager: State<'_, Arc<bitfun_core::infrastructure::PathManager>>,
+    path_manager: State<'_, Arc<halo_core::infrastructure::PathManager>>,
 ) -> Result<bool, String> {
     let generation = account_context_generation();
     // Soft-skip before any disk IO so accidental callers cannot fail-closed
@@ -3354,7 +3354,7 @@ pub async fn account_execute_on_device(
     let account_generation = account_context_generation();
     let (session, _) = read_account_context_for_generation(account_generation).await?;
 
-    use bitfun_core::service::remote_connect::remote_server::RemoteCommand;
+    use halo_core::service::remote_connect::remote_server::RemoteCommand;
     let envelope = serde_json::to_string(&RemoteCommand::ExecuteOnDevice {
         session_id,
         content,
@@ -3369,7 +3369,7 @@ pub async fn account_execute_on_device(
     if !device_routing_owner_is_current(&routing_owner).await {
         return Err("device routing changed".to_string());
     }
-    use bitfun_core::service::remote_connect::encryption::encrypt_to_base64;
+    use halo_core::service::remote_connect::encryption::encrypt_to_base64;
     let (encrypted_data, nonce) =
         encrypt_to_base64(&session.master_key, &envelope).map_err(|e| format!("{e}"))?;
 
@@ -3553,7 +3553,7 @@ pub async fn account_delegate_to_paired(correlation_id: String) -> Result<String
 
     // 3. Encrypt with the captured room secret and atomically verify that the
     // service still owns that pairing before sending.
-    use bitfun_core::service::remote_connect::encryption::encrypt_to_base64;
+    use halo_core::service::remote_connect::encryption::encrypt_to_base64;
     let (enc, nonce) = encrypt_to_base64(&pairing_secret, &identity_str)
         .map_err(|e| format!("encrypt delegated identity: {e}"))?;
     if !account_context_matches(account_generation, &session.token).await {
@@ -3605,7 +3605,7 @@ pub async fn account_auto_sync(
     config_json: String,
     sync_operation_id: u64,
     app_state: State<'_, crate::api::app_state::AppState>,
-    path_manager: State<'_, Arc<bitfun_core::infrastructure::PathManager>>,
+    path_manager: State<'_, Arc<halo_core::infrastructure::PathManager>>,
 ) -> Result<AutoSyncResult, String> {
     if sync_operation_id == 0 {
         return Err("sync operation id must be non-zero".to_string());
@@ -3640,7 +3640,7 @@ async fn account_auto_sync_inner(
     config_json: String,
     sync_operation_id: u64,
     app_state: State<'_, crate::api::app_state::AppState>,
-    path_manager: State<'_, Arc<bitfun_core::infrastructure::PathManager>>,
+    path_manager: State<'_, Arc<halo_core::infrastructure::PathManager>>,
 ) -> Result<AutoSyncResult, String> {
     // Soft no-op while controlling a peer: cloud sync would rewrite the
     // controller's local disk mid-remote. Match account_fetch_session_turns.
@@ -3655,7 +3655,7 @@ async fn account_auto_sync_inner(
     ensure_account_auto_sync_current(sync_operation_id)?;
     let (acct_session, relay_url) = read_account_context().await?;
     let client = AccountClient::new();
-    use bitfun_core::service::remote_connect::settings_sync;
+    use halo_core::service::remote_connect::settings_sync;
 
     // 1. Settings sync
     let settings_synced = if is_first_login {
@@ -3889,7 +3889,7 @@ fn ensure_session_backup_complete(
 // ── Auto-sync: debounced upload on session changes ─────────────────────────
 //
 // Settings sync (debounced push + 30s pull) is owned by the shared engine in
-// `bitfun_core::service::remote_connect::settings_sync`; this module only
+// `halo_core::service::remote_connect::settings_sync`; this module only
 // keeps the desktop-specific session backup loop and wires engine hooks.
 
 use std::time::Duration;
@@ -3921,7 +3921,7 @@ pub fn init_auto_sync() {
 
 /// Start the shared settings sync engine with desktop hooks.
 fn start_settings_sync_engine() {
-    use bitfun_core::service::remote_connect::settings_sync;
+    use halo_core::service::remote_connect::settings_sync;
     let hooks = settings_sync::SettingsSyncHooks {
         account_context: Some(std::sync::Arc::new(|| {
             Box::pin(async {
@@ -3998,7 +3998,7 @@ pub fn notify_session_deleted(session_id: &str) {
 /// Non-blocking notification that config was changed. Called from `set_config`.
 /// Forwards to the shared settings sync engine (debounced + hash-deduped).
 pub fn notify_settings_changed() {
-    bitfun_core::service::remote_connect::settings_sync::notify_settings_changed();
+    halo_core::service::remote_connect::settings_sync::notify_settings_changed();
 }
 
 /// Background loop: collects session sync requests, debounces 5 seconds,
@@ -4159,11 +4159,11 @@ async fn export_and_upload_session(
     // Resolve storage path — we need app_state for desktop_effective_session_storage_path
     // but in this background context we don't have it. Use the path_manager approach.
     let path_manager = std::sync::Arc::new(
-        bitfun_core::infrastructure::PathManager::new()
+        halo_core::infrastructure::PathManager::new()
             .map_err(|e| anyhow::anyhow!("create path manager: {e}"))?,
     );
     let storage_path =
-        bitfun_core::service::remote_ssh::workspace_state::get_effective_session_path(
+        halo_core::service::remote_ssh::workspace_state::get_effective_session_path(
             workspace_path,
             None,
             None,
@@ -4207,10 +4207,10 @@ async fn export_and_upload_session(
 }
 
 /// Resolve the local workspace path for task execution. Returns the first
-/// project directory found under ~/.bitfun/projects/, or "/" as fallback.
+/// project directory found under ~/.halo-studio/projects/, or "/" as fallback.
 fn resolve_local_workspace_path() -> String {
     let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/"));
-    let projects = home.join(".bitfun").join("projects");
+    let projects = home.join(".halo-studio").join("projects");
     if let Ok(entries) = std::fs::read_dir(&projects) {
         for entry in entries.flatten() {
             if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
@@ -4225,9 +4225,9 @@ fn resolve_local_workspace_path() -> String {
 /// Execute a RemoteCommand locally (for RPC requests from other devices).
 /// Returns the RemoteResponse serialized as JSON to be encrypted and sent back.
 async fn execute_local_remote_command(
-    cmd: &bitfun_core::service::remote_connect::remote_server::RemoteCommand,
+    cmd: &halo_core::service::remote_connect::remote_server::RemoteCommand,
 ) -> anyhow::Result<serde_json::Value> {
-    use bitfun_core::service::remote_connect::remote_server::{RemoteCommand, RemoteResponse};
+    use halo_core::service::remote_connect::remote_server::{RemoteCommand, RemoteResponse};
 
     match cmd {
         RemoteCommand::HostInvoke { command, args } => {
@@ -4298,7 +4298,7 @@ async fn execute_local_remote_command(
             // manual coordinator access. The dummy shared secret is irrelevant
             // because we call dispatch() directly (encryption is handled at the
             // RPC envelope level, not here).
-            let server = bitfun_core::service::remote_connect::RemoteServer::new([0u8; 32]);
+            let server = halo_core::service::remote_connect::RemoteServer::new([0u8; 32]);
             let response = server.dispatch(other).await;
             serde_json::to_value(&response).map_err(|e| anyhow::anyhow!("serialize response: {e}"))
         }
@@ -4317,7 +4317,7 @@ async fn import_session_bundle(bundle_json: &str, account_generation: u64) -> an
     read_account_context().await.map_err(anyhow::Error::msg)?;
     let bundle: SessionBundle = serde_json::from_str(bundle_json)?;
 
-    let path_manager = std::sync::Arc::new(bitfun_core::infrastructure::PathManager::new()?);
+    let path_manager = std::sync::Arc::new(halo_core::infrastructure::PathManager::new()?);
     let manager = PersistenceManager::new(path_manager.clone())?;
     let workspace = get_global_workspace_service()
         .ok_or_else(|| anyhow::anyhow!("workspace service is unavailable"))?
@@ -4376,7 +4376,7 @@ async fn pull_and_reconcile(account_generation: u64) {
     let Ok((acct_session, relay_url)) = read_account_context().await else {
         return;
     };
-    use bitfun_core::service::remote_connect::settings_sync;
+    use halo_core::service::remote_connect::settings_sync;
     if let Err(e) = settings_sync::pull_and_apply_settings(&acct_session, &relay_url).await {
         if is_token_expired_error(&e) {
             TOKEN_EXPIRED.store(true, std::sync::atomic::Ordering::Relaxed);

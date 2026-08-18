@@ -28,8 +28,8 @@ use crate::agentic::keyed_lock::{KeyedAsyncLock, KeyedAsyncLockGuard};
 use crate::agentic::round_preempt::{DialogRoundInjectionSource, SessionRoundInjectionBuffer};
 use crate::agentic::session::session_store_port::CoreSessionStorePort;
 use crate::agentic::session::SessionManager;
-use crate::util::errors::{BitFunError, BitFunResult};
-use bitfun_runtime_ports::{ThreadGoal, MAX_THREAD_GOAL_AUTO_CONTINUATIONS};
+use crate::util::errors::{HaloError, HaloResult};
+use halo_runtime_ports::{ThreadGoal, MAX_THREAD_GOAL_AUTO_CONTINUATIONS};
 use log::{debug, info, warn};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -42,7 +42,7 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use bitfun_agent_runtime::scheduler::{
+use halo_agent_runtime::scheduler::{
     build_thread_goal_objective_updated_delivery_plan, build_thread_goal_resumed_delivery_plan,
     resolve_agent_session_reply_action, resolve_background_delivery_action,
     resolve_background_delivery_injection, resolve_background_delivery_injection_for_turn,
@@ -55,7 +55,7 @@ use bitfun_agent_runtime::scheduler::{
     ThreadGoalDeliveryReminder, ThreadGoalDeliveryReminderKind, TurnOutcomeQueueAction,
     TurnOutcomeStatus,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     resolve_dialog_submit_queue_action, AgentBackgroundResultRequest, AgentDialogPrependedReminder,
     AgentDialogTurnPort, AgentDialogTurnRequest, AgentInputAttachment, AgentLifecycleDeliveryPort,
     AgentThreadGoalDeliveryKind, AgentThreadGoalDeliveryRequest, AgentTurnCancellationPort,
@@ -63,7 +63,7 @@ use bitfun_runtime_ports::{
     DialogSubmitQueueAction, DialogSubmitQueueFacts, PortError, PortErrorKind, PortResult,
     RoundInjection, RoundInjectionKind, SessionStoragePathRequest, SessionStorePort,
 };
-pub use bitfun_runtime_ports::{
+pub use halo_runtime_ports::{
     AgentSessionReplyRoute, DialogQueuePriority, DialogSteerOutcome, DialogSubmissionPolicy,
     DialogSubmitOutcome,
 };
@@ -114,7 +114,7 @@ fn remove_queued_turn_by_id(
 
 #[derive(Debug)]
 enum SchedulerSubmitError {
-    Core(BitFunError),
+    Core(HaloError),
     Port(PortError),
     Message(String),
 }
@@ -122,23 +122,23 @@ enum SchedulerSubmitError {
 impl SchedulerSubmitError {
     fn into_port_error(self) -> PortError {
         match self {
-            Self::Core(BitFunError::Validation(message)) => {
+            Self::Core(HaloError::Validation(message)) => {
                 PortError::new(PortErrorKind::InvalidRequest, message)
             }
-            Self::Core(BitFunError::NotFound(message)) => {
+            Self::Core(HaloError::NotFound(message)) => {
                 PortError::new(PortErrorKind::NotFound, message)
             }
-            Self::Core(BitFunError::Cancelled(message)) => {
+            Self::Core(HaloError::Cancelled(message)) => {
                 PortError::new(PortErrorKind::Cancelled, message)
             }
-            Self::Core(BitFunError::Timeout(message)) => {
+            Self::Core(HaloError::Timeout(message)) => {
                 PortError::new(PortErrorKind::Timeout, message)
             }
-            Self::Core(BitFunError::SessionInUse { session_id }) => PortError::new(
+            Self::Core(HaloError::SessionInUse { session_id }) => PortError::new(
                 PortErrorKind::SessionInUse,
                 format!("Session is already open for writing: {session_id}"),
             ),
-            Self::Core(BitFunError::NotImplemented(message)) => {
+            Self::Core(HaloError::NotImplemented(message)) => {
                 PortError::new(PortErrorKind::NotAvailable, message)
             }
             Self::Core(error) => PortError::new(PortErrorKind::Backend, error.to_string()),
@@ -158,8 +158,8 @@ impl std::fmt::Display for SchedulerSubmitError {
     }
 }
 
-impl From<BitFunError> for SchedulerSubmitError {
-    fn from(error: BitFunError) -> Self {
+impl From<HaloError> for SchedulerSubmitError {
+    fn from(error: HaloError) -> Self {
         Self::Core(error)
     }
 }
@@ -186,17 +186,17 @@ pub(crate) struct HiddenSubagentQueuedExecution {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SharedSubagentResultSender {
-    inner: Arc<std::sync::Mutex<Option<oneshot::Sender<BitFunResult<SubagentResult>>>>>,
+    inner: Arc<std::sync::Mutex<Option<oneshot::Sender<HaloResult<SubagentResult>>>>>,
 }
 
 impl SharedSubagentResultSender {
-    fn new(sender: oneshot::Sender<BitFunResult<SubagentResult>>) -> Self {
+    fn new(sender: oneshot::Sender<HaloResult<SubagentResult>>) -> Self {
         Self {
             inner: Arc::new(std::sync::Mutex::new(Some(sender))),
         }
     }
 
-    fn send(&self, result: BitFunResult<SubagentResult>) {
+    fn send(&self, result: HaloResult<SubagentResult>) {
         let Some(sender) = self.inner.lock().ok().and_then(|mut guard| guard.take()) else {
             return;
         };
@@ -236,7 +236,7 @@ impl HiddenSubagentQueueCancellation {
 
 #[derive(Debug)]
 pub(crate) struct HiddenSubagentSubmitResult {
-    pub receiver: oneshot::Receiver<BitFunResult<SubagentResult>>,
+    pub receiver: oneshot::Receiver<HaloResult<SubagentResult>>,
     pub cancel_handle: HiddenSubagentQueueCancelHandle,
 }
 
@@ -278,7 +278,7 @@ impl DialogRoundInjectionSource for SchedulerRoundInjectionSource {
         &self,
         session_id: &str,
         turn_id: &str,
-    ) -> bitfun_runtime_ports::RoundInjectionToolPreemption {
+    ) -> halo_runtime_ports::RoundInjectionToolPreemption {
         self.buffer
             .pending_tool_preemption_for_turn(session_id, turn_id)
     }
@@ -916,7 +916,7 @@ impl DialogScheduler {
                 "Hidden subagent turn cancellation request did not hit an active turn: session_id={}, turn_id={}, error={}",
                 handle.session_id, handle.turn_id, error
             );
-            handle.result_tx.send(Err(BitFunError::Cancelled(
+            handle.result_tx.send(Err(HaloError::Cancelled(
                 "Subagent task has been cancelled".to_string(),
             )));
         }
@@ -1141,7 +1141,7 @@ impl DialogScheduler {
                 self.coordinator
                     .cleanup_prepared_hidden_subagent_session_if_unsubmitted(&execution.request)
                     .await;
-                execution.result_tx.send(Err(BitFunError::Cancelled(
+                execution.result_tx.send(Err(HaloError::Cancelled(
                     "Subagent task has been cancelled".to_string(),
                 )));
             }
@@ -1194,7 +1194,7 @@ impl DialogScheduler {
         target_session_id: &str,
         requester_session_id: &str,
         wait_timeout: Duration,
-    ) -> crate::util::errors::BitFunResult<Option<String>> {
+    ) -> crate::util::errors::HaloResult<Option<String>> {
         let _operation_guard = self.lock_session_operation(target_session_id).await;
         let suppression_key = self
             .active_turns
@@ -1240,7 +1240,7 @@ impl DialogScheduler {
         &self,
         session_id: &str,
         wait_timeout: Duration,
-    ) -> BitFunResult<Option<String>> {
+    ) -> HaloResult<Option<String>> {
         let _operation_guard = self.lock_session_operation(session_id).await;
         abort_thread_goal_continuation_for_session(session_id);
         self.coordinator
@@ -1256,8 +1256,8 @@ impl DialogScheduler {
         session_id: &str,
         requested_storage_path: &std::path::Path,
         wait_timeout: Duration,
-    ) -> BitFunResult<SessionMaintenancePermit> {
-        bitfun_core_types::validate_session_id(session_id).map_err(BitFunError::Validation)?;
+    ) -> HaloResult<SessionMaintenancePermit> {
+        halo_core_types::validate_session_id(session_id).map_err(HaloError::Validation)?;
         let operation_guard = self.lock_session_operation(session_id).await;
         self.session_manager
             .validate_session_storage_path_binding(session_id, requested_storage_path)?;
@@ -1321,7 +1321,7 @@ impl DialogScheduler {
         session_id: &str,
         requested_storage_path: &std::path::Path,
         wait_timeout: Duration,
-    ) -> BitFunResult<SessionMaintenancePermit> {
+    ) -> HaloResult<SessionMaintenancePermit> {
         self.begin_session_maintenance(session_id, requested_storage_path, wait_timeout)
             .await
     }
@@ -1392,7 +1392,7 @@ impl DialogScheduler {
                                 &execution.request,
                             )
                             .await;
-                        execution.result_tx.send(Err(BitFunError::Cancelled(
+                        execution.result_tx.send(Err(HaloError::Cancelled(
                             "Subagent task was cancelled because a previous queued turn failed"
                                 .to_string(),
                         )));
@@ -1623,7 +1623,7 @@ impl DialogScheduler {
                     ))
                     .await;
             });
-            result_tx.send(Err(BitFunError::Cancelled(
+            result_tx.send(Err(HaloError::Cancelled(
                 "Subagent task has been cancelled".to_string(),
             )));
             return Ok(turn_id);
@@ -1691,7 +1691,7 @@ impl DialogScheduler {
                         .await;
                     result_tx.send(Ok(result));
                 }
-                Err(BitFunError::Cancelled(error_text)) => {
+                Err(HaloError::Cancelled(error_text)) => {
                     let _ = outcome_tx
                         .send((
                             session_id_owned.clone(),
@@ -1700,7 +1700,7 @@ impl DialogScheduler {
                             },
                         ))
                         .await;
-                    result_tx.send(Err(BitFunError::Cancelled(error_text)));
+                    result_tx.send(Err(HaloError::Cancelled(error_text)));
                 }
                 Err(error) => {
                     let error_text = error.to_string();
@@ -2391,12 +2391,12 @@ mod tests {
     use crate::agentic::tools::registry::ToolRegistry;
     use crate::agentic::tools::{ToolPipeline, ToolStateManager};
     use crate::infrastructure::PathManager;
-    use bitfun_runtime_ports::{AgentDialogPrependedReminder, AgentInputAttachment, PortErrorKind};
+    use halo_runtime_ports::{AgentDialogPrependedReminder, AgentInputAttachment, PortErrorKind};
     use tokio::sync::RwLock as TokioRwLock;
 
     #[test]
     fn scheduler_preserves_session_writer_conflicts() {
-        let error = SchedulerSubmitError::Core(BitFunError::SessionInUse {
+        let error = SchedulerSubmitError::Core(HaloError::SessionInUse {
             session_id: "session-1".to_string(),
         })
         .into_port_error();
@@ -2453,10 +2453,10 @@ mod tests {
             Arc::new(
                 crate::runtime_ownership::CoreRuntimeOwnership::embedded_with_facts(
                     std::env::temp_dir().join(format!(
-                        "bitfun-scheduler-ownership-test-{}",
+                        "halo-scheduler-ownership-test-{}",
                         uuid::Uuid::new_v4()
                     )),
-                    "bitfun".to_string(),
+                    "halo".to_string(),
                     "test",
                 ),
             ),
@@ -2638,7 +2638,7 @@ mod tests {
             Err(error) => error,
         };
 
-        assert!(matches!(error, BitFunError::Timeout(_)));
+        assert!(matches!(error, HaloError::Timeout(_)));
         assert!(error.to_string().contains(child_session_id));
         assert!(session_manager.get_session(parent_session_id).is_some());
 
@@ -2649,7 +2649,7 @@ mod tests {
             Ok(_) => panic!("retry must retain ownership of the still-running child"),
             Err(error) => error,
         };
-        assert!(matches!(retry_error, BitFunError::Timeout(_)));
+        assert!(matches!(retry_error, HaloError::Timeout(_)));
         assert!(retry_error.to_string().contains(child_session_id));
 
         scheduler
@@ -2712,7 +2712,7 @@ mod tests {
                     Duration::from_millis(10),
                 )
                 .await,
-            Err(BitFunError::NotFound(_))
+            Err(HaloError::NotFound(_))
         ));
     }
 
@@ -2777,7 +2777,7 @@ mod tests {
                 .coordinator
                 .wait_for_turn_settlement(session_id, turn_id, Duration::from_millis(10))
                 .await,
-            Err(BitFunError::Timeout(_))
+            Err(HaloError::Timeout(_))
         ));
 
         assert!(scheduler
@@ -2854,7 +2854,7 @@ mod tests {
                 .coordinator
                 .wait_for_turn_settlement(session_id, "rejected-turn", Duration::from_millis(10),)
                 .await,
-            Err(BitFunError::NotFound(_))
+            Err(HaloError::NotFound(_))
         ));
     }
 
@@ -2959,7 +2959,7 @@ mod tests {
                 .coordinator
                 .wait_for_turn_settlement(session_id, turn_id, Duration::from_millis(10))
                 .await,
-            Err(BitFunError::NotFound(_))
+            Err(HaloError::NotFound(_))
         ));
     }
 
@@ -3046,7 +3046,7 @@ mod tests {
             .await
             .expect_err("missing settlement evidence must not be treated as success");
 
-        assert!(matches!(error, BitFunError::Service(_)), "{error}");
+        assert!(matches!(error, HaloError::Service(_)), "{error}");
     }
 
     fn desktop_active_turn(turn_id: &str) -> ActiveDialogTurn {
@@ -3108,7 +3108,7 @@ mod tests {
             .err()
             .expect("wrong workspace must be rejected before quiescence");
 
-        assert!(matches!(error, BitFunError::Validation(_)));
+        assert!(matches!(error, HaloError::Validation(_)));
         assert_eq!(scheduler.queue_depth(session_id), 1);
         assert!(scheduler
             .active_turns

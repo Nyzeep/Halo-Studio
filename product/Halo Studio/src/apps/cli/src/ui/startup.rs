@@ -39,10 +39,10 @@ use ratatui::{
 use std::sync::Arc;
 use std::time::Duration;
 
-use bitfun_core::agentic::agents::{
+use halo_core::agentic::agents::{
     get_agent_registry, AgentInfo, SubAgentSource, SubagentListScope, SubagentQueryContext,
 };
-use bitfun_core::agentic::tools::implementations::skills::{
+use halo_core::agentic::tools::implementations::skills::{
     mode_overrides::{
         load_project_mode_skills_document_local, save_project_mode_skills_document_local,
         set_mode_skill_disabled_in_document, set_user_mode_skill_state,
@@ -50,8 +50,8 @@ use bitfun_core::agentic::tools::implementations::skills::{
     registry::SkillRegistry,
     ModeSkillInfo, SkillInfo,
 };
-use bitfun_core::product_runtime::CoreAgentRuntimeCompatibility;
-use bitfun_core::service::config::GlobalConfigManager;
+use halo_core::product_runtime::CoreAgentRuntimeCompatibility;
+use halo_core::service::config::GlobalConfigManager;
 
 use crate::agent::runtime_client::CliAgentRuntimeClient;
 
@@ -1403,7 +1403,7 @@ impl StartupPage {
     fn handle_session_delete(&mut self, item: &SessionItem) {
         if self.agent.is_shared() {
             self.status = Some(format!(
-                "Session deletion is unavailable in Shared TUI preview. {SHARED_TUI_EMBEDDED_HANDOFF}; then run `bitfun sessions delete`"
+                "Session deletion is unavailable in Shared TUI preview. {SHARED_TUI_EMBEDDED_HANDOFF}; then run `halo sessions delete`"
             ));
             return;
         }
@@ -1431,9 +1431,9 @@ impl StartupPage {
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 let config_service = GlobalConfigManager::get_service().await.ok()?;
-                let models: Vec<bitfun_core::service::config::AIModelConfig> =
+                let models: Vec<halo_core::service::config::AIModelConfig> =
                     config_service.get_ai_models().await.ok()?;
-                let global_config: bitfun_core::service::config::GlobalConfig =
+                let global_config: halo_core::service::config::GlobalConfig =
                     config_service.get_config(None).await.ok()?;
 
                 let current_model_id =
@@ -1537,7 +1537,7 @@ impl StartupPage {
             Some(result.custom_request_body.clone())
         };
 
-        let model_config = bitfun_core::service::config::AIModelConfig {
+        let model_config = halo_core::service::config::AIModelConfig {
             id: model_id.clone(),
             name: result.name.clone(),
             provider: result.provider_format.clone(),
@@ -1581,7 +1581,7 @@ impl StartupPage {
 
                 // Auto-set as primary model if no primary model exists
                 match config_service
-                    .get_config::<bitfun_core::service::config::GlobalConfig>(None)
+                    .get_config::<halo_core::service::config::GlobalConfig>(None)
                     .await
                 {
                     Ok(global_config) => {
@@ -1630,7 +1630,7 @@ impl StartupPage {
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 let config_service = GlobalConfigManager::get_service().await.ok()?;
-                let models: Vec<bitfun_core::service::config::AIModelConfig> =
+                let models: Vec<halo_core::service::config::AIModelConfig> =
                     config_service.get_ai_models().await.ok()?;
                 models.into_iter().find(|m| m.id == model_id)
             })
@@ -1687,7 +1687,7 @@ impl StartupPage {
             Some(result.custom_request_body.clone())
         };
 
-        let model_config = bitfun_core::service::config::AIModelConfig {
+        let model_config = halo_core::service::config::AIModelConfig {
             id: model_id.clone(),
             name: result.name.clone(),
             provider: result.provider_format.clone(),
@@ -2295,15 +2295,15 @@ impl StartupPage {
         let result: Option<String> = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 let config_service = GlobalConfigManager::get_service().await.ok()?;
-                let models: Vec<bitfun_core::service::config::AIModelConfig> =
+                let models: Vec<halo_core::service::config::AIModelConfig> =
                     config_service.get_ai_models().await.ok()?;
-                let global_config: bitfun_core::service::config::GlobalConfig =
+                let global_config: halo_core::service::config::GlobalConfig =
                     config_service.get_config(None).await.ok()?;
 
                 let model_id = crate::model_selection::resolve_mode_model_id(&global_config.ai)?;
 
                 fn provider_display_name(
-                    model: &bitfun_core::service::config::AIModelConfig,
+                    model: &halo_core::service::config::AIModelConfig,
                 ) -> String {
                     let raw_name = model.name.trim();
                     let model_name = model.model_name.trim();
@@ -2325,7 +2325,7 @@ impl StartupPage {
                 }
 
                 fn model_display_name(
-                    model: &bitfun_core::service::config::AIModelConfig,
+                    model: &halo_core::service::config::AIModelConfig,
                 ) -> String {
                     format!("{} / {}", model.model_name, provider_display_name(model))
                 }

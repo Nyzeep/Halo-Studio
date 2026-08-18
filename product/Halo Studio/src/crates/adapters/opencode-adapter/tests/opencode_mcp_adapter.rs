@@ -1,5 +1,5 @@
-use bitfun_opencode_adapter::{OpenCodeMcpProvider, OpenCodeMcpProviderOptions};
-use bitfun_product_domains::external_sources::{
+use halo_opencode_adapter::{OpenCodeMcpProvider, OpenCodeMcpProviderOptions};
+use halo_product_domains::external_sources::{
     ExecutionDomainId, ExternalMcpDiscoveryInput, ExternalMcpRevisionKey,
     ExternalMcpSourceProvider, ExternalMcpStaticStatus, ExternalMcpTransportKind,
     ExternalSourceContext, ExternalSourceScope, PreparedExternalMcpImportTransport,

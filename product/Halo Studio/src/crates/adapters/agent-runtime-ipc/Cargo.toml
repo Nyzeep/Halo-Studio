@@ -1,20 +1,20 @@
 [package]
-name = "bitfun-agent-runtime-ipc"
+name = "halo-agent-runtime-ipc"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 publish = false
-description = "Private pre-integration IPC seam for a shared BitFun Agent Runtime"
+description = "Private pre-integration IPC seam for a shared Halo Agent Runtime"
 
 [lib]
-name = "bitfun_agent_runtime_ipc"
+name = "halo_agent_runtime_ipc"
 crate-type = ["rlib"]
 
 [dependencies]
 async-trait = { workspace = true }
-bitfun-events = { path = "../../contracts/events" }
-bitfun-product-domains = { path = "../../contracts/product-domains", default-features = false }
-bitfun-runtime-ports = { path = "../../contracts/runtime-ports" }
+halo-events = { path = "../../contracts/events" }
+halo-product-domains = { path = "../../contracts/product-domains", default-features = false }
+halo-runtime-ports = { path = "../../contracts/runtime-ports" }
 dunce = { workspace = true }
 fs2 = { workspace = true }
 serde = { workspace = true }

@@ -2,7 +2,7 @@
 
 use crate::api::app_state::AppState;
 use crate::startup_trace::DesktopStartupTrace;
-use bitfun_core::util::errors::BitFunError;
+use halo_core::util::errors::HaloError;
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -59,9 +59,9 @@ fn to_json_value<T: Serialize>(value: T, context: &str) -> Result<Value, String>
     serde_json::to_value(value).map_err(|e| format!("Failed to serialize {}: {}", context, e))
 }
 
-fn is_expected_config_path_not_found(error: &BitFunError, path: Option<&str>) -> bool {
+fn is_expected_config_path_not_found(error: &HaloError, path: Option<&str>) -> bool {
     match (error, path) {
-        (BitFunError::NotFound(message), Some(path)) => {
+        (HaloError::NotFound(message), Some(path)) => {
             message == &format!("Config path '{}' not found", path)
         }
         _ => false,
@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn recognizes_expected_config_path_not_found_errors() {
-        let error = BitFunError::NotFound(
+        let error = HaloError::NotFound(
             "Config path 'ai.review_team_rate_limit_status' not found".to_string(),
         );
 
@@ -171,7 +171,7 @@ mod tests {
         ));
         assert!(!is_expected_config_path_not_found(&error, None));
         assert!(!is_expected_config_path_not_found(
-            &BitFunError::config("Config path 'ai.review_team_rate_limit_status' not found"),
+            &HaloError::config("Config path 'ai.review_team_rate_limit_status' not found"),
             Some("ai.review_team_rate_limit_status"),
         ));
     }
@@ -340,7 +340,7 @@ pub async fn reload_config(state: State<'_, AppState>) -> Result<String, String>
 
 #[tauri::command]
 pub async fn sync_config_to_global(_state: State<'_, AppState>) -> Result<String, String> {
-    match bitfun_core::service::config::reload_global_config().await {
+    match halo_core::service::config::reload_global_config().await {
         Ok(_) => {
             info!("Config synced to global service");
             Ok("Configuration synced to global service".to_string())
@@ -354,7 +354,7 @@ pub async fn sync_config_to_global(_state: State<'_, AppState>) -> Result<String
 
 #[tauri::command]
 pub async fn get_global_config_health() -> Result<bool, String> {
-    Ok(bitfun_core::service::config::GlobalConfigManager::is_initialized())
+    Ok(halo_core::service::config::GlobalConfigManager::is_initialized())
 }
 
 #[tauri::command]
@@ -394,7 +394,7 @@ pub async fn append_flow_chat_diagnostics(
 #[tauri::command]
 pub async fn get_agent_profile_configs(_state: State<'_, AppState>) -> Result<Value, String> {
     let agent_profiles =
-        bitfun_core::service::config::mode_config_canonicalizer::get_agent_profile_views()
+        halo_core::service::config::mode_config_canonicalizer::get_agent_profile_views()
             .await
             .map_err(|e| format!("Failed to get agent profile configs: {}", e))?;
 
@@ -407,7 +407,7 @@ pub async fn get_agent_profile_config(
     agent_id: String,
 ) -> Result<Value, String> {
     let config =
-        bitfun_core::service::config::mode_config_canonicalizer::get_agent_profile_view(&agent_id)
+        halo_core::service::config::mode_config_canonicalizer::get_agent_profile_view(&agent_id)
             .await
             .map_err(|e| format!("Failed to get agent profile config: {}", e))?;
 
@@ -422,7 +422,7 @@ pub async fn set_agent_profile_config(
 ) -> Result<String, String> {
     let _ = state;
 
-    match bitfun_core::service::config::mode_config_canonicalizer::persist_agent_profile_from_value(
+    match halo_core::service::config::mode_config_canonicalizer::persist_agent_profile_from_value(
         &agent_id, config,
     )
     .await
@@ -443,7 +443,7 @@ pub async fn reset_agent_profile_config(
     _state: State<'_, AppState>,
     agent_id: String,
 ) -> Result<String, String> {
-    match bitfun_core::service::config::mode_config_canonicalizer::reset_agent_profile_to_default(
+    match halo_core::service::config::mode_config_canonicalizer::reset_agent_profile_to_default(
         &agent_id,
     )
     .await
@@ -466,7 +466,7 @@ pub async fn reset_agent_profile_config(
 pub async fn canonicalize_agent_profile_configs(
     _state: State<'_, AppState>,
 ) -> Result<Value, String> {
-    match bitfun_core::service::config::mode_config_canonicalizer::canonicalize_agent_profile_configs(
+    match halo_core::service::config::mode_config_canonicalizer::canonicalize_agent_profile_configs(
     )
     .await {
         Ok(report) => {

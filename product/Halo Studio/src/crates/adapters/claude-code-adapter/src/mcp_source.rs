@@ -1,4 +1,4 @@
-use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_sources::{
     EcosystemId, ExternalMcpDiscoveryInput, ExternalMcpProviderIdentity,
     ExternalMcpProviderSnapshot, ExternalMcpServerDefinition, ExternalMcpSourceProvider,
     ExternalMcpStaticStatus, ExternalMcpTransportKind, ExternalSourceAssetKind,
@@ -7,7 +7,7 @@ use bitfun_product_domains::external_sources::{
     PreparedExternalMcpImportServer, PreparedExternalMcpImportTransport, PreparedExternalMcpServer,
     PreparedExternalMcpTransport, SecretValue, SourceKey, SourceQualifiedMcpServerId,
 };
-use bitfun_static_hook_support::{
+use halo_static_hook_support::{
     read_bounded_text, redacted_executable_preview, resolve_bounded_regular_file,
     BoundedFileResolveError, BoundedTextRead,
 };
@@ -520,7 +520,7 @@ fn extract_servers(value: &Value, selector: &LayerSelector) -> ExtractedServers 
 
 fn materialize_server(
     context: &ExternalSourceContext,
-    revision_key: &bitfun_product_domains::external_sources::ExternalMcpRevisionKey,
+    revision_key: &halo_product_domains::external_sources::ExternalMcpRevisionKey,
     source: SourceKey,
     name: String,
     value: Value,
@@ -1064,7 +1064,7 @@ fn diagnostic_error(suffix: &str, message: &str) -> ExternalSourceDiagnostic {
 }
 
 fn behavior_version(
-    revision_key: &bitfun_product_domains::external_sources::ExternalMcpRevisionKey,
+    revision_key: &halo_product_domains::external_sources::ExternalMcpRevisionKey,
     name: &str,
     value: &Value,
 ) -> String {
@@ -1076,7 +1076,7 @@ fn behavior_version(
 }
 
 fn content_version(
-    revision_key: &bitfun_product_domains::external_sources::ExternalMcpRevisionKey,
+    revision_key: &halo_product_domains::external_sources::ExternalMcpRevisionKey,
     path: &Path,
     kind: &str,
     content: &[u8],

@@ -108,7 +108,7 @@ export struct SettingsSheet {
   @Builder
   AboutCard() {
     Column() {
-      this.StaticRow(RemoteI18n.t('settings.about.product'), 'BitFun HarmonyOS')
+      this.StaticRow(RemoteI18n.t('settings.about.product'), 'Halo Studio HarmonyOS')
       Text('')
         .width('84%')
         .height(1)

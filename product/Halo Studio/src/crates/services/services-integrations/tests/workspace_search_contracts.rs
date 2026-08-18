@@ -1,6 +1,6 @@
 #[cfg(feature = "workspace-search")]
 mod workspace_search {
-    use bitfun_services_integrations::workspace_search::{
+    use halo_services_integrations::workspace_search::{
         workspace_search_daemon_binary_name, workspace_search_daemon_binary_names,
         workspace_search_daemon_missing_hint, WorkspaceSearchService,
     };

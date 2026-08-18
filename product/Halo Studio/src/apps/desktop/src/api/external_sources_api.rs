@@ -1,6 +1,6 @@
 //! Desktop host API for ecosystem-neutral external AI application sources.
 
-use bitfun_core::external_sources::{
+use halo_core::external_sources::{
     apply_external_source_control_action, choose_external_mcp_conflict,
     choose_external_subagent_conflict, expand_external_prompt_command,
     external_source_location_for_host_action, external_source_snapshot,
@@ -15,8 +15,8 @@ use bitfun_core::external_sources::{
     ExternalSourceSurfaceSnapshotV1, NativePromptCommandConflictSnapshot,
     NativePromptCommandDescriptor,
 };
-use bitfun_core::service::remote_ssh::workspace_state::is_remote_path;
-use bitfun_product_domains::external_sources::{
+use halo_core::service::remote_ssh::workspace_state::is_remote_path;
+use halo_product_domains::external_sources::{
     ExternalMcpImportApplyRequestV1, ExternalMcpImportApplyResultV1, ExternalMcpImportPlanV1,
 };
 use serde::{Deserialize, Serialize};
@@ -191,7 +191,7 @@ pub async fn plan_external_mcp_import_command(
     let workspace = require_local_workspace(request.workspace_path.as_deref())
         .await?
         .map(Path::to_path_buf);
-    bitfun_core::external_mcp_import::plan_external_mcp_import(workspace).await
+    halo_core::external_mcp_import::plan_external_mcp_import(workspace).await
 }
 
 #[tauri::command]
@@ -201,7 +201,7 @@ pub async fn apply_external_mcp_import_command(
     let workspace = require_local_workspace(request.workspace_path.as_deref())
         .await?
         .map(Path::to_path_buf);
-    bitfun_core::external_mcp_import::apply_external_mcp_import(workspace, request.import_request)
+    halo_core::external_mcp_import::apply_external_mcp_import(workspace, request.import_request)
         .await
 }
 
@@ -235,7 +235,7 @@ pub async fn update_external_integration_policy_command(
     update_external_integration_policy(workspace, request.mutation)
         .await
         .map(Into::into)
-        .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+        .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -246,7 +246,7 @@ pub async fn get_external_source_snapshot(
     external_source_snapshot(workspace, request.force_refresh)
         .await
         .map(|snapshot| ExternalSourcePublicSnapshot::from(snapshot).into_legacy_v0_compatible())
-        .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+        .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -256,9 +256,9 @@ pub async fn reveal_external_source_location(
     let workspace = require_local_workspace(request.workspace_path.as_deref()).await?;
     let path = external_source_location_for_host_action(workspace, &request.source_key)
         .await
-        .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)?;
+        .map_err(halo_core::external_sources::sanitize_external_source_operation_error)?;
     super::commands::reveal_local_path_in_explorer(&path, &request.source_key)
-        .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+        .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -295,7 +295,7 @@ pub async fn set_external_source_enabled_command(
     )
     .await
     .map(Into::into)
-    .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+    .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -311,7 +311,7 @@ pub async fn set_external_source_conflict_choice_command(
     )
     .await
     .map(Into::into)
-    .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+    .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -321,7 +321,7 @@ pub async fn get_native_prompt_command_conflicts_command(
     let workspace = require_local_workspace(request.workspace_path.as_deref()).await?;
     native_prompt_command_conflicts(workspace, request.native_commands)
         .await
-        .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+        .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -336,7 +336,7 @@ pub async fn set_native_prompt_command_conflict_choice_command(
         request.expected_preference_revision,
     )
     .await
-    .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+    .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -355,7 +355,7 @@ pub async fn expand_external_prompt_command_command(
         request.expected_preference_revision,
     )
     .await
-    .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+    .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -372,7 +372,7 @@ pub async fn set_external_tool_target_decision_command(
     )
     .await
     .map(Into::into)
-    .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+    .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -388,7 +388,7 @@ pub async fn set_external_tool_conflict_choice_command(
     )
     .await
     .map(Into::into)
-    .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+    .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -406,7 +406,7 @@ pub async fn set_external_subagent_activation_command(
     )
     .await
     .map(Into::into)
-    .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+    .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -424,7 +424,7 @@ pub async fn choose_external_subagent_conflict_command(
     )
     .await
     .map(Into::into)
-    .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+    .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -442,7 +442,7 @@ pub async fn set_external_mcp_server_decision_command(
     )
     .await
     .map(Into::into)
-    .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+    .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[tauri::command]
@@ -460,13 +460,13 @@ pub async fn choose_external_mcp_conflict_command(
     )
     .await
     .map(Into::into)
-    .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)
+    .map_err(halo_core::external_sources::sanitize_external_source_operation_error)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitfun_core::external_sources::{
+    use halo_core::external_sources::{
         ExternalSourceCatalogSnapshot, ExternalSourceControlActionV1,
     };
 
@@ -533,7 +533,7 @@ mod tests {
                 "arguments": "focus on auth",
                 "nativeCommands": [{
                     "commandName": "review",
-                    "candidateId": "bitfun.desktop:action:review",
+                    "candidateId": "halo.desktop:action:review",
                     "behaviorVersion": "action:review:v1"
                 }],
                 "candidateId": "claude-code.commands:project:review",

@@ -4,14 +4,14 @@ use std::collections::BTreeMap;
 
 use serde_json::{json, Value};
 
-use bitfun_core::service::config::get_global_config_service;
-use bitfun_core::util::errors::BitFunError;
+use halo_core::service::config::get_global_config_service;
+use halo_core::util::errors::HaloError;
 
 use crate::peer_host::args::{optional_bool, request_value};
 
-fn is_expected_config_path_not_found(error: &BitFunError, path: Option<&str>) -> bool {
+fn is_expected_config_path_not_found(error: &HaloError, path: Option<&str>) -> bool {
     match (error, path) {
-        (BitFunError::NotFound(message), Some(path)) => {
+        (HaloError::NotFound(message), Some(path)) => {
             message == &format!("Config path '{path}' not found")
         }
         _ => false,
@@ -121,7 +121,7 @@ pub(crate) async fn get_agent_profile_config(args: &Value) -> Result<Value, Stri
         .or_else(|_| crate::peer_host::args::get_string(request_value(args), "agentId"))?;
 
     let config =
-        bitfun_core::service::config::mode_config_canonicalizer::get_agent_profile_view(&agent_id)
+        halo_core::service::config::mode_config_canonicalizer::get_agent_profile_view(&agent_id)
             .await
             .map_err(|e| format!("Failed to get agent profile config: {e}"))?;
     serde_json::to_value(config).map_err(|e| format!("Failed to serialize agent profile: {e}"))
@@ -129,7 +129,7 @@ pub(crate) async fn get_agent_profile_config(args: &Value) -> Result<Value, Stri
 
 pub(crate) async fn get_agent_profile_configs() -> Result<Value, String> {
     let configs =
-        bitfun_core::service::config::mode_config_canonicalizer::get_agent_profile_views()
+        halo_core::service::config::mode_config_canonicalizer::get_agent_profile_views()
             .await
             .map_err(|e| format!("Failed to get agent profile configs: {e}"))?;
     serde_json::to_value(configs)

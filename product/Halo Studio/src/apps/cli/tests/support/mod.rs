@@ -202,7 +202,7 @@ impl CliTestEnvironment {
     }
 
     pub(crate) fn std_command(&self) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_bitfun"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_halo"));
         command.current_dir(&self.workspace);
         self.apply_std_environment(&mut command);
         command
@@ -211,11 +211,11 @@ impl CliTestEnvironment {
     pub(crate) fn apply_tokio_environment(&self, command: &mut tokio::process::Command) {
         command
             .current_dir(&self.workspace)
-            .env_remove("BITFUN_USER_ROOT")
-            .env_remove("BITFUN_HOME")
-            .env("BITFUN_E2E_STORAGE_GUARD", "1")
-            .env("BITFUN_E2E_USER_ROOT", &self.user_root)
-            .env("BITFUN_E2E_HOME", &self.home_root)
+            .env_remove("HALO_USER_ROOT")
+            .env_remove("HALO_HOME")
+            .env("HALO_E2E_STORAGE_GUARD", "1")
+            .env("HALO_E2E_USER_ROOT", &self.user_root)
+            .env("HALO_E2E_HOME", &self.home_root)
             .env("APPDATA", &self.config_root)
             .env("XDG_CONFIG_HOME", &self.config_root)
             .env("HOME", &self.home_root)
@@ -224,21 +224,21 @@ impl CliTestEnvironment {
     }
 
     pub(crate) fn pty_command(&self) -> CommandBuilder {
-        self.pty_command_for(env!("CARGO_BIN_EXE_bitfun"))
+        self.pty_command_for(env!("CARGO_BIN_EXE_halo"))
     }
 
     pub(crate) fn deprecated_pty_command(&self) -> CommandBuilder {
-        self.pty_command_for(env!("CARGO_BIN_EXE_bitfun-cli"))
+        self.pty_command_for(env!("CARGO_BIN_EXE_halo-cli"))
     }
 
     fn pty_command_for(&self, binary: &str) -> CommandBuilder {
         let mut command = CommandBuilder::new(binary);
         command.cwd(&self.workspace);
-        command.env_remove("BITFUN_USER_ROOT");
-        command.env_remove("BITFUN_HOME");
-        command.env("BITFUN_E2E_STORAGE_GUARD", "1");
-        command.env("BITFUN_E2E_USER_ROOT", &self.user_root);
-        command.env("BITFUN_E2E_HOME", &self.home_root);
+        command.env_remove("HALO_USER_ROOT");
+        command.env_remove("HALO_HOME");
+        command.env("HALO_E2E_STORAGE_GUARD", "1");
+        command.env("HALO_E2E_USER_ROOT", &self.user_root);
+        command.env("HALO_E2E_HOME", &self.home_root);
         command.env("APPDATA", &self.config_root);
         command.env("XDG_CONFIG_HOME", &self.config_root);
         command.env("HOME", &self.home_root);
@@ -249,11 +249,11 @@ impl CliTestEnvironment {
 
     fn apply_std_environment(&self, command: &mut Command) {
         command
-            .env_remove("BITFUN_USER_ROOT")
-            .env_remove("BITFUN_HOME")
-            .env("BITFUN_E2E_STORAGE_GUARD", "1")
-            .env("BITFUN_E2E_USER_ROOT", &self.user_root)
-            .env("BITFUN_E2E_HOME", &self.home_root)
+            .env_remove("HALO_USER_ROOT")
+            .env_remove("HALO_HOME")
+            .env("HALO_E2E_STORAGE_GUARD", "1")
+            .env("HALO_E2E_USER_ROOT", &self.user_root)
+            .env("HALO_E2E_HOME", &self.home_root)
             .env("APPDATA", &self.config_root)
             .env("XDG_CONFIG_HOME", &self.config_root)
             .env("HOME", &self.home_root)

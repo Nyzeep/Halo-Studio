@@ -91,7 +91,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let welcome_msg = WsMessage::Event {
         event: "connection_established".to_string(),
         payload: serde_json::json!({
-            "server": "BitFun Server",
+            "server": "Halo Server",
             "version": env!("CARGO_PKG_VERSION"),
             "timestamp": chrono::Utc::now().timestamp(),
         }),
@@ -206,7 +206,7 @@ async fn handle_command(
     method: &str,
     params: serde_json::Value,
     state: &AppState,
-) -> bitfun_core::external_sources::ExternalSourceOperationResult<serde_json::Value> {
+) -> halo_core::external_sources::ExternalSourceOperationResult<serde_json::Value> {
     if super::external_sources::supports(method) {
         return super::external_sources::dispatch(method, params, state).await;
     }
@@ -223,7 +223,7 @@ async fn handle_command(
                 method = safe_protocol_token(method),
                 "Unknown Server Host command"
             );
-            Err(bitfun_core::external_sources::ExternalSourceOperationError::host_capability_unavailable(
+            Err(halo_core::external_sources::ExternalSourceOperationError::host_capability_unavailable(
                 "Unknown Server Host operation",
             ))
         }
@@ -244,9 +244,9 @@ fn safe_protocol_token(value: &str) -> &str {
 }
 
 fn json_rpc_error_code(
-    code: bitfun_core::external_sources::ExternalSourceOperationErrorCode,
+    code: halo_core::external_sources::ExternalSourceOperationErrorCode,
 ) -> i32 {
-    use bitfun_core::external_sources::ExternalSourceOperationErrorCode;
+    use halo_core::external_sources::ExternalSourceOperationErrorCode;
     match code {
         ExternalSourceOperationErrorCode::InvalidRequest => -32602,
         ExternalSourceOperationErrorCode::HostCapabilityUnavailable => -32601,
@@ -301,7 +301,7 @@ mod tests {
 
     #[test]
     fn typed_errors_keep_stable_json_rpc_categories() {
-        use bitfun_core::external_sources::ExternalSourceOperationErrorCode;
+        use halo_core::external_sources::ExternalSourceOperationErrorCode;
 
         assert_eq!(
             json_rpc_error_code(ExternalSourceOperationErrorCode::InvalidRequest),

@@ -1,7 +1,7 @@
 //! Remote MCP OAuth runtime support.
 //!
 //! This module owns the file-backed credential store and OAuth bootstrap logic.
-//! `bitfun-core` injects the product data directory and maps errors to its
+//! `halo-core` injects the product data directory and maps errors to its
 //! compatibility error type.
 
 use crate::mcp::server::{MCPServerConfig, MCPServerOAuthConfig};
@@ -351,7 +351,7 @@ fn normalize_callback_path(config: &MCPServerOAuthConfig) -> String {
 fn effective_oauth_config(config: &MCPServerConfig) -> MCPServerOAuthConfig {
     let mut oauth = config.oauth.clone().unwrap_or_default();
     if oauth.client_name.is_none() {
-        oauth.client_name = Some(format!("BitFun MCP Client ({})", config.name));
+        oauth.client_name = Some(format!("Halo MCP Client ({})", config.name));
     }
     oauth
 }

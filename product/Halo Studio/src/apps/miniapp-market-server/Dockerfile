@@ -7,8 +7,8 @@ RUN corepack enable && corepack prepare pnpm@10.15.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY src/miniapp-market-web/package.json src/miniapp-market-web/package.json
-RUN --mount=type=cache,id=bitfun-market-pnpm,target=/root/.local/share/pnpm/store,sharing=locked \
-    pnpm install --frozen-lockfile --ignore-scripts --filter bitfun-miniapp-market-web
+RUN --mount=type=cache,id=halo-market-pnpm,target=/root/.local/share/pnpm/store,sharing=locked \
+    pnpm install --frozen-lockfile --ignore-scripts --filter halo-miniapp-market-web
 
 COPY src/miniapp-market-web/ src/miniapp-market-web/
 RUN pnpm --dir src/miniapp-market-web build
@@ -32,18 +32,18 @@ RUN apt-get update \
 COPY Cargo.toml Cargo.lock ./
 COPY src/ src/
 
-RUN --mount=type=cache,id=bitfun-market-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,id=bitfun-market-cargo-git,target=/usr/local/cargo/git,sharing=locked \
-    --mount=type=cache,id=bitfun-market-target,target=/build/target,sharing=locked \
+RUN --mount=type=cache,id=halo-market-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=halo-market-cargo-git,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,id=halo-market-target,target=/build/target,sharing=locked \
     { [ -n "${CARGO_BUILD_JOBS:-}" ] || unset CARGO_BUILD_JOBS; } \
-    && cargo build --locked --release -p bitfun-miniapp-market-server \
-    && cp target/release/bitfun-miniapp-market-server /tmp/bitfun-miniapp-market-server \
-    && strip /tmp/bitfun-miniapp-market-server
+    && cargo build --locked --release -p halo-miniapp-market-server \
+    && cp target/release/halo-miniapp-market-server /tmp/halo-miniapp-market-server \
+    && strip /tmp/halo-miniapp-market-server
 
 FROM debian:bookworm-slim AS runtime
 
 ARG MARKET_GIT_COMMIT=unknown
-LABEL org.opencontainers.image.title="BitFun MiniApp Market" \
+LABEL org.opencontainers.image.title="Halo MiniApp Market" \
       org.opencontainers.image.revision="${MARKET_GIT_COMMIT}"
 
 RUN apt-get update \
@@ -53,7 +53,7 @@ RUN apt-get update \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin market
 
 WORKDIR /app
-COPY --from=rust-builder /tmp/bitfun-miniapp-market-server /app/bitfun-miniapp-market-server
+COPY --from=rust-builder /tmp/halo-miniapp-market-server /app/halo-miniapp-market-server
 COPY --from=web-builder /build/src/miniapp-market-web/dist/ /app/web/
 
 RUN mkdir -p /app/data /app/artifacts \
@@ -71,4 +71,4 @@ EXPOSE 9710
 HEALTHCHECK --interval=20s --timeout=5s --start-period=15s --retries=5 \
   CMD curl -fsS http://127.0.0.1:9710/miniapp/api/v1/health || exit 1
 
-ENTRYPOINT ["/app/bitfun-miniapp-market-server"]
+ENTRYPOINT ["/app/halo-miniapp-market-server"]

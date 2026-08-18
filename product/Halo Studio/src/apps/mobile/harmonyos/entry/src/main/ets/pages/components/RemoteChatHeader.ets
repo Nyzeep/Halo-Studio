@@ -261,7 +261,7 @@ export struct RemoteChatHeader {
     if (this.desktopName.length > 0) {
       return this.desktopName;
     }
-    const brand = 'BitFun';
+    const brand = 'Halo Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio';
     return this.workspaceBranch.length > 0 ? `${brand} · ${this.workspaceBranch}` : brand;
   }
 
@@ -345,6 +345,6 @@ export struct RemoteChatHeader {
       normalized !== 'openai' &&
       normalized !== 'google' &&
       normalized !== 'azure' &&
-      normalized !== 'bitfun';
+      normalized !== 'halo';
   }
 }

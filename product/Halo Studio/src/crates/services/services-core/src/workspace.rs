@@ -5,7 +5,7 @@
 //! when these providers are used.
 
 use async_trait::async_trait;
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     WorkspaceCommandOptions, WorkspaceCommandResult, WorkspaceDirEntry, WorkspaceFileSystem,
     WorkspaceServices, WorkspaceShell,
 };
@@ -203,7 +203,7 @@ pub fn local_workspace_services(workspace_root: String) -> WorkspaceServices {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitfun_runtime_ports::WorkspaceFileSystem;
+    use halo_runtime_ports::WorkspaceFileSystem;
 
     #[tokio::test]
     async fn local_workspace_fs_writes_parent_dirs_and_reads_text() {

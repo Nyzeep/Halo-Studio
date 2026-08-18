@@ -1,5 +1,5 @@
-use bitfun_opencode_adapter::{OpenCodeCommandProvider, OpenCodeCommandProviderOptions};
-use bitfun_product_domains::external_sources::{
+use halo_opencode_adapter::{OpenCodeCommandProvider, OpenCodeCommandProviderOptions};
+use halo_product_domains::external_sources::{
     ExecutionDomainId, ExternalSourceContext, ExternalSourceHealth, PromptCommandAvailability,
     PromptCommandDefinition, PromptCommandProviderSnapshot, PromptCommandSourceProvider,
 };

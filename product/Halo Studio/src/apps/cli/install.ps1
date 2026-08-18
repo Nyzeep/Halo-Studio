@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$BinDir = (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'BitFun\bin'),
+    [string]$BinDir = (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Halo\bin'),
     [switch]$SkipPathUpdate
 )
 
@@ -25,7 +25,7 @@ function Resolve-RepoRoot {
         $candidate = $parent
     }
 
-    throw "Could not locate the BitFun repository root from $PSScriptRoot"
+    throw "Could not locate the Halo repository root from $PSScriptRoot"
 }
 
 function Resolve-TargetRoot([string]$RepoRoot) {
@@ -78,16 +78,16 @@ function Assert-CommandSucceeded([string]$Description) {
 
 function Assert-EntrypointPair([string]$Primary, [string]$Legacy) {
     & $Primary --version | Out-Null
-    Assert-CommandSucceeded 'bitfun --version'
+    Assert-CommandSucceeded 'halo --version'
 
     $id = [guid]::NewGuid().ToString('N')
-    $stdoutFile = Join-Path ([IO.Path]::GetTempPath()) "bitfun-install-$id.out"
-    $stderrFile = Join-Path ([IO.Path]::GetTempPath()) "bitfun-install-$id.err"
+    $stdoutFile = Join-Path ([IO.Path]::GetTempPath()) "halo-install-$id.out"
+    $stderrFile = Join-Path ([IO.Path]::GetTempPath()) "halo-install-$id.err"
     try {
         $legacyProcess = Start-Process -FilePath $Legacy -ArgumentList '--version' -Wait -PassThru -NoNewWindow `
             -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
         if ($legacyProcess.ExitCode -ne 0) {
-            throw "bitfun-cli --version failed with exit code $($legacyProcess.ExitCode)"
+            throw "halo-cli --version failed with exit code $($legacyProcess.ExitCode)"
         }
         $legacyWarning = (Get-Content -LiteralPath $stderrFile -Raw).TrimEnd("`r", "`n")
         if ($legacyWarning -cne $script:deprecation) {
@@ -105,13 +105,13 @@ function Install-EntrypointPair(
     [string]$Destination
 ) {
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
-    $stageDir = Join-Path $Destination ".bitfun-install-$([guid]::NewGuid().ToString('N'))"
-    $stagedPrimary = Join-Path $stageDir 'bitfun.exe'
-    $stagedLegacy = Join-Path $stageDir 'bitfun-cli.exe'
-    $primaryTarget = Join-Path $Destination 'bitfun.exe'
-    $legacyTarget = Join-Path $Destination 'bitfun-cli.exe'
-    $primaryBackup = Join-Path $stageDir 'previous-bitfun.exe'
-    $legacyBackup = Join-Path $stageDir 'previous-bitfun-cli.exe'
+    $stageDir = Join-Path $Destination ".halo-install-$([guid]::NewGuid().ToString('N'))"
+    $stagedPrimary = Join-Path $stageDir 'halo.exe'
+    $stagedLegacy = Join-Path $stageDir 'halo-cli.exe'
+    $primaryTarget = Join-Path $Destination 'halo.exe'
+    $legacyTarget = Join-Path $Destination 'halo-cli.exe'
+    $primaryBackup = Join-Path $stageDir 'previous-halo.exe'
+    $legacyBackup = Join-Path $stageDir 'previous-halo-cli.exe'
     $primaryBackedUp = $false
     $legacyBackedUp = $false
     $primaryCommitted = $false
@@ -161,11 +161,11 @@ function Install-EntrypointPair(
 
 $repoRoot = Resolve-RepoRoot
 $releaseDir = Resolve-ReleaseDir $repoRoot
-$primarySource = Join-Path $releaseDir 'bitfun.exe'
-$legacySource = Join-Path $releaseDir 'bitfun-cli.exe'
-$primaryInstalled = Join-Path $BinDir 'bitfun.exe'
-$legacyInstalled = Join-Path $BinDir 'bitfun-cli.exe'
-$deprecation = 'Warning: `bitfun-cli` is deprecated; use `bitfun` instead.'
+$primarySource = Join-Path $releaseDir 'halo.exe'
+$legacySource = Join-Path $releaseDir 'halo-cli.exe'
+$primaryInstalled = Join-Path $BinDir 'halo.exe'
+$legacyInstalled = Join-Path $BinDir 'halo-cli.exe'
+$deprecation = 'Warning: `halo-cli` is deprecated; use `halo` instead.'
 
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
     throw 'cargo was not found. Install Rust from https://rustup.rs and re-run.'
@@ -174,14 +174,14 @@ if (-not (Get-Command rustc -ErrorAction SilentlyContinue)) {
     throw 'rustc was not found. Install Rust from https://rustup.rs and re-run.'
 }
 
-Write-Host '=== BitFun CLI Install ==='
+Write-Host '=== Halo CLI Install ==='
 Write-Host "Repo: $repoRoot"
 Write-Host "Install dir: $BinDir"
 
 Push-Location $repoRoot
 try {
-    Write-Host '[1/3] Building the bitfun and deprecated bitfun-cli entrypoints...'
-    & cargo build -p bitfun-cli --release
+    Write-Host '[1/3] Building the halo and deprecated halo-cli entrypoints...'
+    & cargo build -p halo-cli --release
     Assert-CommandSucceeded 'cargo build'
 }
 finally {
@@ -210,7 +210,7 @@ Write-Host '[3/3] Verifying both entrypoints...'
 Assert-EntrypointPair $primaryInstalled $legacyInstalled
 
 Write-Host '=== Install complete ==='
-Write-Host 'Open a new terminal, then run: bitfun'
-Write-Host "Current PowerShell: `$env:Path = `"$([IO.Path]::GetFullPath($BinDir));`$env:Path`"; bitfun"
+Write-Host 'Open a new terminal, then run: halo'
+Write-Host "Current PowerShell: `$env:Path = `"$([IO.Path]::GetFullPath($BinDir));`$env:Path`"; halo"
 Write-Host "Direct path: $primaryInstalled"
-Write-Host 'Deprecated compatibility command: bitfun-cli'
+Write-Host 'Deprecated compatibility command: halo-cli'

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use bitfun_agent_runtime::sdk::AgentRuntime;
+use halo_agent_runtime::sdk::AgentRuntime;
 use futures_util::StreamExt;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Mutex;
@@ -12,8 +12,8 @@ use tokio::time::{timeout, Instant};
 use tokio_util::codec::{FramedRead, LinesCodec, LinesCodecError};
 use tokio_util::sync::CancellationToken;
 
-use bitfun_sdk_host::host::{ConnectionControl, HostOutput, SdkHostConfig, SdkHostConnection};
-use bitfun_sdk_host::protocol::{
+use halo_sdk_host::host::{ConnectionControl, HostOutput, SdkHostConfig, SdkHostConnection};
+use halo_sdk_host::protocol::{
     JsonRpcErrorResponse, JsonRpcRequest, RequestId, METHOD_INITIALIZE, METHOD_QUERY_CANCEL,
     METHOD_SESSION_CLOSE, METHOD_SHUTDOWN,
 };

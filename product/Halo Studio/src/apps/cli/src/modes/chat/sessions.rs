@@ -224,7 +224,7 @@ impl ChatMode {
     ) {
         if self.agent.is_shared() {
             chat_view.set_status(Some(format!(
-                "Session deletion is unavailable in Shared TUI preview. {SHARED_TUI_EMBEDDED_HANDOFF}; then run `bitfun sessions delete`"
+                "Session deletion is unavailable in Shared TUI preview. {SHARED_TUI_EMBEDDED_HANDOFF}; then run `halo sessions delete`"
             )));
             return;
         }

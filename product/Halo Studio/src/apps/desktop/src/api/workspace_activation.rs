@@ -1,6 +1,6 @@
 use crate::api::app_state::AppState;
-use bitfun_core::service::search::workspace_search_runtime_available;
-use bitfun_core::service::workspace::{WorkspaceInfo, WorkspaceKind};
+use halo_core::service::search::workspace_search_runtime_available;
+use halo_core::service::workspace::{WorkspaceInfo, WorkspaceKind};
 use log::{debug, info, warn};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -25,8 +25,8 @@ pub fn spawn_workspace_background_warmup(state: &AppState, workspace_info: Works
 
 async fn warm_workspace_background_services(
     workspace_path: Arc<RwLock<Option<PathBuf>>>,
-    agent_registry: Arc<bitfun_core::agentic::agents::AgentRegistry>,
-    workspace_search_service: Arc<bitfun_core::service::search::WorkspaceSearchService>,
+    agent_registry: Arc<halo_core::agentic::agents::AgentRegistry>,
+    workspace_search_service: Arc<halo_core::service::search::WorkspaceSearchService>,
     workspace_info: WorkspaceInfo,
 ) {
     let started_at = Instant::now();

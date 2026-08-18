@@ -4,7 +4,7 @@
 //! shape, the fixed event list, matcher semantics, handler fields, timeout
 //! defaults, and the layer/limit rules.
 
-use bitfun_agent_runtime::native_hooks::{
+use halo_agent_runtime::native_hooks::{
     AgentHookEvent, AgentHookScope, AgentHookSettings, AgentHookSettingsIssue,
     AgentHookSettingsLayer, MAX_HOOK_HANDLERS,
 };

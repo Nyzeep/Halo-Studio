@@ -2,7 +2,7 @@
 
 use crate::agentic::events::{AgenticEvent, EventSubscriber};
 use crate::service::token_usage::TokenUsageService;
-use bitfun_agent_runtime::event_bus::EventSubscriberResult;
+use halo_agent_runtime::event_bus::EventSubscriberResult;
 use log::{debug, warn};
 use std::sync::Arc;
 

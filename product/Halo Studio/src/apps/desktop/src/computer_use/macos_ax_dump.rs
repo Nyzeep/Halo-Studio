@@ -17,8 +17,8 @@
 // without weakening real warnings elsewhere.
 #![allow(dead_code)]
 
-use bitfun_core::agentic::tools::computer_use_host::{AppStateSnapshot, AxNode};
-use bitfun_core::util::errors::{BitFunError, BitFunResult};
+use halo_core::agentic::tools::computer_use_host::{AppStateSnapshot, AxNode};
+use halo_core::util::errors::{HaloError, HaloResult};
 use core_foundation::array::{CFArray, CFArrayRef};
 use core_foundation::base::{CFGetTypeID, CFTypeRef, TCFType};
 use core_foundation::boolean::{CFBoolean, CFBooleanGetTypeID, CFBooleanRef};
@@ -443,10 +443,10 @@ impl Default for DumpOpts {
     }
 }
 
-pub(super) fn dump_app_ax(pid: i32, opts: DumpOpts) -> BitFunResult<AppStateSnapshot> {
+pub(super) fn dump_app_ax(pid: i32, opts: DumpOpts) -> HaloResult<AppStateSnapshot> {
     let app = unsafe { AXUIElementCreateApplication(pid) };
     if app.is_null() {
-        return Err(BitFunError::tool(format!(
+        return Err(HaloError::tool(format!(
             "AXUIElementCreateApplication returned null for pid={}",
             pid
         )));
@@ -611,7 +611,7 @@ pub(super) fn dump_app_ax(pid: i32, opts: DumpOpts) -> BitFunResult<AppStateSnap
     {
         let mut cache = snapshot_cache()
             .lock()
-            .map_err(|_| BitFunError::tool("AX snapshot cache poisoned".to_string()))?;
+            .map_err(|_| HaloError::tool("AX snapshot cache poisoned".to_string()))?;
         cache.insert(
             pid,
             CachedSnapshot {
@@ -622,7 +622,7 @@ pub(super) fn dump_app_ax(pid: i32, opts: DumpOpts) -> BitFunResult<AppStateSnap
     }
 
     Ok(AppStateSnapshot {
-        app: bitfun_core::agentic::tools::computer_use_host::AppInfo {
+        app: halo_core::agentic::tools::computer_use_host::AppInfo {
             name: window_title.clone().unwrap_or_default(),
             bundle_id: None,
             pid: Some(pid),
@@ -829,7 +829,7 @@ fn compute_digest(nodes: &[AxNode]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitfun_core::agentic::tools::computer_use_host::AxNode;
+    use halo_core::agentic::tools::computer_use_host::AxNode;
 
     fn n(idx: u32, parent: Option<u32>, role: &str, title: Option<&str>) -> AxNode {
         AxNode {

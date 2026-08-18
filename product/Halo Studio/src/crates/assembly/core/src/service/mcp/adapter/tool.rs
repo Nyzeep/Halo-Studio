@@ -1,6 +1,6 @@
 //! MCP tool adapter
 //!
-//! Wraps MCP tools as implementations of BitFun's `Tool` trait.
+//! Wraps MCP tools as implementations of Halo's `Tool` trait.
 
 use crate::agentic::tools::framework::{
     DynamicToolInfo, PermissionIntent, Tool, ToolExposure, ToolRenderOptions, ToolResult,
@@ -8,15 +8,15 @@ use crate::agentic::tools::framework::{
 };
 use crate::service::mcp::protocol::{MCPTool, MCPToolResult};
 use crate::service::mcp::server::MCPConnection;
-use crate::util::errors::BitFunResult;
+use crate::util::errors::HaloResult;
 use async_trait::async_trait;
-use bitfun_agent_tools::{
+use halo_agent_tools::{
     build_mcp_tool_bridge_result, mcp_tool_bridge_dynamic_tool_info,
     mcp_tool_bridge_short_description, render_mcp_tool_bridge_rejected_message,
     render_mcp_tool_bridge_result_message, render_mcp_tool_bridge_use_message,
     validate_mcp_tool_bridge_input,
 };
-use bitfun_services_integrations::mcp::adapter::{
+use halo_services_integrations::mcp::adapter::{
     render_mcp_tool_result_for_assistant, MCPDynamicToolProvider, McpDynamicToolDescriptor,
 };
 use log::{debug, error, info, warn};
@@ -85,7 +85,7 @@ impl MCPToolContextPolicy {
     }
 }
 
-/// MCP tool wrapper that adapts an MCP tool to BitFun's `Tool`.
+/// MCP tool wrapper that adapts an MCP tool to Halo's `Tool`.
 struct MCPToolWrapper {
     server_id: String,
     external_workspace_scope: Option<String>,
@@ -145,7 +145,7 @@ impl Tool for MCPToolWrapper {
         &self.descriptor.full_name
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(self.descriptor.description.clone())
     }
 
@@ -204,7 +204,7 @@ impl Tool for MCPToolWrapper {
         &self,
         _input: &Value,
         _context: &ToolUseContext,
-    ) -> BitFunResult<Vec<PermissionIntent>> {
+    ) -> HaloResult<Vec<PermissionIntent>> {
         Ok(vec![dynamic_mcp_permission_intent(
             &self.descriptor.full_name,
         )])
@@ -256,9 +256,9 @@ impl Tool for MCPToolWrapper {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         if self.is_blocked_in_context(Some(context)) {
-            return Err(crate::util::errors::BitFunError::tool(format!(
+            return Err(crate::util::errors::HaloError::tool(format!(
                 "MCP server '{}' is unavailable in the current workspace",
                 self.descriptor.tool_info.server_name
             )));
@@ -313,7 +313,7 @@ impl MCPToolAdapter {
         connection: Arc<MCPConnection>,
         external_workspace_scope: Option<String>,
         context_policy: Arc<MCPToolContextPolicy>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         info!(
             "Loading tools from MCP server: {} (id={})",
             server_name, server_id
@@ -325,7 +325,7 @@ impl MCPToolAdapter {
             .await
             .map_err(|e| {
                 error!("list_tools call failed: {}", e);
-                crate::util::errors::BitFunError::from(e)
+                crate::util::errors::HaloError::from(e)
             })?;
 
         info!(

@@ -1,10 +1,10 @@
-# BitFun 简体中文语言包
+# Halo Studio 简体中文语言包
 # Chinese Simplified (zh-CN) Fluent Translation File
 
 # ==================== 通用 ====================
 app-version = 版本 { $version }
 loading = 加载中...
-welcome = 欢迎使用 BitFun
+welcome = 欢迎使用 Halo Studio
 
 # ==================== 操作 ====================
 action-confirm = 确认

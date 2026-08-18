@@ -472,7 +472,7 @@ mod tests {
         DeepReviewQueueReason, DeepReviewQueueState, DeepReviewQueueStatus,
         ModelRoundAttemptDiagnostic,
     };
-    use bitfun_core_types::{
+    use halo_core_types::{
         SessionExecutionTarget, SessionExecutionTargetKind, WorktreeLifecycle,
     };
 

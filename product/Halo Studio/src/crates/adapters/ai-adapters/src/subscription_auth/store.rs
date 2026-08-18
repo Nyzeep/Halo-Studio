@@ -5,7 +5,7 @@
 //! Service). The JSON file contains only non-secret account metadata and
 //! references used to discover the corresponding vault entries.
 //!
-//! Path: `{dirs::config_dir()}/bitfun/data/subscription_auth.json`.
+//! Path: `{dirs::config_dir()}/halo/data/subscription_auth.json`.
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ use std::time::Duration;
 
 const STORE_VERSION: u8 = 2;
 const CLEANUP_JOURNAL_VERSION: u8 = 1;
-const KEYRING_SERVICE: &str = "openbitfun.bitfun.subscription-auth.v1";
+const KEYRING_SERVICE: &str = "openbitfun.halo.subscription-auth.v1";
 const PI_KEYRING_SERVICE: &str = "openbitfun.halo.pi-credentials.v1";
 const PI_ENTRY_PREFIX: &str = "halo-pi/v1";
 const STORE_FILE_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
@@ -232,7 +232,7 @@ struct SecureStoreFile {
     /// Monotonic provider epochs, retained even after an account is removed.
     ///
     /// The retained entry is a tombstone: an authorization or token refresh
-    /// that began in another BitFun process before logout must not be able to
+    /// that began in another Halo process before logout must not be able to
     /// publish its stale credential after logout has completed.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     provider_revisions: HashMap<String, u64>,
@@ -567,7 +567,7 @@ async fn acquire_store_file_lock_with_timeout(
                 if tokio::time::Instant::now() >= deadline {
                     let _ = fs2::FileExt::unlock(&file);
                     return Err(anyhow!(
-                        "timed out waiting for subscription credential transaction lock {}; another BitFun process may be updating credentials",
+                        "timed out waiting for subscription credential transaction lock {}; another Halo process may be updating credentials",
                         lock_path.display()
                     ));
                 }
@@ -580,7 +580,7 @@ async fn acquire_store_file_lock_with_timeout(
                 let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
                 if remaining.is_zero() {
                     return Err(anyhow!(
-                        "timed out waiting for subscription credential transaction lock {}; another BitFun process may be updating credentials",
+                        "timed out waiting for subscription credential transaction lock {}; another Halo process may be updating credentials",
                         lock_path.display()
                     ));
                 }
@@ -786,7 +786,7 @@ fn store_path() -> Result<PathBuf> {
     }
     let base = dirs::config_dir().ok_or_else(|| anyhow!("system config directory unavailable"))?;
     Ok(base
-        .join("bitfun")
+        .join("halo")
         .join("data")
         .join("subscription_auth.json"))
 }
@@ -1908,14 +1908,14 @@ pub(crate) async fn replace_metadata_file_windows(tmp: &Path, path: &Path) -> Re
 mod file_lock_tests {
     use super::*;
 
-    const LOCK_CHILD_METADATA_ENV: &str = "BITFUN_SUBAUTH_LOCK_CHILD_METADATA";
-    const LOCK_CHILD_STARTED_ENV: &str = "BITFUN_SUBAUTH_LOCK_CHILD_STARTED";
-    const LOCK_CHILD_OBSERVED_ENV: &str = "BITFUN_SUBAUTH_LOCK_CHILD_OBSERVED";
+    const LOCK_CHILD_METADATA_ENV: &str = "HALO_SUBAUTH_LOCK_CHILD_METADATA";
+    const LOCK_CHILD_STARTED_ENV: &str = "HALO_SUBAUTH_LOCK_CHILD_STARTED";
+    const LOCK_CHILD_OBSERVED_ENV: &str = "HALO_SUBAUTH_LOCK_CHILD_OBSERVED";
 
     fn temporary_metadata_path(label: &str) -> PathBuf {
         std::env::temp_dir()
             .join(format!(
-                "bitfun-subauth-lock-{label}-{}",
+                "halo-subauth-lock-{label}-{}",
                 uuid::Uuid::new_v4()
             ))
             .join("subscription_auth.json")
@@ -2148,7 +2148,7 @@ mod pi_credential_tests {
     fn temporary_metadata_path(label: &str) -> PathBuf {
         std::env::temp_dir()
             .join(format!(
-                "bitfun-pi-credential-{label}-{}",
+                "halo-pi-credential-{label}-{}",
                 uuid::Uuid::new_v4()
             ))
             .join("subscription_auth.json")

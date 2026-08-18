@@ -1,12 +1,12 @@
 [package]
-name = "bitfun-core"
+name = "halo-core"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "BitFun Core Library - Platform-agnostic business logic"
+description = "Halo Core Library - Platform-agnostic business logic"
 
 [lib]
-name = "bitfun_core"
+name = "halo_core"
 crate-type = ["rlib"]
 
 [dependencies]
@@ -71,31 +71,31 @@ rmcp = { workspace = true, features = [
 sse-stream = { workspace = true, optional = true }
 
 # Shared AI protocol adapters
-bitfun-ai-adapters = { path = "../../adapters/ai-adapters", optional = true }
+halo-ai-adapters = { path = "../../adapters/ai-adapters", optional = true }
 
 # Lightweight agent stream processing
-bitfun-agent-stream = { path = "../../execution/agent-stream" }
+halo-agent-stream = { path = "../../execution/agent-stream" }
 
 # Agent runtime owner contracts
-bitfun-agent-runtime = { path = "../../execution/agent-runtime" }
+halo-agent-runtime = { path = "../../execution/agent-runtime" }
 
 # Harness workflow contracts
-bitfun-harness = { path = "../../execution/harness" }
+halo-harness = { path = "../../execution/harness" }
 
 # Product capability pack contracts
-bitfun-product-capabilities = { path = "../product-capabilities", default-features = false, optional = true }
+halo-product-capabilities = { path = "../product-capabilities", default-features = false, optional = true }
 
 # Ecosystem-neutral external source lifecycle coordinator
-bitfun-external-sources = { path = "../external-sources", optional = true }
+halo-external-sources = { path = "../external-sources", optional = true }
 
 # Agent tool contracts
-bitfun-agent-tools = { path = "../../execution/tool-contracts" }
+halo-agent-tools = { path = "../../execution/tool-contracts" }
 
 # Tool pack provider plan
-bitfun-tool-packs = { path = "../../execution/tool-provider-groups", default-features = false, optional = true }
+halo-tool-packs = { path = "../../execution/tool-provider-groups", default-features = false, optional = true }
 
 # Core service owner crate
-bitfun-services-core = { path = "../../services/services-core", default-features = false, features = [
+halo-services-core = { path = "../../services/services-core", default-features = false, features = [
     "lsp",
     "markdown",
     "permission",
@@ -104,10 +104,10 @@ bitfun-services-core = { path = "../../services/services-core", default-features
 ] }
 
 # Integration service owner crate
-bitfun-services-integrations = { path = "../../services/services-integrations", default-features = false, features = ["remote-ssh"] }
+halo-services-integrations = { path = "../../services/services-integrations", default-features = false, features = ["remote-ssh"] }
 
 # Product domain owner crate
-bitfun-product-domains = { path = "../../contracts/product-domains", default-features = false, optional = true }
+halo-product-domains = { path = "../../contracts/product-domains", default-features = false, optional = true }
 
 # Tool runtime
 tool-runtime = { path = "../../execution/tool-execution", default-features = false, optional = true, features = [
@@ -135,20 +135,20 @@ tokio-tungstenite = { workspace = true, optional = true }
 russh = { workspace = true, optional = true }
 
 # Event layer dependency (lowest layer)
-bitfun-core-types = { path = "../../contracts/core-types" }
-bitfun-events = { path = "../../contracts/events" }
-bitfun-runtime-ports = { path = "../../contracts/runtime-ports", features = ["permission"] }
-bitfun-runtime-services = { path = "../../execution/runtime-services" }
+halo-core-types = { path = "../../contracts/core-types" }
+halo-events = { path = "../../contracts/events" }
+halo-runtime-ports = { path = "../../contracts/runtime-ports", features = ["permission"] }
+halo-runtime-services = { path = "../../execution/runtime-services" }
 
 # Reviewed product-full plugin composition root.
-bitfun-opencode-adapter = { path = "../../adapters/opencode-adapter", optional = true }
-bitfun-pi-rpc-adapter = { path = "../../adapters/pi-rpc-adapter", optional = true }
-bitfun-claude-code-adapter = { path = "../../adapters/claude-code-adapter", optional = true }
-bitfun-codex-adapter = { path = "../../adapters/codex-adapter", optional = true }
-bitfun-plugin-runtime-client = { path = "../../execution/plugin-runtime-client", optional = true }
+halo-opencode-adapter = { path = "../../adapters/opencode-adapter", optional = true }
+halo-pi-rpc-adapter = { path = "../../adapters/pi-rpc-adapter", optional = true }
+halo-claude-code-adapter = { path = "../../adapters/claude-code-adapter", optional = true }
+halo-codex-adapter = { path = "../../adapters/codex-adapter", optional = true }
+halo-plugin-runtime-client = { path = "../../execution/plugin-runtime-client", optional = true }
 
 # Transport layer dependency
-bitfun-transport = { path = "../../adapters/transport" }
+halo-transport = { path = "../../adapters/transport" }
 
 # Tauri dependency (optional, enabled only when needed)
 tauri = { workspace = true, optional = true }
@@ -165,7 +165,7 @@ schannel = "0.1"
 
 [features]
 # Full product runtime feature set. Product crates should depend on this
-# explicitly before `bitfun-core` default features are made lighter.
+# explicitly before `halo-core` default features are made lighter.
 default = ["product-full"]
 product-full = [
     "ai-adapter-runtime",
@@ -180,12 +180,12 @@ product-full = [
     "dep:glob",
     "dep:globset",
     "dep:include_dir",
-    "dep:bitfun-opencode-adapter",
-    "dep:bitfun-pi-rpc-adapter",
-    "dep:bitfun-claude-code-adapter",
-    "dep:bitfun-codex-adapter",
-    "dep:bitfun-external-sources",
-    "dep:bitfun-plugin-runtime-client",
+    "dep:halo-opencode-adapter",
+    "dep:halo-pi-rpc-adapter",
+    "dep:halo-claude-code-adapter",
+    "dep:halo-codex-adapter",
+    "dep:halo-external-sources",
+    "dep:halo-plugin-runtime-client",
     "dep:indexmap",
     "dep:md5",
     "dep:similar",
@@ -198,25 +198,25 @@ product-full = [
     "tool-packs",
 ]
 ai-adapter-runtime = [
-    "dep:bitfun-ai-adapters",
-    "bitfun-ai-adapters/subscription-auth",
+    "dep:halo-ai-adapters",
+    "halo-ai-adapters/subscription-auth",
     "dep:reqwest",
 ]
-product-capabilities = ["dep:bitfun-product-capabilities"]
+product-capabilities = ["dep:halo-product-capabilities"]
 plugin-source = [
-    "bitfun-services-integrations/plugin-source",
+    "halo-services-integrations/plugin-source",
 ]
 product-domains = [
     "ai-adapter-runtime",
-    "dep:bitfun-product-domains",
+    "dep:halo-product-domains",
     "plugin-source",
-    "bitfun-services-integrations/function-agents",
-    "bitfun-services-integrations/miniapp-runtime",
-    "bitfun-product-domains/product-full",
+    "halo-services-integrations/function-agents",
+    "halo-services-integrations/miniapp-runtime",
+    "halo-product-domains/product-full",
 ]
 canvas-runtime = [
     "product-domains",
-    "bitfun-services-integrations/canvas-runtime",
+    "halo-services-integrations/canvas-runtime",
 ]
 runtime-services = []
 service-integrations = [
@@ -231,12 +231,12 @@ service-integrations = [
     "dep:sse-stream",
     "dep:tokio-tungstenite",
     "dep:tower-http",
-    "bitfun-services-integrations/product-full",
+    "halo-services-integrations/product-full",
 ]
-tool-packs = ["dep:bitfun-tool-packs", "bitfun-tool-packs/product-full", "dep:image"]
+tool-packs = ["dep:halo-tool-packs", "halo-tool-packs/product-full", "dep:image"]
 tauri-support = ["tauri"]  # Optional tauri support
 ssh-remote = [
-    "bitfun-services-integrations/remote-ssh-concrete",
+    "halo-services-integrations/remote-ssh-concrete",
     "russh",
 ]
 

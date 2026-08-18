@@ -11,7 +11,7 @@ use tokio::io::AsyncWriteExt;
 fn runtime_identity(workspace: &std::path::Path) -> RuntimeInstanceIdentity {
     RuntimeInstanceIdentity::for_workspace(
         workspace,
-        "bitfun",
+        "halo",
         "stable",
         "user-a",
         PROTOCOL_VERSION,

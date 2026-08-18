@@ -4,8 +4,8 @@
 
 use crate::util::errors::*;
 use async_trait::async_trait;
-use bitfun_core_types::WorktreeSettings;
-use bitfun_runtime_ports::{PermissionRule, ToolPermissionConfig};
+use halo_core_types::WorktreeSettings;
+use halo_runtime_ports::{PermissionRule, ToolPermissionConfig};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -149,7 +149,7 @@ pub struct AppConfig {
 ///
 /// Hook declarations themselves live in `hooks.json` documents (user scope:
 /// `config/hooks.json` next to this file; project scope:
-/// `{project}/.bitfun/config/hooks.json`), not in this settings document.
+/// `{project}/.halo-studio/config/hooks.json`), not in this settings document.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct AgentHooksConfig {
@@ -381,14 +381,14 @@ pub struct AgentCompanionPetSelection {
 
 fn default_agent_companion_pet() -> Option<AgentCompanionPetSelection> {
     Some(AgentCompanionPetSelection {
-        id: "bitfun".to_string(),
-        display_name: "Bitfun".to_string(),
+        id: "halo".to_string(),
+        display_name: "Halo".to_string(),
         description: Some(
-            "BitFun's mascot — Bifang, a figure from Chinese mythology said to live on Mount Zhang'e. In the Classic of Mountains and Seas (Shan Hai Jing · Western Mountains), Bifang is described as crane-like with one foot, blue feathers marked with red, and a white beak.".to_string(),
+            "Halo's mascot — Bifang, a figure from Chinese mythology said to live on Mount Zhang'e. In the Classic of Mountains and Seas (Shan Hai Jing · Western Mountains), Bifang is described as crane-like with one foot, blue feathers marked with red, and a white beak.".to_string(),
         ),
         source: "preset".to_string(),
-        package_path: "/agent-companion-pets/bitfun".to_string(),
-        spritesheet_path: "/agent-companion-pets/bitfun/spritesheet.webp".to_string(),
+        package_path: "/agent-companion-pets/halo".to_string(),
+        spritesheet_path: "/agent-companion-pets/halo/spritesheet.webp".to_string(),
         spritesheet_mime_type: "image/webp".to_string(),
     })
 }
@@ -439,7 +439,7 @@ pub struct ThemesConfig {
 impl Default for ThemesConfig {
     fn default() -> Self {
         Self {
-            current: "bitfun-light".to_string(),
+            current: "halo-light".to_string(),
             custom: None,
         }
     }
@@ -575,7 +575,7 @@ pub enum ModelCategory {
     SpeechRecognition,
 }
 
-pub use bitfun_core_types::ReasoningMode;
+pub use halo_core_types::ReasoningMode;
 
 /// Default model configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1099,7 +1099,7 @@ fn default_max_rounds() -> usize {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DebugModeConfig {
-    /// Custom log path (relative to the workspace; default: `.bitfun/debug.log`).
+    /// Custom log path (relative to the workspace; default: `.halo-studio/debug.log`).
     pub log_path: String,
 
     /// Ingest server port.
@@ -1115,7 +1115,7 @@ pub struct DebugModeConfig {
 impl Default for DebugModeConfig {
     fn default() -> Self {
         Self {
-            log_path: ".bitfun/debug.log".to_string(),
+            log_path: ".halo-studio/debug.log".to_string(),
             ingest_port: 7242,
             enabled_languages: Vec::new(),
             language_templates: Self::default_language_templates(),
@@ -1368,7 +1368,7 @@ pub struct AIModelConfig {
     /// Context window size (total token limit for input + output).
     pub context_window: Option<u32>,
     /// Optional advanced override for the request output limit. When absent,
-    /// BitFun derives a tiered limit from the context window at runtime.
+    /// Halo derives a tiered limit from the context window at runtime.
     pub max_tokens: Option<u32>,
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
@@ -1497,7 +1497,7 @@ pub enum AuthConfig {
     /// Use the inline `api_key` string (default).
     #[default]
     ApiKey,
-    /// Use BitFun in-app subscription OAuth for the named provider.
+    /// Use Halo in-app subscription OAuth for the named provider.
     Subscription { provider: SubscriptionProvider },
 }
 
@@ -1599,7 +1599,7 @@ impl AIModelConfig {
     }
 }
 
-pub use bitfun_core_types::ProxyConfig;
+pub use halo_core_types::ProxyConfig;
 
 /// Configuration provider interface.
 #[async_trait]
@@ -1611,21 +1611,21 @@ pub trait ConfigProvider: Send + Sync {
     fn get_default_config(&self) -> serde_json::Value;
 
     /// Validates configuration.
-    async fn validate_config(&self, config: &serde_json::Value) -> BitFunResult<Vec<String>>;
+    async fn validate_config(&self, config: &serde_json::Value) -> HaloResult<Vec<String>>;
 
     /// Called when configuration changes.
     async fn on_config_changed(
         &self,
         old_config: &serde_json::Value,
         new_config: &serde_json::Value,
-    ) -> BitFunResult<()>;
+    ) -> HaloResult<()>;
 
     /// Migrates configuration (used for version upgrades).
     async fn migrate_config(
         &self,
         version: &str,
         config: serde_json::Value,
-    ) -> BitFunResult<serde_json::Value>;
+    ) -> HaloResult<serde_json::Value>;
 }
 
 /// Configuration change event.
@@ -2118,7 +2118,7 @@ mod tests {
         ModelExchangeTracingMode, NotificationConfig, ReasoningMode, SubagentBatchExecutionPolicy,
         SubagentModelSelection, UserSkillGroupsConfig, UserToolGroupsConfig,
     };
-    use bitfun_runtime_ports::ToolPermissionConfig;
+    use halo_runtime_ports::ToolPermissionConfig;
 
     #[test]
     fn prevent_sleep_defaults_to_disabled() {
@@ -2337,13 +2337,13 @@ mod tests {
             "Rust config must not export the removed GUI theme schema"
         );
         assert_eq!(
-            serialized["themes"]["current"], "bitfun-light",
+            serialized["themes"]["current"], "halo-light",
             "theme selection remains in the TS-owned themes contract"
         );
     }
 
     #[test]
-    fn defaults_agent_companion_pet_to_bitfun() {
+    fn defaults_agent_companion_pet_to_halo() {
         let config: AIExperienceConfig =
             serde_json::from_value(serde_json::json!({})).expect("empty config should default");
 
@@ -2351,12 +2351,12 @@ mod tests {
             .agent_companion_pet
             .as_ref()
             .expect("default companion pet should be present");
-        assert_eq!(pet.id, "bitfun");
-        assert_eq!(pet.display_name, "Bitfun");
-        assert_eq!(pet.package_path, "/agent-companion-pets/bitfun");
+        assert_eq!(pet.id, "halo");
+        assert_eq!(pet.display_name, "Halo");
+        assert_eq!(pet.package_path, "/agent-companion-pets/halo");
         assert_eq!(
             pet.spritesheet_path,
-            "/agent-companion-pets/bitfun/spritesheet.webp"
+            "/agent-companion-pets/halo/spritesheet.webp"
         );
     }
 

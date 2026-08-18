@@ -524,7 +524,7 @@ mod tests {
     #[test]
     fn copy_directory_recursive_copies_nested_binary_files() {
         let root = std::env::temp_dir().join(format!(
-            "bitfun-directory-copy-test-{}",
+            "halo-directory-copy-test-{}",
             uuid::Uuid::new_v4()
         ));
         let source = root.join("source");

@@ -3,8 +3,8 @@ use crate::{
     RuntimeUserAnswersRequest, MAX_REQUEST_FRAME_BYTES, PROTOCOL_VERSION,
 };
 
-use bitfun_product_domains::tool_permissions::PermissionReply;
-use bitfun_runtime_ports::{AgentDialogTurnRequest, AgentSubmissionSource, DialogSubmissionPolicy};
+use halo_product_domains::tool_permissions::PermissionReply;
+use halo_runtime_ports::{AgentDialogTurnRequest, AgentSubmissionSource, DialogSubmissionPolicy};
 use serde_json::{json, Map};
 
 #[test]

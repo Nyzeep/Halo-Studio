@@ -5,7 +5,7 @@ import { CARD, GREEN, INK, LINE, MUTED, RED, SUBTLE } from './Theme';
 @ComponentV2
 export struct RemoteActionsSheet {
   @Param desktopName: string = 'MacBook Pro';
-  @Param workspaceName: string = 'BitFun';
+  @Param workspaceName: string = 'Halo Studio';
   @Param workspacePath: string = '';
   @Param assistantId: string = '';
   @Param connectionState: string = 'connected';
@@ -298,7 +298,7 @@ export struct RemoteActionsSheet {
   }
 
   private workspaceTitle(): string {
-    return this.workspaceName || 'BitFun';
+    return this.workspaceName || 'Halo Studio';
   }
 
   private assistantTitle(): string {

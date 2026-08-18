@@ -1,4 +1,4 @@
-use bitfun_agent_runtime::scheduler::{
+use halo_agent_runtime::scheduler::{
     build_thread_goal_objective_updated_delivery_plan, build_thread_goal_resumed_delivery_plan,
     resolve_agent_session_reply_action, resolve_background_delivery_action,
     resolve_background_delivery_injection, resolve_background_delivery_injection_for_turn,
@@ -10,7 +10,7 @@ use bitfun_agent_runtime::scheduler::{
     ThreadGoalDeliveryReminderKind, TurnOutcome, TurnOutcomeQueueAction, TurnOutcomeStatus,
     DEFAULT_MAX_DIALOG_QUEUE_DEPTH,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     AgentSessionReplyRoute, DialogQueuePriority, DialogSessionStateFact, DialogSteerOutcome,
     DialogSubmissionPolicy, DialogTriggerSource, RoundInjection, RoundInjectionKind,
     RoundInjectionTarget, RoundInjectionToolPreemption, ThreadGoal, ThreadGoalStatus,

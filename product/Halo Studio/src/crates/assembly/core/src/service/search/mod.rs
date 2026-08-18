@@ -3,10 +3,10 @@ mod remote;
 pub mod service;
 
 #[cfg(not(feature = "ssh-remote"))]
-pub use bitfun_services_integrations::remote_ssh::workspace_search::disabled::{
+pub use halo_services_integrations::remote_ssh::workspace_search::disabled::{
     remote_workspace_search_service_for_path, RemoteWorkspaceSearchService,
 };
-pub use bitfun_services_integrations::workspace_search::{
+pub use halo_services_integrations::workspace_search::{
     ContentSearchOutputMode, ContentSearchRequest, ContentSearchResult, GlobSearchRequest,
     GlobSearchResult, IndexTaskHandle, WorkspaceIndexStatus, WorkspaceSearchBackend,
     WorkspaceSearchContextLine, WorkspaceSearchDirtyFiles, WorkspaceSearchFileCount,

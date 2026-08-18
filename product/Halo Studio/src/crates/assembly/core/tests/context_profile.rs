@@ -1,4 +1,4 @@
-use bitfun_core::agentic::context_profile::{
+use halo_core::agentic::context_profile::{
     ContextProfile, ContextProfilePolicy, ModelCapabilityProfile,
 };
 

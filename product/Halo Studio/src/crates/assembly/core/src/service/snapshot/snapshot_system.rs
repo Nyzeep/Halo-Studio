@@ -869,7 +869,7 @@ mod tests {
 
     fn test_runtime_context() -> WorkspaceRuntimeContext {
         let runtime_root =
-            std::env::temp_dir().join(format!("bitfun_snapshot_test_{}", Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo_snapshot_test_{}", Uuid::new_v4()));
         WorkspaceRuntimeContext::new(
             WorkspaceRuntimeTarget::LocalWorkspace {
                 workspace_root: runtime_root.join("workspace"),

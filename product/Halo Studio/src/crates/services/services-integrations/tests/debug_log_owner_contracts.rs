@@ -1,4 +1,4 @@
-use bitfun_services_integrations::debug_log::{append_log_async, DebugLogConfig, DebugLogEntry};
+use halo_services_integrations::debug_log::{append_log_async, DebugLogConfig, DebugLogEntry};
 use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;

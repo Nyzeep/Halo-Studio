@@ -5,7 +5,7 @@ use crate::agentic::tools::framework::{
 use crate::infrastructure::PathManager;
 use crate::service::session::SessionTranscriptExportOptions;
 use crate::service_agent_runtime::CoreServiceAgentRuntime;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -26,12 +26,12 @@ impl SessionHistoryTool {
     }
 
     fn validate_session_id(session_id: &str) -> Result<(), String> {
-        bitfun_core_types::validate_session_id(session_id)
+        halo_core_types::validate_session_id(session_id)
     }
 
-    fn resolve_session_id(&self, session_id: &str) -> BitFunResult<String> {
+    fn resolve_session_id(&self, session_id: &str) -> HaloResult<String> {
         let session_id = session_id.trim().to_string();
-        Self::validate_session_id(&session_id).map_err(BitFunError::tool)?;
+        Self::validate_session_id(&session_id).map_err(HaloError::tool)?;
         Ok(session_id)
     }
 }
@@ -55,7 +55,7 @@ impl Tool for SessionHistoryTool {
         "SessionHistory"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(
             r#"Use this tool when you need the history of an agent session.
 
@@ -222,16 +222,16 @@ Examples:
         &self,
         input: &Value,
         _context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let params: SessionHistoryInput = serde_json::from_value(input.clone())
-            .map_err(|e| BitFunError::tool(format!("Invalid input: {}", e)))?;
+            .map_err(|e| HaloError::tool(format!("Invalid input: {}", e)))?;
 
         let session_id = self.resolve_session_id(&params.session_id)?;
         let (display_workspace, session_storage_dir) =
             CoreServiceAgentRuntime::resolve_session_workspace_paths(&session_id)
                 .await
                 .ok_or_else(|| {
-                    BitFunError::NotFound(format!(
+                    HaloError::NotFound(format!(
                         "Workspace for session '{}' could not be resolved",
                         session_id
                     ))

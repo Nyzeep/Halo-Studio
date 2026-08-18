@@ -1,12 +1,12 @@
 [package]
-name = "bitfun-agent-runtime"
+name = "halo-agent-runtime"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Agent runtime contracts and owner decisions for BitFun"
+description = "Agent runtime contracts and owner decisions for Halo"
 
 [lib]
-name = "bitfun_agent_runtime"
+name = "halo_agent_runtime"
 crate-type = ["rlib"]
 
 [features]
@@ -14,13 +14,13 @@ default = []
 
 [dependencies]
 async-trait = { workspace = true }
-bitfun-agent-stream = { path = "../agent-stream" }
-bitfun-agent-tools = { path = "../tool-contracts" }
-bitfun-core-types = { path = "../../contracts/core-types" }
-bitfun-events = { path = "../../contracts/events" }
-bitfun-harness = { path = "../harness" }
-bitfun-runtime-ports = { path = "../../contracts/runtime-ports", features = ["permission"] }
-bitfun-runtime-services = { path = "../runtime-services" }
+halo-agent-stream = { path = "../agent-stream" }
+halo-agent-tools = { path = "../tool-contracts" }
+halo-core-types = { path = "../../contracts/core-types" }
+halo-events = { path = "../../contracts/events" }
+halo-harness = { path = "../harness" }
+halo-runtime-ports = { path = "../../contracts/runtime-ports", features = ["permission"] }
+halo-runtime-services = { path = "../runtime-services" }
 dashmap = { workspace = true }
 hex = { workspace = true }
 log = { workspace = true }

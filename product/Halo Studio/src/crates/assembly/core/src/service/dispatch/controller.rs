@@ -1,4 +1,4 @@
-use bitfun_services_integrations::remote_ssh::{
+use halo_services_integrations::remote_ssh::{
     dispatch_ssh::{
         self, DispatchCliRelease, DispatchInstallPoll, DispatchInstallStart, DispatchSshProbe,
     },
@@ -195,7 +195,7 @@ pub async fn submit(
                 .protocol_error
                 .as_deref()
                 .or(preflight.install_error.as_deref())
-                .unwrap_or("BitFun CLI dispatch protocol is unavailable on the SSH target")
+                .unwrap_or("Halo CLI dispatch protocol is unavailable on the SSH target")
         )
     })?;
     dispatch_ssh::validate_dispatch_protocol(protocol, Some(&request.approval_policy))?;

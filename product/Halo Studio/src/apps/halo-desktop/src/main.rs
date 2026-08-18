@@ -30,20 +30,20 @@ fn configure_halo_storage_scope() {
         env_path("APPDATA").or_else(|| env_path("XDG_CONFIG_HOME")),
         env_path("USERPROFILE").or_else(|| env_path("HOME")),
     );
-    // The shared BitFun infrastructure reads these names. Set them before its
+    // The shared Halo infrastructure reads these names. Set them before its
     // first global initialization so Halo never imports another product profile.
-    std::env::set_var("BITFUN_USER_ROOT", user_root);
-    std::env::set_var("BITFUN_HOME", home_root);
+    std::env::set_var("HALO_USER_ROOT", user_root);
+    std::env::set_var("HALO_HOME", home_root);
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() {
     configure_halo_storage_scope();
     std::env::set_var("RUST_MIN_STACK", "8388608");
-    let logs_root = bitfun_desktop_lib::logging::product_logs_root("Halo Studio");
-    bitfun_desktop_lib::run_with_context_and_options(
+    let logs_root = halo_desktop_lib::logging::product_logs_root("Halo Studio");
+    halo_desktop_lib::run_with_context_and_options(
         tauri::generate_context!(),
-        bitfun_desktop_lib::DesktopRunOptions::with_logs_root(logs_root),
+        halo_desktop_lib::DesktopRunOptions::with_logs_root(logs_root),
     )
     .await
 }
@@ -66,7 +66,7 @@ mod tests {
     }
 
     #[test]
-    fn halo_storage_scope_derives_names_that_cannot_overlap_bitfun_defaults() {
+    fn halo_storage_scope_derives_isolated_default_roots() {
         let (user_root, home_root) = halo_storage_roots(
             None,
             None,
@@ -76,7 +76,7 @@ mod tests {
 
         assert_eq!(user_root, PathBuf::from("D:/profiles/config/Halo Studio"));
         assert_eq!(home_root, PathBuf::from("D:/profiles/home/.halo-studio"));
-        assert!(!user_root.to_string_lossy().contains("bitfun"));
-        assert!(!home_root.to_string_lossy().contains(".bitfun"));
+        assert!(!user_root.to_string_lossy().contains("Halo Studio/Halo Studio"));
+        assert!(!home_root.to_string_lossy().contains(".halo-studio/.halo-studio"));
     }
 }

@@ -67,18 +67,18 @@ use crate::service::workspace::{
     WorkspaceKind, WorkspaceService,
 };
 use crate::service_agent_runtime::CoreServiceAgentRuntime;
-use crate::util::errors::{BitFunError, BitFunResult};
-use bitfun_agent_runtime::deep_review::FocusedReviewAssignment;
-use bitfun_agent_runtime::output_surface::{
+use crate::util::errors::{HaloError, HaloResult};
+use halo_agent_runtime::deep_review::FocusedReviewAssignment;
+use halo_agent_runtime::output_surface::{
     supports_inline_markdown_images_for_source, TOOL_CONTEXT_INLINE_MARKDOWN_IMAGE_DISPLAY_KEY,
 };
-use bitfun_agent_runtime::permission::AUTO_APPROVE_ASK_CONTEXT_KEY;
-use bitfun_agent_runtime::remote_file_delivery::{
+use halo_agent_runtime::permission::AUTO_APPROVE_ASK_CONTEXT_KEY;
+use halo_agent_runtime::remote_file_delivery::{
     needs_computer_links_for_source, remote_file_delivery_reminder,
     TOOL_CONTEXT_REMOTE_FILE_DELIVERY_KEY,
 };
-use bitfun_agent_runtime::user_questions::USER_INPUT_AVAILABLE_CONTEXT_KEY;
-use bitfun_runtime_ports::{
+use halo_agent_runtime::user_questions::USER_INPUT_AVAILABLE_CONTEXT_KEY;
+use halo_runtime_ports::{
     AgentSessionWorkspaceBinding, AgentThreadGoalDeliveryKind, AgentThreadGoalDeliveryRequest,
     DelegationPolicy, PermissionDelegationContext, PermissionRuntimeCeiling, RemoteExecPort,
     SessionStoragePathRequest, SessionStoragePathResolution, SessionStorePort, SubagentContextMode,
@@ -176,14 +176,14 @@ tokio::task_local! {
     static TEST_AGENT_MODEL_DEFAULTS: AgentModelDefaultsConfig;
 }
 
-async fn normalize_model_selection(model_id: &str) -> BitFunResult<String> {
+async fn normalize_model_selection(model_id: &str) -> HaloResult<String> {
     let requested_model_id = model_id.trim();
     match requested_model_id {
         "" | "auto" | "default" => Ok("auto".to_string()),
         "primary" | "fast" => Ok(requested_model_id.to_string()),
         model_config_id => {
             let config_service = get_global_config_service().await.map_err(|error| {
-                BitFunError::AIClient(format!(
+                HaloError::AIClient(format!(
                     "Failed to load AI configuration for model update: {error}"
                 ))
             })?;
@@ -191,14 +191,14 @@ async fn normalize_model_selection(model_id: &str) -> BitFunResult<String> {
                 .get_config(Some("ai"))
                 .await
                 .map_err(|error| {
-                    BitFunError::AIClient(format!(
+                    HaloError::AIClient(format!(
                         "Failed to read AI configuration for model update: {error}"
                     ))
                 })?;
             ai_config
                 .resolve_model_reference(model_config_id)
                 .ok_or_else(|| {
-                    BitFunError::Validation(format!(
+                    HaloError::Validation(format!(
                         "Unknown or disabled model configuration ID: {model_config_id}"
                     ))
                 })
@@ -233,17 +233,17 @@ fn resolve_subagent_model_selection(
     explicit_model_id: Option<&str>,
     configured_selection: &SubagentModelSelection,
     parent_model_id: Option<&str>,
-) -> BitFunResult<String> {
+) -> HaloResult<String> {
     if let Some(model_id) = trimmed_model_id(explicit_model_id) {
         return Ok(model_id);
     }
 
     match configured_selection {
         SubagentModelSelection::Fixed { model_id } => trimmed_model_id(Some(model_id)).ok_or_else(|| {
-            BitFunError::Validation("Configured subagent model must not be empty".to_string())
+            HaloError::Validation("Configured subagent model must not be empty".to_string())
         }),
         SubagentModelSelection::Inherit => trimmed_model_id(parent_model_id).ok_or_else(|| {
-            BitFunError::Validation(
+            HaloError::Validation(
                 "Subagent model is configured to inherit, but the parent session has no model selection"
                     .to_string(),
             )
@@ -618,7 +618,7 @@ impl HiddenSubagentExecutionRequest {
     }
 }
 
-pub use bitfun_runtime_ports::DialogTriggerSource;
+pub use halo_runtime_ports::DialogTriggerSource;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AssistantBootstrapSkipReason {
@@ -1232,7 +1232,7 @@ impl ConversationCoordinator {
 
     fn session_reference_locators_from_metadata(
         metadata: Option<&serde_json::Value>,
-    ) -> BitFunResult<Vec<SessionReferenceLocator>> {
+    ) -> HaloResult<Vec<SessionReferenceLocator>> {
         let Some(value) = metadata
             .and_then(serde_json::Value::as_object)
             .and_then(|object| object.get(SESSION_REFERENCES_METADATA_KEY))
@@ -1242,10 +1242,10 @@ impl ConversationCoordinator {
 
         let references = serde_json::from_value::<Vec<SessionReferenceLocator>>(value.clone())
             .map_err(|error| {
-                BitFunError::Validation(format!("Invalid session reference metadata: {}", error))
+                HaloError::Validation(format!("Invalid session reference metadata: {}", error))
             })?;
         if references.len() > MAX_SESSION_REFERENCES_PER_TURN {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "A message can reference at most {} sessions",
                 MAX_SESSION_REFERENCES_PER_TURN
             )));
@@ -1307,7 +1307,7 @@ impl ConversationCoordinator {
         &self,
         source_session_id: &str,
         metadata: Option<&serde_json::Value>,
-    ) -> BitFunResult<Vec<Message>> {
+    ) -> HaloResult<Vec<Message>> {
         let references = Self::session_reference_locators_from_metadata(metadata)?;
         if references.is_empty() {
             return Ok(Vec::new());
@@ -1318,7 +1318,7 @@ impl ConversationCoordinator {
         for (reference, artifact_stem) in references.into_iter().zip(artifact_stems) {
             if let Some(scheduler) = get_global_scheduler() {
                 if scheduler.is_session_busy_or_queued(&reference.session_id) {
-                    return Err(BitFunError::Validation(format!(
+                    return Err(HaloError::Validation(format!(
                         "Referenced session is busy or has queued work: {}",
                         reference.session_id
                     )));
@@ -1380,7 +1380,7 @@ impl ConversationCoordinator {
         }
     }
 
-    async fn restore_path_for_existing_session(&self, session_id: &str) -> BitFunResult<PathBuf> {
+    async fn restore_path_for_existing_session(&self, session_id: &str) -> HaloResult<PathBuf> {
         if let Some(binding) = self
             .session_manager
             .resolve_session_workspace_binding(session_id)
@@ -1392,14 +1392,14 @@ impl ConversationCoordinator {
         let session = self
             .session_manager
             .get_session(session_id)
-            .ok_or_else(|| BitFunError::NotFound(format!("Session not found: {}", session_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Session not found: {}", session_id)))?;
         session
             .config
             .workspace_path
             .as_deref()
             .map(PathBuf::from)
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "workspace_path is required when restoring session: {}",
                     session_id
                 ))
@@ -1665,10 +1665,10 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &Path,
         remote_connection_id: Option<&str>,
         remote_ssh_host: Option<&str>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.runtime_ownership
             .ensure_workspace_scope(workspace_path, remote_connection_id, remote_ssh_host)
-            .map_err(|error| BitFunError::Service(self.runtime_ownership.error_message(&error)))
+            .map_err(|error| HaloError::Service(self.runtime_ownership.error_message(&error)))
     }
 
     /// Ensures that this process may attach or mutate one workspace Runtime.
@@ -1677,7 +1677,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &Path,
         remote_connection_id: Option<&str>,
         remote_ssh_host: Option<&str>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.ensure_runtime_ownership(workspace_path, remote_connection_id, remote_ssh_host)
     }
 
@@ -1688,10 +1688,10 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &Path,
         remote_connection_id: &str,
         remote_ssh_host: Option<&str>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.runtime_ownership
             .register_verified_remote_scope(workspace_path, remote_connection_id, remote_ssh_host)
-            .map_err(|error| BitFunError::Service(self.runtime_ownership.error_message(&error)))?;
+            .map_err(|error| HaloError::Service(self.runtime_ownership.error_message(&error)))?;
         self.ensure_runtime_ownership(workspace_path, Some(remote_connection_id), remote_ssh_host)
     }
 
@@ -1704,7 +1704,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         remote_connection_id: Option<&str>,
         remote_ssh_host: Option<&str>,
         snapshot_log_context: &str,
-    ) -> BitFunResult<WorkspaceInfo> {
+    ) -> HaloResult<WorkspaceInfo> {
         let known_remote = workspace_service
             .find_known_remote_workspace_for_path(
                 &path.to_string_lossy(),
@@ -1713,8 +1713,8 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             )
             .await;
         if known_remote.is_none() && !path.exists() {
-            return Err(BitFunError::service(format!(
-                "Workspace path does not exist locally and is not a known remote SSH workspace: {}. Open it once from the desktop SSH remote UI so BitFun can remember the connection, then try again.",
+            return Err(HaloError::service(format!(
+                "Workspace path does not exist locally and is not a known remote SSH workspace: {}. Open it once from the desktop SSH remote UI so Halo can remember the connection, then try again.",
                 path.display()
             )));
         }
@@ -1765,10 +1765,10 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: &str,
         fallback_workspace: Option<&Path>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if let Some(session) = self.session_manager.get_session(session_id) {
             let workspace_path = session.config.workspace_path.as_deref().ok_or_else(|| {
-                BitFunError::Validation(format!("Session workspace_path is missing: {session_id}"))
+                HaloError::Validation(format!("Session workspace_path is missing: {session_id}"))
             })?;
             return self.ensure_runtime_ownership(
                 Path::new(workspace_path),
@@ -1778,7 +1778,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         }
         match fallback_workspace {
             Some(workspace_path) => self.ensure_runtime_ownership(workspace_path, None, None),
-            None => Err(BitFunError::NotFound(format!(
+            None => Err(HaloError::NotFound(format!(
                 "Session not found: {session_id}"
             ))),
         }
@@ -1833,10 +1833,10 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: &str,
         action: SubagentTimeoutAction,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let registry = self.subagent_timeout_registry.read().await;
         let handle = registry.get(session_id).cloned().ok_or_else(|| {
-            BitFunError::tool(format!(
+            HaloError::tool(format!(
                 "No active subagent timeout handle for session {}",
                 session_id
             ))
@@ -1857,9 +1857,9 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         session_name: String,
         agent_type: String,
         config: SessionConfig,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         let workspace_path = config.workspace_path.clone().ok_or_else(|| {
-            BitFunError::Validation(
+            HaloError::Validation(
                 "workspace_path is required when creating a session".to_string(),
             )
         })?;
@@ -1881,9 +1881,9 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         session_name: String,
         agent_type: String,
         config: SessionConfig,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         let workspace_path = config.workspace_path.clone().ok_or_else(|| {
-            BitFunError::Validation(
+            HaloError::Validation(
                 "workspace_path is required when creating a session".to_string(),
             )
         })?;
@@ -1908,7 +1908,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         agent_type: String,
         config: SessionConfig,
         workspace_path: String,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.create_session_with_workspace_and_creator(
             session_id,
             session_name,
@@ -1920,7 +1920,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         .await
     }
 
-    pub async fn update_session_model(&self, session_id: &str, model_id: &str) -> BitFunResult<()> {
+    pub async fn update_session_model(&self, session_id: &str, model_id: &str) -> HaloResult<()> {
         self.ensure_session_runtime_ownership(session_id, None)?;
         let normalized_model_id = normalize_model_selection(model_id).await?;
 
@@ -1947,7 +1947,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         config: SessionConfig,
         workspace_path: String,
         created_by: Option<String>,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.create_session_with_workspace_and_creator_internal(
             session_id,
             session_name,
@@ -1969,7 +1969,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: String,
         created_by: Option<String>,
         transient: bool,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         // Persist the workspace binding inside the session config so execution can
         // consistently restore the correct workspace regardless of the entry point.
         config.workspace_path = Some(workspace_path.clone());
@@ -2086,7 +2086,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         mut config: SessionConfig,
         workspace_path: String,
         created_by: Option<String>,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         config.workspace_path = Some(workspace_path);
         self.ensure_runtime_ownership(
             Path::new(
@@ -2130,7 +2130,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &str,
         // Pre-resolved on-disk session storage path (mirror dir for remote workspaces).
         // When present we use it directly so we never re-resolve without remote SSH info
-        // (which would slugify a raw remote POSIX path under `~/.bitfun/projects/`).
+        // (which would slugify a raw remote POSIX path under `~/.halo-studio/projects/`).
         resolved_session_storage_path: Option<&std::path::Path>,
         status: crate::service::session::TurnStatus,
         user_message_metadata: Option<serde_json::Value>,
@@ -2411,11 +2411,11 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         scheduler_notify_tx: Option<&mpsc::Sender<(String, TurnOutcome)>>,
         session_id: &str,
         turn_id: &str,
-        error: &BitFunError,
+        error: &HaloError,
         emit_lifecycle_events: bool,
     ) -> crate::service::session::TurnStatus {
         let error_text = error.to_string();
-        let recoverable = !matches!(error, BitFunError::AIClient(_) | BitFunError::Timeout(_));
+        let recoverable = !matches!(error, HaloError::AIClient(_) | HaloError::Timeout(_));
 
         error!("Dialog turn execution failed: {}", error_text);
 
@@ -2543,7 +2543,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         agent_type: String,
         config: SessionConfig,
         created_by: Option<String>,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.create_hidden_agent_session(
             session_id,
             session_name,
@@ -2563,7 +2563,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         config: SessionConfig,
         created_by: Option<String>,
         kind: SessionKind,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.create_hidden_agent_session_with_durability(
             session_id,
             session_name,
@@ -2585,7 +2585,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         created_by: Option<String>,
         kind: SessionKind,
         transient: bool,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         if transient {
             self.session_manager
                 .create_transient_session_with_id_and_details(
@@ -2611,7 +2611,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         }
     }
 
-    async fn load_session_context_messages(&self, session: &Session) -> BitFunResult<Vec<Message>> {
+    async fn load_session_context_messages(&self, session: &Session) -> HaloResult<Vec<Message>> {
         let session_id = &session.session_id;
         let mut context_messages = self
             .session_manager
@@ -2664,7 +2664,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         enable_tools: bool,
         skill_agent_context_vars: &HashMap<String, String>,
         runtime_tool_restrictions: &ToolRuntimeRestrictions,
-    ) -> BitFunResult<WrappedUserInputPayload> {
+    ) -> HaloResult<WrappedUserInputPayload> {
         let agent_registry = get_agent_registry();
         agent_registry
             .load_custom_agents(
@@ -2676,7 +2676,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         let current_agent = agent_registry
             .get_agent(agent_type, workspace.map(|binding| binding.root_path()))
             .ok_or_else(|| {
-                BitFunError::Validation(format!("Unknown agent type: {}", agent_type))
+                HaloError::Validation(format!("Unknown agent type: {}", agent_type))
             })?;
         let current_agent_reminder = current_agent
             .get_system_reminder(previous_agent_type, workspace)
@@ -2760,7 +2760,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: String,
         workspace_path: String,
-    ) -> BitFunResult<AssistantBootstrapEnsureOutcome> {
+    ) -> HaloResult<AssistantBootstrapEnsureOutcome> {
         let workspace_root = PathBuf::from(&workspace_path);
         // Assistant workspaces are local-only. Ownership must be established
         // before persona files are created or a persisted Session is attached.
@@ -2891,7 +2891,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         remote_ssh_host: Option<String>,
         submission_policy: DialogSubmissionPolicy,
         user_message_metadata: Option<serde_json::Value>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.start_dialog_turn_internal(
             session_id,
             user_input,
@@ -2924,7 +2924,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         submission_policy: DialogSubmissionPolicy,
         user_message_metadata: Option<serde_json::Value>,
         prepended_messages: Vec<Message>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.start_dialog_turn_internal(
             session_id,
             user_input,
@@ -2957,7 +2957,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         remote_ssh_host: Option<String>,
         submission_policy: DialogSubmissionPolicy,
         user_message_metadata: Option<serde_json::Value>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.start_dialog_turn_internal(
             session_id,
             user_input,
@@ -2991,7 +2991,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         submission_policy: DialogSubmissionPolicy,
         user_message_metadata: Option<serde_json::Value>,
         prepended_messages: Vec<Message>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.start_dialog_turn_internal(
             session_id,
             user_input,
@@ -3018,7 +3018,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &str,
         remote_connection_id: Option<&str>,
         remote_ssh_host: Option<&str>,
-    ) -> BitFunResult<SessionStoragePathResolution> {
+    ) -> HaloResult<SessionStoragePathResolution> {
         let request = SessionStoragePathRequest {
             workspace_path: PathBuf::from(workspace_path),
             remote_connection_id: remote_connection_id.map(ToOwned::to_owned),
@@ -3028,29 +3028,29 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         CoreSessionStorePort::default()
             .resolve_session_storage_path(request)
             .await
-            .map_err(|error| BitFunError::Session(error.to_string()))
+            .map_err(|error| HaloError::Session(error.to_string()))
     }
 
     async fn resolve_session_restore_path(
         workspace_path: &str,
         remote_connection_id: Option<&str>,
         remote_ssh_host: Option<&str>,
-    ) -> BitFunResult<PathBuf> {
+    ) -> HaloResult<PathBuf> {
         Self::resolve_session_restore_scope(workspace_path, remote_connection_id, remote_ssh_host)
             .await
             .map(|resolution| resolution.effective_storage_path)
     }
 
-    fn require_main_session_workspace(&self, session_id: &str) -> BitFunResult<PathBuf> {
+    fn require_main_session_workspace(&self, session_id: &str) -> HaloResult<PathBuf> {
         let session = self
             .session_manager
             .get_session(session_id)
-            .ok_or_else(|| BitFunError::NotFound(format!("Session not found: {session_id}")))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Session not found: {session_id}")))?;
         if matches!(
             session.kind,
             SessionKind::Subagent | SessionKind::EphemeralChild
         ) {
-            return Err(BitFunError::Validation(
+            return Err(HaloError::Validation(
                 "Thread goals are only available for main sessions".to_string(),
             ));
         }
@@ -3061,18 +3061,18 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .map(Path::new)
             .map(Path::to_path_buf)
             .ok_or_else(|| {
-                BitFunError::Validation(format!("Session workspace_path is missing: {session_id}"))
+                HaloError::Validation(format!("Session workspace_path is missing: {session_id}"))
             })
     }
 
-    async fn require_main_session_storage_path(&self, session_id: &str) -> BitFunResult<PathBuf> {
+    async fn require_main_session_storage_path(&self, session_id: &str) -> HaloResult<PathBuf> {
         self.require_main_session_workspace(session_id)?;
         self.session_manager
             .resolve_session_workspace_binding(session_id)
             .await
             .map(|binding| binding.session_storage_dir())
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Session storage path is unavailable: {session_id}"
                 ))
             })
@@ -3082,7 +3082,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: &str,
         workspace_path: &Path,
-    ) -> BitFunResult<PathBuf> {
+    ) -> HaloResult<PathBuf> {
         if self.session_manager.get_session(session_id).is_some() {
             self.require_main_session_storage_path(session_id).await
         } else {
@@ -3094,7 +3094,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: &str,
         workspace_path: &Path,
-    ) -> BitFunResult<Option<ThreadGoal>> {
+    ) -> HaloResult<Option<ThreadGoal>> {
         let storage_path = self
             .resolve_thread_goal_storage_path(session_id, workspace_path)
             .await?;
@@ -3107,7 +3107,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: &str,
         workspace_path: &Path,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let storage_path = self
             .resolve_thread_goal_storage_path(session_id, workspace_path)
             .await?;
@@ -3125,7 +3125,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         _workspace_path: &Path,
         objective: String,
         token_budget: Option<i64>,
-    ) -> BitFunResult<ThreadGoal> {
+    ) -> HaloResult<ThreadGoal> {
         let storage_path = self.require_main_session_storage_path(session_id).await?;
         let goal = self
             .thread_goal_store()
@@ -3142,14 +3142,14 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         session_id: &str,
         _workspace_path: &Path,
         objective: String,
-    ) -> BitFunResult<ThreadGoal> {
+    ) -> HaloResult<ThreadGoal> {
         let storage_path = self.require_main_session_storage_path(session_id).await?;
         let existing = self
             .thread_goal_store()
             .get_thread_goal(session_id, storage_path.as_path())
             .await?
             .ok_or_else(|| {
-                BitFunError::NotFound(format!(
+                HaloError::NotFound(format!(
                     "cannot edit goal for session {session_id}: no goal exists"
                 ))
             })?;
@@ -3190,7 +3190,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         _workspace_path: &Path,
         objective: String,
         replace_existing: bool,
-    ) -> BitFunResult<ThreadGoal> {
+    ) -> HaloResult<ThreadGoal> {
         let storage_path = self.require_main_session_storage_path(session_id).await?;
         let previous = self
             .thread_goal_store()
@@ -3292,7 +3292,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     pub async fn maybe_mark_thread_goal_usage_limited(
         &self,
         session_id: &str,
-        error: &BitFunError,
+        error: &HaloError,
     ) {
         if !is_usage_limit_error(error) {
             return;
@@ -3331,7 +3331,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         session_id: &str,
         _workspace_path: &Path,
         status: ThreadGoalStatus,
-    ) -> BitFunResult<ThreadGoal> {
+    ) -> HaloResult<ThreadGoal> {
         let storage_path = self.require_main_session_storage_path(session_id).await?;
         let previous = self
             .thread_goal_store()
@@ -3475,7 +3475,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &Path,
         status: ThreadGoalStatus,
         turn_id: Option<&str>,
-    ) -> BitFunResult<ThreadGoal> {
+    ) -> HaloResult<ThreadGoal> {
         let goal = self
             .set_thread_goal_status(session_id, workspace_path, status)
             .await?;
@@ -3484,7 +3484,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     }
 
     pub async fn emit_thread_goal_updated(&self, session_id: &str, goal: Option<ThreadGoal>) {
-        let goal = bitfun_agent_runtime::thread_goal::thread_goal_event_payload(goal);
+        let goal = halo_agent_runtime::thread_goal::thread_goal_event_payload(goal);
         self.emit_event(AgenticEvent::ThreadGoalUpdated {
             session_id: session_id.to_string(),
             goal,
@@ -3492,7 +3492,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         .await;
     }
 
-    async fn load_active_thread_goal(&self, session_id: &str) -> BitFunResult<Option<ThreadGoal>> {
+    async fn load_active_thread_goal(&self, session_id: &str) -> HaloResult<Option<ThreadGoal>> {
         let storage_path = self.require_main_session_storage_path(session_id).await?;
         Ok(self
             .thread_goal_store()
@@ -3506,9 +3506,9 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: String,
         user_hint: Option<String>,
-    ) -> BitFunResult<ThreadGoal> {
+    ) -> HaloResult<ThreadGoal> {
         let objective = user_hint.ok_or_else(|| {
-            BitFunError::Validation(
+            HaloError::Validation(
                 "Goal objective is required. Use /goal <objective>.".to_string(),
             )
         })?;
@@ -3542,7 +3542,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         user_input: &str,
         user_message_metadata: Option<&serde_json::Value>,
         turn_completed: bool,
-    ) -> BitFunResult<Option<ThreadGoalContinuationPlan>> {
+    ) -> HaloResult<Option<ThreadGoalContinuationPlan>> {
         if should_skip_goal_continuation_after_turn(user_input, user_message_metadata) {
             return Ok(None);
         }
@@ -3588,11 +3588,11 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     }
 
     /// Compact the active session context as a persisted maintenance turn.
-    pub async fn compact_session_manually(&self, session_id: String) -> BitFunResult<()> {
+    pub async fn compact_session_manually(&self, session_id: String) -> HaloResult<()> {
         let session = self
             .session_manager
             .get_session(&session_id)
-            .ok_or_else(|| BitFunError::NotFound(format!("Session not found: {}", session_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Session not found: {}", session_id)))?;
 
         match &session.state {
             SessionState::Idle => {}
@@ -3600,13 +3600,13 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 current_turn_id,
                 phase,
             } => {
-                return Err(BitFunError::Validation(format!(
+                return Err(HaloError::Validation(format!(
                     "Session is still processing: current_turn_id={}, phase={:?}",
                     current_turn_id, phase
                 )));
             }
             SessionState::Error { error, .. } => {
-                return Err(BitFunError::Validation(format!(
+                return Err(HaloError::Validation(format!(
                     "Session must be idle before manual compaction: {}",
                     error
                 )));
@@ -3790,7 +3790,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         extra_user_message_metadata: Option<serde_json::Value>,
         mut additional_prepended_messages: Vec<Message>,
         suppress_session_title_generation: bool,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let loaded_session = self.session_manager.get_session(&session_id);
         let storage_workspace_path = session_storage_workspace_locator(
             workspace_path.as_deref(),
@@ -3832,7 +3832,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     session_id
                 );
                 let restore = requested_restore.ok_or_else(|| {
-                    BitFunError::Validation(format!(
+                    HaloError::Validation(format!(
                         "workspace_path is required when restoring session: {}",
                         session_id
                     ))
@@ -3933,7 +3933,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     "Session still processing, rejecting new dialog: session_id={}, current_turn_id={}, phase={:?}",
                     session_id, current_turn_id, phase
                 );
-                return Err(BitFunError::Validation(format!(
+                return Err(HaloError::Validation(format!(
                     "Session state does not allow starting new dialog: {:?}",
                     session.state
                 )));
@@ -3961,7 +3961,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 "UserPromptSubmit hook blocked the prompt: session_id={}, reason={}",
                 session_id, reason
             );
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "A UserPromptSubmit hook blocked this prompt: {reason}"
             )));
         }
@@ -4021,7 +4021,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 .or(session.config.workspace_path.as_deref())
                 .or(storage_workspace_path.as_deref())
                 .ok_or_else(|| {
-                    BitFunError::Validation(format!(
+                    HaloError::Validation(format!(
                         "workspace_path is required when restoring session: {}",
                         session_id
                     ))
@@ -4612,7 +4612,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     .0,
                 ),
                 Err(e) => {
-                    if matches!(&e, BitFunError::Cancelled(_)) {
+                    if matches!(&e, HaloError::Cancelled(_)) {
                         Some(
                             Self::persist_cancelled_dialog_turn(
                                 event_queue.as_ref(),
@@ -4703,7 +4703,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         session_id: &str,
         turn_id: &str,
         max_wait: Duration,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         match self
             .turn_settlements
             .wait(session_id, turn_id, max_wait)
@@ -4716,19 +4716,19 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     .session_manager
                     .get_session(session_id)
                     .ok_or_else(|| {
-                        BitFunError::NotFound(format!("Session not found: {session_id}"))
+                        HaloError::NotFound(format!("Session not found: {session_id}"))
                     })?;
                 if !session.dialog_turn_ids.iter().any(|known| known == turn_id) {
-                    return Err(BitFunError::NotFound(format!(
+                    return Err(HaloError::NotFound(format!(
                         "Dialog turn not found: {turn_id}"
                     )));
                 }
-                return Err(BitFunError::Service(format!(
+                return Err(HaloError::Service(format!(
                     "Turn settlement evidence is unavailable: session_id={session_id}, turn_id={turn_id}"
                 )));
             }
         }
-        Err(BitFunError::Timeout(format!(
+        Err(HaloError::Timeout(format!(
             "Turn did not settle before timeout: session_id={session_id}, turn_id={turn_id}, timeout_ms={}",
             max_wait.as_millis()
         )))
@@ -4766,12 +4766,12 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: &str,
         max_wait: Duration,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let pending = self.wait_session_drained(session_id, max_wait).await;
         if pending == 0 {
             return Ok(());
         }
-        Err(BitFunError::Timeout(format!(
+        Err(HaloError::Timeout(format!(
             "Session execution did not drain before maintenance: session_id={session_id}, pending={pending}, timeout_ms={}",
             max_wait.as_millis()
         )))
@@ -4869,7 +4869,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: &str,
         dialog_turn_id: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         info!(
             "Received cancel request: dialog_turn_id={}, session_id={}",
             dialog_turn_id, session_id
@@ -4970,7 +4970,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: &str,
         wait_timeout: Duration,
-    ) -> BitFunResult<Option<String>> {
+    ) -> HaloResult<Option<String>> {
         abort_thread_goal_continuation_for_session(session_id);
 
         let Some(session) = self.session_manager.get_session(session_id) else {
@@ -4996,7 +4996,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     current_turn_id,
                     wait_timeout.as_millis()
                 );
-                return Err(BitFunError::Timeout(format!(
+                return Err(HaloError::Timeout(format!(
                     "Active turn cancellation did not drain before timeout: session_id={session_id}, dialog_turn_id={current_turn_id}, timeout_ms={}",
                     wait_timeout.as_millis()
                 )));
@@ -5012,7 +5012,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         // SessionEnd hooks observe the session before its state is gone.
         // Their timeout is capped tightly so deletion cannot hang.
         let session_hook_facts = match self.session_manager.get_session(session_id) {
@@ -5061,7 +5061,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         remote_connection_id: Option<&str>,
         remote_ssh_host: Option<&str>,
         session_id: &str,
-    ) -> BitFunResult<bool> {
+    ) -> HaloResult<bool> {
         let family = self.session_manager.transient_session_family_postorder(
             workspace_path,
             remote_connection_id,
@@ -5091,7 +5091,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &Path,
         parent_session_id: &str,
         parent_dialog_turn_ids: &HashSet<String>,
-    ) -> BitFunResult<Vec<String>> {
+    ) -> HaloResult<Vec<String>> {
         let session_ids = self
             .collect_hidden_subagent_sessions_for_parent_turns(
                 workspace_path,
@@ -5120,7 +5120,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         source_session_id: &str,
         target_session_id: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.background_subagent_outcomes
             .initialize_fork(source_session_id, target_session_id)
             .await
@@ -5131,7 +5131,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &Path,
         parent_session_id: &str,
         parent_dialog_turn_ids: &HashSet<String>,
-    ) -> BitFunResult<Vec<String>> {
+    ) -> HaloResult<Vec<String>> {
         self.session_manager
             .collect_hidden_subagent_cascade_for_parent_turns(
                 workspace_path,
@@ -5146,7 +5146,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &Path,
         parent_session_id: &str,
         session_id: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if let Err(e) = self
             .cancel_active_turn_for_session(session_id, Duration::from_secs(2))
             .await
@@ -5165,7 +5165,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.ensure_runtime_ownership(workspace_path, None, None)?;
         self.session_manager
             .restore_session(workspace_path, session_id)
@@ -5176,7 +5176,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.session_manager
             .restore_session_from_storage_path(session_storage_path, session_id)
             .await
@@ -5186,7 +5186,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.session_manager
             .restore_internal_session_from_storage_path(session_storage_path, session_id)
             .await
@@ -5196,7 +5196,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         request: SessionStoragePathRequest,
         session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.ensure_runtime_ownership(
             &request.workspace_path,
             request.remote_connection_id.as_deref(),
@@ -5211,7 +5211,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         request: SessionStoragePathRequest,
         session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.ensure_runtime_ownership(
             &request.workspace_path,
             request.remote_connection_id.as_deref(),
@@ -5226,7 +5226,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.ensure_runtime_ownership(workspace_path, None, None)?;
         self.session_manager
             .restore_internal_session(workspace_path, session_id)
@@ -5238,7 +5238,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
         self.ensure_runtime_ownership(workspace_path, None, None)?;
         self.session_manager
             .restore_session_with_turns(workspace_path, session_id)
@@ -5249,7 +5249,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
         self.session_manager
             .restore_session_with_turns_from_storage_path(session_storage_path, session_id)
             .await
@@ -5259,7 +5259,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
         self.session_manager
             .restore_internal_session_with_turns_from_storage_path(session_storage_path, session_id)
             .await
@@ -5269,7 +5269,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         request: SessionStoragePathRequest,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
         self.ensure_runtime_ownership(
             &request.workspace_path,
             request.remote_connection_id.as_deref(),
@@ -5284,7 +5284,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         request: SessionStoragePathRequest,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
         self.ensure_runtime_ownership(
             &request.workspace_path,
             request.remote_connection_id.as_deref(),
@@ -5299,7 +5299,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
         self.ensure_runtime_ownership(workspace_path, None, None)?;
         self.session_manager
             .restore_internal_session_with_turns(workspace_path, session_id)
@@ -5311,7 +5311,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
         self.session_manager
             .restore_session_view(workspace_path, session_id)
             .await
@@ -5321,7 +5321,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<crate::service::session::DialogTurnData>,
         crate::agentic::session::session_manager::SessionViewRestoreTiming,
@@ -5335,7 +5335,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         request: SessionStoragePathRequest,
         session_id: &str,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<crate::service::session::DialogTurnData>,
         crate::agentic::session::session_manager::SessionViewRestoreTiming,
@@ -5349,7 +5349,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<crate::service::session::DialogTurnData>,
         crate::agentic::session::session_manager::SessionViewRestoreTiming,
@@ -5364,7 +5364,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &Path,
         session_id: &str,
         tail_turn_count: usize,
-    ) -> BitFunResult<(Session, Vec<crate::service::session::DialogTurnData>, usize)> {
+    ) -> HaloResult<(Session, Vec<crate::service::session::DialogTurnData>, usize)> {
         self.session_manager
             .restore_session_view_tail(workspace_path, session_id, tail_turn_count)
             .await
@@ -5375,7 +5375,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &Path,
         session_id: &str,
         tail_turn_count: usize,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<crate::service::session::DialogTurnData>,
         usize,
@@ -5391,7 +5391,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         session_storage_path: &Path,
         session_id: &str,
         tail_turn_count: usize,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<crate::service::session::DialogTurnData>,
         usize,
@@ -5410,7 +5410,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<crate::service::session::DialogTurnData>)> {
         self.session_manager
             .restore_internal_session_view(workspace_path, session_id)
             .await
@@ -5420,7 +5420,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<crate::service::session::DialogTurnData>,
         crate::agentic::session::session_manager::SessionViewRestoreTiming,
@@ -5434,7 +5434,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         request: SessionStoragePathRequest,
         session_id: &str,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<crate::service::session::DialogTurnData>,
         crate::agentic::session::session_manager::SessionViewRestoreTiming,
@@ -5448,7 +5448,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<crate::service::session::DialogTurnData>,
         crate::agentic::session::session_manager::SessionViewRestoreTiming,
@@ -5463,7 +5463,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &Path,
         session_id: &str,
         tail_turn_count: usize,
-    ) -> BitFunResult<(Session, Vec<crate::service::session::DialogTurnData>, usize)> {
+    ) -> HaloResult<(Session, Vec<crate::service::session::DialogTurnData>, usize)> {
         self.session_manager
             .restore_internal_session_view_tail(workspace_path, session_id, tail_turn_count)
             .await
@@ -5474,7 +5474,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         workspace_path: &Path,
         session_id: &str,
         tail_turn_count: usize,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<crate::service::session::DialogTurnData>,
         usize,
@@ -5490,7 +5490,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         session_storage_path: &Path,
         session_id: &str,
         tail_turn_count: usize,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<crate::service::session::DialogTurnData>,
         usize,
@@ -5506,12 +5506,12 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     }
 
     /// List all sessions
-    pub async fn list_sessions(&self, workspace_path: &Path) -> BitFunResult<Vec<SessionSummary>> {
+    pub async fn list_sessions(&self, workspace_path: &Path) -> HaloResult<Vec<SessionSummary>> {
         self.session_manager.list_sessions(workspace_path).await
     }
 
     /// Get a best-effort message view for a session.
-    pub async fn get_messages(&self, session_id: &str) -> BitFunResult<Vec<Message>> {
+    pub async fn get_messages(&self, session_id: &str) -> HaloResult<Vec<Message>> {
         self.session_manager.get_messages(session_id).await
     }
 
@@ -5521,7 +5521,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         session_id: &str,
         limit: usize,
         before_message_id: Option<&str>,
-    ) -> BitFunResult<(Vec<Message>, bool)> {
+    ) -> HaloResult<(Vec<Message>, bool)> {
         self.session_manager
             .get_messages_paginated(session_id, limit, before_message_id)
             .await
@@ -5546,7 +5546,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     }
 
     /// Cancel tool execution
-    pub async fn cancel_tool(&self, tool_id: &str, reason: String) -> BitFunResult<()> {
+    pub async fn cancel_tool(&self, tool_id: &str, reason: String) -> HaloResult<()> {
         self.tool_pipeline.cancel_tool(tool_id, reason).await
     }
 
@@ -5639,20 +5639,20 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         cancel_token: Option<&CancellationToken>,
         deadline: Option<Instant>,
         label: &str,
-    ) -> BitFunResult<OwnedSemaphorePermit> {
+    ) -> HaloResult<OwnedSemaphorePermit> {
         let semaphore = limiter.semaphore.clone();
         let permit = match (cancel_token, deadline) {
             (Some(token), Some(deadline)) => {
                 tokio::select! {
                     result = semaphore.acquire_owned() => result
-                        .map_err(|error| BitFunError::Semaphore(error.to_string()))?,
+                        .map_err(|error| HaloError::Semaphore(error.to_string()))?,
                     _ = token.cancelled() => {
-                        return Err(BitFunError::Cancelled(
+                        return Err(HaloError::Cancelled(
                             "Subagent task was cancelled while waiting for a concurrency slot".to_string(),
                         ));
                     }
                     _ = tokio::time::sleep_until(deadline) => {
-                        return Err(BitFunError::Timeout(format!(
+                        return Err(HaloError::Timeout(format!(
                             "Timed out while waiting for a {} concurrency slot for subagent '{}'",
                             label, agent_type
                         )));
@@ -5662,9 +5662,9 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             (Some(token), None) => {
                 tokio::select! {
                     result = semaphore.acquire_owned() => result
-                        .map_err(|error| BitFunError::Semaphore(error.to_string()))?,
+                        .map_err(|error| HaloError::Semaphore(error.to_string()))?,
                     _ = token.cancelled() => {
-                        return Err(BitFunError::Cancelled(
+                        return Err(HaloError::Cancelled(
                             "Subagent task was cancelled while waiting for a concurrency slot".to_string(),
                         ));
                     }
@@ -5673,9 +5673,9 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             (None, Some(deadline)) => {
                 tokio::select! {
                     result = semaphore.acquire_owned() => result
-                        .map_err(|error| BitFunError::Semaphore(error.to_string()))?,
+                        .map_err(|error| HaloError::Semaphore(error.to_string()))?,
                     _ = tokio::time::sleep_until(deadline) => {
-                        return Err(BitFunError::Timeout(format!(
+                        return Err(HaloError::Timeout(format!(
                             "Timed out while waiting for a {} concurrency slot for subagent '{}'",
                             label, agent_type
                         )));
@@ -5685,7 +5685,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             (None, None) => semaphore
                 .acquire_owned()
                 .await
-                .map_err(|error| BitFunError::Semaphore(error.to_string()))?,
+                .map_err(|error| HaloError::Semaphore(error.to_string()))?,
         };
 
         let active_subagents = limiter
@@ -5705,7 +5705,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         profile_concurrency_cap: usize,
         cancel_token: Option<&CancellationToken>,
         deadline: Option<Instant>,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Vec<(OwnedSemaphorePermit, SubagentConcurrencyLimiter)>,
         u128,
     )> {
@@ -5793,7 +5793,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         request: HiddenSubagentExecutionRequest,
         cancel_token: Option<&CancellationToken>,
         timeout_seconds: Option<u64>,
-    ) -> BitFunResult<SubagentResult> {
+    ) -> HaloResult<SubagentResult> {
         let HiddenSubagentExecutionRequest {
             target_session_id,
             dialog_turn_id,
@@ -5901,7 +5901,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     prepared_session_created,
                 )
                 .await;
-                return Err(BitFunError::Cancelled(
+                return Err(HaloError::Cancelled(
                     "Subagent task has been cancelled".to_string(),
                 ));
             }
@@ -5942,7 +5942,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     prepared_session_created,
                 )
                 .await;
-                return Err(BitFunError::Cancelled(
+                return Err(HaloError::Cancelled(
                     "Subagent task has been cancelled".to_string(),
                 ));
             }
@@ -5957,7 +5957,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 prepared_session_created,
             )
             .await;
-            return Err(BitFunError::Timeout(timeout_error_message.clone()));
+            return Err(HaloError::Timeout(timeout_error_message.clone()));
         }
 
         let session = match target_session_id {
@@ -5965,12 +5965,12 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 Some(session) => {
                     if session.kind != session_kind {
                         let error = if session_kind == SessionKind::Subagent {
-                            BitFunError::Validation(format!(
+                            HaloError::Validation(format!(
                                 "Subagent execution target must be a subagent session: {}",
                                 target_session_id
                             ))
                         } else {
-                            BitFunError::Validation(format!(
+                            HaloError::Validation(format!(
                                 "Hidden agent execution target has unexpected kind: {}",
                                 target_session_id
                             ))
@@ -5985,7 +5985,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     session
                 }
                 None => {
-                    let error = BitFunError::NotFound(format!(
+                    let error = HaloError::NotFound(format!(
                         "Subagent session not found: {}",
                         target_session_id
                     ));
@@ -6111,7 +6111,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 .await;
                 let mut registry = self.subagent_timeout_registry.write().await;
                 registry.remove(&session_id);
-                return Err(BitFunError::Cancelled(
+                return Err(HaloError::Cancelled(
                     "Subagent task has been cancelled".to_string(),
                 ));
             }
@@ -6129,7 +6129,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .await;
             let mut registry = self.subagent_timeout_registry.write().await;
             registry.remove(&session_id);
-            return Err(BitFunError::Timeout(timeout_error_message.clone()));
+            return Err(HaloError::Timeout(timeout_error_message.clone()));
         }
 
         let turn_index = self.session_manager.get_turn_count(&session_id);
@@ -6242,7 +6242,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             let _ = self.cleanup_subagent_resources(&session_id).await;
             let mut registry = self.subagent_timeout_registry.write().await;
             registry.remove(&session_id);
-            return Err(BitFunError::Cancelled(
+            return Err(HaloError::Cancelled(
                 "Subagent task has been cancelled".to_string(),
             ));
         }
@@ -6428,7 +6428,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             SubagentExecutionOutcome::Completed(join_result) => match join_result {
                 Ok(result) => result,
                 Err(error) => {
-                    let join_error = BitFunError::tool(format!(
+                    let join_error = HaloError::tool(format!(
                         "Subagent '{}' failed to join: {}",
                         agent_type, error
                     ));
@@ -6553,7 +6553,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 registry.remove(&session_id);
 
                 execution_scope.disarm();
-                return Err(BitFunError::Cancelled(
+                return Err(HaloError::Cancelled(
                     "Subagent task has been cancelled".to_string(),
                 ));
             }
@@ -6678,7 +6678,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     return Ok(partial_result);
                 }
 
-                let timeout_error = BitFunError::Timeout(timeout_error_message.clone());
+                let timeout_error = HaloError::Timeout(timeout_error_message.clone());
                 Self::persist_failed_dialog_turn(
                     self.event_queue.as_ref(),
                     self.session_manager.as_ref(),
@@ -6713,7 +6713,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 registry.remove(&session_id);
 
                 execution_scope.disarm();
-                return Err(BitFunError::Timeout(timeout_error_message.clone()));
+                return Err(HaloError::Timeout(timeout_error_message.clone()));
             }
         };
 
@@ -6732,7 +6732,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 .await
             }
             Err(e) => {
-                let turn_status = if matches!(&e, BitFunError::Cancelled(_)) {
+                let turn_status = if matches!(&e, HaloError::Cancelled(_)) {
                     Self::persist_cancelled_dialog_turn(
                         self.event_queue.as_ref(),
                         self.session_manager.as_ref(),
@@ -6887,12 +6887,12 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     pub async fn capture_fork_agent_context_snapshot(
         &self,
         parent_session_id: &str,
-    ) -> BitFunResult<ForkAgentContextSnapshot> {
+    ) -> HaloResult<ForkAgentContextSnapshot> {
         let parent_session = self
             .session_manager
             .get_session(parent_session_id)
             .ok_or_else(|| {
-                BitFunError::NotFound(format!("Parent session not found: {}", parent_session_id))
+                HaloError::NotFound(format!("Parent session not found: {}", parent_session_id))
             })?;
         let context_messages = self.load_session_context_messages(&parent_session).await?;
         ForkAgentContextSnapshot::from_parent_session(&parent_session, context_messages)
@@ -6906,7 +6906,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         request_id: &str,
         parent_dialog_turn_id: Option<&str>,
         parent_turn_index: Option<usize>,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         if let Some(session) = self.session_manager.get_session(child_session_id) {
             self.session_manager
                 .merge_session_relationship(
@@ -7005,24 +7005,24 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         image_contexts: Option<Vec<ImageContextData>>,
         parent_dialog_turn_id: Option<&str>,
         parent_turn_index: Option<usize>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         if request_id.trim().is_empty() {
-            return Err(BitFunError::Validation(
+            return Err(HaloError::Validation(
                 "request_id is required".to_string(),
             ));
         }
         if parent_session_id.trim().is_empty() {
-            return Err(BitFunError::Validation(
+            return Err(HaloError::Validation(
                 "parent_session_id is required".to_string(),
             ));
         }
         if child_session_id.trim().is_empty() {
-            return Err(BitFunError::Validation(
+            return Err(HaloError::Validation(
                 "child_session_id is required".to_string(),
             ));
         }
         if question.trim().is_empty() {
-            return Err(BitFunError::Validation("question is required".to_string()));
+            return Err(HaloError::Validation("question is required".to_string()));
         }
 
         let child_session = self
@@ -7100,7 +7100,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         target_session_id: &str,
         parent_session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         let session = match self.session_manager.get_session(target_session_id) {
             Some(session) => session,
             None => {
@@ -7109,7 +7109,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     .resolve_session_workspace_binding(parent_session_id)
                     .await
                     .ok_or_else(|| {
-                        BitFunError::NotFound(format!(
+                        HaloError::NotFound(format!(
                             "Parent session workspace not found: {}",
                             parent_session_id
                         ))
@@ -7125,7 +7125,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                         .and_then(|relationship| relationship.continuation_policy)
                         == Some(SessionContinuationPolicy::FreshOnly)
                 }) {
-                    return Err(BitFunError::Validation(
+                    return Err(HaloError::Validation(
                         "subagent_follow_up_unsupported: this subagent session is fresh-only; start a new Task invocation"
                             .to_string(),
                     ));
@@ -7140,14 +7140,14 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         };
 
         if session.config.continuation_policy == SessionContinuationPolicy::FreshOnly {
-            return Err(BitFunError::Validation(
+            return Err(HaloError::Validation(
                 "subagent_follow_up_unsupported: this subagent session is fresh-only; start a new Task invocation"
                     .to_string(),
             ));
         }
 
         if session.kind != SessionKind::Subagent {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Subagent execution target must be a subagent session: {}",
                 target_session_id
             )));
@@ -7157,14 +7157,14 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .subagent_session_owned_by_parent(&session, parent_session_id)
             .await
         {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Subagent session '{}' was not created by parent session '{}'",
                 target_session_id, parent_session_id
             )));
         }
 
         if matches!(session.state, SessionState::Error { .. }) {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Subagent session is in error state and cannot be reused: {}",
                 target_session_id
             )));
@@ -7265,7 +7265,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     async fn load_reusable_subagent_context_messages(
         &self,
         session: &Session,
-    ) -> BitFunResult<Vec<Message>> {
+    ) -> HaloResult<Vec<Message>> {
         let session_id = &session.session_id;
         let mut context_messages = self
             .session_manager
@@ -7311,18 +7311,18 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         parent_session_id: &str,
         defaults: &AgentModelDefaultsConfig,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let parent_session = self
             .session_manager
             .get_session(parent_session_id)
             .ok_or_else(|| {
-                BitFunError::NotFound(format!("Parent session not found: {}", parent_session_id))
+                HaloError::NotFound(format!("Parent session not found: {}", parent_session_id))
             })?;
 
         trimmed_model_id(parent_session.config.model_id.as_deref())
             .or_else(|| trimmed_model_id(Some(defaults.mode.as_str())))
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Parent session has no model selection: {}",
                     parent_session_id
                 ))
@@ -7336,7 +7336,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         agent_type: &str,
         workspace_path: &str,
         parent_session_id: &str,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let defaults = Self::agent_model_defaults().await;
         if inherit_parent_model {
             return normalize_model_selection(
@@ -7367,10 +7367,10 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     async fn resolve_hidden_subagent_execution_request(
         &self,
         request: SubagentExecutionRequest,
-    ) -> BitFunResult<HiddenSubagentExecutionRequest> {
+    ) -> HaloResult<HiddenSubagentExecutionRequest> {
         let task_description = request.task_description.trim().to_string();
         if task_description.is_empty() {
-            return Err(BitFunError::Validation(
+            return Err(HaloError::Validation(
                 "task_description is required when creating a subagent session".to_string(),
             ));
         }
@@ -7383,7 +7383,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .map(str::to_string);
         let inherit_parent_model = request.inherit_parent_model;
         if inherit_parent_model && model_id.is_some() {
-            return Err(BitFunError::Validation(
+            return Err(HaloError::Validation(
                 "A subagent model request cannot specify both a model ID and parent inheritance"
                     .to_string(),
             ));
@@ -7396,7 +7396,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .session_manager
             .get_session(&request.subagent_parent_info.session_id)
             .ok_or_else(|| {
-                BitFunError::NotFound(format!(
+                HaloError::NotFound(format!(
                     "Parent session not found: {}",
                     request.subagent_parent_info.session_id
                 ))
@@ -7413,13 +7413,13 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             SubagentContextMode::Fresh => {
                 if let Some(target_session_id) = request.target_session_id.as_deref() {
                     if request.subagent_type.is_some() {
-                        return Err(BitFunError::Validation(
+                        return Err(HaloError::Validation(
                             "subagent_type is not allowed when target_session_id is provided"
                                 .to_string(),
                         ));
                     }
                     if request.workspace_path.is_some() {
-                        return Err(BitFunError::Validation(
+                        return Err(HaloError::Validation(
                             "workspace_path is not allowed when target_session_id is provided"
                                 .to_string(),
                         ));
@@ -7454,7 +7454,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                             self.session_manager
                                 .get_session(&session_id)
                                 .ok_or_else(|| {
-                                    BitFunError::NotFound(format!(
+                                    HaloError::NotFound(format!(
                                         "Subagent session not found after model update: {}",
                                         session_id
                                     ))
@@ -7499,12 +7499,12 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 }
 
                 let agent_type = request.subagent_type.ok_or_else(|| {
-                    BitFunError::Validation(
+                    HaloError::Validation(
                         "subagent_type is required when context_mode is 'fresh'".to_string(),
                     )
                 })?;
                 let workspace_path = request.workspace_path.ok_or_else(|| {
-                    BitFunError::Validation(
+                    HaloError::Validation(
                         "workspace_path is required when creating a fresh subagent session"
                             .to_string(),
                     )
@@ -7514,7 +7514,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     SessionModelBindingPolicy::ApprovedImmutable
                 ) {
                     if model_id.is_some() || inherit_parent_model {
-                        return Err(BitFunError::Validation(
+                        return Err(HaloError::Validation(
                             "An approved immutable subagent model cannot be overridden".to_string(),
                         ));
                     }
@@ -7522,7 +7522,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                         .as_ref()
                         .map(|binding| binding.model_id.clone())
                         .ok_or_else(|| {
-                            BitFunError::Validation(
+                            HaloError::Validation(
                                 "Approved immutable subagent generation has no concrete model binding"
                                     .to_string(),
                             )
@@ -7585,17 +7585,17 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             }
             SubagentContextMode::Fork => {
                 if request.target_session_id.is_some() {
-                    return Err(BitFunError::Validation(
+                    return Err(HaloError::Validation(
                         "target_session_id is not allowed when context_mode is 'fork'".to_string(),
                     ));
                 }
                 if request.subagent_type.is_some() {
-                    return Err(BitFunError::Validation(
+                    return Err(HaloError::Validation(
                         "subagent_type is not allowed when context_mode is 'fork'".to_string(),
                     ));
                 }
                 if request.workspace_path.is_some() {
-                    return Err(BitFunError::Validation(
+                    return Err(HaloError::Validation(
                         "workspace_path is not allowed when context_mode is 'fork'".to_string(),
                     ));
                 }
@@ -7611,7 +7611,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                         trimmed_model_id(snapshot.session_model_id.as_deref())
                             .or_else(|| trimmed_model_id(Some(defaults.mode.as_str())))
                             .ok_or_else(|| {
-                                BitFunError::Validation(format!(
+                                HaloError::Validation(format!(
                                     "Fork parent session has no model selection: {}",
                                     snapshot.parent_session_id
                                 ))
@@ -7622,7 +7622,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 };
                 let model_selection = if inherit_parent_model {
                     parent_model_id.ok_or_else(|| {
-                        BitFunError::Validation(
+                        HaloError::Validation(
                             "Fork parent session has no model selection".to_string(),
                         )
                     })?
@@ -7676,19 +7676,19 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     pub(super) async fn prepare_hidden_subagent_execution_request(
         &self,
         mut request: HiddenSubagentExecutionRequest,
-    ) -> BitFunResult<HiddenSubagentExecutionRequest> {
+    ) -> HaloResult<HiddenSubagentExecutionRequest> {
         if let Some(target_session_id) = request.target_session_id.as_deref() {
             let session = self
                 .session_manager
                 .get_session(target_session_id)
                 .ok_or_else(|| {
-                    BitFunError::NotFound(format!(
+                    HaloError::NotFound(format!(
                         "Subagent session not found: {}",
                         target_session_id
                     ))
                 })?;
             if session.kind != SessionKind::Subagent {
-                return Err(BitFunError::Validation(format!(
+                return Err(HaloError::Validation(format!(
                     "Subagent execution target must be a subagent session: {}",
                     target_session_id
                 )));
@@ -7773,7 +7773,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     pub(crate) async fn prepare_subagent_execution_request(
         &self,
         request: SubagentExecutionRequest,
-    ) -> BitFunResult<HiddenSubagentExecutionRequest> {
+    ) -> HaloResult<HiddenSubagentExecutionRequest> {
         let request = self
             .resolve_hidden_subagent_execution_request(request)
             .await?;
@@ -7790,26 +7790,26 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         request: HiddenSubagentExecutionRequest,
         cancel_token: Option<&CancellationToken>,
         timeout_seconds: Option<u64>,
-    ) -> BitFunResult<SubagentResult> {
+    ) -> HaloResult<SubagentResult> {
         self.execute_hidden_subagent_internal(request, cancel_token, timeout_seconds)
             .await
     }
 
     async fn await_hidden_subagent_receiver(
-        receiver: tokio::sync::oneshot::Receiver<BitFunResult<SubagentResult>>,
-    ) -> BitFunResult<SubagentResult> {
+        receiver: tokio::sync::oneshot::Receiver<HaloResult<SubagentResult>>,
+    ) -> HaloResult<SubagentResult> {
         receiver
             .await
-            .map_err(|_| BitFunError::tool("Subagent result channel closed".to_string()))?
+            .map_err(|_| HaloError::tool("Subagent result channel closed".to_string()))?
     }
 
     async fn await_hidden_subagent_cancellation(
-        receiver: impl std::future::Future<Output = BitFunResult<SubagentResult>>,
+        receiver: impl std::future::Future<Output = HaloResult<SubagentResult>>,
         wait_timeout: Duration,
-    ) -> BitFunResult<SubagentResult> {
+    ) -> HaloResult<SubagentResult> {
         match tokio::time::timeout(wait_timeout, receiver).await {
             Ok(result) => result,
-            Err(_) => Err(BitFunError::Cancelled(
+            Err(_) => Err(HaloError::Cancelled(
                 "Subagent task has been cancelled".to_string(),
             )),
         }
@@ -7854,7 +7854,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         parent_session_id: &str,
         subagent_session_id: &str,
-    ) -> BitFunResult<usize> {
+    ) -> HaloResult<usize> {
         self.ensure_subagent_session_loaded_for_reuse(subagent_session_id, parent_session_id)
             .await?;
 
@@ -7874,7 +7874,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     pub(crate) async fn cancel_background_subagents_for_parent_session(
         &self,
         parent_session_id: &str,
-    ) -> BitFunResult<Vec<String>> {
+    ) -> HaloResult<Vec<String>> {
         let controls = self.claim_background_subagent_controls(|control| {
             control.parent_session_id == parent_session_id
         });
@@ -7899,7 +7899,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         timeout: Duration,
         delivered_parent_dialog_turn_id: &str,
         cancellation_token: Option<&CancellationToken>,
-    ) -> BitFunResult<BackgroundSubagentWaitResult> {
+    ) -> HaloResult<BackgroundSubagentWaitResult> {
         self.background_subagent_outcomes
             .wait_for(
                 parent_session_id,
@@ -7916,7 +7916,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         parent_session_id: &str,
         subagent_session_id: &str,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         self.background_subagent_outcomes
             .agent_id_for_session(parent_session_id, subagent_session_id)
             .await
@@ -7926,7 +7926,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         parent_session_id: &str,
         agent_id: &str,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         self.background_subagent_outcomes
             .resolve_agent_id(parent_session_id, agent_id)
             .await
@@ -7960,7 +7960,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     async fn cancel_background_subagent_controls(
         &self,
         controls: Vec<(i64, BackgroundSubagentTaskControl)>,
-    ) -> BitFunResult<usize> {
+    ) -> HaloResult<usize> {
         for (task_pk, control) in &controls {
             debug!(
                 "Cancelling background subagent task: task_pk={}, parent_session_id={}, subagent_session_id={}",
@@ -7991,7 +7991,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         request: SubagentExecutionRequest,
         cancel_token: Option<&CancellationToken>,
         timeout_seconds: Option<u64>,
-    ) -> BitFunResult<SubagentResult> {
+    ) -> HaloResult<SubagentResult> {
         let request = self.prepare_subagent_execution_request(request).await?;
         let Some(scheduler) = get_global_scheduler() else {
             return self
@@ -8006,7 +8006,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             Err(error) => {
                 self.cleanup_prepared_hidden_subagent_session_if_unsubmitted(&request)
                     .await;
-                return Err(BitFunError::tool(error));
+                return Err(HaloError::tool(error));
             }
         };
         let receiver = submit_result.receiver;
@@ -8041,10 +8041,10 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         request: InternalAgentExecutionRequest,
         cancel_token: Option<&CancellationToken>,
         timeout_seconds: Option<u64>,
-    ) -> BitFunResult<SubagentResult> {
+    ) -> HaloResult<SubagentResult> {
         let task_description = request.task_description.trim().to_string();
         if task_description.is_empty() {
-            return Err(BitFunError::Validation(
+            return Err(HaloError::Validation(
                 "task_description is required when creating an internal agent session".to_string(),
             ));
         }
@@ -8089,12 +8089,12 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         // Tool cancellation is narrower than parent-turn cancellation: round
         // injection cancels the Tool while keeping the dialog turn alive.
         tool_cancellation_token: Option<CancellationToken>,
-    ) -> BitFunResult<BackgroundSubagentStartResult> {
+    ) -> HaloResult<BackgroundSubagentStartResult> {
         if tool_cancellation_token
             .as_ref()
             .is_some_and(CancellationToken::is_cancelled)
         {
-            return Err(BitFunError::Cancelled(
+            return Err(HaloError::Cancelled(
                 "Background subagent start was cancelled".to_string(),
             ));
         }
@@ -8110,7 +8110,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         {
             self.cleanup_prepared_hidden_subagent_session_if_unsubmitted(&request)
                 .await;
-            return Err(BitFunError::Cancelled(
+            return Err(HaloError::Cancelled(
                 "Background subagent start was cancelled".to_string(),
             ));
         }
@@ -8118,7 +8118,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         let subagent_session_id = request
             .target_session_id()
             .ok_or_else(|| {
-                BitFunError::Validation(
+                HaloError::Validation(
                     "prepared hidden subagent request is missing target_session_id".to_string(),
                 )
             })?
@@ -8128,7 +8128,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             None => {
                 self.cleanup_prepared_hidden_subagent_session_if_unsubmitted(&request)
                     .await;
-                return Err(BitFunError::Validation(
+                return Err(HaloError::Validation(
                     "subagent_parent_info is required when creating a background subagent session"
                         .to_string(),
                 ));
@@ -8142,7 +8142,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             None => {
                 self.cleanup_prepared_hidden_subagent_session_if_unsubmitted(&request)
                     .await;
-                return Err(BitFunError::NotFound(format!(
+                return Err(HaloError::NotFound(format!(
                     "Parent session not found: {}",
                     subagent_parent_info.session_id
                 )));
@@ -8153,7 +8153,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             None => {
                 self.cleanup_prepared_hidden_subagent_session_if_unsubmitted(&request)
                     .await;
-                return Err(BitFunError::service(
+                return Err(HaloError::service(
                     "Coordinator not initialized".to_string(),
                 ));
             }
@@ -8192,7 +8192,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             }
             self.cleanup_prepared_hidden_subagent_session_if_unsubmitted(&request)
                 .await;
-            return Err(BitFunError::Cancelled(
+            return Err(HaloError::Cancelled(
                 "Background subagent start was cancelled".to_string(),
             ));
         }
@@ -8218,7 +8218,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     }
                     self.cleanup_prepared_hidden_subagent_session_if_unsubmitted(&request)
                         .await;
-                    return Err(BitFunError::tool(error));
+                    return Err(HaloError::tool(error));
                 }
             };
             let receiver = submit_result.receiver;
@@ -8376,7 +8376,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     /// Durable and reusable Subagent sessions remain available for follow-up.
     /// A transient fresh-only child has no supported continuation path, so its
     /// existing lifecycle owner releases the Session after terminal cleanup.
-    async fn cleanup_subagent_resources(&self, session_id: &str) -> BitFunResult<()> {
+    async fn cleanup_subagent_resources(&self, session_id: &str) -> HaloResult<()> {
         let cleanup_started_at = Instant::now();
         debug!(
             "Starting subagent resource cleanup: session_id={}",
@@ -8430,7 +8430,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 .as_deref()
                 .map(Path::new)
                 .ok_or_else(|| {
-                    BitFunError::Validation(format!(
+                    HaloError::Validation(format!(
                         "Transient subagent workspace binding is missing: {session_id}"
                     ))
                 })?;
@@ -8467,7 +8467,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         session_id: &str,
         dialog_turn_id: &str,
         user_input_text: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if !Self::should_persist_reused_subagent_user_input_context(
             prepared_target_session_id,
             prepared_session_created,
@@ -8495,7 +8495,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         session_id: &str,
         user_message: &str,
         max_length: Option<usize>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         self.ensure_session_runtime_ownership(session_id, None)?;
         let allow_ai = is_ai_session_title_generation_enabled().await;
         let resolved = self
@@ -8526,11 +8526,11 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: &str,
         title: &str,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         self.ensure_session_runtime_ownership(session_id, None)?;
         let normalized = title.trim().to_string();
         if normalized.is_empty() {
-            return Err(BitFunError::validation(
+            return Err(HaloError::validation(
                 "Session title must not be empty".to_string(),
             ));
         }
@@ -8546,7 +8546,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: &str,
         agent_type: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.ensure_session_runtime_ownership(session_id, None)?;
         let normalized = Self::normalize_agent_type(agent_type);
         self.session_manager
@@ -8554,11 +8554,11 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .await
     }
 
-    pub async fn update_session_mode(&self, session_id: &str, mode_id: &str) -> BitFunResult<()> {
+    pub async fn update_session_mode(&self, session_id: &str, mode_id: &str) -> HaloResult<()> {
         self.ensure_session_runtime_ownership(session_id, None)?;
         let mode_id = mode_id.trim();
         if mode_id.is_empty() {
-            return Err(BitFunError::Validation(
+            return Err(HaloError::Validation(
                 "Session mode must not be empty".to_string(),
             ));
         }
@@ -8569,7 +8569,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .into_iter()
             .any(|mode| mode.id == mode_id);
         if !mode_exists {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Unknown session mode: {mode_id}"
             )));
         }
@@ -8585,7 +8585,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         &self,
         session_id: &str,
         agent_type: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.ensure_session_runtime_ownership(session_id, None)?;
         let normalized = Self::normalize_agent_type(agent_type);
         self.session_manager
@@ -8664,7 +8664,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
 }
 
 fn resolve_agent_submission_turn_id(
-    request: &bitfun_runtime_ports::AgentSubmissionRequest,
+    request: &halo_runtime_ports::AgentSubmissionRequest,
 ) -> String {
     request
         .turn_id
@@ -8693,9 +8693,9 @@ fn resolve_agent_session_create_created_by(
         .map(ToOwned::to_owned)
 }
 
-fn runtime_port_backend_error(error: BitFunError) -> bitfun_runtime_ports::PortError {
-    bitfun_runtime_ports::PortError::new(
-        bitfun_runtime_ports::PortErrorKind::Backend,
+fn runtime_port_backend_error(error: HaloError) -> halo_runtime_ports::PortError {
+    halo_runtime_ports::PortError::new(
+        halo_runtime_ports::PortErrorKind::Backend,
         error.to_string(),
     )
 }
@@ -8703,13 +8703,13 @@ fn runtime_port_backend_error(error: BitFunError) -> bitfun_runtime_ports::PortE
 async fn create_agent_session_from_runtime_request(
     coordinator: &ConversationCoordinator,
     session_id: Option<String>,
-    request: bitfun_runtime_ports::AgentSessionCreateRequest,
+    request: halo_runtime_ports::AgentSessionCreateRequest,
     transient: bool,
-    map_core_error: fn(BitFunError) -> bitfun_runtime_ports::PortError,
-) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::AgentSessionCreateResult> {
+    map_core_error: fn(HaloError) -> halo_runtime_ports::PortError,
+) -> halo_runtime_ports::PortResult<halo_runtime_ports::AgentSessionCreateResult> {
     let workspace_path = request.workspace_path.clone().ok_or_else(|| {
-        bitfun_runtime_ports::PortError::new(
-            bitfun_runtime_ports::PortErrorKind::InvalidRequest,
+        halo_runtime_ports::PortError::new(
+            halo_runtime_ports::PortErrorKind::InvalidRequest,
             "workspace_path is required to create an agent session",
         )
     })?;
@@ -8740,11 +8740,11 @@ async fn create_agent_session_from_runtime_request(
 }
 
 #[async_trait::async_trait]
-impl bitfun_runtime_ports::AgentSubmissionPort for ConversationCoordinator {
+impl halo_runtime_ports::AgentSubmissionPort for ConversationCoordinator {
     async fn create_session(
         &self,
-        request: bitfun_runtime_ports::AgentSessionCreateRequest,
-    ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::AgentSessionCreateResult> {
+        request: halo_runtime_ports::AgentSessionCreateRequest,
+    ) -> halo_runtime_ports::PortResult<halo_runtime_ports::AgentSessionCreateResult> {
         create_agent_session_from_runtime_request(
             self,
             None,
@@ -8758,10 +8758,10 @@ impl bitfun_runtime_ports::AgentSubmissionPort for ConversationCoordinator {
     async fn create_session_with_id(
         &self,
         session_id: String,
-        request: bitfun_runtime_ports::AgentSessionCreateRequest,
-    ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::AgentSessionCreateResult> {
-        bitfun_core_types::validate_session_id(&session_id).map_err(|message| {
-            runtime_port_error_preserving_message(BitFunError::Validation(message))
+        request: halo_runtime_ports::AgentSessionCreateRequest,
+    ) -> halo_runtime_ports::PortResult<halo_runtime_ports::AgentSessionCreateResult> {
+        halo_core_types::validate_session_id(&session_id).map_err(|message| {
+            runtime_port_error_preserving_message(HaloError::Validation(message))
         })?;
         create_agent_session_from_runtime_request(
             self,
@@ -8776,10 +8776,10 @@ impl bitfun_runtime_ports::AgentSubmissionPort for ConversationCoordinator {
     async fn create_transient_session_with_id(
         &self,
         session_id: String,
-        request: bitfun_runtime_ports::AgentSessionCreateRequest,
-    ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::AgentSessionCreateResult> {
-        bitfun_core_types::validate_session_id(&session_id).map_err(|message| {
-            runtime_port_error_preserving_message(BitFunError::Validation(message))
+        request: halo_runtime_ports::AgentSessionCreateRequest,
+    ) -> halo_runtime_ports::PortResult<halo_runtime_ports::AgentSessionCreateResult> {
+        halo_core_types::validate_session_id(&session_id).map_err(|message| {
+            runtime_port_error_preserving_message(HaloError::Validation(message))
         })?;
         create_agent_session_from_runtime_request(
             self,
@@ -8793,11 +8793,11 @@ impl bitfun_runtime_ports::AgentSubmissionPort for ConversationCoordinator {
 
     async fn submit_message(
         &self,
-        request: bitfun_runtime_ports::AgentSubmissionRequest,
-    ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::AgentSubmissionResult> {
+        request: halo_runtime_ports::AgentSubmissionRequest,
+    ) -> halo_runtime_ports::PortResult<halo_runtime_ports::AgentSubmissionResult> {
         if !request.attachments.is_empty() {
-            return Err(bitfun_runtime_ports::PortError::new(
-                bitfun_runtime_ports::PortErrorKind::InvalidRequest,
+            return Err(halo_runtime_ports::PortError::new(
+                halo_runtime_ports::PortErrorKind::InvalidRequest,
                 "agent submission port does not yet accept generic attachments",
             ));
         }
@@ -8806,8 +8806,8 @@ impl bitfun_runtime_ports::AgentSubmissionPort for ConversationCoordinator {
             .get_session_manager()
             .get_session(&request.session_id)
             .ok_or_else(|| {
-                bitfun_runtime_ports::PortError::new(
-                    bitfun_runtime_ports::PortErrorKind::NotFound,
+                halo_runtime_ports::PortError::new(
+                    halo_runtime_ports::PortErrorKind::NotFound,
                     format!("session not found: {}", request.session_id),
                 )
             })?;
@@ -8835,13 +8835,13 @@ impl bitfun_runtime_ports::AgentSubmissionPort for ConversationCoordinator {
         )
         .await
         .map_err(|error| {
-            bitfun_runtime_ports::PortError::new(
-                bitfun_runtime_ports::PortErrorKind::Backend,
+            halo_runtime_ports::PortError::new(
+                halo_runtime_ports::PortErrorKind::Backend,
                 error.to_string(),
             )
         })?;
 
-        Ok(bitfun_runtime_ports::AgentSubmissionResult {
+        Ok(halo_runtime_ports::AgentSubmissionResult {
             turn_id,
             accepted: true,
         })
@@ -8850,7 +8850,7 @@ impl bitfun_runtime_ports::AgentSubmissionPort for ConversationCoordinator {
     async fn resolve_session_agent_type(
         &self,
         session_id: &str,
-    ) -> bitfun_runtime_ports::PortResult<Option<String>> {
+    ) -> halo_runtime_ports::PortResult<Option<String>> {
         if let Some(session) = self.get_session_manager().get_session(session_id) {
             return Ok(Some(session.agent_type.clone()));
         }
@@ -8877,8 +8877,8 @@ impl bitfun_runtime_ports::AgentSubmissionPort for ConversationCoordinator {
             .await
             .map(|session| Some(session.agent_type))
             .map_err(|error| {
-                bitfun_runtime_ports::PortError::new(
-                    bitfun_runtime_ports::PortErrorKind::Backend,
+                halo_runtime_ports::PortError::new(
+                    halo_runtime_ports::PortErrorKind::Backend,
                     error.to_string(),
                 )
             })
@@ -8891,8 +8891,8 @@ fn runtime_session_time_ms(time: std::time::SystemTime) -> u64 {
         .unwrap_or_default()
 }
 
-fn runtime_session_summary(session: SessionSummary) -> bitfun_runtime_ports::AgentSessionSummary {
-    bitfun_runtime_ports::AgentSessionSummary {
+fn runtime_session_summary(session: SessionSummary) -> halo_runtime_ports::AgentSessionSummary {
+    halo_runtime_ports::AgentSessionSummary {
         session_id: session.session_id,
         session_name: session.session_name,
         agent_type: session.agent_type,
@@ -8920,58 +8920,58 @@ fn runtime_session_workspace_binding(binding: WorkspaceBinding) -> AgentSessionW
     }
 }
 
-fn runtime_port_error_from_bitfun(error: BitFunError) -> bitfun_runtime_ports::PortError {
+fn runtime_port_error_from_halo(error: HaloError) -> halo_runtime_ports::PortError {
     let (kind, message) = match error {
-        BitFunError::Validation(message) => {
-            (bitfun_runtime_ports::PortErrorKind::InvalidRequest, message)
+        HaloError::Validation(message) => {
+            (halo_runtime_ports::PortErrorKind::InvalidRequest, message)
         }
-        BitFunError::NotFound(message) => (bitfun_runtime_ports::PortErrorKind::NotFound, message),
-        BitFunError::Cancelled(message) => {
-            (bitfun_runtime_ports::PortErrorKind::Cancelled, message)
+        HaloError::NotFound(message) => (halo_runtime_ports::PortErrorKind::NotFound, message),
+        HaloError::Cancelled(message) => {
+            (halo_runtime_ports::PortErrorKind::Cancelled, message)
         }
-        BitFunError::Timeout(message) => (bitfun_runtime_ports::PortErrorKind::Timeout, message),
-        BitFunError::SessionInUse { session_id } => (
-            bitfun_runtime_ports::PortErrorKind::SessionInUse,
+        HaloError::Timeout(message) => (halo_runtime_ports::PortErrorKind::Timeout, message),
+        HaloError::SessionInUse { session_id } => (
+            halo_runtime_ports::PortErrorKind::SessionInUse,
             format!("Session is already open for writing: {session_id}"),
         ),
-        BitFunError::NotImplemented(message) => {
-            (bitfun_runtime_ports::PortErrorKind::NotAvailable, message)
+        HaloError::NotImplemented(message) => {
+            (halo_runtime_ports::PortErrorKind::NotAvailable, message)
         }
         other => (
-            bitfun_runtime_ports::PortErrorKind::Backend,
+            halo_runtime_ports::PortErrorKind::Backend,
             other.to_string(),
         ),
     };
-    bitfun_runtime_ports::PortError::new(kind, message)
+    halo_runtime_ports::PortError::new(kind, message)
 }
 
-fn runtime_port_error_preserving_message(error: BitFunError) -> bitfun_runtime_ports::PortError {
+fn runtime_port_error_preserving_message(error: HaloError) -> halo_runtime_ports::PortError {
     let message = error.to_string();
-    let mut port_error = runtime_port_error_from_bitfun(error);
+    let mut port_error = runtime_port_error_from_halo(error);
     port_error.message = message;
     port_error
 }
 
 fn user_input_port_error(
-    error: bitfun_agent_runtime::user_questions::UserInputSendError,
-) -> bitfun_runtime_ports::PortError {
+    error: halo_agent_runtime::user_questions::UserInputSendError,
+) -> halo_runtime_ports::PortError {
     let kind = match &error {
-        bitfun_agent_runtime::user_questions::UserInputSendError::MissingChannel { .. } => {
-            bitfun_runtime_ports::PortErrorKind::NotFound
+        halo_agent_runtime::user_questions::UserInputSendError::MissingChannel { .. } => {
+            halo_runtime_ports::PortErrorKind::NotFound
         }
-        bitfun_agent_runtime::user_questions::UserInputSendError::ChannelClosed { .. } => {
-            bitfun_runtime_ports::PortErrorKind::Cancelled
+        halo_agent_runtime::user_questions::UserInputSendError::ChannelClosed { .. } => {
+            halo_runtime_ports::PortErrorKind::Cancelled
         }
     };
-    bitfun_runtime_ports::PortError::new(kind, format!("Tool error: {error}"))
+    halo_runtime_ports::PortError::new(kind, format!("Tool error: {error}"))
 }
 
 #[async_trait::async_trait]
-impl bitfun_runtime_ports::AgentSessionManagementPort for ConversationCoordinator {
+impl halo_runtime_ports::AgentSessionManagementPort for ConversationCoordinator {
     async fn list_sessions(
         &self,
-        request: bitfun_runtime_ports::AgentSessionListRequest,
-    ) -> bitfun_runtime_ports::PortResult<Vec<bitfun_runtime_ports::AgentSessionSummary>> {
+        request: halo_runtime_ports::AgentSessionListRequest,
+    ) -> halo_runtime_ports::PortResult<Vec<halo_runtime_ports::AgentSessionSummary>> {
         let effective_storage_path = Self::resolve_session_restore_path(
             &request.workspace_path,
             request.remote_connection_id.as_deref(),
@@ -8979,8 +8979,8 @@ impl bitfun_runtime_ports::AgentSessionManagementPort for ConversationCoordinato
         )
         .await
         .map_err(|error| {
-            bitfun_runtime_ports::PortError::new(
-                bitfun_runtime_ports::PortErrorKind::Backend,
+            halo_runtime_ports::PortError::new(
+                halo_runtime_ports::PortErrorKind::Backend,
                 error.to_string(),
             )
         })?;
@@ -8994,8 +8994,8 @@ impl bitfun_runtime_ports::AgentSessionManagementPort for ConversationCoordinato
                     .collect::<Vec<_>>()
             })
             .map_err(|error| {
-                bitfun_runtime_ports::PortError::new(
-                    bitfun_runtime_ports::PortErrorKind::Backend,
+                halo_runtime_ports::PortError::new(
+                    halo_runtime_ports::PortErrorKind::Backend,
                     error.to_string(),
                 )
             })
@@ -9003,11 +9003,11 @@ impl bitfun_runtime_ports::AgentSessionManagementPort for ConversationCoordinato
 
     async fn delete_session(
         &self,
-        request: bitfun_runtime_ports::AgentSessionDeleteRequest,
-    ) -> bitfun_runtime_ports::PortResult<()> {
-        bitfun_core_types::validate_session_id(&request.session_id).map_err(|message| {
-            bitfun_runtime_ports::PortError::new(
-                bitfun_runtime_ports::PortErrorKind::InvalidRequest,
+        request: halo_runtime_ports::AgentSessionDeleteRequest,
+    ) -> halo_runtime_ports::PortResult<()> {
+        halo_core_types::validate_session_id(&request.session_id).map_err(|message| {
+            halo_runtime_ports::PortError::new(
+                halo_runtime_ports::PortErrorKind::InvalidRequest,
                 message,
             )
         })?;
@@ -9024,8 +9024,8 @@ impl bitfun_runtime_ports::AgentSessionManagementPort for ConversationCoordinato
         )
         .await
         .map_err(|error| {
-            bitfun_runtime_ports::PortError::new(
-                bitfun_runtime_ports::PortErrorKind::Backend,
+            halo_runtime_ports::PortError::new(
+                halo_runtime_ports::PortErrorKind::Backend,
                 error.to_string(),
             )
         })?;
@@ -9033,8 +9033,8 @@ impl bitfun_runtime_ports::AgentSessionManagementPort for ConversationCoordinato
         self.delete_session(&effective_storage_path, &request.session_id)
             .await
             .map_err(|error| {
-                bitfun_runtime_ports::PortError::new(
-                    bitfun_runtime_ports::PortErrorKind::Backend,
+                halo_runtime_ports::PortError::new(
+                    halo_runtime_ports::PortErrorKind::Backend,
                     error.to_string(),
                 )
             })
@@ -9042,11 +9042,11 @@ impl bitfun_runtime_ports::AgentSessionManagementPort for ConversationCoordinato
 
     async fn rename_session(
         &self,
-        request: bitfun_runtime_ports::AgentSessionRenameRequest,
-    ) -> bitfun_runtime_ports::PortResult<()> {
-        bitfun_core_types::validate_session_id(&request.session_id).map_err(|message| {
-            bitfun_runtime_ports::PortError::new(
-                bitfun_runtime_ports::PortErrorKind::InvalidRequest,
+        request: halo_runtime_ports::AgentSessionRenameRequest,
+    ) -> halo_runtime_ports::PortResult<()> {
+        halo_core_types::validate_session_id(&request.session_id).map_err(|message| {
+            halo_runtime_ports::PortError::new(
+                halo_runtime_ports::PortErrorKind::InvalidRequest,
                 message,
             )
         })?;
@@ -9081,11 +9081,11 @@ impl bitfun_runtime_ports::AgentSessionManagementPort for ConversationCoordinato
 
     async fn archive_session(
         &self,
-        request: bitfun_runtime_ports::AgentSessionArchiveRequest,
-    ) -> bitfun_runtime_ports::PortResult<()> {
-        bitfun_runtime_ports::AgentSessionManagementPort::set_session_archived(
+        request: halo_runtime_ports::AgentSessionArchiveRequest,
+    ) -> halo_runtime_ports::PortResult<()> {
+        halo_runtime_ports::AgentSessionManagementPort::set_session_archived(
             self,
-            bitfun_runtime_ports::AgentSessionArchiveStateRequest {
+            halo_runtime_ports::AgentSessionArchiveStateRequest {
                 workspace_path: request.workspace_path,
                 session_id: request.session_id,
                 archived: true,
@@ -9098,11 +9098,11 @@ impl bitfun_runtime_ports::AgentSessionManagementPort for ConversationCoordinato
 
     async fn set_session_archived(
         &self,
-        request: bitfun_runtime_ports::AgentSessionArchiveStateRequest,
-    ) -> bitfun_runtime_ports::PortResult<()> {
-        bitfun_core_types::validate_session_id(&request.session_id).map_err(|message| {
-            bitfun_runtime_ports::PortError::new(
-                bitfun_runtime_ports::PortErrorKind::InvalidRequest,
+        request: halo_runtime_ports::AgentSessionArchiveStateRequest,
+    ) -> halo_runtime_ports::PortResult<()> {
+        halo_core_types::validate_session_id(&request.session_id).map_err(|message| {
+            halo_runtime_ports::PortError::new(
+                halo_runtime_ports::PortErrorKind::InvalidRequest,
                 message,
             )
         })?;
@@ -9143,8 +9143,8 @@ impl bitfun_runtime_ports::AgentSessionManagementPort for ConversationCoordinato
 
     async fn resolve_session_workspace_binding(
         &self,
-        request: bitfun_runtime_ports::AgentSessionWorkspaceRequest,
-    ) -> bitfun_runtime_ports::PortResult<Option<bitfun_runtime_ports::AgentSessionWorkspaceBinding>>
+        request: halo_runtime_ports::AgentSessionWorkspaceRequest,
+    ) -> halo_runtime_ports::PortResult<Option<halo_runtime_ports::AgentSessionWorkspaceBinding>>
     {
         Ok(self
             .get_session_manager()
@@ -9155,11 +9155,11 @@ impl bitfun_runtime_ports::AgentSessionManagementPort for ConversationCoordinato
 }
 
 #[async_trait::async_trait]
-impl bitfun_runtime_ports::AgentSessionModelPort for ConversationCoordinator {
+impl halo_runtime_ports::AgentSessionModelPort for ConversationCoordinator {
     async fn update_session_model(
         &self,
-        request: bitfun_runtime_ports::AgentSessionModelUpdateRequest,
-    ) -> bitfun_runtime_ports::PortResult<()> {
+        request: halo_runtime_ports::AgentSessionModelUpdateRequest,
+    ) -> halo_runtime_ports::PortResult<()> {
         self.update_session_model(&request.session_id, &request.model_id)
             .await
             .map_err(runtime_port_error_preserving_message)
@@ -9167,11 +9167,11 @@ impl bitfun_runtime_ports::AgentSessionModelPort for ConversationCoordinator {
 }
 
 #[async_trait::async_trait]
-impl bitfun_runtime_ports::AgentSessionModePort for ConversationCoordinator {
+impl halo_runtime_ports::AgentSessionModePort for ConversationCoordinator {
     async fn update_session_mode(
         &self,
-        request: bitfun_runtime_ports::AgentSessionModeUpdateRequest,
-    ) -> bitfun_runtime_ports::PortResult<()> {
+        request: halo_runtime_ports::AgentSessionModeUpdateRequest,
+    ) -> halo_runtime_ports::PortResult<()> {
         self.update_session_mode(&request.session_id, &request.mode_id)
             .await
             .map_err(runtime_port_error_preserving_message)
@@ -9179,15 +9179,15 @@ impl bitfun_runtime_ports::AgentSessionModePort for ConversationCoordinator {
 }
 
 #[async_trait::async_trait]
-impl bitfun_agent_runtime::sdk::AgentSessionRestorePort for ConversationCoordinator {
+impl halo_agent_runtime::sdk::AgentSessionRestorePort for ConversationCoordinator {
     async fn restore_session(
         &self,
-        request: bitfun_agent_runtime::sdk::AgentSessionRestoreRequest,
-    ) -> bitfun_runtime_ports::PortResult<bitfun_agent_runtime::sdk::AgentSessionRestoreResult>
+        request: halo_agent_runtime::sdk::AgentSessionRestoreRequest,
+    ) -> halo_runtime_ports::PortResult<halo_agent_runtime::sdk::AgentSessionRestoreResult>
     {
-        bitfun_core_types::validate_session_id(&request.session_id).map_err(|message| {
-            bitfun_runtime_ports::PortError::new(
-                bitfun_runtime_ports::PortErrorKind::InvalidRequest,
+        halo_core_types::validate_session_id(&request.session_id).map_err(|message| {
+            halo_runtime_ports::PortError::new(
+                halo_runtime_ports::PortErrorKind::InvalidRequest,
                 message,
             )
         })?;
@@ -9205,8 +9205,8 @@ impl bitfun_agent_runtime::sdk::AgentSessionRestorePort for ConversationCoordina
         }
         .map_err(runtime_port_error_preserving_message)?;
 
-        Ok(bitfun_agent_runtime::sdk::AgentSessionRestoreResult {
-            session: bitfun_runtime_ports::AgentSessionSummary {
+        Ok(halo_agent_runtime::sdk::AgentSessionRestoreResult {
+            session: halo_runtime_ports::AgentSessionSummary {
                 session_id: session.session_id,
                 session_name: session.session_name,
                 agent_type: session.agent_type,
@@ -9223,11 +9223,11 @@ impl bitfun_agent_runtime::sdk::AgentSessionRestorePort for ConversationCoordina
 }
 
 #[async_trait::async_trait]
-impl bitfun_runtime_ports::AgentLocalCommandTurnPort for ConversationCoordinator {
+impl halo_runtime_ports::AgentLocalCommandTurnPort for ConversationCoordinator {
     async fn record_completed_local_command_turn(
         &self,
-        request: bitfun_runtime_ports::AgentLocalCommandTurnRecordRequest,
-    ) -> bitfun_runtime_ports::PortResult<()> {
+        request: halo_runtime_ports::AgentLocalCommandTurnRecordRequest,
+    ) -> halo_runtime_ports::PortResult<()> {
         self.ensure_session_runtime_ownership(&request.session_id, None)
             .map_err(runtime_port_error_preserving_message)?;
         let metadata = if request.metadata.is_empty() {
@@ -9250,11 +9250,11 @@ impl bitfun_runtime_ports::AgentLocalCommandTurnPort for ConversationCoordinator
 }
 
 #[async_trait::async_trait]
-impl bitfun_agent_runtime::sdk::AgentInteractionResponsePort for ConversationCoordinator {
+impl halo_agent_runtime::sdk::AgentInteractionResponsePort for ConversationCoordinator {
     async fn submit_user_answers(
         &self,
-        request: bitfun_agent_runtime::sdk::AgentUserAnswersRequest,
-    ) -> bitfun_runtime_ports::PortResult<()> {
+        request: halo_agent_runtime::sdk::AgentUserAnswersRequest,
+    ) -> halo_runtime_ports::PortResult<()> {
         crate::agentic::tools::user_input_manager::get_user_input_manager()
             .send_answer(&request.tool_id, request.answers)
             .map_err(user_input_port_error)
@@ -9262,13 +9262,13 @@ impl bitfun_agent_runtime::sdk::AgentInteractionResponsePort for ConversationCoo
 }
 
 #[async_trait::async_trait]
-impl bitfun_runtime_ports::AgentThreadGoalManagementPort for ConversationCoordinator {
+impl halo_runtime_ports::AgentThreadGoalManagementPort for ConversationCoordinator {
     async fn get_thread_goal(
         &self,
-        request: bitfun_runtime_ports::AgentThreadGoalGetRequest,
-    ) -> bitfun_runtime_ports::PortResult<Option<ThreadGoal>> {
-        bitfun_core_types::validate_session_id(&request.session_id).map_err(|message| {
-            runtime_port_error_preserving_message(BitFunError::Validation(message))
+        request: halo_runtime_ports::AgentThreadGoalGetRequest,
+    ) -> halo_runtime_ports::PortResult<Option<ThreadGoal>> {
+        halo_core_types::validate_session_id(&request.session_id).map_err(|message| {
+            runtime_port_error_preserving_message(HaloError::Validation(message))
         })?;
         let uses_default_workspace = request.workspace_path == "."
             && request.remote_connection_id.is_none()
@@ -9310,8 +9310,8 @@ impl bitfun_runtime_ports::AgentThreadGoalManagementPort for ConversationCoordin
 
     async fn create_thread_goal(
         &self,
-        request: bitfun_runtime_ports::AgentThreadGoalCreateRequest,
-    ) -> bitfun_runtime_ports::PortResult<ThreadGoal> {
+        request: halo_runtime_ports::AgentThreadGoalCreateRequest,
+    ) -> halo_runtime_ports::PortResult<ThreadGoal> {
         self.ensure_session_runtime_ownership(
             &request.session_id,
             Some(Path::new(&request.workspace_path)),
@@ -9324,13 +9324,13 @@ impl bitfun_runtime_ports::AgentThreadGoalManagementPort for ConversationCoordin
             request.token_budget,
         )
         .await
-        .map_err(runtime_port_error_from_bitfun)
+        .map_err(runtime_port_error_from_halo)
     }
 
     async fn update_thread_goal_status(
         &self,
-        request: bitfun_runtime_ports::AgentThreadGoalUpdateStatusRequest,
-    ) -> bitfun_runtime_ports::PortResult<ThreadGoal> {
+        request: halo_runtime_ports::AgentThreadGoalUpdateStatusRequest,
+    ) -> halo_runtime_ports::PortResult<ThreadGoal> {
         self.ensure_session_runtime_ownership(
             &request.session_id,
             Some(Path::new(&request.workspace_path)),
@@ -9343,28 +9343,28 @@ impl bitfun_runtime_ports::AgentThreadGoalManagementPort for ConversationCoordin
             request.turn_id.as_deref(),
         )
         .await
-        .map_err(runtime_port_error_from_bitfun)
+        .map_err(runtime_port_error_from_halo)
     }
 }
 
 #[async_trait::async_trait]
-impl bitfun_runtime_ports::AgentTurnCancellationPort for ConversationCoordinator {
+impl halo_runtime_ports::AgentTurnCancellationPort for ConversationCoordinator {
     async fn cancel_turn(
         &self,
-        request: bitfun_runtime_ports::AgentTurnCancellationRequest,
-    ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::AgentTurnCancellationResult> {
+        request: halo_runtime_ports::AgentTurnCancellationRequest,
+    ) -> halo_runtime_ports::PortResult<halo_runtime_ports::AgentTurnCancellationResult> {
         let session_id = request.session_id;
         if let Some(turn_id) = request.turn_id {
             self.cancel_dialog_turn(&session_id, &turn_id)
                 .await
                 .map_err(|error| {
-                    bitfun_runtime_ports::PortError::new(
-                        bitfun_runtime_ports::PortErrorKind::Backend,
+                    halo_runtime_ports::PortError::new(
+                        halo_runtime_ports::PortErrorKind::Backend,
                         error.to_string(),
                     )
                 })?;
 
-            return Ok(bitfun_runtime_ports::AgentTurnCancellationResult {
+            return Ok(halo_runtime_ports::AgentTurnCancellationResult {
                 session_id,
                 turn_id: Some(turn_id),
                 requested: true,
@@ -9376,14 +9376,14 @@ impl bitfun_runtime_ports::AgentTurnCancellationPort for ConversationCoordinator
             .cancel_active_turn_for_session(&session_id, wait_timeout)
             .await
             .map_err(|error| {
-                bitfun_runtime_ports::PortError::new(
-                    bitfun_runtime_ports::PortErrorKind::Backend,
+                halo_runtime_ports::PortError::new(
+                    halo_runtime_ports::PortErrorKind::Backend,
                     error.to_string(),
                 )
             })?;
         let requested = cancelled_turn_id.is_some();
 
-        Ok(bitfun_runtime_ports::AgentTurnCancellationResult {
+        Ok(halo_runtime_ports::AgentTurnCancellationResult {
             session_id,
             turn_id: cancelled_turn_id,
             requested,
@@ -9392,11 +9392,11 @@ impl bitfun_runtime_ports::AgentTurnCancellationPort for ConversationCoordinator
 }
 
 #[async_trait::async_trait]
-impl bitfun_runtime_ports::RemoteControlStatePort for ConversationCoordinator {
+impl halo_runtime_ports::RemoteControlStatePort for ConversationCoordinator {
     async fn read_remote_control_state(
         &self,
-        request: bitfun_runtime_ports::RemoteControlStateRequest,
-    ) -> bitfun_runtime_ports::PortResult<Option<bitfun_runtime_ports::RemoteControlStateSnapshot>>
+        request: halo_runtime_ports::RemoteControlStateRequest,
+    ) -> halo_runtime_ports::PortResult<Option<halo_runtime_ports::RemoteControlStateSnapshot>>
     {
         let Some(session) = self.get_session_manager().get_session(&request.session_id) else {
             return Ok(None);
@@ -9404,7 +9404,7 @@ impl bitfun_runtime_ports::RemoteControlStatePort for ConversationCoordinator {
 
         let mut metadata = serde_json::Map::new();
         let (state, active_turn_id) = match session.state {
-            SessionState::Idle => (bitfun_runtime_ports::RemoteControlSessionState::Idle, None),
+            SessionState::Idle => (halo_runtime_ports::RemoteControlSessionState::Idle, None),
             SessionState::Processing {
                 current_turn_id,
                 phase,
@@ -9414,7 +9414,7 @@ impl bitfun_runtime_ports::RemoteControlStatePort for ConversationCoordinator {
                     serde_json::Value::String(format!("{:?}", phase)),
                 );
                 (
-                    bitfun_runtime_ports::RemoteControlSessionState::Processing,
+                    halo_runtime_ports::RemoteControlSessionState::Processing,
                     Some(current_turn_id),
                 )
             }
@@ -9424,11 +9424,11 @@ impl bitfun_runtime_ports::RemoteControlStatePort for ConversationCoordinator {
                     "recoverable".to_string(),
                     serde_json::Value::Bool(recoverable),
                 );
-                (bitfun_runtime_ports::RemoteControlSessionState::Error, None)
+                (halo_runtime_ports::RemoteControlSessionState::Error, None)
             }
         };
 
-        Ok(Some(bitfun_runtime_ports::RemoteControlStateSnapshot {
+        Ok(Some(halo_runtime_ports::RemoteControlStateSnapshot {
             session_id: request.session_id,
             state,
             active_turn_id,
@@ -9439,11 +9439,11 @@ impl bitfun_runtime_ports::RemoteControlStatePort for ConversationCoordinator {
 }
 
 #[async_trait::async_trait]
-impl bitfun_runtime_ports::SessionTranscriptReader for ConversationCoordinator {
+impl halo_runtime_ports::SessionTranscriptReader for ConversationCoordinator {
     async fn read_session_transcript(
         &self,
-        request: bitfun_runtime_ports::SessionTranscriptRequest,
-    ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::SessionTranscript> {
+        request: halo_runtime_ports::SessionTranscriptRequest,
+    ) -> halo_runtime_ports::PortResult<halo_runtime_ports::SessionTranscript> {
         let messages = self
             .get_messages(&request.session_id)
             .await
@@ -9466,10 +9466,10 @@ impl bitfun_runtime_ports::SessionTranscriptReader for ConversationCoordinator {
 
                 let content = match message.content {
                     MessageContent::Text(text) => {
-                        bitfun_runtime_ports::TranscriptContent::Text(text)
+                        halo_runtime_ports::TranscriptContent::Text(text)
                     }
                     MessageContent::Multimodal { text, images } => {
-                        bitfun_runtime_ports::TranscriptContent::Multimodal {
+                        halo_runtime_ports::TranscriptContent::Multimodal {
                             text,
                             image_count: images.len(),
                         }
@@ -9481,7 +9481,7 @@ impl bitfun_runtime_ports::SessionTranscriptReader for ConversationCoordinator {
                         result,
                         is_error,
                         ..
-                    } => bitfun_runtime_ports::TranscriptContent::ToolResult {
+                    } => halo_runtime_ports::TranscriptContent::ToolResult {
                         tool_id,
                         tool_name,
                         effective_tool_name,
@@ -9492,12 +9492,12 @@ impl bitfun_runtime_ports::SessionTranscriptReader for ConversationCoordinator {
                         reasoning_content,
                         text,
                         tool_calls,
-                    } => bitfun_runtime_ports::TranscriptContent::Mixed {
+                    } => halo_runtime_ports::TranscriptContent::Mixed {
                         reasoning_content,
                         text,
                         tool_calls: tool_calls
                             .into_iter()
-                            .map(|tool_call| bitfun_runtime_ports::TranscriptToolCall {
+                            .map(|tool_call| halo_runtime_ports::TranscriptToolCall {
                                 tool_id: tool_call.tool_id,
                                 tool_name: tool_call.tool_name,
                                 arguments: tool_call.arguments,
@@ -9506,7 +9506,7 @@ impl bitfun_runtime_ports::SessionTranscriptReader for ConversationCoordinator {
                     },
                 };
 
-                bitfun_runtime_ports::TranscriptMessage {
+                halo_runtime_ports::TranscriptMessage {
                     id: Some(message.id),
                     role,
                     turn_id: message.metadata.turn_id,
@@ -9516,7 +9516,7 @@ impl bitfun_runtime_ports::SessionTranscriptReader for ConversationCoordinator {
             })
             .collect();
 
-        Ok(bitfun_runtime_ports::SessionTranscript {
+        Ok(halo_runtime_ports::SessionTranscript {
             session_id: request.session_id,
             messages,
         })
@@ -9663,11 +9663,11 @@ mod tests {
     use crate::service::remote_ssh::workspace_state::init_remote_workspace_manager;
     use crate::service::session::{SessionMetadata, SessionStatus};
     use crate::service::workspace::WorkspaceKind;
-    use bitfun_agent_runtime::permission::AUTO_APPROVE_ASK_CONTEXT_KEY;
-    use bitfun_core_types::{
+    use halo_agent_runtime::permission::AUTO_APPROVE_ASK_CONTEXT_KEY;
+    use halo_core_types::{
         SessionExecutionTarget, SessionExecutionTargetKind, WorktreeLifecycle,
     };
-    use bitfun_runtime_ports::{
+    use halo_runtime_ports::{
         AgentSessionArchiveRequest, AgentSessionCreateRequest, AgentSessionManagementPort,
         AgentSessionRenameRequest, AgentSubmissionPort, AgentSubmissionRequest,
         AgentSubmissionSource, AgentThreadGoalGetRequest, AgentThreadGoalManagementPort,
@@ -9686,10 +9686,10 @@ mod tests {
             session_storage_workspace_locator(
                 Some(r"D:\worktrees\session-1"),
                 Some("D:/worktrees/session-1"),
-                Some("D:/projects/BitFun"),
+                Some("D:/projects/Halo"),
             )
             .as_deref(),
-            Some("D:/projects/BitFun")
+            Some("D:/projects/Halo")
         );
     }
 
@@ -9699,7 +9699,7 @@ mod tests {
             session_storage_workspace_locator(
                 None,
                 Some("/worktrees/session-1"),
-                Some("/projects/BitFun"),
+                Some("/projects/Halo"),
             )
             .as_deref(),
             None
@@ -9712,7 +9712,7 @@ mod tests {
             session_storage_workspace_locator(
                 Some("/projects/other"),
                 Some("/worktrees/session-1"),
-                Some("/projects/BitFun"),
+                Some("/projects/Halo"),
             )
             .as_deref(),
             Some("/projects/other")
@@ -9773,7 +9773,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            crate::util::errors::BitFunError::Cancelled(_)
+            crate::util::errors::HaloError::Cancelled(_)
         ));
     }
 
@@ -9869,24 +9869,24 @@ mod tests {
     #[test]
     fn migrated_runtime_ports_preserve_existing_core_error_messages() {
         let error = runtime_port_error_preserving_message(
-            crate::util::errors::BitFunError::Validation("invalid session id".to_string()),
+            crate::util::errors::HaloError::Validation("invalid session id".to_string()),
         );
 
         assert_eq!(
             error.kind,
-            bitfun_runtime_ports::PortErrorKind::InvalidRequest
+            halo_runtime_ports::PortErrorKind::InvalidRequest
         );
         assert_eq!(error.message, "Validation error: invalid session id");
     }
 
     #[tokio::test]
     async fn interaction_response_port_uses_user_question_owner_and_typed_stale_errors() {
-        use bitfun_agent_runtime::sdk::{AgentInteractionResponsePort, AgentUserAnswersRequest};
+        use halo_agent_runtime::sdk::{AgentInteractionResponsePort, AgentUserAnswersRequest};
 
         let (coordinator, _) = test_coordinator();
         let answer_tool_id = format!("answer-{}", uuid::Uuid::new_v4());
         let (sender, receiver) = tokio::sync::oneshot::channel::<
-            bitfun_agent_runtime::user_questions::UserInputResponse,
+            halo_agent_runtime::user_questions::UserInputResponse,
         >();
         crate::agentic::tools::user_input_manager::get_user_input_manager()
             .register_channel(answer_tool_id.clone(), sender);
@@ -9916,7 +9916,7 @@ mod tests {
         .expect_err("consumed answer channel must be reported as stale");
         assert_eq!(
             stale_answer.kind,
-            bitfun_runtime_ports::PortErrorKind::NotFound
+            halo_runtime_ports::PortErrorKind::NotFound
         );
         assert_eq!(
             stale_answer.message,
@@ -9926,7 +9926,7 @@ mod tests {
 
     #[tokio::test]
     async fn session_model_port_preserves_core_not_found_errors() {
-        use bitfun_agent_runtime::sdk::{AgentSessionModelPort, AgentSessionModelUpdateRequest};
+        use halo_agent_runtime::sdk::{AgentSessionModelPort, AgentSessionModelUpdateRequest};
 
         let (coordinator, _) = test_coordinator();
         let error = AgentSessionModelPort::update_session_model(
@@ -9939,13 +9939,13 @@ mod tests {
         .await
         .expect_err("missing session must remain a typed not-found error");
 
-        assert_eq!(error.kind, bitfun_runtime_ports::PortErrorKind::NotFound);
+        assert_eq!(error.kind, halo_runtime_ports::PortErrorKind::NotFound);
         assert!(error.message.contains("missing-session"));
     }
 
     #[tokio::test]
     async fn session_mode_port_preserves_core_not_found_errors() {
-        use bitfun_agent_runtime::sdk::{AgentSessionModePort, AgentSessionModeUpdateRequest};
+        use halo_agent_runtime::sdk::{AgentSessionModePort, AgentSessionModeUpdateRequest};
 
         let (coordinator, _) = test_coordinator();
         let error = AgentSessionModePort::update_session_mode(
@@ -9958,17 +9958,17 @@ mod tests {
         .await
         .expect_err("missing session must remain a typed not-found error");
 
-        assert_eq!(error.kind, bitfun_runtime_ports::PortErrorKind::NotFound);
+        assert_eq!(error.kind, halo_runtime_ports::PortErrorKind::NotFound);
         assert!(error.message.contains("missing-session"));
     }
 
     #[tokio::test]
     async fn session_mode_port_rejects_blank_mode_for_active_session() {
-        use bitfun_agent_runtime::sdk::{AgentSessionModePort, AgentSessionModeUpdateRequest};
+        use halo_agent_runtime::sdk::{AgentSessionModePort, AgentSessionModeUpdateRequest};
 
         let (coordinator, _) = test_coordinator();
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-session-mode-validation-test-{}",
+            "halo-session-mode-validation-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -10002,18 +10002,18 @@ mod tests {
 
         assert_eq!(
             error.kind,
-            bitfun_runtime_ports::PortErrorKind::InvalidRequest
+            halo_runtime_ports::PortErrorKind::InvalidRequest
         );
         let _ = std::fs::remove_dir_all(workspace_path);
     }
 
     #[tokio::test]
     async fn session_mode_port_rejects_unknown_mode_for_active_session() {
-        use bitfun_agent_runtime::sdk::{AgentSessionModePort, AgentSessionModeUpdateRequest};
+        use halo_agent_runtime::sdk::{AgentSessionModePort, AgentSessionModeUpdateRequest};
 
         let (coordinator, _) = test_coordinator();
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-session-mode-validation-test-{}",
+            "halo-session-mode-validation-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -10047,19 +10047,19 @@ mod tests {
 
         assert_eq!(
             error.kind,
-            bitfun_runtime_ports::PortErrorKind::InvalidRequest
+            halo_runtime_ports::PortErrorKind::InvalidRequest
         );
         let _ = std::fs::remove_dir_all(workspace_path);
     }
 
     #[tokio::test]
     async fn session_mode_runtime_updates_the_real_core_session() {
-        use bitfun_agent_runtime::sdk::{AgentRuntimeBuilder, AgentSessionModeUpdateRequest};
+        use halo_agent_runtime::sdk::{AgentRuntimeBuilder, AgentSessionModeUpdateRequest};
 
         let (coordinator, session_manager) = test_coordinator();
         let coordinator = Arc::new(coordinator);
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-session-mode-runtime-test-{}",
+            "halo-session-mode-runtime-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -10106,12 +10106,12 @@ mod tests {
 
     #[tokio::test]
     async fn session_model_runtime_updates_the_real_core_session() {
-        use bitfun_agent_runtime::sdk::{AgentRuntimeBuilder, AgentSessionModelUpdateRequest};
+        use halo_agent_runtime::sdk::{AgentRuntimeBuilder, AgentSessionModelUpdateRequest};
 
         let (coordinator, session_manager) = test_coordinator();
         let coordinator = Arc::new(coordinator);
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-session-model-runtime-test-{}",
+            "halo-session-model-runtime-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -10165,7 +10165,7 @@ mod tests {
     ) -> (ConversationCoordinator, Arc<SessionManager>) {
         let event_queue = Arc::new(EventQueue::new(EventQueueConfig::default()));
         let coordination_database_file = std::env::temp_dir()
-            .join(format!("bitfun-coordinator-test-{}", uuid::Uuid::new_v4()))
+            .join(format!("halo-coordinator-test-{}", uuid::Uuid::new_v4()))
             .join("coordination.sqlite");
         let session_manager = Arc::new(SessionManager::new(
             Arc::new(SessionContextStore::new()),
@@ -10207,10 +10207,10 @@ mod tests {
             runtime_ownership,
         );
         coordinator.set_terminal_port(
-            bitfun_runtime_services::test_support::FakeRuntimeServicesProvider::terminal_port(),
+            halo_runtime_services::test_support::FakeRuntimeServicesProvider::terminal_port(),
         );
         coordinator.set_remote_exec_port(
-            bitfun_runtime_services::test_support::FakeRuntimeServicesProvider::remote_exec_port(),
+            halo_runtime_services::test_support::FakeRuntimeServicesProvider::remote_exec_port(),
         );
 
         (coordinator, session_manager)
@@ -10221,7 +10221,7 @@ mod tests {
         enable_persistence: bool,
     ) -> (ConversationCoordinator, Arc<SessionManager>) {
         let ownership_root = std::env::temp_dir().join(format!(
-            "bitfun-runtime-ownership-test-{}",
+            "halo-runtime-ownership-test-{}",
             uuid::Uuid::new_v4()
         ));
         test_coordinator_with_config_and_ownership(
@@ -10229,7 +10229,7 @@ mod tests {
             enable_persistence,
             Arc::new(CoreRuntimeOwnership::embedded_with_facts(
                 ownership_root,
-                "bitfun".to_string(),
+                "halo".to_string(),
                 "test",
             )),
         )
@@ -10253,21 +10253,21 @@ mod tests {
     async fn create_session_checks_runtime_ownership_before_persisting() {
         let ownership_root = tempfile::tempdir().expect("ownership root");
         let workspace = tempfile::tempdir().expect("workspace");
-        let key = bitfun_services_core::runtime_ownership::RuntimeOwnershipKey::for_workspace(
+        let key = halo_services_core::runtime_ownership::RuntimeOwnershipKey::for_workspace(
             workspace.path(),
-            "bitfun",
+            "halo",
         )
         .expect("ownership key");
         let _shared =
-            bitfun_services_core::runtime_ownership::WorkspaceRuntimeOwnership::try_acquire(
+            halo_services_core::runtime_ownership::WorkspaceRuntimeOwnership::try_acquire(
                 ownership_root.path(),
                 &key,
-                bitfun_services_core::runtime_ownership::RuntimeDeployment::Shared,
+                halo_services_core::runtime_ownership::RuntimeDeployment::Shared,
             )
             .expect("shared owner");
         let owner = Arc::new(CoreRuntimeOwnership::embedded_with_facts(
             ownership_root.path().to_path_buf(),
-            "bitfun".to_string(),
+            "halo".to_string(),
             "test",
         ));
         let (coordinator, session_manager) =
@@ -10294,21 +10294,21 @@ mod tests {
     async fn assistant_bootstrap_checks_runtime_ownership_before_files_or_attach() {
         let ownership_root = tempfile::tempdir().expect("ownership root");
         let workspace = tempfile::tempdir().expect("workspace");
-        let key = bitfun_services_core::runtime_ownership::RuntimeOwnershipKey::for_workspace(
+        let key = halo_services_core::runtime_ownership::RuntimeOwnershipKey::for_workspace(
             workspace.path(),
-            "bitfun",
+            "halo",
         )
         .expect("ownership key");
         let _shared =
-            bitfun_services_core::runtime_ownership::WorkspaceRuntimeOwnership::try_acquire(
+            halo_services_core::runtime_ownership::WorkspaceRuntimeOwnership::try_acquire(
                 ownership_root.path(),
                 &key,
-                bitfun_services_core::runtime_ownership::RuntimeDeployment::Shared,
+                halo_services_core::runtime_ownership::RuntimeDeployment::Shared,
             )
             .expect("shared owner");
         let owner = Arc::new(CoreRuntimeOwnership::embedded_with_facts(
             ownership_root.path().to_path_buf(),
-            "bitfun".to_string(),
+            "halo".to_string(),
             "test",
         ));
         let (coordinator, session_manager) =
@@ -10372,7 +10372,7 @@ mod tests {
             crate::service::workspace::WorkspaceService::new_for_test_path_manager(path_manager)
                 .await;
         let remote_path = PathBuf::from(format!(
-            "/bitfun-tests/known-remote-{}",
+            "/halo-tests/known-remote-{}",
             uuid::Uuid::new_v4()
         ));
         workspace_service
@@ -10390,7 +10390,7 @@ mod tests {
             .expect("remember remote workspace");
         let owner = Arc::new(CoreRuntimeOwnership::embedded_with_facts(
             root.path().join("ownership"),
-            "bitfun".to_string(),
+            "halo".to_string(),
             "test",
         ));
         let (coordinator, _) = test_coordinator_with_config_and_ownership(100, false, owner);
@@ -10414,21 +10414,21 @@ mod tests {
     async fn unverified_remote_hint_cannot_bypass_local_workspace_ownership() {
         let ownership_root = tempfile::tempdir().expect("ownership root");
         let workspace = tempfile::tempdir().expect("workspace");
-        let key = bitfun_services_core::runtime_ownership::RuntimeOwnershipKey::for_workspace(
+        let key = halo_services_core::runtime_ownership::RuntimeOwnershipKey::for_workspace(
             workspace.path(),
-            "bitfun",
+            "halo",
         )
         .expect("ownership key");
         let _shared =
-            bitfun_services_core::runtime_ownership::WorkspaceRuntimeOwnership::try_acquire(
+            halo_services_core::runtime_ownership::WorkspaceRuntimeOwnership::try_acquire(
                 ownership_root.path(),
                 &key,
-                bitfun_services_core::runtime_ownership::RuntimeDeployment::Shared,
+                halo_services_core::runtime_ownership::RuntimeDeployment::Shared,
             )
             .expect("shared owner");
         let owner = Arc::new(CoreRuntimeOwnership::embedded_with_facts(
             ownership_root.path().to_path_buf(),
-            "bitfun".to_string(),
+            "halo".to_string(),
             "test",
         ));
         let (coordinator, _) = test_coordinator_with_config_and_ownership(100, false, owner);
@@ -10457,21 +10457,21 @@ mod tests {
     async fn attach_and_mutation_paths_check_runtime_ownership_before_side_effects() {
         let ownership_root = tempfile::tempdir().expect("ownership root");
         let workspace = tempfile::tempdir().expect("workspace");
-        let key = bitfun_services_core::runtime_ownership::RuntimeOwnershipKey::for_workspace(
+        let key = halo_services_core::runtime_ownership::RuntimeOwnershipKey::for_workspace(
             workspace.path(),
-            "bitfun",
+            "halo",
         )
         .expect("ownership key");
         let _shared =
-            bitfun_services_core::runtime_ownership::WorkspaceRuntimeOwnership::try_acquire(
+            halo_services_core::runtime_ownership::WorkspaceRuntimeOwnership::try_acquire(
                 ownership_root.path(),
                 &key,
-                bitfun_services_core::runtime_ownership::RuntimeDeployment::Shared,
+                halo_services_core::runtime_ownership::RuntimeDeployment::Shared,
             )
             .expect("shared owner");
         let owner = Arc::new(CoreRuntimeOwnership::embedded_with_facts(
             ownership_root.path().to_path_buf(),
-            "bitfun".to_string(),
+            "halo".to_string(),
             "test",
         ));
         let (coordinator, session_manager) =
@@ -10504,9 +10504,9 @@ mod tests {
             .expect_err("Runtime attach must honor ownership before reading persistence");
         assert!(restore_error.to_string().contains("ownership"));
 
-        let archive_error = bitfun_runtime_ports::AgentSessionManagementPort::set_session_archived(
+        let archive_error = halo_runtime_ports::AgentSessionManagementPort::set_session_archived(
             &coordinator,
-            bitfun_runtime_ports::AgentSessionArchiveStateRequest {
+            halo_runtime_ports::AgentSessionArchiveStateRequest {
                 workspace_path,
                 session_id: "missing-session".to_string(),
                 archived: true,
@@ -10544,8 +10544,8 @@ mod tests {
 
     #[test]
     fn conversation_coordinator_exposes_remote_runtime_ports() {
-        fn assert_cancellation_port<T: bitfun_runtime_ports::AgentTurnCancellationPort>() {}
-        fn assert_state_port<T: bitfun_runtime_ports::RemoteControlStatePort>() {}
+        fn assert_cancellation_port<T: halo_runtime_ports::AgentTurnCancellationPort>() {}
+        fn assert_state_port<T: halo_runtime_ports::RemoteControlStatePort>() {}
 
         assert_cancellation_port::<ConversationCoordinator>();
         assert_state_port::<ConversationCoordinator>();
@@ -11126,7 +11126,7 @@ mod tests {
     async fn agent_submission_create_session_preserves_creator_metadata() {
         let (coordinator, session_manager) = test_coordinator();
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-agent-session-port-test-{}",
+            "halo-agent-session-port-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -11170,7 +11170,7 @@ mod tests {
     async fn agent_session_management_port_renames_and_sets_persisted_archive_state() {
         let (coordinator, session_manager) = test_coordinator();
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-agent-session-management-port-test-{}",
+            "halo-agent-session-management-port-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -11247,7 +11247,7 @@ mod tests {
 
         AgentSessionManagementPort::set_session_archived(
             &coordinator,
-            bitfun_runtime_ports::AgentSessionArchiveStateRequest {
+            halo_runtime_ports::AgentSessionArchiveStateRequest {
                 workspace_path: workspace.clone(),
                 session_id: created.session_id.clone(),
                 archived: false,
@@ -11290,14 +11290,14 @@ mod tests {
         .await
         .expect_err("v1 create should preserve its backend error classification");
 
-        assert_eq!(error.kind, bitfun_runtime_ports::PortErrorKind::Backend);
+        assert_eq!(error.kind, halo_runtime_ports::PortErrorKind::Backend);
     }
 
     #[tokio::test]
     async fn agent_submission_create_session_preserves_requested_session_id() {
         let (coordinator, session_manager) = test_coordinator();
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-agent-session-fixed-id-port-test-{}",
+            "halo-agent-session-fixed-id-port-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -11356,7 +11356,7 @@ mod tests {
         .expect_err("duplicate fixed session id should be rejected");
         assert_eq!(
             duplicate_error.kind,
-            bitfun_runtime_ports::PortErrorKind::InvalidRequest
+            halo_runtime_ports::PortErrorKind::InvalidRequest
         );
         assert!(duplicate_error.message.starts_with("Validation error:"));
         assert!(duplicate_error.message.contains("already exists"));
@@ -11402,7 +11402,7 @@ mod tests {
 
         assert_eq!(
             error.kind,
-            bitfun_runtime_ports::PortErrorKind::InvalidRequest
+            halo_runtime_ports::PortErrorKind::InvalidRequest
         );
         assert!(error.message.starts_with("Validation error:"));
     }
@@ -11577,7 +11577,7 @@ mod tests {
         .expect_err("a loaded session must not read another remote workspace");
         assert_eq!(
             cross_workspace_error.kind,
-            bitfun_runtime_ports::PortErrorKind::InvalidRequest
+            halo_runtime_ports::PortErrorKind::InvalidRequest
         );
         assert!(cross_workspace_error
             .message
@@ -11621,7 +11621,7 @@ mod tests {
 
         let created = AgentThreadGoalManagementPort::create_thread_goal(
             &coordinator,
-            bitfun_runtime_ports::AgentThreadGoalCreateRequest {
+            halo_runtime_ports::AgentThreadGoalCreateRequest {
                 session_id: session_id.clone(),
                 workspace_path: logical_workspace_path.clone(),
                 objective: "Keep remote ownership structured".to_string(),
@@ -11632,7 +11632,7 @@ mod tests {
         .expect("remote goal creation must not acquire a local workspace lock");
         let updated = AgentThreadGoalManagementPort::update_thread_goal_status(
             &coordinator,
-            bitfun_runtime_ports::AgentThreadGoalUpdateStatusRequest {
+            halo_runtime_ports::AgentThreadGoalUpdateStatusRequest {
                 session_id: session_id.clone(),
                 workspace_path: logical_workspace_path,
                 status: ThreadGoalStatus::Complete,
@@ -11656,7 +11656,7 @@ mod tests {
     async fn normal_sessions_keep_the_mode_default_snapshotted_at_creation() {
         let (coordinator, session_manager) = test_coordinator();
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-normal-session-model-snapshot-test-{}",
+            "halo-normal-session-model-snapshot-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -11746,7 +11746,7 @@ mod tests {
     async fn transient_session_port_never_persists_or_discards_a_durable_identity() {
         let (coordinator, session_manager) = test_coordinator_with_config(100, true);
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-agent-transient-session-port-test-{}",
+            "halo-agent-transient-session-port-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -11859,7 +11859,7 @@ mod tests {
             .expect_err("transient discard must reject durable Session ownership");
         assert!(matches!(
             discard_error,
-            crate::util::errors::BitFunError::Validation(_)
+            crate::util::errors::HaloError::Validation(_)
         ));
         session_manager.evict_loaded_session_for_test(&durable.session_id);
         let collision = AgentSubmissionPort::create_transient_session_with_id(
@@ -11871,7 +11871,7 @@ mod tests {
         .expect_err("transient Session must not shadow persisted durable identity");
         assert_eq!(
             collision.kind,
-            bitfun_runtime_ports::PortErrorKind::InvalidRequest
+            halo_runtime_ports::PortErrorKind::InvalidRequest
         );
 
         let _ = std::fs::remove_dir_all(storage_path);
@@ -11902,7 +11902,7 @@ mod tests {
 
         assert_eq!(
             error.kind,
-            bitfun_runtime_ports::PortErrorKind::InvalidRequest
+            halo_runtime_ports::PortErrorKind::InvalidRequest
         );
         assert!(error.message.starts_with("Validation error:"));
     }
@@ -11944,7 +11944,7 @@ mod tests {
     async fn fresh_subagent_request_can_explicitly_inherit_parent_model() {
         let (coordinator, session_manager) = test_coordinator();
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-fresh-subagent-inherit-test-{}",
+            "halo-fresh-subagent-inherit-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -11988,7 +11988,7 @@ mod tests {
     async fn fresh_subagent_inherits_matching_parent_worktree_binding() {
         let (coordinator, session_manager) = test_coordinator();
         let temp_root = tempfile::tempdir().expect("temp root should exist");
-        let project_path = temp_root.path().join("BitFun");
+        let project_path = temp_root.path().join("Halo");
         let worktree_path = temp_root.path().join("managed-worktree");
         std::fs::create_dir_all(&project_path).expect("project dir should exist");
         std::fs::create_dir_all(&worktree_path).expect("worktree dir should exist");
@@ -12066,7 +12066,7 @@ mod tests {
     async fn fresh_subagent_inherits_transient_parent_persistence_boundary() {
         let (coordinator, session_manager) = test_coordinator();
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-fresh-subagent-transient-test-{}",
+            "halo-fresh-subagent-transient-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -12206,7 +12206,7 @@ mod tests {
     async fn reused_subagent_send_input_updates_requested_and_inherited_model() {
         let (coordinator, session_manager) = test_coordinator();
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-reused-subagent-model-test-{}",
+            "halo-reused-subagent-model-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -12354,7 +12354,7 @@ mod tests {
     async fn fork_subagent_request_allows_requested_model_override() {
         let (coordinator, session_manager) = test_coordinator();
         let workspace_path =
-            std::env::temp_dir().join(format!("bitfun-fork-model-test-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo-fork-model-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
         struct TempWorkspaceGuard(std::path::PathBuf);
         impl Drop for TempWorkspaceGuard {
@@ -12460,7 +12460,7 @@ mod tests {
     async fn hidden_agent_session_uses_requested_ephemeral_kind() {
         let (coordinator, session_manager) = test_coordinator();
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-hidden-agent-kind-test-{}",
+            "halo-hidden-agent-kind-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -12501,7 +12501,7 @@ mod tests {
     async fn reused_subagent_input_is_added_to_runtime_context() {
         let (coordinator, session_manager) = test_coordinator();
         let workspace_path = std::env::temp_dir().join(format!(
-            "bitfun-reused-subagent-input-context-test-{}",
+            "halo-reused-subagent-input-context-test-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
@@ -12580,7 +12580,7 @@ mod tests {
     async fn btw_session_persists_relationship_and_seeds_forked_listing_baselines() {
         let (coordinator, session_manager) = test_persistent_coordinator();
         let workspace_path =
-            std::env::temp_dir().join(format!("bitfun-btw-baseline-test-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo-btw-baseline-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&workspace_path).expect("workspace dir should exist");
         struct TempWorkspaceGuard(std::path::PathBuf);
         impl Drop for TempWorkspaceGuard {

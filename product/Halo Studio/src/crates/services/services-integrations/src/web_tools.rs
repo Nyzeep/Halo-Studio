@@ -5,7 +5,7 @@ use serde_json::json;
 use std::time::Duration;
 use thiserror::Error;
 
-const USER_AGENT_VALUE: &str = "BitFun/1.0";
+const USER_AGENT_VALUE: &str = "Halo/1.0";
 const WEB_FETCH_TIMEOUT_SECS: u64 = 30;
 const EXA_URL: &str = "https://mcp.exa.ai/mcp";
 const EXA_TIMEOUT_SECS: u64 = 25;

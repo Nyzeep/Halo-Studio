@@ -12,7 +12,7 @@ use crate::agentic::core::{
     MessageHelper, MessageRole, MessageSemanticKind,
 };
 use crate::service::session::TranscriptLineRange;
-use crate::util::errors::BitFunResult;
+use crate::util::errors::HaloResult;
 use log::{debug, trace};
 
 /// Context compressor configuration
@@ -101,7 +101,7 @@ impl ContextCompressor {
         &self,
         session_id: &str,
         mut messages: Vec<Message>,
-    ) -> BitFunResult<Vec<TurnWithTokens>> {
+    ) -> HaloResult<Vec<TurnWithTokens>> {
         debug!(
             "Collecting conversation turns for compression: session_id={}",
             session_id
@@ -150,7 +150,7 @@ impl ContextCompressor {
         &self,
         session_id: &str,
         messages: Vec<Message>,
-    ) -> BitFunResult<Vec<TurnWithTokens>> {
+    ) -> HaloResult<Vec<TurnWithTokens>> {
         debug!(
             "Starting session context compression analysis: session_id={}",
             session_id
@@ -169,7 +169,7 @@ impl ContextCompressor {
         &self,
         session_id: &str,
         messages: Vec<Message>,
-    ) -> BitFunResult<Vec<TurnWithTokens>> {
+    ) -> HaloResult<Vec<TurnWithTokens>> {
         self.collect_conversation_turns(session_id, messages)
     }
 
@@ -179,7 +179,7 @@ impl ContextCompressor {
         runtime_messages: &[Message],
         recent_target_tokens: usize,
         previous_cutoff: Option<usize>,
-    ) -> BitFunResult<Option<AutoCompressionPlan>> {
+    ) -> HaloResult<Option<AutoCompressionPlan>> {
         let system_message_count = runtime_messages
             .iter()
             .take_while(|message| message.role == MessageRole::System)
@@ -365,7 +365,7 @@ impl ContextCompressor {
         turns: Vec<TurnWithTokens>,
         mode: CompressionMode,
         model_summary: Option<String>,
-    ) -> BitFunResult<CompressionResult> {
+    ) -> HaloResult<CompressionResult> {
         self.compress_turns_with_contract(
             session_id,
             context_window,
@@ -384,7 +384,7 @@ impl ContextCompressor {
         mode: CompressionMode,
         contract: Option<CompressionContract>,
         model_summary: Option<String>,
-    ) -> BitFunResult<CompressionResult> {
+    ) -> HaloResult<CompressionResult> {
         self.compress_turns_internal(
             session_id,
             context_window,
@@ -406,7 +406,7 @@ impl ContextCompressor {
         contract: Option<CompressionContract>,
         model_summary: Option<String>,
         append_live_boundary_context: bool,
-    ) -> BitFunResult<CompressionResult> {
+    ) -> HaloResult<CompressionResult> {
         if turns.is_empty() {
             debug!("No turns need compression: session_id={}", session_id);
             return Ok(CompressionResult {
@@ -466,7 +466,7 @@ impl ContextCompressor {
         plan: AutoCompressionPlan,
         contract: Option<CompressionContract>,
         model_summary: Option<String>,
-    ) -> BitFunResult<CompressionResult> {
+    ) -> HaloResult<CompressionResult> {
         let turns = MessageHelper::group_messages_by_turns(plan.summary_messages);
         let turns = turns.into_iter().map(TurnWithTokens::new).collect();
         let mut result = self.compress_turns_internal(
@@ -989,7 +989,7 @@ mod tests {
         assert_eq!(result.messages[3].id, retained_assistant.id);
         assert!(compressor.append_transcript_reference(
             &mut result,
-            "bitfun://current-session/artifacts/compression-transcripts/3-recent.txt",
+            "halo://current-session/artifacts/compression-transcripts/3-recent.txt",
             &TranscriptLineRange {
                 start_line: 1,
                 end_line: 20,
@@ -1097,7 +1097,7 @@ mod tests {
                 Some("Model summary".to_string()),
             )
             .expect("compression succeeds");
-        let uri = "bitfun://current-session/artifacts/compression-transcripts/12-a3f9.txt";
+        let uri = "halo://current-session/artifacts/compression-transcripts/12-a3f9.txt";
         let index_range = TranscriptLineRange {
             start_line: 1,
             end_line: 14,
@@ -1176,7 +1176,7 @@ mod tests {
                 Some("Model summary".to_string()),
             )
             .expect("compression succeeds");
-        let uri = "bitfun://current-session/artifacts/compression-transcripts/12-a3f9.txt";
+        let uri = "halo://current-session/artifacts/compression-transcripts/12-a3f9.txt";
         let index_range = TranscriptLineRange {
             start_line: 1,
             end_line: 14,

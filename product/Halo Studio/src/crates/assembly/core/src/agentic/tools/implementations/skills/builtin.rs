@@ -1,10 +1,10 @@
-//! Built-in skills shipped with BitFun.
+//! Built-in skills shipped with Halo.
 //!
-//! These skills are embedded into the `bitfun-core` binary and installed into a
+//! These skills are embedded into the `halo-core` binary and installed into a
 //! managed `.system` directory under the user skills root on demand.
 
 use crate::infrastructure::get_path_manager_arc;
-use crate::util::errors::BitFunResult;
+use crate::util::errors::HaloResult;
 use fs2::FileExt;
 use include_dir::{include_dir, Dir};
 use log::{debug, error, warn};
@@ -110,7 +110,7 @@ fn builtin_skills_staging_root(parent: &Path) -> PathBuf {
     ))
 }
 
-async fn read_installed_manifest(root: &Path) -> BitFunResult<Option<BuiltinSkillsManifest>> {
+async fn read_installed_manifest(root: &Path) -> HaloResult<Option<BuiltinSkillsManifest>> {
     let path = builtin_skills_manifest_path(root);
     match fs::read_to_string(&path).await {
         Ok(content) => match serde_json::from_str::<BuiltinSkillsManifest>(&content) {
@@ -129,7 +129,7 @@ async fn read_installed_manifest(root: &Path) -> BitFunResult<Option<BuiltinSkil
     }
 }
 
-async fn write_installed_manifest(root: &Path) -> BitFunResult<()> {
+async fn write_installed_manifest(root: &Path) -> HaloResult<()> {
     let path = builtin_skills_manifest_path(root);
     let manifest = BuiltinSkillsManifest {
         bundle_hash: builtin_skills_bundle_hash().to_string(),
@@ -139,7 +139,7 @@ async fn write_installed_manifest(root: &Path) -> BitFunResult<()> {
     Ok(())
 }
 
-async fn remove_existing_path(path: &Path) -> BitFunResult<()> {
+async fn remove_existing_path(path: &Path) -> HaloResult<()> {
     let Ok(metadata) = fs::symlink_metadata(path).await else {
         return Ok(());
     };
@@ -153,7 +153,7 @@ async fn remove_existing_path(path: &Path) -> BitFunResult<()> {
     Ok(())
 }
 
-async fn cleanup_legacy_builtin_dirs(legacy_root: &Path) -> BitFunResult<()> {
+async fn cleanup_legacy_builtin_dirs(legacy_root: &Path) -> HaloResult<()> {
     for dir_name in builtin_skill_dir_names() {
         let path = legacy_root.join(dir_name);
         remove_existing_path(&path).await?;
@@ -172,13 +172,13 @@ async fn cleanup_legacy_builtin_dirs(legacy_root: &Path) -> BitFunResult<()> {
     Ok(())
 }
 
-async fn acquire_install_lock(legacy_root: &Path) -> BitFunResult<BuiltinSkillsInstallLock> {
+async fn acquire_install_lock(legacy_root: &Path) -> HaloResult<BuiltinSkillsInstallLock> {
     let lock_path = builtin_skills_install_lock_path(legacy_root);
 
     // Use an OS-backed advisory file lock so parallel test processes and app
     // instances serialize built-in skill installation across the shared
     // `.system` directory.
-    let file = task::spawn_blocking(move || -> BitFunResult<std::fs::File> {
+    let file = task::spawn_blocking(move || -> HaloResult<std::fs::File> {
         let file = OpenOptions::new()
             .create(true)
             .truncate(false)
@@ -190,7 +190,7 @@ async fn acquire_install_lock(legacy_root: &Path) -> BitFunResult<BuiltinSkillsI
     })
     .await
     .map_err(|error| {
-        crate::util::errors::BitFunError::io(format!(
+        crate::util::errors::HaloError::io(format!(
             "Failed to join built-in skills install lock task: {}",
             error
         ))
@@ -199,7 +199,7 @@ async fn acquire_install_lock(legacy_root: &Path) -> BitFunResult<BuiltinSkillsI
     Ok(BuiltinSkillsInstallLock { file })
 }
 
-async fn install_builtin_skills_to_staging(staging_root: &Path) -> BitFunResult<(usize, usize)> {
+async fn install_builtin_skills_to_staging(staging_root: &Path) -> HaloResult<(usize, usize)> {
     let mut installed = 0usize;
     let mut updated = 0usize;
 
@@ -218,7 +218,7 @@ async fn install_builtin_skills_to_staging(staging_root: &Path) -> BitFunResult<
     Ok((installed, updated))
 }
 
-pub async fn ensure_builtin_skills_installed() -> BitFunResult<()> {
+pub async fn ensure_builtin_skills_installed() -> HaloResult<()> {
     let pm = get_path_manager_arc();
     let legacy_root = pm.user_skills_dir();
     let dest_root = pm.builtin_skills_dir();
@@ -297,7 +297,7 @@ struct SyncStats {
     updated: usize,
 }
 
-async fn sync_dir(dir: &Dir<'_>, dest_root: &Path) -> BitFunResult<SyncStats> {
+async fn sync_dir(dir: &Dir<'_>, dest_root: &Path) -> HaloResult<SyncStats> {
     let mut files: Vec<&include_dir::File<'_>> = Vec::new();
     collect_files(dir, &mut files);
 
@@ -337,9 +337,9 @@ fn collect_files<'a>(dir: &'a Dir<'a>, out: &mut Vec<&'a include_dir::File<'a>>)
     }
 }
 
-fn safe_join(root: &Path, relative: &Path) -> BitFunResult<PathBuf> {
+fn safe_join(root: &Path, relative: &Path) -> HaloResult<PathBuf> {
     if relative.is_absolute() {
-        return Err(crate::util::errors::BitFunError::validation(format!(
+        return Err(crate::util::errors::HaloError::validation(format!(
             "Unexpected absolute path in built-in skills: {}",
             relative.display()
         )));
@@ -348,7 +348,7 @@ fn safe_join(root: &Path, relative: &Path) -> BitFunResult<PathBuf> {
     // Prevent `..` traversal even though include_dir should only contain clean relative paths.
     for c in relative.components() {
         if matches!(c, std::path::Component::ParentDir) {
-            return Err(crate::util::errors::BitFunError::validation(format!(
+            return Err(crate::util::errors::HaloError::validation(format!(
                 "Unexpected parent dir component in built-in skills path: {}",
                 relative.display()
             )));
@@ -361,7 +361,7 @@ fn safe_join(root: &Path, relative: &Path) -> BitFunResult<PathBuf> {
 async fn desired_file_content(
     file: &include_dir::File<'_>,
     _dest_path: &Path,
-) -> BitFunResult<Vec<u8>> {
+) -> HaloResult<Vec<u8>> {
     Ok(file.contents().to_vec())
 }
 
@@ -410,7 +410,7 @@ mod tests {
                         "{source}/SKILL.md references missing built-in skill {target}/SKILL.md"
                     );
                 }
-                if let Some(target) = token.strip_prefix("user::bitfun-system::") {
+                if let Some(target) = token.strip_prefix("user::halo-system::") {
                     assert!(
                         BUILTIN_SKILLS_DIR.get_dir(target).is_some(),
                         "{source}/SKILL.md references missing stable skill key {token}"
@@ -421,10 +421,10 @@ mod tests {
     }
 
     #[test]
-    fn gstack_does_not_emit_pseudo_bitfun_browser_commands() {
+    fn gstack_does_not_emit_pseudo_halo_browser_commands() {
         const STALE_BROWSER_GUIDANCE: [&str; 5] = [
-            "BitFun browser/computer-use",
-            "BitFun built-in browser/computer-use",
+            "Halo browser/computer-use",
+            "Halo built-in browser/computer-use",
             "external browse binary",
             "use `ComputerUse` for browser inspection",
             "use `ComputerUse` for browser/desktop testing",
@@ -591,14 +591,14 @@ mod tests {
         }
 
         let comment = embedded_skill_text("docx/scripts/comment.py");
-        assert!(comment.contains("author: str = \"BitFun\""));
+        assert!(comment.contains("author: str = \"Halo\""));
         assert!(comment.contains("initials: str = \"B\""));
-        assert!(comment.contains("default=\"BitFun\""));
+        assert!(comment.contains("default=\"Halo\""));
         assert!(comment.contains("default=\"B\""));
 
         let docx_skill = embedded_skill_text("docx/SKILL.md");
         assert!(docx_skill.contains(
-            "Use \"BitFun\" as the author for tracked changes and comments unless the user explicitly requests a different name."
+            "Use \"Halo\" as the author for tracked changes and comments unless the user explicitly requests a different name."
         ));
 
         let xlsx_skill = embedded_skill_text("xlsx/SKILL.md");

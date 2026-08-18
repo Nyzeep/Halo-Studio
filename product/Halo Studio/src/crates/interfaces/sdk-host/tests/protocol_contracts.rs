@@ -1,4 +1,4 @@
-use bitfun_sdk_host::protocol::{
+use halo_sdk_host::protocol::{
     ErrorCode, ErrorData, ErrorStage, HostCapabilities, InitializeParams, InitializeResult,
     JsonRpcErrorResponse, JsonRpcRequest, JsonRpcSuccessResponse, QueryEvent, QueryResultError,
     QueryResultParams, QueryTerminalStatus, RecoveryAction, RequestId, SessionLifetime, Stability,

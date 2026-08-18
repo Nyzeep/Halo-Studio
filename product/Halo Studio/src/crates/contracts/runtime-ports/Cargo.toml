@@ -1,19 +1,19 @@
 [package]
-name = "bitfun-runtime-ports"
+name = "halo-runtime-ports"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Thin runtime ports for BitFun core decomposition"
+description = "Thin runtime ports for Halo core decomposition"
 
 [lib]
-name = "bitfun_runtime_ports"
+name = "halo_runtime_ports"
 crate-type = ["rlib"]
 
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-bitfun-product-domains = { path = "../product-domains", default-features = false, optional = true }
-bitfun-core-types = { path = "../core-types" }
+halo-product-domains = { path = "../product-domains", default-features = false, optional = true }
+halo-core-types = { path = "../core-types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -21,7 +21,7 @@ tokio-util = { workspace = true }
 
 [features]
 default = []
-permission = ["dep:bitfun-product-domains"]
+permission = ["dep:halo-product-domains"]
 
 [dev-dependencies]
 tokio = { workspace = true }

@@ -1,4 +1,4 @@
-use bitfun_product_domains::tool_permissions::{
+use halo_product_domains::tool_permissions::{
     merge_permission_rule_layers, resolve_child_permission_policy, resolve_permission_policy,
     wildcard_matches, ChildPermissionPolicyLayers, PermissionDelegationContext, PermissionEffect,
     PermissionEvaluator, PermissionPolicyConfig, PermissionPolicyLayers, PermissionPolicyPreset,
@@ -110,7 +110,7 @@ fn ask_preset_allows_low_risk_actions_and_keeps_mutations_guarded() {
     for (action, resource) in [
         ("read", "C:/repo/README.md"),
         ("read", "C:/repo/.env.example"),
-        ("websearch", "BitFun permission model"),
+        ("websearch", "Halo permission model"),
         ("webfetch", "https://example.com/docs"),
         ("task", "general"),
         ("task", "send_input:session-1"),

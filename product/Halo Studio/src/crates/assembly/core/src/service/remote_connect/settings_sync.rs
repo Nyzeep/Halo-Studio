@@ -12,7 +12,7 @@
 //!   refresh UI / notify peer controllers.
 //!
 //! The cursor (`version` + content `hash` of the last uploaded/applied blob)
-//! is persisted in `~/.bitfun/account_sync/<user>.settings.json`, separate
+//! is persisted in `~/.halo-studio/account_sync/<user>.settings.json`, separate
 //! from the session sync state, so restarts do not re-apply unchanged blobs
 //! and co-located processes (e.g. CLI daemon + interactive CLI) share one
 //! cursor without racing the session backup writer.
@@ -28,10 +28,10 @@ use anyhow::{anyhow, Result};
 use log::{debug, warn};
 use tokio::sync::{mpsc, Notify};
 
-use bitfun_services_integrations::remote_connect::account::{
+use halo_services_integrations::remote_connect::account::{
     error_indicates_expired_token, AccountClient, AccountSession, SettingsBlob,
 };
-use bitfun_services_integrations::remote_connect::sync_state;
+use halo_services_integrations::remote_connect::sync_state;
 
 /// How often the engine pulls cloud settings.
 pub const SETTINGS_PULL_INTERVAL: Duration = Duration::from_secs(30);

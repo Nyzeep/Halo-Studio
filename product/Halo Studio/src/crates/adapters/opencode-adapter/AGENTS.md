@@ -19,7 +19,7 @@ Product-source boundary:
 - Standard OpenCode Command, standalone Tool, and Subagent config and directories
   are current read-only live sources. Full plugin directories and package specs
   remain target work rather than executable production sources. Source files need
-  no BitFun import. Low-risk declarative results follow the
+  no Halo Studio import. Low-risk declarative results follow the
   user's auto-apply/ask preference; executable sources require a source, plugin,
   and execution-domain
   decision before first import. Broader pre-import execution permissions and
@@ -61,8 +61,8 @@ Product-source boundary:
 
 ## Boundary Rules
 
-- Depend on stable contracts such as `bitfun-runtime-ports` and the
-  `PluginRuntimeAdapter` boundary trait, not `bitfun-core`, app crates, Tauri
+- Depend on stable contracts such as `halo-runtime-ports` and the
+  `PluginRuntimeAdapter` boundary trait, not `halo-core`, app crates, Tauri
   APIs, product UI, or concrete service managers.
 - Keep OpenCode config JSON, source ordering, loader compatibility, and argument
   expansion inside this crate. Cross-crate outputs use typed source snapshots,
@@ -89,21 +89,21 @@ Product-source boundary:
   OpenCode adapter/provider and injects it into PluginRuntimeClient. It does not
   discover dynamic sources, prepare dependencies, or import plugin modules.
 - Product Assembly may consume this crate only from reviewed composition modules
-  such as `bitfun-core/plugin_runtime` or `bitfun-core/external_sources`; boundary
+  such as `halo-core/plugin_runtime` or `halo-core/external_sources`; boundary
   guards and focused assembly-path tests must change with any additional consumer.
 - This crate must not depend on Codex, Claude Code, or another ecosystem adapter.
   New ecosystems are sibling adapters registered by Product Assembly, not modes of
   this adapter.
-- Production crates must not depend on `bitfun_opencode_adapter` internals.
+- Production crates must not depend on `halo_opencode_adapter` internals.
   Unsupported capabilities must return diagnostics or typed unsupported states
   instead of failing at runtime on external plugin content.
 
 ## Verification
 
-- `cargo test -p bitfun-opencode-adapter --test opencode_source_adapter`
-- `cargo test -p bitfun-opencode-adapter --test opencode_command_adapter`
-- `cargo test -p bitfun-opencode-adapter --test tool_source_contracts`
-- `cargo test -p bitfun-opencode-adapter --test opencode_subagent_adapter`
-- `cargo test -p bitfun-opencode-adapter p0_c2_fixture`
-- `cargo test -p bitfun-opencode-adapter client_path_projects_trusted_custom_tool_candidate_with_permission_prompt`
+- `cargo test -p halo-opencode-adapter --test opencode_source_adapter`
+- `cargo test -p halo-opencode-adapter --test opencode_command_adapter`
+- `cargo test -p halo-opencode-adapter --test tool_source_contracts`
+- `cargo test -p halo-opencode-adapter --test opencode_subagent_adapter`
+- `cargo test -p halo-opencode-adapter p0_c2_fixture`
+- `cargo test -p halo-opencode-adapter client_path_projects_trusted_custom_tool_candidate_with_permission_prompt`
 - `node scripts/check-core-boundaries.mjs`

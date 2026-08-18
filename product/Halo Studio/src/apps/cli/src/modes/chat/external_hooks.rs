@@ -106,7 +106,7 @@ fn extension_command_help_request(command_name: &str, arguments: &str) -> Option
             "",
             "Usage: /extensions [status | refresh | safe-mode on | safe-mode off | source enable <source-key> | source disable <source-key>]",
             "",
-            "Shows external AI application sources and controls BitFun Safe Mode. Source files remain owned by their native application.",
+            "Shows external AI application sources and controls Halo Safe Mode. Source files remain owned by their native application.",
             "",
             "Help: /help extensions, /extensions -h, or /extensions --help",
         ].join("\n")),
@@ -115,7 +115,7 @@ fn extension_command_help_request(command_name: &str, arguments: &str) -> Option
             "",
             "Usage: /tools [refresh | enable <number> | disable <number> | choose <conflict-number> <choice-number>]",
             "",
-            "Shows BitFun, MCP, and compatible external tool sources. Activation and conflicts remain guarded by BitFun policy.",
+            "Shows Halo, MCP, and compatible external tool sources. Activation and conflicts remain guarded by Halo policy.",
             "",
             "Help: /help tools, /tools -h, or /tools --help",
         ].join("\n")),
@@ -146,7 +146,7 @@ fn extension_command_help_request(command_name: &str, arguments: &str) -> Option
 fn render_external_hook_catalog(snapshot: &ExternalHookCatalogSnapshotV1) -> String {
     let mut lines = vec![
         "Available external Hook sources".to_string(),
-        "Discovery is read-only. Review an exact import plan before BitFun copies or enables anything."
+        "Discovery is read-only. Review an exact import plan before Halo copies or enables anything."
             .to_string(),
         String::new(),
     ];
@@ -332,7 +332,7 @@ fn matcher_label(matcher: &ExternalHookMatcherSummary) -> String {
     }
 }
 
-fn projection_label(entry: &bitfun_core::external_hooks::ExternalHookCatalogEntry) -> &'static str {
+fn projection_label(entry: &halo_core::external_hooks::ExternalHookCatalogEntry) -> &'static str {
     match entry.projection_status {
         ExternalHookProjectionStatus::Mapped => match entry
             .mapping
@@ -340,11 +340,11 @@ fn projection_label(entry: &bitfun_core::external_hooks::ExternalHookCatalogEntr
             .map(|mapping| mapping.hook_point)
         {
             Some(
-                bitfun_product_domains::external_hook_contributions::ExternalHookPoint::ToolBefore,
-            ) => "coverage mapped: BitFun tool before",
+                halo_product_domains::external_hook_contributions::ExternalHookPoint::ToolBefore,
+            ) => "coverage mapped: Halo tool before",
             Some(
-                bitfun_product_domains::external_hook_contributions::ExternalHookPoint::ToolAfter,
-            ) => "coverage mapped: BitFun tool after",
+                halo_product_domains::external_hook_contributions::ExternalHookPoint::ToolAfter,
+            ) => "coverage mapped: Halo tool after",
             None => "invalid mapping",
         },
         ExternalHookProjectionStatus::NativeOnly => "native only",
@@ -381,8 +381,8 @@ fn source_health_label(health: ExternalSourceHealth) -> &'static str {
     }
 }
 
-fn hook_handler_label(kind: bitfun_core::external_hooks::ExternalHookHandlerKind) -> &'static str {
-    use bitfun_core::external_hooks::ExternalHookHandlerKind;
+fn hook_handler_label(kind: halo_core::external_hooks::ExternalHookHandlerKind) -> &'static str {
+    use halo_core::external_hooks::ExternalHookHandlerKind;
     match kind {
         ExternalHookHandlerKind::Function => "function",
         ExternalHookHandlerKind::Command => "command",
@@ -464,7 +464,7 @@ impl ChatMode {
                 self.spawn_hook_management(
                     async move {
                         let imports =
-                            bitfun_core::external_hook_import::external_hook_import_snapshot(
+                            halo_core::external_hook_import::external_hook_import_snapshot(
                                 Some(workspace_root.as_path()),
                                 refresh,
                             )
@@ -591,7 +591,7 @@ impl ChatMode {
         if !confirm {
             self.spawn_hook_management(
                 async move {
-                    bitfun_core::external_hook_import::plan_external_hook_import(
+                    halo_core::external_hook_import::plan_external_hook_import(
                         Some(workspace_root.as_path()),
                         source,
                     )
@@ -618,7 +618,7 @@ impl ChatMode {
         };
         self.spawn_hook_management(
             async move {
-                let result = bitfun_core::external_hook_import::apply_external_hook_import(
+                let result = halo_core::external_hook_import::apply_external_hook_import(
                     Some(workspace_root.as_path()),
                     ExternalHookImportApplyRequestV1 {
                         schema_version: EXTERNAL_HOOK_IMPORT_SCHEMA_V1,
@@ -656,7 +656,7 @@ impl ChatMode {
         &'a self,
         number: usize,
         chat_state: &mut ChatState,
-    ) -> Option<&'a bitfun_product_domains::external_hook_import::ImportedHookSourceSnapshotV1>
+    ) -> Option<&'a halo_product_domains::external_hook_import::ImportedHookSourceSnapshotV1>
     {
         let Some(snapshot) = &self.hook_management_snapshot else {
             chat_state.add_system_message("Run /hooks first to load imported sources.".to_string());
@@ -702,7 +702,7 @@ impl ChatMode {
                 let native = native_hook_overview(Some(workspace_root.as_path())).await;
                 let status = if remove {
                     format!(
-                        "Removed BitFun's managed copy of {import_id}; the source was unchanged."
+                        "Removed Halo's managed copy of {import_id}; the source was unchanged."
                     )
                 } else if enabled {
                     format!("Enabled {import_id} for the next matching event.")
@@ -784,7 +784,7 @@ impl ChatMode {
         F: std::future::Future<
                 Output = std::result::Result<
                     HookManagementResult,
-                    bitfun_core::external_sources::ExternalSourceOperationError,
+                    halo_core::external_sources::ExternalSourceOperationError,
                 >,
             > + Send
             + 'static,
@@ -847,7 +847,7 @@ impl ChatMode {
             }
             Err(error)
                 if error.code
-                    == bitfun_core::external_sources::ExternalSourceOperationErrorCode::StaleRevision =>
+                    == halo_core::external_sources::ExternalSourceOperationErrorCode::StaleRevision =>
             {
                 chat_state.add_system_message(
                     "Hook import state changed; the action was not applied. Run /hooks to refresh, review the new state, and try again."

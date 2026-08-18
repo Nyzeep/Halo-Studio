@@ -2,13 +2,13 @@ use std::collections::{HashSet, VecDeque};
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Context, Result};
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     AgentDialogTurnRequest, AgentSessionCreateRequest, AgentTurnCancellationRequest,
     AgentTurnSettlementRequest, PermissionReply, PermissionReplySource, PermissionRequest,
     PermissionRequestEvent,
 };
-use bitfun_events::{project_agentic_frontend_event, AgenticEvent};
-use bitfun_runtime_ports::{AgentSubmissionSource, DialogSubmissionPolicy, SessionExecutionTarget};
+use halo_events::{project_agentic_frontend_event, AgenticEvent};
+use halo_runtime_ports::{AgentSubmissionSource, DialogSubmissionPolicy, SessionExecutionTarget};
 
 use crate::{shutdown_mcp_servers, BootstrapProfile};
 
@@ -282,7 +282,7 @@ async fn run_inner(store: &DispatchStore, job_id: &str) -> Result<()> {
 async fn reject_permission(
     store: &DispatchStore,
     job_id: &str,
-    runtime: &bitfun_agent_runtime::sdk::AgentRuntime,
+    runtime: &halo_agent_runtime::sdk::AgentRuntime,
     session_id: &str,
     turn_id: &str,
     request: PermissionRequest,
@@ -318,7 +318,7 @@ async fn reject_permission(
 }
 
 async fn cancel_turn(
-    runtime: &bitfun_agent_runtime::sdk::AgentRuntime,
+    runtime: &halo_agent_runtime::sdk::AgentRuntime,
     session_id: &str,
     turn_id: &str,
     reason: &str,

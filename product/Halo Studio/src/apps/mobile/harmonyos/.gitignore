@@ -14,11 +14,11 @@
 /.appanalyzer
 
 # Local emulator verification artifacts
-/bitfun_*.jpeg
-/bitfun_*_layout.json
-/bitfun_layout*.json
-.bitfun/
-/.bitfun/search/flashgrep-index/
+/halo_*.jpeg
+/halo_*_layout.json
+/halo_layout*.json
+.halo-studio/
+/.halo-studio/search/flashgrep-index/
 
 # Signing credentials and installable artifacts
 /signing.local.json5

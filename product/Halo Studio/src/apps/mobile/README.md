@@ -1,6 +1,6 @@
-# BitFun Native Mobile Apps
+# Halo Studio Native Mobile Apps
 
-This directory contains the native mobile product surfaces for BitFun:
+This directory contains the native mobile product surfaces for Halo Studio:
 
 - `android/`: Android application code and resources.
 - `ios/`: iOS application code and resources.

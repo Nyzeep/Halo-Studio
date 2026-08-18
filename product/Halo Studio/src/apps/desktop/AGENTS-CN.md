@@ -39,9 +39,9 @@ crate；`src/crates/assembly/core` 只保留产品装配与兼容桥接。
 ```bash
 pnpm run desktop:dev
 pnpm run desktop:preview:debug
-cargo check -p bitfun-desktop
-cargo test -p bitfun-desktop
-cargo build -p bitfun-desktop
+cargo check -p halo-desktop
+cargo test -p halo-desktop
+cargo build -p halo-desktop
 pnpm run desktop:build:fast
 ```
 
@@ -55,7 +55,7 @@ pnpm run desktop:build:fast
 
 ## Target 缓存 GC
 
-`desktop:dev`（退出时）、`desktop:preview:debug`（关闭时）以及 `desktop:build*` 会裁剪过期的 `target/<profile>/incremental`（每个 crate 只留最新根）以及已无对应 `.fingerprint` 的孤儿 `deps`。**不会**按 mtime 删除 fingerprint（否则下次 `desktop:dev` 会冷编译）。手动执行：`pnpm run target:gc -- --profile debug`。禁用：`BITFUN_TARGET_GC=0`；演练：`BITFUN_TARGET_GC_DRY_RUN=1`。
+`desktop:dev`（退出时）、`desktop:preview:debug`（关闭时）以及 `desktop:build*` 会裁剪过期的 `target/<profile>/incremental`（每个 crate 只留最新根）以及已无对应 `.fingerprint` 的孤儿 `deps`。**不会**按 mtime 删除 fingerprint（否则下次 `desktop:dev` 会冷编译）。手动执行：`pnpm run target:gc -- --profile debug`。禁用：`HALO_TARGET_GC=0`；演练：`HALO_TARGET_GC_DRY_RUN=1`。
 
 `release-fast` profile（`Cargo.toml`）：继承 `release`，但关闭 LTO、`codegen-units` 提高到 16、启用增量编译。编译速度显著提升，代价是二进制体积增大和边际运行时性能下降。
 
@@ -71,11 +71,11 @@ pnpm run desktop:build:fast
 ## 验证
 
 ```bash
-cargo check -p bitfun-desktop && cargo test -p bitfun-desktop
+cargo check -p halo-desktop && cargo test -p halo-desktop
 ```
 
 如果改动影响启动、WebDriver、browser/computer-use 或打包行为，还需要运行：
 
 ```bash
-cargo build -p bitfun-desktop
+cargo build -p halo-desktop
 ```

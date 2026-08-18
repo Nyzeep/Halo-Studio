@@ -1,5 +1,5 @@
-use bitfun_external_sources::ExternalMcpCoordinator;
-use bitfun_product_domains::external_sources::{
+use halo_external_sources::ExternalMcpCoordinator;
+use halo_product_domains::external_sources::{
     EcosystemId, ExecutionDomainId, ExternalMcpDiscoveryInput, ExternalMcpProviderIdentity,
     ExternalMcpProviderSnapshot, ExternalMcpRevisionKey, ExternalMcpServerDefinition,
     ExternalMcpSourceProvider, ExternalMcpStaticStatus, ExternalMcpTransportKind,

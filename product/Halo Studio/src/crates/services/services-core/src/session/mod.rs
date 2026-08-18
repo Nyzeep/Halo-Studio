@@ -8,7 +8,7 @@ pub mod page;
 pub mod types;
 mod write_lock;
 
-pub use bitfun_core_types::SessionKind;
+pub use halo_core_types::SessionKind;
 pub use layout::SessionStorageLayout;
 pub use lineage::{
     apply_session_lineage, build_branched_session_metadata, collect_hidden_subagent_cascade,

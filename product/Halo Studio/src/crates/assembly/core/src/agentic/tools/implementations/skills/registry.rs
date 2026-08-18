@@ -10,16 +10,16 @@ use super::mode_overrides::{
 use super::types::{ModeSkillInfo, SkillData, SkillInfo, SkillLocation};
 use crate::agentic::workspace::WorkspaceFileSystem;
 use crate::infrastructure::get_path_manager_arc;
-use crate::util::errors::{BitFunError, BitFunResult};
-use bitfun_agent_runtime::skills::{
+use crate::util::errors::{HaloError, HaloResult};
+use halo_agent_runtime::skills::{
     annotate_shadowed_skills, build_mode_skill_infos, filter_candidates_for_mode,
     filter_implicitly_invocable_skills, is_skill_globally_enabled, normalize_local_skill_dir_name,
     normalize_remote_skill_dir_name, normalize_skill_keys,
     resolve_default_hidden_builtin_for_explicit_invocation, resolve_user_config_skill_root,
     resolve_visible_skills, sort_skill_candidates_by_dir, sort_skills,
-    ExplicitSkillInvocationResolution, SkillCandidate, BITFUN_SKILL_SOURCE_ID,
-    BITFUN_SKILL_SOURCE_LABEL, BITFUN_SYSTEM_SKILL_DIR, BITFUN_SYSTEM_SKILL_SLOT,
-    BITFUN_USER_SKILL_SLOT, PROJECT_SKILL_KEY_PREFIX, PROJECT_SKILL_ROOTS, USER_CONFIG_SKILL_ROOTS,
+    ExplicitSkillInvocationResolution, SkillCandidate, HALO_SKILL_SOURCE_ID,
+    HALO_SKILL_SOURCE_LABEL, HALO_SYSTEM_SKILL_DIR, HALO_SYSTEM_SKILL_SLOT,
+    HALO_USER_SKILL_SLOT, PROJECT_SKILL_KEY_PREFIX, PROJECT_SKILL_ROOTS, USER_CONFIG_SKILL_ROOTS,
     USER_HOME_SKILL_ROOTS, USER_SKILL_KEY_PREFIX,
 };
 use log::{debug, error, warn};
@@ -211,18 +211,18 @@ impl SkillRegistry {
             }
         }
 
-        // BitFun's own user-defined skills sit between most home slots and config slots.
+        // Halo's own user-defined skills sit between most home slots and config slots.
         // This lets other agent directories (e.g. ~/.claude/skills) take precedence
-        // while still keeping config-level overrides after BitFun defaults.
+        // while still keeping config-level overrides after Halo defaults.
         let path_manager = get_path_manager_arc();
-        let bitfun_skills = path_manager.user_skills_dir();
-        if bitfun_skills.exists() && bitfun_skills.is_dir() {
+        let halo_skills = path_manager.user_skills_dir();
+        if halo_skills.exists() && halo_skills.is_dir() {
             entries.push(SkillRootEntry {
-                path: bitfun_skills,
+                path: halo_skills,
                 level: SkillLocation::User,
-                slot: BITFUN_USER_SKILL_SLOT,
-                source_id: BITFUN_SKILL_SOURCE_ID,
-                source_label: BITFUN_SKILL_SOURCE_LABEL,
+                slot: HALO_USER_SKILL_SLOT,
+                source_id: HALO_SKILL_SOURCE_ID,
+                source_label: HALO_SKILL_SOURCE_LABEL,
                 priority,
                 is_builtin: false,
             });
@@ -234,9 +234,9 @@ impl SkillRegistry {
             entries.push(SkillRootEntry {
                 path: builtin_skills,
                 level: SkillLocation::User,
-                slot: BITFUN_SYSTEM_SKILL_SLOT,
-                source_id: BITFUN_SKILL_SOURCE_ID,
-                source_label: BITFUN_SKILL_SOURCE_LABEL,
+                slot: HALO_SYSTEM_SKILL_SLOT,
+                source_id: HALO_SKILL_SOURCE_ID,
+                source_label: HALO_SKILL_SOURCE_LABEL,
                 priority,
                 is_builtin: true,
             });
@@ -299,7 +299,7 @@ impl SkillRegistry {
                 continue;
             };
 
-            if entry.slot == BITFUN_USER_SKILL_SLOT && dir_name == BITFUN_SYSTEM_SKILL_DIR {
+            if entry.slot == HALO_USER_SKILL_SLOT && dir_name == HALO_SYSTEM_SKILL_DIR {
                 continue;
             }
 
@@ -505,17 +505,17 @@ impl SkillRegistry {
         skill_name: &str,
         candidates: Vec<SkillCandidate>,
         agent_type: Option<&str>,
-    ) -> BitFunResult<SkillInfo> {
+    ) -> HaloResult<SkillInfo> {
         match resolve_default_hidden_builtin_for_explicit_invocation(
             skill_name, candidates, agent_type,
         ) {
             ExplicitSkillInvocationResolution::Found(info) => Ok(info),
-            ExplicitSkillInvocationResolution::NotFound => Err(BitFunError::tool(format!(
+            ExplicitSkillInvocationResolution::NotFound => Err(HaloError::tool(format!(
                 "Skill '{}' not found",
                 skill_name
             ))),
             ExplicitSkillInvocationResolution::DisabledForMode { mode_id } => {
-                Err(BitFunError::tool(format!(
+                Err(HaloError::tool(format!(
                     "Skill '{}' is disabled for mode '{}'. Enable it in mode skill settings or switch to a mode where it is enabled.",
                     skill_name, mode_id
                 )))
@@ -528,7 +528,7 @@ impl SkillRegistry {
         skill_name: &str,
         workspace_root: Option<&Path>,
         agent_type: Option<&str>,
-    ) -> BitFunResult<SkillInfo> {
+    ) -> HaloResult<SkillInfo> {
         let candidates = self
             .scan_skill_candidates_for_workspace(workspace_root)
             .await;
@@ -556,7 +556,7 @@ impl SkillRegistry {
         fs: &dyn WorkspaceFileSystem,
         remote_root: &str,
         agent_type: Option<&str>,
-    ) -> BitFunResult<SkillInfo> {
+    ) -> HaloResult<SkillInfo> {
         let candidates = self
             .scan_skill_candidates_for_remote_workspace(fs, remote_root)
             .await;
@@ -782,7 +782,7 @@ impl SkillRegistry {
         skill_name: &str,
         workspace_root: Option<&Path>,
         agent_type: Option<&str>,
-    ) -> BitFunResult<SkillData> {
+    ) -> HaloResult<SkillData> {
         let info = self
             .find_skill_info_for_explicit_invocation_workspace(
                 skill_name,
@@ -794,10 +794,10 @@ impl SkillRegistry {
         let skill_md_path = PathBuf::from(&info.path).join("SKILL.md");
         let content = fs::read_to_string(&skill_md_path)
             .await
-            .map_err(|error| BitFunError::tool(format!("Failed to read skill file: {}", error)))?;
+            .map_err(|error| HaloError::tool(format!("Failed to read skill file: {}", error)))?;
 
         let mut data = SkillData::from_markdown(info.path.clone(), &content, info.level, true)
-            .map_err(|error| BitFunError::tool(error.to_string()))?;
+            .map_err(|error| HaloError::tool(error.to_string()))?;
         data.key = info.key;
         data.source_slot = info.source_slot;
         data.dir_name = info.dir_name;
@@ -809,7 +809,7 @@ impl SkillRegistry {
         skill_key: &str,
         workspace_root: Option<&Path>,
         agent_type: Option<&str>,
-    ) -> BitFunResult<SkillData> {
+    ) -> HaloResult<SkillData> {
         let candidates = self
             .scan_skill_candidates_for_workspace(workspace_root)
             .await;
@@ -821,7 +821,7 @@ impl SkillRegistry {
             .map(|candidate| candidate.info)
             .find(|skill| skill.key == skill_key)
             .ok_or_else(|| {
-                BitFunError::tool(format!(
+                HaloError::tool(format!(
                     "Skill key '{}' was not found or is disabled for this mode",
                     skill_key
                 ))
@@ -830,10 +830,10 @@ impl SkillRegistry {
         let skill_md_path = PathBuf::from(&info.path).join("SKILL.md");
         let content = fs::read_to_string(&skill_md_path)
             .await
-            .map_err(|error| BitFunError::tool(format!("Failed to read skill file: {}", error)))?;
+            .map_err(|error| HaloError::tool(format!("Failed to read skill file: {}", error)))?;
 
         let mut data = SkillData::from_markdown(info.path.clone(), &content, info.level, true)
-            .map_err(|error| BitFunError::tool(error.to_string()))?;
+            .map_err(|error| HaloError::tool(error.to_string()))?;
         data.key = info.key;
         data.source_slot = info.source_slot;
         data.dir_name = info.dir_name;
@@ -846,7 +846,7 @@ impl SkillRegistry {
         fs: &dyn WorkspaceFileSystem,
         remote_root: &str,
         agent_type: Option<&str>,
-    ) -> BitFunResult<SkillData> {
+    ) -> HaloResult<SkillData> {
         let info = self
             .find_skill_info_for_explicit_invocation_remote_workspace(
                 skill_name,
@@ -858,7 +858,7 @@ impl SkillRegistry {
 
         let content = Self::read_skill_md_for_remote_merge(&info, fs).await?;
         let mut data = SkillData::from_markdown(info.path.clone(), &content, info.level, true)
-            .map_err(|error| BitFunError::tool(error.to_string()))?;
+            .map_err(|error| HaloError::tool(error.to_string()))?;
         data.key = info.key;
         data.source_slot = info.source_slot;
         data.dir_name = info.dir_name;
@@ -871,7 +871,7 @@ impl SkillRegistry {
         fs: &dyn WorkspaceFileSystem,
         remote_root: &str,
         agent_type: Option<&str>,
-    ) -> BitFunResult<SkillData> {
+    ) -> HaloResult<SkillData> {
         let candidates = self
             .scan_skill_candidates_for_remote_workspace(fs, remote_root)
             .await;
@@ -883,7 +883,7 @@ impl SkillRegistry {
             .map(|candidate| candidate.info)
             .find(|skill| skill.key == skill_key)
             .ok_or_else(|| {
-                BitFunError::tool(format!(
+                HaloError::tool(format!(
                     "Skill key '{}' was not found or is disabled for this mode",
                     skill_key
                 ))
@@ -891,7 +891,7 @@ impl SkillRegistry {
 
         let content = Self::read_skill_md_for_remote_merge(&info, fs).await?;
         let mut data = SkillData::from_markdown(info.path.clone(), &content, info.level, true)
-            .map_err(|error| BitFunError::tool(error.to_string()))?;
+            .map_err(|error| HaloError::tool(error.to_string()))?;
         data.key = info.key;
         data.source_slot = info.source_slot;
         data.dir_name = info.dir_name;
@@ -926,12 +926,12 @@ impl SkillRegistry {
     async fn read_skill_md_for_remote_merge(
         info: &SkillInfo,
         remote_fs: &dyn WorkspaceFileSystem,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         match info.level {
             SkillLocation::User => {
                 let skill_md_path = PathBuf::from(&info.path).join("SKILL.md");
                 fs::read_to_string(&skill_md_path).await.map_err(|error| {
-                    BitFunError::tool(format!("Failed to read skill file: {}", error))
+                    HaloError::tool(format!("Failed to read skill file: {}", error))
                 })
             }
             SkillLocation::Project => {
@@ -940,7 +940,7 @@ impl SkillRegistry {
                     .read_file_text(&skill_md_path)
                     .await
                     .map_err(|error| {
-                        BitFunError::tool(format!("Failed to read skill file: {}", error))
+                        HaloError::tool(format!("Failed to read skill file: {}", error))
                     })
             }
         }

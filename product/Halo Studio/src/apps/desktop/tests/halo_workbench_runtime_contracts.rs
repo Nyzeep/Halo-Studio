@@ -1,10 +1,10 @@
 use std::collections::BTreeSet;
 
-use bitfun_agent_runtime::halo_workbench::{
+use halo_agent_runtime::halo_workbench::{
     HaloWorkbenchAdapterSnapshot, HaloWorkbenchEvent, HaloWorkbenchEventKind, HaloWorkbenchPhase,
     HaloWorkbenchSnapshot,
 };
-use bitfun_desktop_lib::api::remote_workspace_policy::{
+use halo_desktop_lib::api::remote_workspace_policy::{
     remote_workspace_policy, RemoteWorkspacePolicy,
 };
 
@@ -199,7 +199,7 @@ fn halo_build_excludes_legacy_execution_authorities() {
     let app_state = include_str!("../src/api/app_state.rs");
     for entry in [
         "MCPService::new(config_service.clone())",
-        "bitfun_acp::AcpClientService::new(config_service.clone(), path_manager.clone())",
+        "halo_acp::AcpClientService::new(config_service.clone(), path_manager.clone())",
     ] {
         let offset = app_state
             .find(entry)

@@ -1,6 +1,6 @@
-# BitFun Server (Web App Backend)
+# Halo Studio Server (Web App Backend)
 
-This directory contains the `bitfun-server` application, which serves the web backend runtime for BitFun.
+This directory contains the `halo-server` application, which serves the web backend runtime for Halo Studio.
 
 If you are looking for **Remote Connect self-hosted relay deployment**, use:
 

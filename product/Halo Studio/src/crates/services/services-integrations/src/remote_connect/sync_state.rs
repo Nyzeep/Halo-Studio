@@ -1,7 +1,7 @@
 //! Local account sync cursors and upload content hashes.
 //!
-//! Persists per-user state under `<BITFUN_HOME>/account_sync/` (normally
-//! `~/.bitfun/account_sync/`) so incremental
+//! Persists per-user state under `<HALO_HOME>/account_sync/` (normally
+//! `~/.halo-studio/account_sync/`) so incremental
 //! `?since=` pulls and upload dedupe survive app restarts. Not secret —
 //! hashes are of plaintext session bundles; cursors are relay version ints.
 //!
@@ -47,8 +47,8 @@ pub fn content_hash(plaintext: &str) -> String {
 }
 
 fn sync_dir() -> Result<PathBuf> {
-    let home = super::bitfun_home_dir()
-        .ok_or_else(|| anyhow!("cannot determine BitFun home directory"))?;
+    let home = super::halo_home_dir()
+        .ok_or_else(|| anyhow!("cannot determine Halo home directory"))?;
     Ok(home.join("account_sync"))
 }
 

@@ -4,12 +4,12 @@ import { RemoteI18n } from '../../i18n/RemoteI18n';
 import { Encoding } from '../Encoding';
 import { GeneralChatTokenProvider } from './GeneralChatHttpTransport';
 
-const STORE_NAME = 'bitfun_general_chat_config';
+const STORE_NAME = 'halo_general_chat_config';
 const API_URL_KEY = 'api_url';
 const MODEL_NAME_KEY = 'model_name';
 const API_KEY_CIPHER_KEY = 'api_key_cipher';
 const API_KEY_IV_KEY = 'api_key_iv';
-const HUKS_ALIAS = 'bitfun_general_chat_api_key';
+const HUKS_ALIAS = 'halo_general_chat_api_key';
 
 export interface GeneralChatConfigSnapshot {
   apiUrl: string;

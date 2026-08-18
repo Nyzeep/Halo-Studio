@@ -5,7 +5,7 @@
 use super::types::ToolTask;
 use crate::agentic::core::ToolExecutionState;
 use crate::agentic::events::AgenticEvent;
-use bitfun_agent_stream::StreamEventSink;
+use halo_agent_stream::StreamEventSink;
 use dashmap::DashMap;
 use log::debug;
 use std::sync::Arc;
@@ -223,7 +223,7 @@ impl ToolStateManager {
             },
         };
         let tool_event = tool_state_event_data(ToolStateEventFacts {
-            identity: bitfun_events::ToolEventIdentity::resolved(
+            identity: halo_events::ToolEventIdentity::resolved(
                 task.tool_call.tool_id.clone(),
                 task.invocation.wire_tool_name.clone(),
                 task.effective_tool_name().to_string(),
@@ -281,7 +281,7 @@ mod tests {
         async fn enqueue(
             &self,
             event: AgenticEvent,
-            _priority: Option<bitfun_events::AgenticEventPriority>,
+            _priority: Option<halo_events::AgenticEventPriority>,
         ) {
             self.events.lock().await.push(event);
         }
@@ -297,7 +297,7 @@ mod tests {
         async fn enqueue(
             &self,
             _event: AgenticEvent,
-            _priority: Option<bitfun_events::AgenticEventPriority>,
+            _priority: Option<halo_events::AgenticEventPriority>,
         ) {
             self.started.notify_one();
             self.release.notified().await;
@@ -328,7 +328,7 @@ mod tests {
                 context_vars: HashMap::new(),
                 subagent_parent_info: None,
                 permission_delegation: None,
-                delegation_policy: bitfun_runtime_ports::DelegationPolicy::top_level(),
+                delegation_policy: halo_runtime_ports::DelegationPolicy::top_level(),
                 deferred_tools: Vec::new(),
                 loaded_deferred_tool_specs: Vec::new(),
                 allowed_tools: Vec::new(),
@@ -391,10 +391,10 @@ mod tests {
             "args": { "name": "Plan" }
         });
         let mut task = test_task("tool-1");
-        task.tool_call.tool_name = bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME.to_string();
+        task.tool_call.tool_name = halo_agent_tools::CALL_DEFERRED_TOOL_NAME.to_string();
         task.tool_call.arguments = wire_arguments.clone();
-        task.invocation = bitfun_agent_tools::ResolvedToolInvocation::from_wire_call(
-            bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME,
+        task.invocation = halo_agent_tools::ResolvedToolInvocation::from_wire_call(
+            halo_agent_tools::CALL_DEFERRED_TOOL_NAME,
             wire_arguments.clone(),
         )
         .expect("valid deferred invocation");
@@ -415,7 +415,7 @@ mod tests {
         let events = sink.events.lock().await;
         let AgenticEvent::ToolEvent {
             tool_event:
-                bitfun_events::ToolEventData::Started {
+                halo_events::ToolEventData::Started {
                     identity, params, ..
                 },
             ..
@@ -425,7 +425,7 @@ mod tests {
         };
         assert_eq!(
             identity.tool_name,
-            bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME
+            halo_agent_tools::CALL_DEFERRED_TOOL_NAME
         );
         assert_eq!(identity.effective_name(), "CreatePlan");
         assert_eq!(params, &wire_arguments);

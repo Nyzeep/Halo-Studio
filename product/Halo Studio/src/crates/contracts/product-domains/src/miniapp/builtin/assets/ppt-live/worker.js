@@ -1,2 +1,2 @@
-// PPT Live uses BitFun host primitives directly and does not require a Node worker.
+// PPT Live uses Halo host primitives directly and does not require a Node worker.
 export {};

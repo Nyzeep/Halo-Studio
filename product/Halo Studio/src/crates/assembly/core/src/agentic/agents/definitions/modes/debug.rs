@@ -13,9 +13,9 @@ use crate::agentic::agents::{
 };
 use crate::service::config::global::GlobalConfigManager;
 use crate::service::config::types::{DebugModeConfig, LanguageDebugTemplate};
-use crate::util::errors::BitFunResult;
+use crate::util::errors::HaloResult;
 use async_trait::async_trait;
-use bitfun_services_core::lsp::project_detector::{ProjectDetector, ProjectInfo};
+use halo_services_core::lsp::project_detector::{ProjectDetector, ProjectInfo};
 use log::debug;
 use std::path::Path;
 
@@ -57,11 +57,11 @@ impl DebugMode {
         ProjectDetector::detect(path).await.unwrap_or_default()
     }
 
-    fn load_reminder_template(&self, template_name: &str) -> BitFunResult<String> {
+    fn load_reminder_template(&self, template_name: &str) -> HaloResult<String> {
         get_embedded_prompt(template_name)
             .map(str::to_string)
             .ok_or_else(|| {
-                crate::util::errors::BitFunError::Agent(format!(
+                crate::util::errors::HaloError::Agent(format!(
                     "{} not found in embedded files",
                     template_name
                 ))
@@ -237,7 +237,7 @@ Use these exact values when inserting instrumentation code. The server automatic
     }
 
     /// Builds the ongoing reminder appended after each dialog turn while staying in Debug mode.
-    fn build_ongoing_reminder(&self) -> BitFunResult<String> {
+    fn build_ongoing_reminder(&self) -> HaloResult<String> {
         self.load_reminder_template(DEBUG_MODE_ONGOING_REMINDER_TEMPLATE)
     }
 
@@ -246,7 +246,7 @@ Use these exact values when inserting instrumentation code. The server automatic
         debug_config: &DebugModeConfig,
         project_info: &ProjectInfo,
         workspace_path: &str,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let reminder_template =
             self.load_reminder_template(DEBUG_MODE_FIRST_ENTRY_REMINDER_TEMPLATE)?;
 
@@ -349,7 +349,7 @@ impl Agent for DebugMode {
         &self,
         previous_agent_type: Option<&str>,
         workspace: Option<&crate::agentic::WorkspaceBinding>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         if previous_agent_type == Some(self.id()) {
             return self.build_ongoing_reminder();
         }

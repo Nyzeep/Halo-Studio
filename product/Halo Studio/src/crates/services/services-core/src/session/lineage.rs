@@ -3,7 +3,7 @@
 use super::types::{
     DialogTurnData, SessionMetadata, SessionRelationship, SessionRelationshipKind, SessionStatus,
 };
-use bitfun_core_types::SessionKind;
+use halo_core_types::SessionKind;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::collections::{HashMap, HashSet};

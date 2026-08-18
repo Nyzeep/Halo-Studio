@@ -1,1 +1,1 @@
-pub use bitfun_services_core::markdown::FrontMatterMarkdown;
+pub use halo_services_core::markdown::FrontMatterMarkdown;

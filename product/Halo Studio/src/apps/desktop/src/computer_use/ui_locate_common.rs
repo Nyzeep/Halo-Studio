@@ -1,10 +1,10 @@
 //! Shared validation, filter matching, and global→native pixel mapping for UI locate tools.
 
-use bitfun_core::agentic::tools::computer_use_host::{UiElementLocateQuery, UiElementLocateResult};
-use bitfun_core::util::errors::{BitFunError, BitFunResult};
+use halo_core::agentic::tools::computer_use_host::{UiElementLocateQuery, UiElementLocateResult};
+use halo_core::util::errors::{HaloError, HaloResult};
 use screenshots::display_info::DisplayInfo;
 
-pub(super) fn validate_query(q: &UiElementLocateQuery) -> BitFunResult<()> {
+pub(super) fn validate_query(q: &UiElementLocateQuery) -> HaloResult<()> {
     // node_idx alone is enough: it short-circuits BFS via the per-pid AX cache.
     if q.node_idx.is_some() {
         return Ok(());
@@ -30,7 +30,7 @@ pub(super) fn validate_query(q: &UiElementLocateQuery) -> BitFunResult<()> {
         .map(|s| !s.trim().is_empty())
         .unwrap_or(false);
     if !t && !tx && !r && !i {
-        return Err(BitFunError::tool(
+        return Err(HaloError::tool(
             "Provide at least one of: node_idx, text_contains, title_contains, role_substring, identifier_contains (non-empty)."
                 .to_string(),
         ));
@@ -51,7 +51,7 @@ pub(super) struct NodeAttrs<'a> {
     pub help: Option<&'a str>,
 }
 
-fn global_xy_to_native_with_display(d: &DisplayInfo, gx: f64, gy: f64) -> BitFunResult<(u32, u32)> {
+fn global_xy_to_native_with_display(d: &DisplayInfo, gx: f64, gy: f64) -> HaloResult<(u32, u32)> {
     // Phase 1 fix: `DisplayInfo.width / height` are **logical** points, and
     // `scale_factor` is the device pixel ratio (2.0 on Retina, 1.5/1.75 on
     // Windows mixed-DPI, etc.). The screenshot we hand to the model is
@@ -68,7 +68,7 @@ fn global_xy_to_native_with_display(d: &DisplayInfo, gx: f64, gy: f64) -> BitFun
     let disp_w = d.width as f64;
     let disp_h = d.height as f64;
     if disp_w <= 0.0 || disp_h <= 0.0 || d.width == 0 || d.height == 0 {
-        return Err(BitFunError::tool(
+        return Err(HaloError::tool(
             "Invalid display geometry for UI locate mapping.".to_string(),
         ));
     }
@@ -86,9 +86,9 @@ fn global_xy_to_native_with_display(d: &DisplayInfo, gx: f64, gy: f64) -> BitFun
     Ok((nx, ny))
 }
 
-fn global_to_native_center(gx: f64, gy: f64) -> BitFunResult<(u32, u32)> {
+fn global_to_native_center(gx: f64, gy: f64) -> HaloResult<(u32, u32)> {
     let d = DisplayInfo::from_point(gx.round() as i32, gy.round() as i32)
-        .map_err(|e| BitFunError::tool(format!("DisplayInfo::from_point: {}", e)))?;
+        .map_err(|e| HaloError::tool(format!("DisplayInfo::from_point: {}", e)))?;
     global_xy_to_native_with_display(&d, gx, gy)
 }
 
@@ -99,9 +99,9 @@ fn global_bounds_to_native_minmax(
     top: f64,
     width: f64,
     height: f64,
-) -> BitFunResult<(u32, u32, u32, u32)> {
+) -> HaloResult<(u32, u32, u32, u32)> {
     let d = DisplayInfo::from_point(center_gx.round() as i32, center_gy.round() as i32)
-        .map_err(|e| BitFunError::tool(format!("DisplayInfo::from_point: {}", e)))?;
+        .map_err(|e| HaloError::tool(format!("DisplayInfo::from_point: {}", e)))?;
     let corners = [
         (left, top),
         (left + width, top),
@@ -284,7 +284,7 @@ pub(super) fn ok_result(
     matched_role: String,
     matched_title: Option<String>,
     matched_identifier: Option<String>,
-) -> BitFunResult<UiElementLocateResult> {
+) -> HaloResult<UiElementLocateResult> {
     ok_result_with_context(
         gx,
         gy,
@@ -315,7 +315,7 @@ fn ok_result_with_context(
     parent_context: Option<String>,
     total_matches: u32,
     other_matches: Vec<String>,
-) -> BitFunResult<UiElementLocateResult> {
+) -> HaloResult<UiElementLocateResult> {
     let (nx, ny) = global_to_native_center(gx, gy)?;
     let (nminx, nminy, nmaxx, nmaxy) = if bounds_width > 0.0 && bounds_height > 0.0 {
         global_bounds_to_native_minmax(
@@ -372,7 +372,7 @@ pub(super) fn ok_result_with_context_full(
     other_matches: Vec<String>,
     matched_node_idx: Option<u32>,
     matched_via: Option<String>,
-) -> BitFunResult<UiElementLocateResult> {
+) -> HaloResult<UiElementLocateResult> {
     let mut r = ok_result_with_context(
         gx,
         gy,

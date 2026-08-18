@@ -1,5 +1,5 @@
-use bitfun_ai_adapters::providers::openai::OpenAIMessageConverter;
-use bitfun_ai_adapters::Message;
+use halo_ai_adapters::providers::openai::OpenAIMessageConverter;
+use halo_ai_adapters::Message;
 use serde_json::json;
 
 #[test]

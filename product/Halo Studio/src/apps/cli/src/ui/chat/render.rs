@@ -139,7 +139,7 @@ impl ChatView {
 
     /// Render header
     fn render_header(&self, frame: &mut Frame, area: Rect, chat_state: &ChatState) {
-        let title = format!(" BitFun CLI v{} ", env!("CARGO_PKG_VERSION"));
+        let title = format!(" Halo CLI v{} ", env!("CARGO_PKG_VERSION"));
         let auto_mode = if chat_state.auto_approve_ask {
             "Auto: on"
         } else {
@@ -207,7 +207,7 @@ impl ChatView {
             let welcome = vec![
                 Line::from(""),
                 Line::from(Span::styled(
-                    "Welcome to BitFun CLI!",
+                    "Welcome to Halo CLI!",
                     self.theme.style(StyleKind::Title),
                 )),
                 Line::from(""),

@@ -2,11 +2,11 @@
 
 use crate::api::app_state::AppState;
 use crate::api::session_storage_path::desktop_effective_session_storage_path;
-use bitfun_product_domains::canvas::{
+use halo_product_domains::canvas::{
     parse_canvas_artifact_ref, CanvasDiagnostic, CanvasDiagnosticCategory,
     CanvasDiagnosticSeverity, CanvasRevision, CanvasSnapshot, CanvasState, CanvasStoragePort,
 };
-use bitfun_services_integrations::canvas::CanvasService;
+use halo_services_integrations::canvas::CanvasService;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -119,7 +119,7 @@ pub async fn save_canvas_state(
         source_revision_seen: request.source_revision_seen.map(CanvasRevision::new),
         values: request.values,
         updated_at: request.updated_at,
-        schema_version: bitfun_product_domains::canvas::CANVAS_CURRENT_STATE_SCHEMA_VERSION,
+        schema_version: halo_product_domains::canvas::CANVAS_CURRENT_STATE_SCHEMA_VERSION,
     };
     let saved = service
         .save_state(reference.session_id, canvas_state)

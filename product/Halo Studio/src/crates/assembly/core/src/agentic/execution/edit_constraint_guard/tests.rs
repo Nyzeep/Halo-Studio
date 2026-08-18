@@ -795,7 +795,7 @@ fn telemetry_requires_explicit_opt_in_value() {
 #[test]
 fn successful_mutation_telemetry_is_persisted_as_jsonl() {
     let root = std::env::temp_dir().join(format!(
-        "bitfun-edit-constraint-telemetry-{}",
+        "halo-edit-constraint-telemetry-{}",
         Uuid::new_v4()
     ));
     fs::create_dir_all(&root).expect("create temp workspace");
@@ -818,7 +818,7 @@ fn successful_mutation_telemetry_is_persisted_as_jsonl() {
 #[test]
 fn local_recursive_delete_fallback_finds_protected_descendant() {
     let root = std::env::temp_dir().join(format!(
-        "bitfun-edit-constraint-recursive-delete-{}",
+        "halo-edit-constraint-recursive-delete-{}",
         Uuid::new_v4()
     ));
     let target = root.join("parent");
@@ -835,7 +835,7 @@ fn local_recursive_delete_fallback_finds_protected_descendant() {
         custom_data: HashMap::new(),
         computer_use_host: None,
         runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-        runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+        runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
     };
     let state = EditConstraintState {
         constraints: vec![constraint(

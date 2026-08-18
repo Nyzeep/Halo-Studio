@@ -3,7 +3,7 @@
 //! Compatibility facade and full product runtime assembly.
 //!
 //! New implementation code should live in owner crates under `src/crates/*`.
-//! This crate re-exports legacy paths and wires the full BitFun product runtime.
+//! This crate re-exports legacy paths and wires the full Halo product runtime.
 
 #[cfg(feature = "product-full")]
 pub mod agentic; // Agent system, tool system, and product runtime orchestration
@@ -59,7 +59,7 @@ pub mod util; // General types, errors, helper functions
 pub use infrastructure::debug_log as debug;
 
 // Export main types
-pub use bitfun_runtime_ports as runtime_ports;
+pub use halo_runtime_ports as runtime_ports;
 pub use util::errors::*;
 pub use util::types::*;
 
@@ -93,4 +93,4 @@ pub use agentic::tools::registry::ToolRegistry;
 
 // Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const CORE_NAME: &str = "BitFun Core";
+pub const CORE_NAME: &str = "Halo Core";

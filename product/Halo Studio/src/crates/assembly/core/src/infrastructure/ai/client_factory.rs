@@ -12,10 +12,10 @@ use crate::service::config::types::{
     model_runtime_binding_fingerprint, AuthConfig, SubscriptionProvider,
 };
 use crate::service::config::{get_global_config_service, ConfigService};
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use crate::util::types::AIConfig;
 use anyhow::{anyhow, Result};
-use bitfun_ai_adapters::resolve_required_model_selector;
+use halo_ai_adapters::resolve_required_model_selector;
 use log::{debug, info, warn};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
@@ -280,7 +280,7 @@ static GLOBAL_AI_CLIENT_FACTORY: OnceLock<Arc<tokio::sync::RwLock<Option<Arc<AIC
 
 impl AIClientFactory {
     /// Initialize the global AIClientFactory singleton
-    pub async fn initialize_global() -> BitFunResult<()> {
+    pub async fn initialize_global() -> HaloResult<()> {
         if Self::is_global_initialized() {
             return Ok(());
         }
@@ -288,14 +288,14 @@ impl AIClientFactory {
         info!("Initializing global AIClientFactory...");
 
         let config_service = get_global_config_service().await.map_err(|e| {
-            BitFunError::service(format!("Failed to get global config service: {}", e))
+            HaloError::service(format!("Failed to get global config service: {}", e))
         })?;
 
         let factory = Arc::new(AIClientFactory::new(config_service));
         let wrapper = Arc::new(tokio::sync::RwLock::new(Some(factory)));
 
         GLOBAL_AI_CLIENT_FACTORY.set(wrapper).map_err(|_| {
-            BitFunError::service("Failed to initialize global AIClientFactory".to_string())
+            HaloError::service("Failed to initialize global AIClientFactory".to_string())
         })?;
 
         info!("Global AIClientFactory initialized");
@@ -303,9 +303,9 @@ impl AIClientFactory {
     }
 
     /// Get the global AIClientFactory instance
-    pub async fn get_global() -> BitFunResult<Arc<AIClientFactory>> {
+    pub async fn get_global() -> HaloResult<Arc<AIClientFactory>> {
         let wrapper = GLOBAL_AI_CLIENT_FACTORY.get().ok_or_else(|| {
-            BitFunError::service(
+            HaloError::service(
                 "Global AIClientFactory not initialized. Call initialize_global() first."
                     .to_string(),
             )
@@ -314,7 +314,7 @@ impl AIClientFactory {
         let guard = wrapper.read().await;
         guard
             .as_ref()
-            .ok_or_else(|| BitFunError::service("Global AIClientFactory is None".to_string()))
+            .ok_or_else(|| HaloError::service("Global AIClientFactory is None".to_string()))
             .map(Arc::clone)
     }
 
@@ -323,9 +323,9 @@ impl AIClientFactory {
     }
 
     /// Update the global AIClientFactory instance (used for config reload)
-    pub async fn update_global(new_factory: Arc<AIClientFactory>) -> BitFunResult<()> {
+    pub async fn update_global(new_factory: Arc<AIClientFactory>) -> HaloResult<()> {
         let wrapper = GLOBAL_AI_CLIENT_FACTORY.get().ok_or_else(|| {
-            BitFunError::service("Global AIClientFactory not initialized".to_string())
+            HaloError::service("Global AIClientFactory not initialized".to_string())
         })?;
 
         {
@@ -338,11 +338,11 @@ impl AIClientFactory {
     }
 }
 
-pub async fn get_global_ai_client_factory() -> BitFunResult<Arc<AIClientFactory>> {
+pub async fn get_global_ai_client_factory() -> HaloResult<Arc<AIClientFactory>> {
     AIClientFactory::get_global().await
 }
 
-pub async fn initialize_global_ai_client_factory() -> BitFunResult<()> {
+pub async fn initialize_global_ai_client_factory() -> HaloResult<()> {
     AIClientFactory::initialize_global().await
 }
 
@@ -417,7 +417,7 @@ mod tests {
     use crate::service::config::types::{
         model_runtime_binding_fingerprint, AIModelConfig, GlobalConfig,
     };
-    use bitfun_ai_adapters::{
+    use halo_ai_adapters::{
         classify_model_selector, resolve_required_model_selector, ModelSelectorKind,
     };
 

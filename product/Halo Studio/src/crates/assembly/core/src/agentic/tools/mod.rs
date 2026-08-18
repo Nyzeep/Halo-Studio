@@ -25,7 +25,7 @@ pub(crate) mod tool_context_runtime;
 pub(crate) mod tool_result_storage;
 pub mod user_input_manager;
 pub mod workspace_paths;
-pub use bitfun_agent_tools::input_validator;
+pub use halo_agent_tools::input_validator;
 
 pub use framework::{
     PortableToolContextProvider, Tool, ToolContextFacts, ToolResult, ToolUseContext,

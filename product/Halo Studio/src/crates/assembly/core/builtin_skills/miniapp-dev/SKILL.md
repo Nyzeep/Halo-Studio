@@ -1,13 +1,13 @@
 ---
 name: miniapp-dev
-description: 'Generate and refine BitFun MiniApps. Use when the user wants a new MiniApp, wants an existing MiniApp redesigned or extended, or asks for a BitFun in-app tool. Typical triggers: "做一个小应用", "生成 MiniApp", "写个 BitFun 小工具", "创建 mini app".'
+description: 'Generate and refine Halo Studio MiniApps. Use when the user wants a new MiniApp, wants an existing MiniApp redesigned or extended, or asks for a Halo Studio in-app tool. Typical triggers: "做一个小应用", "生成 MiniApp", "写个 Halo Studio 小工具", "创建 mini app".'
 ---
 
-# BitFun MiniApp 生成指南
+# Halo Studio MiniApp 生成指南
 
 本技能用于**为用户生成、改造、完善一个 MiniApp**：
 
-- 做一个新的 BitFun 小应用
+- 做一个新的 Halo Studio 小应用
 - 修改某个 MiniApp 的交互、界面、能力、数据流
 - 把一个想法变成可运行的 MiniApp
 
@@ -15,7 +15,7 @@ description: 'Generate and refine BitFun MiniApps. Use when the user wants a new
 
 ## 目标
 
-**交付一个能在 BitFun 里运行、风格合适、权限最小、结构清晰的 MiniApp**。
+**交付一个能在 Halo Studio 里运行、风格合适、权限最小、结构清晰的 MiniApp**。
 
 成功标准：
 
@@ -62,7 +62,7 @@ description: 'Generate and refine BitFun MiniApps. Use when the user wants a new
 
 ### 2. 优先复用现有 MiniApp 语言
 
-不要从零发明一套 BitFun 风格。先从已有 MiniApp 中借鉴：
+不要从零发明一套 Halo Studio 风格。先从已有 MiniApp 中借鉴：
 
 - 布局密度
 - 圆角和间距
@@ -144,7 +144,7 @@ MiniApp 里可用的是 `window.app`。
 
 默认**不要**写这些不存在的接口：
 
-- `app.bitfun.*`
+- `app.halo.*`
 - `app.workspace.*`
 - `app.git.*`
 - `app.session.*`
@@ -172,7 +172,7 @@ await app.fs.readFile(...)
 - `meta.json` 带 `i18n.locales`
 - 静态文案可重渲染
 - 动态文案走 `app.t(...)` 或自有 `I18N` 表
-- 样式优先使用 `--bitfun-*`
+- 样式优先使用 `--halo-*`
 - 测试 light/dark + zh/en
 
 ### 8. 先做核心体验，不补假内容

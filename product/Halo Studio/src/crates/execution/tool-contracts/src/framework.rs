@@ -6,8 +6,8 @@ use crate::{
     ToolDecorator, CALL_DEFERRED_TOOL_NAME,
 };
 use async_trait::async_trait;
-use bitfun_core_types::ToolImageAttachment;
-use bitfun_runtime_ports::DelegationPolicy;
+use halo_core_types::ToolImageAttachment;
+use halo_runtime_ports::DelegationPolicy;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1664,25 +1664,25 @@ impl ToolPathResolution {
         let root = self.runtime_root.as_ref()?;
         let relative = absolute_child_path.strip_prefix(root).ok()?;
         let relative_str = relative.to_string_lossy().replace('\\', "/");
-        if is_bitfun_current_session_uri(&self.logical_path) {
-            return build_bitfun_current_session_uri(&relative_str).ok();
+        if is_halo_current_session_uri(&self.logical_path) {
+            return build_halo_current_session_uri(&relative_str).ok();
         }
         let scope = self.runtime_scope.as_deref()?;
-        build_bitfun_runtime_uri(scope, &relative_str).ok()
+        build_halo_runtime_uri(scope, &relative_str).ok()
     }
 }
 
-pub const BITFUN_RUNTIME_URI_PREFIX: &str = "bitfun://runtime/";
-pub const BITFUN_CURRENT_SESSION_URI_PREFIX: &str = "bitfun://current-session/";
+pub const HALO_RUNTIME_URI_PREFIX: &str = "halo://runtime/";
+pub const HALO_CURRENT_SESSION_URI_PREFIX: &str = "halo://current-session/";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParsedBitFunRuntimeUri {
+pub struct ParsedHaloRuntimeUri {
     pub workspace_scope: String,
     pub relative_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParsedBitFunCurrentSessionUri {
+pub struct ParsedHaloCurrentSessionUri {
     pub relative_path: String,
 }
 
@@ -1757,16 +1757,16 @@ impl fmt::Display for ToolPathContractError {
 
 impl std::error::Error for ToolPathContractError {}
 
-pub fn is_bitfun_runtime_uri(path: &str) -> bool {
-    path.trim().starts_with(BITFUN_RUNTIME_URI_PREFIX)
+pub fn is_halo_runtime_uri(path: &str) -> bool {
+    path.trim().starts_with(HALO_RUNTIME_URI_PREFIX)
 }
 
-pub fn is_bitfun_current_session_uri(path: &str) -> bool {
-    path.trim().starts_with(BITFUN_CURRENT_SESSION_URI_PREFIX)
+pub fn is_halo_current_session_uri(path: &str) -> bool {
+    path.trim().starts_with(HALO_CURRENT_SESSION_URI_PREFIX)
 }
 
-pub fn is_bitfun_tool_uri(path: &str) -> bool {
-    path.trim().starts_with("bitfun://")
+pub fn is_halo_tool_uri(path: &str) -> bool {
+    path.trim().starts_with("halo://")
 }
 
 pub fn normalize_host_path(path: &str) -> String {
@@ -1849,8 +1849,8 @@ pub fn resolve_tool_path_with_context_roots(
     runtime_root: Option<PathBuf>,
     current_session_root: Option<PathBuf>,
 ) -> Result<ToolPathResolution, ToolPathContractError> {
-    if is_bitfun_runtime_uri(path) {
-        let parsed = parse_bitfun_runtime_uri(path)?;
+    if is_halo_runtime_uri(path) {
+        let parsed = parse_halo_runtime_uri(path)?;
         let scope_matches = parsed.workspace_scope == "current"
             || workspace_scope == Some(parsed.workspace_scope.as_str());
         if !scope_matches {
@@ -1868,7 +1868,7 @@ pub fn resolve_tool_path_with_context_roots(
         let effective_scope = workspace_scope
             .map(str::to_string)
             .unwrap_or_else(|| parsed.workspace_scope.clone());
-        let logical_path = build_bitfun_runtime_uri(&effective_scope, &parsed.relative_path)?;
+        let logical_path = build_halo_runtime_uri(&effective_scope, &parsed.relative_path)?;
 
         return Ok(ToolPathResolution {
             requested_path: path.to_string(),
@@ -1880,8 +1880,8 @@ pub fn resolve_tool_path_with_context_roots(
         });
     }
 
-    if is_bitfun_current_session_uri(path) {
-        let parsed = parse_bitfun_current_session_uri(path)?;
+    if is_halo_current_session_uri(path) {
+        let parsed = parse_halo_current_session_uri(path)?;
         let current_session_root =
             current_session_root.ok_or(ToolPathContractError::MissingCurrentSessionRoot)?;
         let mut resolved_path = current_session_root.clone();
@@ -1890,7 +1890,7 @@ pub fn resolve_tool_path_with_context_roots(
         }
         return Ok(ToolPathResolution {
             requested_path: path.to_string(),
-            logical_path: build_bitfun_current_session_uri(&parsed.relative_path)?,
+            logical_path: build_halo_current_session_uri(&parsed.relative_path)?,
             resolved_path: resolved_path.to_string_lossy().to_string(),
             backend: ToolPathBackend::Local,
             runtime_scope: None,
@@ -1898,7 +1898,7 @@ pub fn resolve_tool_path_with_context_roots(
         });
     }
 
-    if is_bitfun_tool_uri(path) {
+    if is_halo_tool_uri(path) {
         return Err(ToolPathContractError::UnsupportedRuntimeUri {
             uri: path.to_string(),
         });
@@ -1920,7 +1920,7 @@ pub fn resolve_tool_path_with_context_roots(
 }
 
 pub fn tool_path_is_effectively_absolute(path: &str, workspace_is_remote: bool) -> bool {
-    if is_bitfun_tool_uri(path) {
+    if is_halo_tool_uri(path) {
         return true;
     }
 
@@ -1954,12 +1954,12 @@ pub fn normalize_runtime_relative_path(path: &str) -> Result<String, ToolPathCon
     Ok(segments.join("/"))
 }
 
-pub fn parse_bitfun_runtime_uri(
+pub fn parse_halo_runtime_uri(
     path: &str,
-) -> Result<ParsedBitFunRuntimeUri, ToolPathContractError> {
+) -> Result<ParsedHaloRuntimeUri, ToolPathContractError> {
     let trimmed = path.trim();
     let suffix = trimmed
-        .strip_prefix(BITFUN_RUNTIME_URI_PREFIX)
+        .strip_prefix(HALO_RUNTIME_URI_PREFIX)
         .ok_or_else(|| ToolPathContractError::UnsupportedRuntimeUri {
             uri: path.to_string(),
         })?;
@@ -1975,40 +1975,40 @@ pub fn parse_bitfun_runtime_uri(
         .next()
         .ok_or(ToolPathContractError::MissingRuntimeUriArtifactPath)?;
 
-    Ok(ParsedBitFunRuntimeUri {
+    Ok(ParsedHaloRuntimeUri {
         workspace_scope,
         relative_path: normalize_runtime_relative_path(relative_path)?,
     })
 }
 
-pub fn parse_bitfun_current_session_uri(
+pub fn parse_halo_current_session_uri(
     path: &str,
-) -> Result<ParsedBitFunCurrentSessionUri, ToolPathContractError> {
+) -> Result<ParsedHaloCurrentSessionUri, ToolPathContractError> {
     let trimmed = path.trim();
     let relative_path = trimmed
-        .strip_prefix(BITFUN_CURRENT_SESSION_URI_PREFIX)
+        .strip_prefix(HALO_CURRENT_SESSION_URI_PREFIX)
         .ok_or_else(|| ToolPathContractError::UnsupportedRuntimeUri {
             uri: path.to_string(),
         })?;
     if relative_path.trim().is_empty() {
         return Err(ToolPathContractError::MissingCurrentSessionArtifactPath);
     }
-    Ok(ParsedBitFunCurrentSessionUri {
+    Ok(ParsedHaloCurrentSessionUri {
         relative_path: normalize_runtime_relative_path(relative_path)?,
     })
 }
 
-pub fn build_bitfun_current_session_uri(
+pub fn build_halo_current_session_uri(
     relative_path: &str,
 ) -> Result<String, ToolPathContractError> {
     Ok(format!(
         "{}{}",
-        BITFUN_CURRENT_SESSION_URI_PREFIX,
+        HALO_CURRENT_SESSION_URI_PREFIX,
         normalize_runtime_relative_path(relative_path)?
     ))
 }
 
-pub fn build_bitfun_runtime_uri(
+pub fn build_halo_runtime_uri(
     workspace_scope: &str,
     relative_path: &str,
 ) -> Result<String, ToolPathContractError> {
@@ -2019,7 +2019,7 @@ pub fn build_bitfun_runtime_uri(
 
     Ok(format!(
         "{}{}/{}",
-        BITFUN_RUNTIME_URI_PREFIX,
+        HALO_RUNTIME_URI_PREFIX,
         scope,
         normalize_runtime_relative_path(relative_path)?
     ))
@@ -2033,7 +2033,7 @@ pub fn build_tool_runtime_artifact_reference(
 ) -> Result<String, ToolPathContractError> {
     let normalized_relative_path = normalize_runtime_relative_path(relative_path)?;
     if emit_runtime_uri {
-        return build_bitfun_runtime_uri(
+        return build_halo_runtime_uri(
             workspace_scope.unwrap_or("current"),
             &normalized_relative_path,
         );

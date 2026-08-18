@@ -13,9 +13,9 @@ use tar::Archive;
 
 const GITHUB_MANIFEST: &str =
     "https://github.com/GCWing/BitFun/releases/latest/download/linux-binaries.json";
-const OPENBITFUN_MANIFEST: &str = "https://openbitfun.com/release/linux-binaries.json";
+const OPENHALO_MANIFEST: &str = "https://openbitfun.com/release/linux-binaries.json";
 const AUTO_CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
-const DEPRECATION_WARNING: &str = "Warning: `bitfun-cli` is deprecated; use `bitfun` instead.";
+const DEPRECATION_WARNING: &str = "Warning: `halo-cli` is deprecated; use `halo` instead.";
 
 /// Ranked-source download tuning. Mirrors the relay deploy path in
 /// `src/crates/services/services-integrations/src/remote_ssh/relay_deploy.rs`,
@@ -101,15 +101,15 @@ pub(crate) async fn run_manual(check_only: bool) -> Result<UpdateOutcome> {
     let outcome = result?;
     match outcome {
         UpdateOutcome::Current => {
-            println!("BitFun CLI is up to date ({}).", env!("CARGO_PKG_VERSION"))
+            println!("Halo CLI is up to date ({}).", env!("CARGO_PKG_VERSION"))
         }
         // `try_source` already printed the available version and its source.
-        UpdateOutcome::Available => println!("Run `bitfun update` to install it."),
+        UpdateOutcome::Available => println!("Run `halo update` to install it."),
         UpdateOutcome::Updated => println!(
-            "BitFun CLI was updated successfully. Restart this command to use the new version."
+            "Halo CLI was updated successfully. Restart this command to use the new version."
         ),
         UpdateOutcome::Unsupported => println!(
-            "BitFun CLI self-update supports official Linux x86_64/ARM64 archive installations."
+            "Halo CLI self-update supports official Linux x86_64/ARM64 archive installations."
         ),
     }
     Ok(outcome)
@@ -160,20 +160,20 @@ pub(crate) async fn maybe_run_automatic() {
 
     match spawn_detached_install() {
         Ok(true) => eprintln!(
-            "BitFun CLI {newest} is downloading in the background; it will be used next launch."
+            "Halo CLI {newest} is downloading in the background; it will be used next launch."
         ),
         Ok(false) => tracing::debug!("A CLI update is already in progress; skipping."),
         Err(error) => tracing::debug!("Could not start background CLI update: {error}"),
     }
 }
 
-/// Run `bitfun update` detached so it outlives this process. Returns false when
+/// Run `halo update` detached so it outlives this process. Returns false when
 /// another install already holds the lock.
 fn spawn_detached_install() -> Result<bool> {
     if InstallLock::is_held() {
         return Ok(false);
     }
-    let exe = std::env::current_exe().context("resolve current BitFun CLI executable")?;
+    let exe = std::env::current_exe().context("resolve current Halo CLI executable")?;
     Command::new(exe)
         .arg("update")
         .env(BACKGROUND_INSTALL_ENV, "1")
@@ -187,7 +187,7 @@ fn spawn_detached_install() -> Result<bool> {
 
 /// Marks the detached child so it knows to leave a failure behind for the next
 /// interactive launch to report.
-const BACKGROUND_INSTALL_ENV: &str = "BITFUN_CLI_BACKGROUND_UPDATE";
+const BACKGROUND_INSTALL_ENV: &str = "HALO_CLI_BACKGROUND_UPDATE";
 
 fn is_background_install() -> bool {
     std::env::var_os(BACKGROUND_INSTALL_ENV).is_some()
@@ -228,11 +228,11 @@ fn report_background_failure() {
     if message.is_empty() {
         return;
     }
-    eprintln!("The last background BitFun CLI update failed: {message}");
-    eprintln!("Run `bitfun update` to retry.");
+    eprintln!("The last background Halo CLI update failed: {message}");
+    eprintln!("Run `halo update` to retry.");
 }
 
-/// Guards against two `bitfun update` runs swapping the binaries at once.
+/// Guards against two `halo update` runs swapping the binaries at once.
 struct InstallLock {
     path: PathBuf,
 }
@@ -266,7 +266,7 @@ impl InstallLock {
             let _ = fs::create_dir_all(parent);
         }
         // `create_new` is the whole point: a check-then-write leaves a window in
-        // which two `bitfun update` processes both see no lock, and interleaving
+        // which two `halo update` processes both see no lock, and interleaving
         // their backup/stage/swap renames can leave no working binary at all.
         // Only a stale lock is cleared, and only then is the create retried.
         match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
@@ -278,7 +278,7 @@ impl InstallLock {
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 if Self::is_held() {
                     return Err(anyhow!(
-                        "another BitFun CLI update is already running ({})",
+                        "another Halo CLI update is already running ({})",
                         path.display()
                     ));
                 }
@@ -308,7 +308,7 @@ async fn update_from_configured_sources(check_only: bool) -> Result<UpdateOutcom
     let Some(platform_key) = current_platform_key() else {
         return Ok(UpdateOutcome::Unsupported);
     };
-    let current_exe = std::env::current_exe().context("resolve current BitFun CLI executable")?;
+    let current_exe = std::env::current_exe().context("resolve current Halo CLI executable")?;
     if is_development_binary(&current_exe) {
         return Ok(UpdateOutcome::Unsupported);
     }
@@ -334,7 +334,7 @@ async fn update_from_configured_sources(check_only: bool) -> Result<UpdateOutcom
             .collect::<Vec<_>>()
             .join(", ");
         println!(
-            "BitFun CLI {} is available from {} (current {}).",
+            "Halo CLI {} is available from {} (current {}).",
             newest,
             from,
             env!("CARGO_PKG_VERSION")
@@ -402,7 +402,7 @@ async fn update_from_configured_sources(check_only: bool) -> Result<UpdateOutcom
     let mut buffer = staging.resume();
     if !buffer.is_empty() {
         eprintln!(
-            "Resuming a previous BitFun CLI download at {} MB.",
+            "Resuming a previous Halo CLI download at {} MB.",
             buffer.len() / (1024 * 1024)
         );
     }
@@ -569,7 +569,7 @@ async fn fetch_manifests(
     // the other's, which matters most on the startup path.
     let (github, mirror) = tokio::join!(
         fetch_manifest(client, GITHUB_MANIFEST),
-        fetch_manifest(client, OPENBITFUN_MANIFEST),
+        fetch_manifest(client, OPENHALO_MANIFEST),
     );
 
     let mut manifests = Vec::new();
@@ -824,7 +824,7 @@ async fn download_text(client: &Client, url: &str) -> Result<String> {
 ///
 /// Absent in local and fork builds; those fall back to checksum-only, which is
 /// why `signature_required` gates on it rather than assuming.
-const RELEASE_PUBKEY: Option<&str> = option_env!("BITFUN_RELEASE_PUBKEY");
+const RELEASE_PUBKEY: Option<&str> = option_env!("HALO_RELEASE_PUBKEY");
 
 /// The trust root this binary was built with, if any. `Some` means an official
 /// release build, and signature verification is then mandatory.
@@ -878,15 +878,15 @@ fn install_archive(archive: &[u8], current_exe: &Path) -> Result<()> {
     let install_dir = current_exe
         .parent()
         .ok_or_else(|| anyhow!("current executable has no parent directory"))?;
-    if current_exe.file_name().and_then(|name| name.to_str()) != Some("bitfun") {
+    if current_exe.file_name().and_then(|name| name.to_str()) != Some("halo") {
         return Err(anyhow!(
-            "self-update requires the official executable name `bitfun`"
+            "self-update requires the official executable name `halo`"
         ));
     }
-    let legacy_target = install_dir.join("bitfun-cli");
+    let legacy_target = install_dir.join("halo-cli");
     if !legacy_target.is_file() {
         return Err(anyhow!(
-            "official bitfun-cli companion was not found beside {}",
+            "official halo-cli companion was not found beside {}",
             current_exe.display()
         ));
     }
@@ -896,12 +896,12 @@ fn install_archive(archive: &[u8], current_exe: &Path) -> Result<()> {
         .unpack(extract_dir.path())
         .context("extract CLI update archive")?;
     let package_dir = find_package_dir(extract_dir.path())?;
-    let new_primary = package_dir.join("bitfun");
-    let new_legacy = package_dir.join("bitfun-cli");
+    let new_primary = package_dir.join("halo");
+    let new_legacy = package_dir.join("halo-cli");
     validate_entrypoint_pair(&new_primary, &new_legacy)?;
 
     let stage = tempfile::Builder::new()
-        .prefix(".bitfun-update.")
+        .prefix(".halo-update.")
         .tempdir_in(install_dir)
         .with_context(|| {
             format!(
@@ -909,20 +909,20 @@ fn install_archive(archive: &[u8], current_exe: &Path) -> Result<()> {
                 install_dir.display()
             )
         })?;
-    let staged_primary = stage.path().join("bitfun");
-    let staged_legacy = stage.path().join("bitfun-cli");
-    fs::copy(&new_primary, &staged_primary).context("stage bitfun")?;
-    fs::copy(&new_legacy, &staged_legacy).context("stage bitfun-cli")?;
+    let staged_primary = stage.path().join("halo");
+    let staged_legacy = stage.path().join("halo-cli");
+    fs::copy(&new_primary, &staged_primary).context("stage halo")?;
+    fs::copy(&new_legacy, &staged_legacy).context("stage halo-cli")?;
     fs::set_permissions(&staged_primary, fs::Permissions::from_mode(0o755))?;
     fs::set_permissions(&staged_legacy, fs::Permissions::from_mode(0o755))?;
     validate_entrypoint_pair(&staged_primary, &staged_legacy)?;
 
-    let primary_backup = stage.path().join("previous-bitfun");
-    let legacy_backup = stage.path().join("previous-bitfun-cli");
+    let primary_backup = stage.path().join("previous-halo");
+    let legacy_backup = stage.path().join("previous-halo-cli");
 
     // Rollback runs while something has already gone wrong, so its own failures
     // are the ones that matter most: they are the difference between "the update
-    // did not apply" and "there is no working `bitfun` on this machine any
+    // did not apply" and "there is no working `halo` on this machine any
     // more". Swallowing them leaves the user with a broken install and no clue.
     let mut rollback_failures: Vec<String> = Vec::new();
     let restore = |from: &Path, to: &Path, rollback_failures: &mut Vec<String>| {
@@ -936,17 +936,17 @@ fn install_archive(archive: &[u8], current_exe: &Path) -> Result<()> {
             return base;
         }
         base.context(format!(
-            "the previous CLI could NOT be put back ({}); reinstall BitFun manually",
+            "the previous CLI could NOT be put back ({}); reinstall Halo manually",
             failures.join("; ")
         ))
     };
 
-    fs::rename(current_exe, &primary_backup).context("back up current bitfun")?;
+    fs::rename(current_exe, &primary_backup).context("back up current halo")?;
     if let Err(error) = fs::rename(&legacy_target, &legacy_backup) {
         restore(&primary_backup, current_exe, &mut rollback_failures);
         return Err(rollback_error(
             error,
-            "back up current bitfun-cli",
+            "back up current halo-cli",
             rollback_failures,
         ));
     }
@@ -955,7 +955,7 @@ fn install_archive(archive: &[u8], current_exe: &Path) -> Result<()> {
         restore(&primary_backup, current_exe, &mut rollback_failures);
         return Err(rollback_error(
             error,
-            "install updated bitfun",
+            "install updated halo",
             rollback_failures,
         ));
     }
@@ -967,7 +967,7 @@ fn install_archive(archive: &[u8], current_exe: &Path) -> Result<()> {
         restore(&primary_backup, current_exe, &mut rollback_failures);
         return Err(rollback_error(
             error,
-            "install updated bitfun-cli",
+            "install updated halo-cli",
             rollback_failures,
         ));
     }
@@ -984,7 +984,7 @@ fn install_archive(archive: &[u8], current_exe: &Path) -> Result<()> {
             return Err(failed);
         }
         return Err(failed.context(format!(
-            "the previous CLI could NOT be put back ({}); reinstall BitFun manually",
+            "the previous CLI could NOT be put back ({}); reinstall Halo manually",
             rollback_failures.join("; ")
         )));
     }
@@ -999,7 +999,7 @@ fn install_archive(_archive: &[u8], _current_exe: &Path) -> Result<()> {
 fn find_package_dir(root: &Path) -> Result<PathBuf> {
     for entry in fs::read_dir(root).context("inspect CLI update archive")? {
         let path = entry?.path();
-        if path.is_dir() && path.join("bitfun").is_file() && path.join("bitfun-cli").is_file() {
+        if path.is_dir() && path.join("halo").is_file() && path.join("halo-cli").is_file() {
             return Ok(path);
         }
     }
@@ -1026,7 +1026,7 @@ fn validate_entrypoint_pair(primary: &Path, legacy: &Path) -> Result<()> {
     if !legacy_output.status.success()
         || String::from_utf8_lossy(&legacy_output.stderr).trim() != DEPRECATION_WARNING
     {
-        return Err(anyhow!("deprecated bitfun-cli entrypoint contract failed"));
+        return Err(anyhow!("deprecated halo-cli entrypoint contract failed"));
     }
     Ok(())
 }
@@ -1061,7 +1061,7 @@ fn is_newer_version(candidate: &str, current: &str) -> bool {
 }
 
 fn automatic_update_is_eligible() -> bool {
-    if std::env::var_os("BITFUN_CLI_DISABLE_AUTO_UPDATE").is_some()
+    if std::env::var_os("HALO_CLI_DISABLE_AUTO_UPDATE").is_some()
         || env!("CARGO_PKG_VERSION").contains("-nightly.")
     {
         return false;
@@ -1114,10 +1114,10 @@ fn restart_managed_daemon() {
     let installed = candidates
         .iter()
         .flatten()
-        .any(|dir| dir.join("systemd/user/bitfun-cli-daemon.service").is_file());
+        .any(|dir| dir.join("systemd/user/halo-cli-daemon.service").is_file());
     if installed {
         let _ = Command::new("systemctl")
-            .args(["--user", "try-restart", "bitfun-cli-daemon.service"])
+            .args(["--user", "try-restart", "halo-cli-daemon.service"])
             .status();
     }
 }
@@ -1290,21 +1290,21 @@ mod tests {
             PartialDownload::open_in(dir.path(), version, filename)
         };
 
-        let first = stage("0.2.14", "bitfun-cli-0.2.14-x86_64.tar.gz");
+        let first = stage("0.2.14", "halo-cli-0.2.14-x86_64.tar.gz");
         assert!(first.resume().is_empty(), "nothing staged yet");
         first.save(b"partial-bytes");
         assert_eq!(
-            stage("0.2.14", "bitfun-cli-0.2.14-x86_64.tar.gz").resume(),
+            stage("0.2.14", "halo-cli-0.2.14-x86_64.tar.gz").resume(),
             b"partial-bytes",
             "same version and asset must resume"
         );
 
         // Opening a different version evicts the stale partial rather than
         // resuming a mismatched archive into the new one.
-        let newer = stage("0.2.15", "bitfun-cli-0.2.15-x86_64.tar.gz");
+        let newer = stage("0.2.15", "halo-cli-0.2.15-x86_64.tar.gz");
         assert!(newer.resume().is_empty());
         assert!(
-            stage("0.2.14", "bitfun-cli-0.2.14-x86_64.tar.gz")
+            stage("0.2.14", "halo-cli-0.2.14-x86_64.tar.gz")
                 .resume()
                 .is_empty(),
             "the superseded partial must be gone"
@@ -1348,7 +1348,7 @@ mod tests {
     /// the exact on-disk format CI must emit.
     const FIXTURE_PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgRTNFMDg3NENFQzFDMjJDMwpSV1RESWh6c1RJZmc0MXcyR3dpZWkwek5ES2FMWW05ZFFWcEVXTlEvVWxweXQybWJTMkpFMVUyTQo=";
     const FIXTURE_SIGNATURE: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIG1pbmlzaWduIHNlY3JldCBrZXkKUlVUREloenNUSWZnNDBMTitwb25aT3RCVy9VYmJtNWhkR1poM0lCb3IwUDBKaVZmZmM1cFJaNlZSNUpaSzNUUm1yWWpYMXFLQ2svWTdZUDhHdkRZT3YvanVoZlpnZmhyWEFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0OTUxOTM1CWZpbGU6YXJjaGl2ZS50YXIuZ3oJaGFzaGVkCjhWL21EUVAwZGdlZXVNU1lxWlpsOWdFSGUwOTJQTk9yRG1BMUV6ZHNQOUlEYkcyT1dneTFsQ1puUDBJaFIwQnJpMFBCeENRcUdDR2dpb0l0UGtSMUN3PT0K";
-    const FIXTURE_DATA: &[u8] = b"hello-bitfun\n";
+    const FIXTURE_DATA: &[u8] = b"hello-halo\n";
 
     #[test]
     fn release_signature_accepts_the_tauri_wire_format() {
@@ -1360,14 +1360,14 @@ mod tests {
     fn release_signature_rejects_tampered_bytes() {
         // The whole point: a mirror that alters the archive cannot also forge
         // this, unlike the checksum it serves alongside it.
-        let tampered = b"hello-bitfun-tampered\n";
+        let tampered = b"hello-halo-tampered\n";
         assert!(verify_signature(tampered, FIXTURE_SIGNATURE, FIXTURE_PUBKEY).is_err());
         assert!(verify_signature(FIXTURE_DATA, "bm90LWEtc2lnbmF0dXJl", FIXTURE_PUBKEY).is_err());
     }
 
     #[test]
     fn checksum_contract_accepts_standard_sha_file() {
-        let data = b"bitfun";
+        let data = b"halo";
         let digest = format!("{:x}", Sha256::digest(data));
         verify_sha256(
             data,

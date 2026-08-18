@@ -47,7 +47,7 @@ impl ChatMode {
             Some(result.custom_request_body.clone())
         };
 
-        let model_config = bitfun_core::service::config::AIModelConfig {
+        let model_config = halo_core::service::config::AIModelConfig {
             id: model_id.clone(),
             name: result.name.clone(),
             provider: result.provider_format.clone(),
@@ -88,7 +88,7 @@ impl ChatMode {
 
                 // Auto-set as primary model if no primary model exists
                 match config_service
-                    .get_config::<bitfun_core::service::config::GlobalConfig>(None)
+                    .get_config::<halo_core::service::config::GlobalConfig>(None)
                     .await
                 {
                     Ok(global_config) => {
@@ -140,7 +140,7 @@ impl ChatMode {
         let result = tokio::task::block_in_place(|| {
             rt_handle.block_on(async {
                 let config_service = GlobalConfigManager::get_service().await.ok()?;
-                let models: Vec<bitfun_core::service::config::AIModelConfig> =
+                let models: Vec<halo_core::service::config::AIModelConfig> =
                     config_service.get_ai_models().await.ok()?;
                 models.into_iter().find(|m| m.id == model_id)
             })
@@ -203,7 +203,7 @@ impl ChatMode {
             Some(result.custom_request_body.clone())
         };
 
-        let model_config = bitfun_core::service::config::AIModelConfig {
+        let model_config = halo_core::service::config::AIModelConfig {
             id: model_id.clone(),
             name: result.name.clone(),
             provider: result.provider_format.clone(),

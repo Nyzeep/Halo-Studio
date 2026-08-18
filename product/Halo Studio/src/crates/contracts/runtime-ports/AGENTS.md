@@ -2,12 +2,12 @@
 
 Scope: this guide applies to `src/crates/contracts/runtime-ports`.
 
-`bitfun-runtime-ports` owns stable runtime-facing ports, DTOs, and capability
+`halo-runtime-ports` owns stable runtime-facing ports, DTOs, and capability
 facts. It is an interface crate, not a runtime implementation crate.
 
 ## Guardrails
 
-- Do not depend on `bitfun-core`, app crates, Tauri, concrete service crates,
+- Do not depend on `halo-core`, app crates, Tauri, concrete service crates,
   AI adapters, transport adapters, or tool implementations.
 - Keep ports narrow and typed. Avoid untyped service locators, global registries,
   or catch-all context structs.
@@ -34,7 +34,7 @@ facts. It is an interface crate, not a runtime implementation crate.
 ## Verification
 
 ```bash
-cargo test -p bitfun-runtime-ports
+cargo test -p halo-runtime-ports
 node scripts/check-core-boundaries.mjs
 ```
 

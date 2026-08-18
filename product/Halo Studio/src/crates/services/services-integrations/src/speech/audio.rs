@@ -1,8 +1,8 @@
-use super::{BitFunError, BitFunResult};
+use super::{HaloError, HaloResult};
 
-pub(super) fn pcm16_le_to_f32_samples(bytes: &[u8]) -> BitFunResult<Vec<f32>> {
+pub(super) fn pcm16_le_to_f32_samples(bytes: &[u8]) -> HaloResult<Vec<f32>> {
     if bytes.len() % 2 != 0 {
-        return Err(BitFunError::validation(
+        return Err(HaloError::validation(
             "PCM16 audio payload must have an even number of bytes",
         ));
     }

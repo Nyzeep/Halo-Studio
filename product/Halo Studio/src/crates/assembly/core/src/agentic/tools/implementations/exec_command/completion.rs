@@ -1,4 +1,4 @@
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     RemoteExecSessionCompletion, RemoteExecSessionCompletionSource,
     RemoteExecSessionCompletionStatus, TerminalExecSessionCompletion,
     TerminalExecSessionCompletionSource, TerminalExecSessionCompletionStatus,

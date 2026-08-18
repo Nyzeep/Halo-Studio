@@ -15,6 +15,6 @@ export class GeneralChatExportFormatter {
   }
 
   private static roleLabel(role: string): string {
-    return role === 'user' ? '用户' : 'BitFun';
+    return role === 'user' ? '用户' : 'Halo Studio';
   }
 }

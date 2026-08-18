@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use bitfun_core::util::errors::{BitFunError, BitFunResult};
+use halo_core::util::errors::{HaloError, HaloResult};
 use log::warn;
 use tokio::sync::RwLock;
 
@@ -60,7 +60,7 @@ impl RemoteAcpCapabilityStore {
     pub(crate) async fn set(
         &self,
         snapshot: RemoteAcpClientRequirementSnapshot,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let entries = {
             let mut guard = self.snapshots.write().await;
             guard.insert(snapshot.connection_id.clone(), snapshot);
@@ -69,7 +69,7 @@ impl RemoteAcpCapabilityStore {
         self.persist(entries).await
     }
 
-    pub(crate) async fn clear(&self) -> BitFunResult<()> {
+    pub(crate) async fn clear(&self) -> HaloResult<()> {
         {
             let mut guard = self.snapshots.write().await;
             guard.clear();
@@ -80,10 +80,10 @@ impl RemoteAcpCapabilityStore {
     async fn persist(
         &self,
         snapshots: Vec<RemoteAcpClientRequirementSnapshot>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if let Some(parent) = self.path.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|error| {
-                BitFunError::io(format!(
+                HaloError::io(format!(
                     "Failed to create remote ACP capability snapshot directory: {}",
                     error
                 ))
@@ -91,7 +91,7 @@ impl RemoteAcpCapabilityStore {
         }
 
         let content = serde_json::to_string_pretty(&snapshots).map_err(|error| {
-            BitFunError::serialization(format!(
+            HaloError::serialization(format!(
                 "Failed to serialize remote ACP capability snapshots: {}",
                 error
             ))
@@ -99,7 +99,7 @@ impl RemoteAcpCapabilityStore {
         tokio::fs::write(&self.path, content)
             .await
             .map_err(|error| {
-                BitFunError::io(format!(
+                HaloError::io(format!(
                     "Failed to write remote ACP capability snapshots: {}",
                     error
                 ))

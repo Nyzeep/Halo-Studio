@@ -7,15 +7,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[cfg(feature = "ssh-remote")]
-use bitfun_runtime_ports::{PortError, PortErrorKind, RemoteExecPort};
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{PortError, PortErrorKind, RemoteExecPort};
+use halo_runtime_ports::{
     PortResult, RemoteProjectionPort, RemoteWorkspacePort, SessionStorePort, TerminalPort,
 };
-use bitfun_runtime_services::{
+use halo_runtime_services::{
     RuntimeServiceMarkerPort, RuntimeServices, RuntimeServicesBuilder, RuntimeServicesProvider,
     RuntimeServicesRegistry,
 };
-use bitfun_services_core::local_runtime_ports::LocalRuntimePorts;
+use halo_services_core::local_runtime_ports::LocalRuntimePorts;
 use terminal_core::TerminalRuntimePort;
 
 use crate::agentic::session::CoreSessionStorePort;
@@ -31,12 +31,12 @@ struct CoreRemoteExecSshManagerProvider;
 
 #[cfg(feature = "ssh-remote")]
 #[async_trait::async_trait]
-impl bitfun_services_integrations::remote_ssh::RemoteExecSshManagerProvider
+impl halo_services_integrations::remote_ssh::RemoteExecSshManagerProvider
     for CoreRemoteExecSshManagerProvider
 {
     async fn ssh_manager(
         &self,
-    ) -> PortResult<bitfun_services_integrations::remote_ssh::SSHConnectionManager> {
+    ) -> PortResult<halo_services_integrations::remote_ssh::SSHConnectionManager> {
         let manager =
             crate::service::remote_ssh::get_remote_workspace_manager().ok_or_else(|| {
                 PortError::new(
@@ -69,7 +69,7 @@ impl CoreRuntimeServicesProvider {
     #[cfg(feature = "ssh-remote")]
     pub fn remote_exec_port() -> Arc<dyn RemoteExecPort> {
         Arc::new(
-            bitfun_services_integrations::remote_ssh::RemoteExecRuntimePort::new(Arc::new(
+            halo_services_integrations::remote_ssh::RemoteExecRuntimePort::new(Arc::new(
                 CoreRemoteExecSshManagerProvider,
             )),
         )
@@ -153,7 +153,7 @@ pub fn build_local_runtime_services(
 #[cfg(test)]
 mod local_runtime_tests {
     use super::build_local_runtime_services;
-    use bitfun_runtime_ports::RuntimeServiceCapability;
+    use halo_runtime_ports::RuntimeServiceCapability;
 
     #[test]
     fn local_runtime_services_bind_required_core_and_workspace_ports() {

@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     ClockPort, PiProviderReadinessPort, PiRpcAvailabilitySummary, PiRpcCancellationMode,
     PiRpcCapability, PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision,
     PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcPort, PiRpcReply, PiRpcSessionMode,
@@ -1062,8 +1062,8 @@ impl WorkbenchTaskBaselinePort for UnavailableTaskBaselinePort {
     async fn capture(
         &self,
         _request: WorkbenchTaskBaselineRequest,
-    ) -> bitfun_runtime_ports::PortResult<WorkbenchTaskBaseline> {
-        Err(bitfun_runtime_ports::PortError::new(
+    ) -> halo_runtime_ports::PortResult<WorkbenchTaskBaseline> {
+        Err(halo_runtime_ports::PortError::new(
             PortErrorKind::NotAvailable,
             "managed task baseline provider is unavailable",
         ))
@@ -1077,8 +1077,8 @@ impl WorkbenchDeliveryEvidencePort for UnavailableDeliveryEvidencePort {
     async fn capture(
         &self,
         _request: WorkbenchDeliveryEvidenceRequest,
-    ) -> bitfun_runtime_ports::PortResult<WorkbenchDeliveryEvidence> {
-        Err(bitfun_runtime_ports::PortError::new(
+    ) -> halo_runtime_ports::PortResult<WorkbenchDeliveryEvidence> {
+        Err(halo_runtime_ports::PortError::new(
             PortErrorKind::NotAvailable,
             "managed delivery evidence provider is unavailable",
         ))
@@ -1087,8 +1087,8 @@ impl WorkbenchDeliveryEvidencePort for UnavailableDeliveryEvidencePort {
     async fn capture_fingerprint(
         &self,
         _request: WorkbenchDeliveryFingerprintRequest,
-    ) -> bitfun_runtime_ports::PortResult<WorkbenchDeliveryFingerprint> {
-        Err(bitfun_runtime_ports::PortError::new(
+    ) -> halo_runtime_ports::PortResult<WorkbenchDeliveryFingerprint> {
+        Err(halo_runtime_ports::PortError::new(
             PortErrorKind::NotAvailable,
             "managed delivery evidence provider is unavailable",
         ))

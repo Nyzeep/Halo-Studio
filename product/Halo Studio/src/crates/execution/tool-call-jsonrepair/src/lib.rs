@@ -1,4 +1,4 @@
-//! # BitFun tool-call JSON repair
+//! # Halo tool-call JSON repair
 //!
 //! A local MIT-licensed fork of `jsonrepair-rs` 0.2.1 for streamed tool
 //! arguments. The tool-call profile preserves Markdown-like `#` content rather
@@ -9,7 +9,7 @@
 //! ## Usage
 //!
 //! ```
-//! use bitfun_tool_call_jsonrepair::jsonrepair;
+//! use halo_tool_call_jsonrepair::jsonrepair;
 //!
 //! // Fix single quotes (whitespace preserved)
 //! let result = jsonrepair("{'name': 'John'}").unwrap();

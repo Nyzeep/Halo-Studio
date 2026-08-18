@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use bitfun_agent_runtime::halo_workbench::{
+use halo_agent_runtime::halo_workbench::{
     HaloWorkbenchActivityStatus, HaloWorkbenchCancellationMode, HaloWorkbenchCapability,
     HaloWorkbenchDeliveryDecision, HaloWorkbenchIntent, HaloWorkbenchIntentRequest,
     HaloWorkbenchInterruptionHistoryPort, HaloWorkbenchMessageRole, HaloWorkbenchOperationDecision,
@@ -13,7 +13,7 @@ use bitfun_agent_runtime::halo_workbench::{
     HaloWorkbenchRuntime, HaloWorkbenchSessionMode, HaloWorkbenchSessionPhase,
     HaloWorkbenchSessionSnapshot, HaloWorkbenchWorkspaceInput, HALO_WORKBENCH_SCHEMA_VERSION,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     ClockPort, PiProviderReadiness, PiProviderReadinessPort, PiRpcAvailabilitySummary,
     PiRpcCancellationMode, PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationKind,
     PiRpcOperationRiskLevel, PiRpcOperationSummary, PiRpcPort, PiRpcReply, PiRpcVersion,
@@ -289,7 +289,7 @@ struct FixedTaskBaseline;
 impl WorkbenchTaskBaselinePort for FixedTaskBaseline {
     async fn capture(
         &self,
-        request: bitfun_runtime_ports::WorkbenchTaskBaselineRequest,
+        request: halo_runtime_ports::WorkbenchTaskBaselineRequest,
     ) -> PortResult<WorkbenchTaskBaseline> {
         Ok(WorkbenchTaskBaseline {
             head: "test-head".to_string(),
@@ -310,7 +310,7 @@ struct MismatchedTaskBaseline;
 impl WorkbenchTaskBaselinePort for MismatchedTaskBaseline {
     async fn capture(
         &self,
-        _request: bitfun_runtime_ports::WorkbenchTaskBaselineRequest,
+        _request: halo_runtime_ports::WorkbenchTaskBaselineRequest,
     ) -> PortResult<WorkbenchTaskBaseline> {
         Ok(WorkbenchTaskBaseline {
             head: "wrong-workspace-head".to_string(),
@@ -1061,7 +1061,7 @@ async fn managed_task_requires_confirmation_and_records_existing_git_baseline_be
                 generation: command_generation,
                 task_id,
                 session_id: command_session_id,
-                mode: bitfun_runtime_ports::PiRpcSessionMode::Managed,
+                mode: halo_runtime_ports::PiRpcSessionMode::Managed,
             } if *command_generation == generation
                 && task_id == "managed-baseline-task"
                 && command_session_id == &session_id
@@ -3751,7 +3751,7 @@ async fn settle_managed_session(
 fn delivery_evidence_for(
     session_id: &str,
     runtime: &HaloWorkbenchRuntime,
-) -> Option<bitfun_agent_runtime::halo_workbench::HaloWorkbenchDeliveryReviewSnapshot> {
+) -> Option<halo_agent_runtime::halo_workbench::HaloWorkbenchDeliveryReviewSnapshot> {
     runtime
         .snapshot()
         .sessions

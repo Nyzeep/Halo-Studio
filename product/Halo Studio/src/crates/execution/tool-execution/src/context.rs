@@ -1,5 +1,5 @@
-use bitfun_agent_tools::{ToolContextFacts, ToolRuntimeRestrictions, ToolWorkspaceKind};
-use bitfun_runtime_ports::DelegationPolicy;
+use halo_agent_tools::{ToolContextFacts, ToolRuntimeRestrictions, ToolWorkspaceKind};
+use halo_runtime_ports::DelegationPolicy;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -154,8 +154,8 @@ mod tests {
         project_tool_context_facts, PrimaryModelFacts, ToolRuntimeContextFactsInput,
         ToolRuntimeCustomDataInput,
     };
-    use bitfun_agent_tools::{ToolRuntimeRestrictions, ToolWorkspaceKind};
-    use bitfun_runtime_ports::DelegationPolicy;
+    use halo_agent_tools::{ToolRuntimeRestrictions, ToolWorkspaceKind};
+    use halo_runtime_ports::DelegationPolicy;
     use serde_json::json;
     use std::collections::{BTreeSet, HashMap};
 

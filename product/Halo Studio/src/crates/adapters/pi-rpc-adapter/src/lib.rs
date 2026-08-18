@@ -9,7 +9,7 @@
 mod configuration;
 mod framing;
 
-pub use bitfun_runtime_ports::PiRuntimeConfigurationView;
+pub use halo_runtime_ports::PiRuntimeConfigurationView;
 pub use configuration::{
     validate_runtime_configuration_shape, JsonFilePiRuntimeConfigurationRepository,
     MemoryPiCredentialStore, MemoryPiRuntimeConfigurationRepository,
@@ -25,7 +25,7 @@ use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     PiCredentialSecret, PiCredentialStorePort, PiProviderCapability, PiProviderCapabilityPort,
     PiProviderCapabilityRequest, PiRpcAvailabilitySummary, PiRpcCancellationMode, PiRpcCommand,
     PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind,
@@ -33,7 +33,7 @@ use bitfun_runtime_ports::{
     PiRpcVersion, PiRpcVersionEvidenceSource, PiRpcWorkspace, PiRuntimeConfiguration,
     PiRuntimeConfigurationPort, PortError, PortErrorKind, PortResult, PI_RPC_ADAPTER_IDENTITY,
 };
-use bitfun_services_core::process_tree::ProcessTreeChild;
+use halo_services_core::process_tree::ProcessTreeChild;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -2522,7 +2522,7 @@ fn pi_rpc_args(
 /// excluded from argv; callers project it into the adapter-owned Pi config
 /// directory instead. Credentials are never represented in this vector.
 pub fn pi_rpc_arguments(
-    configuration: &bitfun_runtime_ports::PiRuntimeConfiguration,
+    configuration: &halo_runtime_ports::PiRuntimeConfiguration,
     mode: PiRpcSessionMode,
     extension_path: &str,
     session_dir: Option<&str>,
@@ -2576,7 +2576,7 @@ pub fn pi_models_json_projection(
         let reasoning = capability
             .supported_thinking_levels
             .iter()
-            .any(|level| *level != bitfun_runtime_ports::PiThinkingLevel::Off);
+            .any(|level| *level != halo_runtime_ports::PiThinkingLevel::Off);
         provider.insert("api".to_string(), Value::String(capability.api.clone()));
         provider.insert(
             "models".to_string(),

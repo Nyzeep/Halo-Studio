@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use bitfun_runtime_ports::FileSystemPort;
-use bitfun_runtime_ports::{
+use halo_runtime_ports::FileSystemPort;
+use halo_runtime_ports::{
     RemoteWorkspaceKind, RuntimeServiceCapability, SessionStorageKind, SessionStoragePathRequest,
 };
-use bitfun_runtime_services::test_support::{FakeRuntimePort, FakeRuntimeServicesProvider};
-use bitfun_runtime_services::{
+use halo_runtime_services::test_support::{FakeRuntimePort, FakeRuntimeServicesProvider};
+use halo_runtime_services::{
     CapabilityAvailability, RuntimeServiceMarkerPort, RuntimeServicesBuilder, RuntimeServicesError,
     RuntimeServicesProvider, RuntimeServicesRegistry,
 };

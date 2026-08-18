@@ -1,4 +1,4 @@
-//! BitFun Page incremental upload client (Save Version → Deploy).
+//! Halo Page incremental upload client (Save Version → Deploy).
 
 use anyhow::{anyhow, Result};
 use log::{info, warn};
@@ -1183,7 +1183,7 @@ mod tests {
     #[test]
     fn collect_allows_worker_without_index() {
         let base =
-            std::env::temp_dir().join(format!("bitfun-page-worker-only-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo-page-worker-only-{}", uuid::Uuid::new_v4()));
         let server = base.join("server");
         std::fs::create_dir_all(&server).unwrap();
         std::fs::write(
@@ -1218,7 +1218,7 @@ mod tests {
         use std::os::unix::fs::symlink;
 
         let root = std::env::temp_dir().join(format!(
-            "bitfun-page-symlink-external-{}",
+            "halo-page-symlink-external-{}",
             uuid::Uuid::new_v4()
         ));
         let page = root.join("page");
@@ -1238,7 +1238,7 @@ mod tests {
         use std::os::unix::fs::symlink;
 
         let root =
-            std::env::temp_dir().join(format!("bitfun-page-symlink-loop-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo-page-symlink-loop-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("index.html"), b"<html></html>").unwrap();
         symlink(&root, root.join("loop")).unwrap();

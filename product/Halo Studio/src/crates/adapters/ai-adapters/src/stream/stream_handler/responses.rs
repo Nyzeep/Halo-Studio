@@ -5,8 +5,8 @@ use crate::stream::types::responses::{
 };
 use crate::stream::types::unified::UnifiedResponse;
 use anyhow::{anyhow, Result};
-use bitfun_agent_stream::ToolCallCompletion;
-use bitfun_core_types::errors::AiProviderError;
+use halo_agent_stream::ToolCallCompletion;
+use halo_core_types::errors::AiProviderError;
 use eventsource_stream::Eventsource;
 use log::{error, trace};
 use reqwest::Response;
@@ -726,8 +726,8 @@ mod tests {
         handle_function_call_arguments_delta, handle_function_call_output_item_done,
         responses_completed_tool_call_completion, InProgressToolCall, StreamTimeoutController,
     };
-    use bitfun_agent_stream::ToolCallCompletion;
-    use bitfun_core_types::errors::ErrorCategory;
+    use halo_agent_stream::ToolCallCompletion;
+    use halo_core_types::errors::ErrorCategory;
     use serde_json::json;
     use std::collections::HashMap;
     use tokio::sync::mpsc;

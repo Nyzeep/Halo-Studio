@@ -10,7 +10,7 @@ use crate::review_platform_http::{
     send_text_bounded as send_review_text_bounded, ReviewHttpClient, ReviewHttpError,
     ReviewHttpHeaders, ReviewHttpRequest, ReviewJsonResponse, ReviewTextResponse,
 };
-use bitfun_services_core::process_manager;
+use halo_services_core::process_manager;
 use futures::{stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -530,7 +530,7 @@ pub struct ReviewPlatformWorkspaceSnapshot {
 ///
 /// Review-platform only touches the workspace for repository discovery
 /// (`git rev-parse --show-toplevel`, `git remote -v`); provider data itself is
-/// fetched over HTTP from the host running BitFun. Remote SSH workspaces are
+/// fetched over HTTP from the host running Halo. Remote SSH workspaces are
 /// therefore fully supported as long as the product runtime can execute those
 /// Git probes on the remote host, which is what this port injects.
 #[async_trait::async_trait]
@@ -1412,7 +1412,7 @@ impl ReviewPlatformService {
     ) -> Result<(), ReviewPlatformError> {
         if platform == ReviewPlatformKind::Github {
             return Err(ReviewPlatformError::Api(format!(
-                "GitHub tokens are not stored by BitFun. Authenticate the local GitHub CLI with `gh auth login --hostname {}`.",
+                "GitHub tokens are not stored by Halo. Authenticate the local GitHub CLI with `gh auth login --hostname {}`.",
                 normalize_provider_host(host)?
             )));
         }
@@ -7382,7 +7382,7 @@ mod tests {
             .expect("system clock should be after unix epoch")
             .as_nanos();
         std::env::temp_dir().join(format!(
-            "bitfun-review-platform-{name}-{}-{id}.json",
+            "halo-review-platform-{name}-{}-{id}.json",
             std::process::id()
         ))
     }
@@ -7907,7 +7907,7 @@ mod tests {
         let service = ReviewPlatformService::new(path, runtime.clone());
 
         let snapshot = service
-            .workspace_context("/srv/projects/bitfun", None)
+            .workspace_context("/srv/projects/halo", None)
             .await
             .expect("remote workspace context should resolve through remote git");
 
@@ -7931,12 +7931,12 @@ mod tests {
             commands,
             vec![
                 (
-                    "/srv/projects/bitfun".to_string(),
-                    "/srv/projects/bitfun".to_string(),
+                    "/srv/projects/halo".to_string(),
+                    "/srv/projects/halo".to_string(),
                     vec!["rev-parse".to_string(), "--show-toplevel".to_string()],
                 ),
                 (
-                    "/srv/projects/bitfun".to_string(),
+                    "/srv/projects/halo".to_string(),
                     "/srv/projects".to_string(),
                     vec!["remote".to_string(), "-v".to_string()],
                 ),
@@ -7954,7 +7954,7 @@ mod tests {
         assert!(
             service
                 .repository_trusts_provider_identity(
-                    "/srv/projects/bitfun",
+                    "/srv/projects/halo",
                     ReviewPlatformKind::Gitlab,
                     "gitlab.com",
                     "example/repo",
@@ -8008,7 +8008,7 @@ mod tests {
     #[tokio::test]
     async fn repository_root_accepts_nested_and_file_paths() {
         let root = std::env::temp_dir().join(format!(
-            "bitfun-review-platform-git-root-{}-{}",
+            "halo-review-platform-git-root-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)

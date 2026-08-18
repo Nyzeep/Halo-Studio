@@ -1,8 +1,8 @@
 //! Compatibility re-export for skill availability resolution.
 //!
-//! The provider-neutral owner lives in `bitfun-agent-runtime`.
+//! The provider-neutral owner lives in `halo-agent-runtime`.
 
-pub use bitfun_agent_runtime::skills::{
+pub use halo_agent_runtime::skills::{
     normalize_user_mode_skill_overrides, resolve_skill_default_enabled_for_mode,
     resolve_skill_state_for_mode, ModeSkillState,
 };
@@ -18,14 +18,14 @@ mod tests {
 
     fn builtin_skill(dir_name: &str) -> SkillInfo {
         SkillInfo {
-            key: format!("user::bitfun-system::{}", dir_name),
+            key: format!("user::halo-system::{}", dir_name),
             name: dir_name.to_string(),
             description: String::new(),
             path: format!("/tmp/{}", dir_name),
             level: SkillLocation::User,
-            source_slot: "bitfun-system".to_string(),
-            source_id: "bitfun".to_string(),
-            source_label: "BitFun".to_string(),
+            source_slot: "halo-system".to_string(),
+            source_id: "halo".to_string(),
+            source_label: "Halo".to_string(),
             dir_name: dir_name.to_string(),
             is_builtin: true,
             group_key: None,
@@ -37,14 +37,14 @@ mod tests {
 
     fn custom_user_skill(dir_name: &str) -> SkillInfo {
         SkillInfo {
-            key: format!("user::bitfun::{}", dir_name),
+            key: format!("user::halo::{}", dir_name),
             name: dir_name.to_string(),
             description: String::new(),
             path: format!("/tmp/{}", dir_name),
             level: SkillLocation::User,
-            source_slot: "bitfun".to_string(),
-            source_id: "bitfun".to_string(),
-            source_label: "BitFun".to_string(),
+            source_slot: "halo".to_string(),
+            source_id: "halo".to_string(),
+            source_label: "Halo".to_string(),
             dir_name: dir_name.to_string(),
             is_builtin: false,
             group_key: None,

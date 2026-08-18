@@ -89,11 +89,6 @@ pub const GENERATED_SHARED_TERMS: &[GeneratedSharedTermEntry] = &[
     },
     GeneratedSharedTermEntry {
         locale: LocaleId::ZhCN,
-        key: "connectionMethods.bitfunServer",
-        value: "Halo Studio Server",
-    },
-    GeneratedSharedTermEntry {
-        locale: LocaleId::ZhCN,
         key: "connectionMethods.botFeishu",
         value: "飞书机器人",
     },
@@ -111,6 +106,11 @@ pub const GENERATED_SHARED_TERMS: &[GeneratedSharedTermEntry] = &[
         locale: LocaleId::ZhCN,
         key: "connectionMethods.customServer",
         value: "自定义服务器",
+    },
+    GeneratedSharedTermEntry {
+        locale: LocaleId::ZhCN,
+        key: "connectionMethods.haloServer",
+        value: "Halo Studio Server",
     },
     GeneratedSharedTermEntry {
         locale: LocaleId::ZhCN,
@@ -264,11 +264,6 @@ pub const GENERATED_SHARED_TERMS: &[GeneratedSharedTermEntry] = &[
     },
     GeneratedSharedTermEntry {
         locale: LocaleId::ZhTW,
-        key: "connectionMethods.bitfunServer",
-        value: "Halo Studio Server",
-    },
-    GeneratedSharedTermEntry {
-        locale: LocaleId::ZhTW,
         key: "connectionMethods.botFeishu",
         value: "飛書機器人",
     },
@@ -286,6 +281,11 @@ pub const GENERATED_SHARED_TERMS: &[GeneratedSharedTermEntry] = &[
         locale: LocaleId::ZhTW,
         key: "connectionMethods.customServer",
         value: "自訂伺服器",
+    },
+    GeneratedSharedTermEntry {
+        locale: LocaleId::ZhTW,
+        key: "connectionMethods.haloServer",
+        value: "Halo Studio Server",
     },
     GeneratedSharedTermEntry {
         locale: LocaleId::ZhTW,
@@ -439,11 +439,6 @@ pub const GENERATED_SHARED_TERMS: &[GeneratedSharedTermEntry] = &[
     },
     GeneratedSharedTermEntry {
         locale: LocaleId::EnUS,
-        key: "connectionMethods.bitfunServer",
-        value: "Halo Studio Server",
-    },
-    GeneratedSharedTermEntry {
-        locale: LocaleId::EnUS,
         key: "connectionMethods.botFeishu",
         value: "Feishu Bot",
     },
@@ -461,6 +456,11 @@ pub const GENERATED_SHARED_TERMS: &[GeneratedSharedTermEntry] = &[
         locale: LocaleId::EnUS,
         key: "connectionMethods.customServer",
         value: "Custom Server",
+    },
+    GeneratedSharedTermEntry {
+        locale: LocaleId::EnUS,
+        key: "connectionMethods.haloServer",
+        value: "Halo Studio Server",
     },
     GeneratedSharedTermEntry {
         locale: LocaleId::EnUS,

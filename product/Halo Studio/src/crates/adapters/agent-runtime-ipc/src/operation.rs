@@ -1,5 +1,5 @@
-use bitfun_product_domains::tool_permissions::{PermissionReply, PermissionRequest};
-use bitfun_runtime_ports::{
+use halo_product_domains::tool_permissions::{PermissionReply, PermissionRequest};
+use halo_runtime_ports::{
     AgentDialogTurnRequest, AgentSessionCreateRequest, AgentSessionCreateResult,
     AgentSessionListRequest, AgentSessionSummary, AgentTurnCancellationRequest,
     AgentTurnCancellationResult, SessionTranscript,

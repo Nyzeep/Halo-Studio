@@ -1,5 +1,5 @@
-use crate::util::errors::{BitFunError, BitFunResult};
-use bitfun_runtime_ports::{
+use crate::util::errors::{HaloError, HaloResult};
+use halo_runtime_ports::{
     RemoteExecPort, RemoteSendStdinRequest, TerminalPort, TerminalSendStdinRequest,
 };
 use std::sync::Arc;
@@ -16,10 +16,10 @@ pub async fn send_exec_command_input(
     request: ExecCommandInputRequest,
     terminal_port: Option<&Arc<dyn TerminalPort>>,
     remote_exec_port: Option<&Arc<dyn RemoteExecPort>>,
-) -> BitFunResult<()> {
+) -> HaloResult<()> {
     if request.remote {
         let remote_exec_port = remote_exec_port.ok_or_else(|| {
-            BitFunError::tool(
+            HaloError::tool(
                 "remote exec runtime service is required for ExecCommand input".to_string(),
             )
         })?;
@@ -31,13 +31,13 @@ pub async fn send_exec_command_input(
             })
             .await
             .map_err(|error| {
-                BitFunError::tool(format!("ExecCommand input failed: {}", error.message))
+                HaloError::tool(format!("ExecCommand input failed: {}", error.message))
             })?;
         return Ok(());
     }
 
     let terminal_port = terminal_port.ok_or_else(|| {
-        BitFunError::tool("terminal runtime service is required for ExecCommand input".to_string())
+        HaloError::tool("terminal runtime service is required for ExecCommand input".to_string())
     })?;
     terminal_port
         .send_stdin(TerminalSendStdinRequest {
@@ -46,5 +46,5 @@ pub async fn send_exec_command_input(
             append_enter: request.append_enter,
         })
         .await
-        .map_err(|error| BitFunError::tool(format!("ExecCommand input failed: {}", error.message)))
+        .map_err(|error| HaloError::tool(format!("ExecCommand input failed: {}", error.message)))
 }

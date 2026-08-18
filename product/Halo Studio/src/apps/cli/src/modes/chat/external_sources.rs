@@ -32,7 +32,7 @@ fn parse_external_tool_review_action(
     // so a changed target fails closed instead of reusing the same number for
     // a different tool after a watcher refresh.
     let snapshot = reviewed_snapshot.or(current_snapshot).ok_or_else(|| {
-        "BitFun has not finished checking external tools; run /tools refresh".to_string()
+        "Halo has not finished checking external tools; run /tools refresh".to_string()
     })?;
     if command.eq_ignore_ascii_case("enable") || command.eq_ignore_ascii_case("disable") {
         let index = parse_positive_index(parts.next(), "tool number")?;
@@ -196,7 +196,7 @@ fn cli_native_prompt_command_descriptors(command_name: &str) -> Vec<NativePrompt
         })
         .map(|action| NativePromptCommandDescriptor {
             command_name: command_name.to_ascii_lowercase(),
-            candidate_id: format!("bitfun.cli:{}", action.id),
+            candidate_id: format!("halo.cli:{}", action.id),
             behavior_version: action_conflict_behavior_version(action.id).to_string(),
         })
         .collect()
@@ -236,7 +236,7 @@ fn builtin_command_reconfirmation(
     command_name: &str,
     preferences: &ExternalSourceConflictPreferences,
 ) -> Option<BuiltinCommandReconfirmation> {
-    let candidate_id = format!("bitfun.cli:{action_id}");
+    let candidate_id = format!("halo.cli:{action_id}");
     let participated_in_conflict = preferences.conflicted_candidate_ids.contains(&candidate_id);
     if !participated_in_conflict {
         return None;

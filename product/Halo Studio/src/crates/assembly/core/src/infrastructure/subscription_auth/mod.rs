@@ -1,5 +1,5 @@
 //! Compatibility re-exports for subscription authentication.
 //!
-//! The provider-specific implementation lives in `bitfun-ai-adapters`.
+//! The provider-specific implementation lives in `halo-ai-adapters`.
 
-pub use bitfun_ai_adapters::subscription_auth::*;
+pub use halo_ai_adapters::subscription_auth::*;

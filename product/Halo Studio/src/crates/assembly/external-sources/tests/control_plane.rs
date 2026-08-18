@@ -1,5 +1,5 @@
-use bitfun_external_sources::ExternalSourceControlPlane;
-use bitfun_product_domains::external_sources::{
+use halo_external_sources::ExternalSourceControlPlane;
+use halo_product_domains::external_sources::{
     ExecutionDomainId, ExternalMcpRevisionKey, ExternalSourceContext,
 };
 use std::collections::BTreeSet;

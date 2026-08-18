@@ -1,1 +1,1 @@
-pub use bitfun_services_integrations::announcement::*;
+pub use halo_services_integrations::announcement::*;

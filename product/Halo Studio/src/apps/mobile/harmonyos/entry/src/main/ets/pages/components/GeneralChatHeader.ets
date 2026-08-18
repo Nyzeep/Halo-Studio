@@ -23,7 +23,7 @@ export struct GeneralChatHeader {
       .onClick(() => {
         this.onOpenSidebar();
       })
-      Text('BitFun')
+      Text('Halo Studio')
         .fontSize(17)
         .fontWeight(FontWeight.Medium)
         .fontColor(INK)

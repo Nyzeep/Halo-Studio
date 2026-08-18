@@ -10,10 +10,10 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use bitfun_core::product_runtime::CoreAgentRuntimeCompatibility;
-use bitfun_core::service::config::get_global_config_service;
-use bitfun_core::service::remote_connect::settings_sync;
-use bitfun_core::service::remote_connect::{sync_state, AccountClient};
+use halo_core::product_runtime::CoreAgentRuntimeCompatibility;
+use halo_core::service::config::get_global_config_service;
+use halo_core::service::remote_connect::settings_sync;
+use halo_core::service::remote_connect::{sync_state, AccountClient};
 
 use crate::account::{
     account_context_generation, account_context_is_current, automatic_account_sync_policy,
@@ -67,7 +67,7 @@ pub(crate) fn notify_local_settings_changed() {
 }
 
 /// Best-effort one-shot settings push for short-lived management commands
-/// (e.g. `bitfun models set-default`) where the sync loop never starts.
+/// (e.g. `halo models set-default`) where the sync loop never starts.
 /// Silently no-ops when logged out; failures are logged, not fatal.
 pub(crate) async fn push_settings_after_local_change() {
     if !automatic_account_sync_policy().management_push {

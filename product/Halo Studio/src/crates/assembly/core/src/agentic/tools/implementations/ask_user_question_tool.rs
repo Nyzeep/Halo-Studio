@@ -3,7 +3,7 @@
 //! Allows AI to ask questions to users during execution and wait for answers
 
 use async_trait::async_trait;
-use bitfun_agent_runtime::user_questions::{
+use halo_agent_runtime::user_questions::{
     ask_user_question_available_in_context, build_answered_user_question_result,
     build_cancelled_user_question_result, validate_ask_user_question_input, AskUserQuestionInput,
     USER_INPUT_AVAILABLE_CONTEXT_KEY,
@@ -15,7 +15,7 @@ use uuid::Uuid;
 use crate::agentic::tools::framework::{Tool, ToolResult, ToolUseContext};
 use crate::agentic::tools::user_input_manager::get_user_input_manager;
 use crate::infrastructure::events::event_system::{get_global_event_system, BackendEvent};
-use crate::util::errors::BitFunResult;
+use crate::util::errors::HaloResult;
 
 /// AskUserQuestion tool
 pub struct AskUserQuestionTool;
@@ -57,7 +57,7 @@ impl Tool for AskUserQuestionTool {
         "AskUserQuestion"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(r#"Use this tool when you need to ask the user questions during execution. This allows you to:
 1. Gather user preferences or requirements
 2. Clarify ambiguous instructions
@@ -176,9 +176,9 @@ Usage notes:
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         if !Self::is_available_for_tool_context(Some(context)) {
-            return Err(crate::util::errors::BitFunError::tool(
+            return Err(crate::util::errors::HaloError::tool(
                 "AskUserQuestion is unavailable because this execution surface cannot accept interactive user input",
             ));
         }
@@ -186,7 +186,7 @@ Usage notes:
         // 1. Parse input parameters
         let tool_input: AskUserQuestionInput =
             serde_json::from_value(input.clone()).map_err(|e| {
-                crate::util::errors::BitFunError::Validation(format!(
+                crate::util::errors::HaloError::Validation(format!(
                     "Failed to parse input parameters: {}",
                     e
                 ))
@@ -194,7 +194,7 @@ Usage notes:
 
         // 2. Validate question format
         if let Err(error) = validate_ask_user_question_input(&tool_input) {
-            return Err(crate::util::errors::BitFunError::Validation(error));
+            return Err(crate::util::errors::HaloError::Validation(error));
         }
 
         let question_count = tool_input.questions.len();
@@ -279,7 +279,7 @@ mod tests {
             custom_data,
             computer_use_host: None,
             runtime_tool_restrictions: Default::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         }
     }
 

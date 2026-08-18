@@ -28,7 +28,7 @@ Account login (pending sync choice / finalize) lives in
 cloud vs local settings.
 
 One-click relay deploy: Tauri surface `src/api/relay_deploy_api.rs`, orchestration
-in `bitfun-services-integrations` `remote_ssh/relay_deploy.rs`. Feature invariants:
+in `halo-services-integrations` `remote_ssh/relay_deploy.rs`. Feature invariants:
 `src/web-ui/src/features/relay-deploy/README.md`.
 
 If a change affects behavior shared by multiple runtimes, place stable contracts,
@@ -47,9 +47,9 @@ product wiring and compatibility bridges in `src/crates/assembly/core`.
 ```bash
 pnpm run desktop:dev
 pnpm run desktop:preview:debug
-cargo check -p bitfun-desktop
-cargo test -p bitfun-desktop
-cargo build -p bitfun-desktop
+cargo check -p halo-desktop
+cargo test -p halo-desktop
+cargo build -p halo-desktop
 pnpm run desktop:build:fast
 ```
 
@@ -63,7 +63,7 @@ pnpm run desktop:build:fast
 
 ## Target cache GC
 
-`desktop:dev` (on exit), `desktop:preview:debug` (on shutdown), and `desktop:build*` prune stale `target/<profile>/incremental` roots (keep latest per crate) and true-orphan `deps` hashes with no matching `.fingerprint` directory. Fingerprints are never mtime-pruned (that forced cold rebuilds). Manual: `pnpm run target:gc -- --profile debug`. Disable with `BITFUN_TARGET_GC=0`; dry-run with `BITFUN_TARGET_GC_DRY_RUN=1`.
+`desktop:dev` (on exit), `desktop:preview:debug` (on shutdown), and `desktop:build*` prune stale `target/<profile>/incremental` roots (keep latest per crate) and true-orphan `deps` hashes with no matching `.fingerprint` directory. Fingerprints are never mtime-pruned (that forced cold rebuilds). Manual: `pnpm run target:gc -- --profile debug`. Disable with `HALO_TARGET_GC=0`; dry-run with `HALO_TARGET_GC_DRY_RUN=1`.
 
 `release-fast` profile (`Cargo.toml`): inherits `release` but disables LTO, increases `codegen-units` to 16, enables incremental compilation. Significantly faster at the cost of binary size and marginal runtime performance.
 
@@ -79,11 +79,11 @@ The `devtools` Cargo feature exists for debugging UI/UX in the desktop app. When
 ## Verification
 
 ```bash
-cargo check -p bitfun-desktop && cargo test -p bitfun-desktop
+cargo check -p halo-desktop && cargo test -p halo-desktop
 ```
 
 If the change affects startup, WebDriver, browser/computer-use, or packaged behavior, also run:
 
 ```bash
-cargo build -p bitfun-desktop
+cargo build -p halo-desktop
 ```

@@ -1,4 +1,4 @@
-use bitfun_events::EventEmitter;
+use halo_events::EventEmitter;
 use log::{debug, error};
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::hash_map::Entry;

@@ -151,7 +151,7 @@ impl ChatMode {
             .or_else(|| Some(self.agent.workspace_path_string()));
         let agent = self.agent.clone();
 
-        let report_result: Result<bitfun_core::service::session_usage::SessionUsageReport> =
+        let report_result: Result<halo_core::service::session_usage::SessionUsageReport> =
             tokio::task::block_in_place(|| {
                 let session_id = session_id.clone();
                 let workspace_path = workspace_path.clone();
@@ -358,15 +358,15 @@ impl ChatMode {
         let result: Option<String> = tokio::task::block_in_place(|| {
             rt_handle.block_on(async {
                 let config_service = GlobalConfigManager::get_service().await.ok()?;
-                let models: Vec<bitfun_core::service::config::AIModelConfig> =
+                let models: Vec<halo_core::service::config::AIModelConfig> =
                     config_service.get_ai_models().await.ok()?;
-                let global_config: bitfun_core::service::config::GlobalConfig =
+                let global_config: halo_core::service::config::GlobalConfig =
                     config_service.get_config(None).await.ok()?;
 
                 let model_id = crate::model_selection::resolve_mode_model_id(&global_config.ai)?;
 
                 fn provider_display_name(
-                    model: &bitfun_core::service::config::AIModelConfig,
+                    model: &halo_core::service::config::AIModelConfig,
                 ) -> String {
                     let raw_name = model.name.trim();
                     let model_name = model.model_name.trim();
@@ -388,7 +388,7 @@ impl ChatMode {
                 }
 
                 fn model_display_name(
-                    model: &bitfun_core::service::config::AIModelConfig,
+                    model: &halo_core::service::config::AIModelConfig,
                 ) -> String {
                     format!("{} / {}", model.model_name, provider_display_name(model))
                 }
@@ -424,9 +424,9 @@ impl ChatMode {
                     }
                 };
 
-                let models: Vec<bitfun_core::service::config::AIModelConfig> =
+                let models: Vec<halo_core::service::config::AIModelConfig> =
                     config_service.get_ai_models().await.ok()?;
-                let global_config: bitfun_core::service::config::GlobalConfig =
+                let global_config: halo_core::service::config::GlobalConfig =
                     config_service.get_config(None).await.ok()?;
 
                 let current_model_id =

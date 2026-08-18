@@ -5,20 +5,20 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::api::app_state::AppState;
 use crate::startup_trace::DesktopStartupTrace;
-use bitfun_core::service::system;
+use halo_core::service::system;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, Position, Size, State};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_updater::UpdaterExt;
 
 /// Emitted during `install_update` download; matches `installUpdateWithProgress` / frontend listener.
-const UPDATE_PROGRESS_EVENT: &str = "bitfun-update-progress";
+const UPDATE_PROGRESS_EVENT: &str = "halo-update-progress";
 
 /// Updater origins, in configured (fallback) order. Kept in step with
 /// `scripts/desktop-tauri-build.mjs`, which bakes the same pair into the bundle.
 const GITHUB_UPDATER_ENDPOINT: &str =
     "https://github.com/GCWing/BitFun/releases/latest/download/latest.json";
-const OPENBITFUN_UPDATER_ENDPOINT: &str = "https://openbitfun.com/release/latest.json";
+const OPENHALO_UPDATER_ENDPOINT: &str = "https://openbitfun.com/release/latest.json";
 
 /// Throughput probe settings, matching the CLI updater and the relay deploy
 /// script (`src/apps/cli/src/self_update.rs`,
@@ -55,7 +55,7 @@ async fn endpoints_fastest_first() -> Vec<tauri::Url> {
     // download URL, which is exactly the thing worth measuring.
     let platform = updater_platform_key();
     let mut ranked = Vec::new();
-    for endpoint in [GITHUB_UPDATER_ENDPOINT, OPENBITFUN_UPDATER_ENDPOINT] {
+    for endpoint in [GITHUB_UPDATER_ENDPOINT, OPENHALO_UPDATER_ENDPOINT] {
         let Ok(url) = endpoint.parse::<tauri::Url>() else {
             continue;
         };
@@ -120,7 +120,7 @@ async fn manifest_package_url(
 }
 
 fn default_endpoints() -> Vec<tauri::Url> {
-    [GITHUB_UPDATER_ENDPOINT, OPENBITFUN_UPDATER_ENDPOINT]
+    [GITHUB_UPDATER_ENDPOINT, OPENHALO_UPDATER_ENDPOINT]
         .iter()
         .filter_map(|endpoint| endpoint.parse().ok())
         .collect()

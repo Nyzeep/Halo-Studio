@@ -5,7 +5,7 @@
 //! its own rounds, tools, cancellation, and cleanup lifecycle.
 
 use crate::agentic::core::{Message, Session, SessionConfig};
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 
 /// Immutable snapshot of a parent session's runtime context at fork time.
 #[derive(Debug, Clone)]
@@ -26,13 +26,13 @@ impl ForkAgentContextSnapshot {
     pub fn from_parent_session(
         parent_session: &Session,
         messages: Vec<Message>,
-    ) -> BitFunResult<Self> {
+    ) -> HaloResult<Self> {
         let workspace_path = parent_session
             .config
             .workspace_path
             .clone()
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "workspace_path is required when forking session: {}",
                     parent_session.session_id
                 ))

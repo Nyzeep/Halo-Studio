@@ -7,7 +7,7 @@ pub mod message;
 pub mod messages_helper;
 pub mod session;
 pub mod state;
-pub use bitfun_agent_runtime::prompt_markup::{
+pub use halo_agent_runtime::prompt_markup::{
     has_prompt_markup, is_system_reminder_only, render_system_reminder, render_user_query,
     strip_prompt_markup, PromptBlock, PromptBlockKind, PromptEnvelope,
 };

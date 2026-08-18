@@ -2,16 +2,16 @@
 //!
 //! Provide unified error types and handling for the whole application
 
-use bitfun_core_types::errors::{
+use halo_core_types::errors::{
     ai_error_detail_from_message, classify_ai_error_message, AiErrorDetail, AiProviderError,
     ErrorCategory,
 };
 use serde::Serialize;
 use thiserror::Error;
 
-/// Unified error type for the BitFun application
+/// Unified error type for the Halo application
 #[derive(Debug, Error, Serialize)]
-pub enum BitFunError {
+pub enum HaloError {
     #[error("Service error: {0}")]
     Service(String),
 
@@ -97,7 +97,7 @@ pub enum BitFunError {
     Cancelled(String),
 }
 
-pub type BitFunResult<T> = Result<T, BitFunError>;
+pub type HaloResult<T> = Result<T, HaloError>;
 
 // Custom serialization functions for non-serializable error types
 fn serialize_io_error<S>(err: &std::io::Error, serializer: S) -> Result<S::Ok, S::Error>
@@ -121,7 +121,7 @@ where
     serializer.serialize_str(&err.to_string())
 }
 
-impl BitFunError {
+impl HaloError {
     pub fn service<T: Into<String>>(msg: T) -> Self {
         Self::Service(msg.into())
     }
@@ -177,18 +177,18 @@ impl BitFunError {
     /// Infer an error category from this error for frontend-friendly classification.
     pub fn error_category(&self) -> ErrorCategory {
         match self {
-            BitFunError::AIClient(msg) => classify_ai_error_message(msg),
-            BitFunError::AIProvider(error) => error.category.clone(),
-            BitFunError::RecoverableContextOverflow(_) => ErrorCategory::ContextOverflow,
-            BitFunError::Timeout(_) => ErrorCategory::Timeout,
-            BitFunError::Cancelled(_) => ErrorCategory::Unknown,
+            HaloError::AIClient(msg) => classify_ai_error_message(msg),
+            HaloError::AIProvider(error) => error.category.clone(),
+            HaloError::RecoverableContextOverflow(_) => ErrorCategory::ContextOverflow,
+            HaloError::Timeout(_) => ErrorCategory::Timeout,
+            HaloError::Cancelled(_) => ErrorCategory::Unknown,
             _ => ErrorCategory::Unknown,
         }
     }
 
     /// Build a structured, provider-agnostic AI error detail for UI recovery.
     pub fn error_detail(&self) -> AiErrorDetail {
-        if let BitFunError::AIProvider(error) | BitFunError::RecoverableContextOverflow(error) =
+        if let HaloError::AIProvider(error) | HaloError::RecoverableContextOverflow(error) =
             self
         {
             return error.detail();
@@ -203,32 +203,32 @@ impl BitFunError {
     }
 }
 
-impl From<bitfun_agent_stream::StreamProcessorError> for BitFunError {
-    fn from(error: bitfun_agent_stream::StreamProcessorError) -> Self {
+impl From<halo_agent_stream::StreamProcessorError> for HaloError {
+    fn from(error: halo_agent_stream::StreamProcessorError) -> Self {
         match error {
-            bitfun_agent_stream::StreamProcessorError::AiClient(msg) => Self::AIClient(msg),
-            bitfun_agent_stream::StreamProcessorError::AiProvider(error) => Self::AIProvider(error),
-            bitfun_agent_stream::StreamProcessorError::Cancelled(msg) => Self::Cancelled(msg),
+            halo_agent_stream::StreamProcessorError::AiClient(msg) => Self::AIClient(msg),
+            halo_agent_stream::StreamProcessorError::AiProvider(error) => Self::AIProvider(error),
+            halo_agent_stream::StreamProcessorError::Cancelled(msg) => Self::Cancelled(msg),
         }
     }
 }
 
-impl From<bitfun_agent_runtime::event_bus::EventBusError> for BitFunError {
-    fn from(error: bitfun_agent_runtime::event_bus::EventBusError) -> Self {
+impl From<halo_agent_runtime::event_bus::EventBusError> for HaloError {
+    fn from(error: halo_agent_runtime::event_bus::EventBusError) -> Self {
         Self::Agent(error.to_string())
     }
 }
 
-impl From<bitfun_agent_tools::computer_use::ComputerUseContractError> for BitFunError {
-    fn from(error: bitfun_agent_tools::computer_use::ComputerUseContractError) -> Self {
+impl From<halo_agent_tools::computer_use::ComputerUseContractError> for HaloError {
+    fn from(error: halo_agent_tools::computer_use::ComputerUseContractError) -> Self {
         Self::Tool(error.to_string())
     }
 }
 
 #[cfg(feature = "service-integrations")]
-impl From<bitfun_services_integrations::mcp::MCPRuntimeError> for BitFunError {
-    fn from(error: bitfun_services_integrations::mcp::MCPRuntimeError) -> Self {
-        use bitfun_services_integrations::mcp::MCPRuntimeErrorKind;
+impl From<halo_services_integrations::mcp::MCPRuntimeError> for HaloError {
+    fn from(error: halo_services_integrations::mcp::MCPRuntimeError) -> Self {
+        use halo_services_integrations::mcp::MCPRuntimeErrorKind;
 
         let message = error.message().to_string();
         match error.kind() {
@@ -247,20 +247,20 @@ impl From<bitfun_services_integrations::mcp::MCPRuntimeError> for BitFunError {
     }
 }
 
-impl From<BitFunError> for String {
-    fn from(err: BitFunError) -> String {
+impl From<HaloError> for String {
+    fn from(err: HaloError) -> String {
         err.to_string()
     }
 }
 
-impl From<String> for BitFunError {
+impl From<String> for HaloError {
     fn from(error: String) -> Self {
-        BitFunError::Service(error)
+        HaloError::Service(error)
     }
 }
 
-impl From<&str> for BitFunError {
+impl From<&str> for HaloError {
     fn from(error: &str) -> Self {
-        BitFunError::Service(error.to_string())
+        HaloError::Service(error.to_string())
     }
 }

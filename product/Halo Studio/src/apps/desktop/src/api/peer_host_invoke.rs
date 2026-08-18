@@ -225,12 +225,12 @@ pub fn disconnect_controllers() -> Vec<String> {
     state.permission_request_ids.drain().collect()
 }
 
-pub fn track_permission_event(event: &bitfun_agent_runtime::sdk::PermissionRequestEvent) -> bool {
+pub fn track_permission_event(event: &halo_agent_runtime::sdk::PermissionRequestEvent) -> bool {
     let Ok(mut state) = peer_control_state().lock() else {
         return false;
     };
     match event {
-        bitfun_agent_runtime::sdk::PermissionRequestEvent::Asked { request } => {
+        halo_agent_runtime::sdk::PermissionRequestEvent::Asked { request } => {
             if !state.controllers.is_empty() {
                 state
                     .permission_request_ids
@@ -240,8 +240,8 @@ pub fn track_permission_event(event: &bitfun_agent_runtime::sdk::PermissionReque
                 false
             }
         }
-        bitfun_agent_runtime::sdk::PermissionRequestEvent::Replied { request_id, .. }
-        | bitfun_agent_runtime::sdk::PermissionRequestEvent::Cancelled { request_id, .. } => {
+        halo_agent_runtime::sdk::PermissionRequestEvent::Replied { request_id, .. }
+        | halo_agent_runtime::sdk::PermissionRequestEvent::Cancelled { request_id, .. } => {
             let was_tracked = state.permission_request_ids.remove(request_id);
             was_tracked && !state.controllers.is_empty()
         }
@@ -262,7 +262,7 @@ pub async fn fail_closed_permission_requests(
     if request_ids.is_empty() {
         return Ok(());
     }
-    let manager = bitfun_core::product_runtime::core_permission_request_manager()?;
+    let manager = halo_core::product_runtime::core_permission_request_manager()?;
     let mut failures = Vec::new();
     for request_id in request_ids {
         if let Err(error) = manager

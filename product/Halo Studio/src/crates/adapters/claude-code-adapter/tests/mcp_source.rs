@@ -1,5 +1,5 @@
-use bitfun_claude_code_adapter::{ClaudeCodeMcpProvider, ClaudeCodeMcpProviderOptions};
-use bitfun_product_domains::external_sources::{
+use halo_claude_code_adapter::{ClaudeCodeMcpProvider, ClaudeCodeMcpProviderOptions};
+use halo_product_domains::external_sources::{
     ExecutionDomainId, ExternalMcpDiscoveryInput, ExternalMcpRevisionKey,
     ExternalMcpSourceProvider, ExternalMcpStaticStatus, ExternalMcpTransportKind,
     ExternalSourceContext, ExternalSourceScope, PreparedExternalMcpImportTransport,

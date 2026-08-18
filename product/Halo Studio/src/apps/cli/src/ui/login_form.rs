@@ -1,4 +1,4 @@
-//! Full-viewport BitFun account panel (Login / Sync choice / Account status).
+//! Full-viewport Halo account panel (Login / Sync choice / Account status).
 //!
 //! Opened by `/login`. When already logged in, shows account info and sync
 //! progress instead of the credential form.
@@ -455,7 +455,7 @@ impl LoginFormState {
         let outer = Block::default()
             .borders(Borders::ALL)
             .border_style(theme.style(StyleKind::Primary))
-            .title(" BitFun Account Login ")
+            .title(" Halo Account Login ")
             .title_alignment(Alignment::Center);
         let inner = outer.inner(area);
         frame.render_widget(outer, area);
@@ -604,7 +604,7 @@ impl LoginFormState {
         let outer = Block::default()
             .borders(Borders::ALL)
             .border_style(theme.style(StyleKind::Primary))
-            .title(" BitFun Account ")
+            .title(" Halo Account ")
             .title_alignment(Alignment::Center);
         let inner = outer.inner(area);
         frame.render_widget(outer, area);

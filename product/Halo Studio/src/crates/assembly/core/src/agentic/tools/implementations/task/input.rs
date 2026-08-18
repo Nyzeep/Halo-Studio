@@ -8,7 +8,7 @@ pub(super) enum TaskAction {
 }
 
 impl TaskAction {
-    pub(super) fn parse(value: &Value) -> BitFunResult<Self> {
+    pub(super) fn parse(value: &Value) -> HaloResult<Self> {
         let action = match value
             .get("action")
             .and_then(Value::as_str)
@@ -18,7 +18,7 @@ impl TaskAction {
             Some(action) => action,
             None => {
                 return Self::infer_from_input(value)
-                    .ok_or_else(|| BitFunError::tool("action is required".to_string()))
+                    .ok_or_else(|| HaloError::tool("action is required".to_string()))
             }
         };
 
@@ -26,7 +26,7 @@ impl TaskAction {
             "spawn" => Ok(Self::Spawn),
             "send_input" => Ok(Self::SendInput),
             "cancel" => Ok(Self::Cancel),
-            other => Err(BitFunError::tool(format!(
+            other => Err(HaloError::tool(format!(
                 "action must be one of: spawn, send_input, cancel; got '{}'",
                 other
             ))),
@@ -92,9 +92,9 @@ impl TaskTool {
     pub(super) fn parse_invocation(
         input: &Value,
         is_deep_review_parent: bool,
-    ) -> BitFunResult<TaskInvocation> {
+    ) -> HaloResult<TaskInvocation> {
         if input.get("workspace_path").is_some() {
-            return Err(BitFunError::tool(
+            return Err(HaloError::tool(
                 "workspace_path is no longer supported; subagents inherit the current workspace. Put any non-current target path in the prompt."
                     .to_string(),
             ));
@@ -102,13 +102,13 @@ impl TaskTool {
 
         if is_deep_review_parent {
             if input.get("action").is_some() {
-                return Err(BitFunError::tool(
+                return Err(HaloError::tool(
                     "action is not supported for DeepReview Task calls".to_string(),
                 ));
             }
             for field in ["fork_context", "agent_id", "run_in_background"] {
                 if input.get(field).is_some() {
-                    return Err(BitFunError::tool(format!(
+                    return Err(HaloError::tool(format!(
                         "{field} is not allowed for DeepReview Task calls"
                     )));
                 }
@@ -137,12 +137,12 @@ impl TaskTool {
 
         let action = TaskAction::parse(input)?;
         if Self::has_deep_review_retry_fields(input) {
-            return Err(BitFunError::tool(
+            return Err(HaloError::tool(
                 "DeepReview retry fields are only allowed for DeepReview Task calls".to_string(),
             ));
         }
         if input.get("timeout_seconds").is_some() {
-            return Err(BitFunError::tool(
+            return Err(HaloError::tool(
                 "timeout_seconds is only allowed for DeepReview Task calls".to_string(),
             ));
         }
@@ -153,7 +153,7 @@ impl TaskTool {
                 let description = Self::required_string_for_action(input, "description", action)?;
                 let prompt = Self::required_string_for_action(input, "prompt", action)?;
                 if Self::optional_trimmed_string(input, "agent_id")?.is_some() {
-                    return Err(BitFunError::tool(
+                    return Err(HaloError::tool(
                         "agent_id is not allowed when action is spawn".to_string(),
                     ));
                 }
@@ -162,7 +162,7 @@ impl TaskTool {
                 match context_mode {
                     SubagentContextMode::Fresh => {
                         if subagent_type.is_none() {
-                            return Err(BitFunError::tool(
+                            return Err(HaloError::tool(
                                 "subagent_type is required when action is spawn and fork_context is false or omitted"
                                     .to_string(),
                             ));
@@ -170,7 +170,7 @@ impl TaskTool {
                     }
                     SubagentContextMode::Fork => {
                         if subagent_type.is_some() {
-                            return Err(BitFunError::tool(
+                            return Err(HaloError::tool(
                                 "subagent_type cannot be combined with fork_context=true when action is spawn; use either subagent_type for a fresh subagent or fork_context=true to inherit the current context."
                                     .to_string(),
                             ));
@@ -296,14 +296,14 @@ impl TaskTool {
         input: &Value,
         field: &str,
         action: TaskAction,
-    ) -> BitFunResult<Option<String>> {
+    ) -> HaloResult<Option<String>> {
         let value = Self::string_field(
             input,
             field,
             format!("action is {}", action.as_str()).as_str(),
         )?;
         if value.is_none() {
-            return Err(BitFunError::tool(format!(
+            return Err(HaloError::tool(format!(
                 "{field} is required when action is {}",
                 action.as_str()
             )));
@@ -311,16 +311,16 @@ impl TaskTool {
         Ok(value)
     }
 
-    fn string_field(input: &Value, field: &str, context: &str) -> BitFunResult<Option<String>> {
+    fn string_field(input: &Value, field: &str, context: &str) -> HaloResult<Option<String>> {
         match input.get(field) {
             None => Ok(None),
             Some(value) => {
                 let value = value
                     .as_str()
-                    .ok_or_else(|| BitFunError::tool(format!("{field} must be a string")))?;
+                    .ok_or_else(|| HaloError::tool(format!("{field} must be a string")))?;
                 let value = value.trim();
                 if value.is_empty() {
-                    return Err(BitFunError::tool(format!(
+                    return Err(HaloError::tool(format!(
                         "{field} is required for {context}"
                     )));
                 }
@@ -329,42 +329,42 @@ impl TaskTool {
         }
     }
 
-    fn optional_trimmed_string(input: &Value, field: &str) -> BitFunResult<Option<String>> {
+    fn optional_trimmed_string(input: &Value, field: &str) -> HaloResult<Option<String>> {
         match input.get(field) {
             None | Some(Value::Null) => Ok(None),
             Some(value) => {
                 let value = value
                     .as_str()
-                    .ok_or_else(|| BitFunError::tool(format!("{field} must be a string")))?;
+                    .ok_or_else(|| HaloError::tool(format!("{field} must be a string")))?;
                 let value = value.trim();
                 Ok((!value.is_empty()).then(|| value.to_string()))
             }
         }
     }
 
-    fn optional_model_id(input: &Value) -> BitFunResult<(Option<String>, bool)> {
+    fn optional_model_id(input: &Value) -> HaloResult<(Option<String>, bool)> {
         match Self::optional_trimmed_string(input, "model_id")? {
             Some(model_id) if model_id == "inherit" => Ok((None, true)),
             model_id => Ok((model_id, false)),
         }
     }
 
-    fn optional_bool(input: &Value, field: &str) -> BitFunResult<Option<bool>> {
+    fn optional_bool(input: &Value, field: &str) -> HaloResult<Option<bool>> {
         match input.get(field) {
             None | Some(Value::Null) => Ok(None),
             Some(value) => value
                 .as_bool()
                 .map(Some)
-                .ok_or_else(|| BitFunError::tool(format!("{field} must be a boolean"))),
+                .ok_or_else(|| HaloError::tool(format!("{field} must be a boolean"))),
         }
     }
 
-    fn optional_timeout_seconds(input: &Value) -> BitFunResult<Option<u64>> {
+    fn optional_timeout_seconds(input: &Value) -> HaloResult<Option<u64>> {
         match input.get("timeout_seconds") {
             None => Ok(None),
             Some(value) => {
                 let parsed = value.as_u64().ok_or_else(|| {
-                    BitFunError::tool("timeout_seconds must be a non-negative integer".to_string())
+                    HaloError::tool("timeout_seconds must be a non-negative integer".to_string())
                 })?;
                 Ok((parsed > 0).then_some(parsed))
             }
@@ -375,10 +375,10 @@ impl TaskTool {
         input: &Value,
         fields: &[&str],
         action: TaskAction,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         for field in fields {
             if Self::has_effective_value(input, field) {
-                return Err(BitFunError::tool(format!(
+                return Err(HaloError::tool(format!(
                     "{field} is not allowed when action is {}",
                     action.as_str()
                 )));

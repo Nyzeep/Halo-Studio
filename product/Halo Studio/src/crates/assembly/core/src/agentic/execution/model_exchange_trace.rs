@@ -6,7 +6,7 @@ use crate::service::config::{
 };
 use crate::service::workspace_runtime::get_workspace_runtime_service_arc;
 use async_trait::async_trait;
-use bitfun_ai_adapters::{
+use halo_ai_adapters::{
     ModelExchangeRequestAttempt, ModelExchangeRequestTraceHandle, ModelExchangeResponseTrace,
     ModelExchangeRoundAttempt, ModelExchangeTraceConfig, ModelExchangeTraceSink,
 };

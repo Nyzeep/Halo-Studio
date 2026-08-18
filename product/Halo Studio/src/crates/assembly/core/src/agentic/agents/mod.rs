@@ -1,4 +1,4 @@
-//! Mode system for BitFun
+//! Mode system for Halo
 //!
 //! Provides flexible mode selection with different system prompts and tool sets
 
@@ -9,15 +9,15 @@ mod registry;
 use crate::agentic::session::{SystemPromptCacheIdentity, UserContextCacheIdentity};
 use crate::agentic::tools::framework::ToolExposure;
 use crate::agentic::WorkspaceBinding;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
-pub use bitfun_agent_runtime::agents::{
+pub use halo_agent_runtime::agents::{
     mode_config_profile_label, mode_config_profile_member_mode_ids, mode_presentation_rank,
     resolve_mode_config_profile_id, shared_coding_mode_user_context_policy,
     SHARED_CODING_MODE_CONFIG_PROFILE_ID, SHARED_CODING_MODE_CONFIG_PROFILE_LABEL,
     SHARED_CODING_MODE_IDS, SHARED_CODING_MODE_PROMPT_TEMPLATE,
 };
-pub use bitfun_agent_runtime::custom_agent::{
+pub use halo_agent_runtime::custom_agent::{
     custom_agent_model_or_default, custom_agent_review_writable_tools, default_custom_agent_tools,
     default_custom_agent_user_context_policy, CustomAgentKind, CustomAgentLevel,
 };
@@ -78,7 +78,7 @@ fn append_provider_group_tools(tools: &mut Vec<String>, provider_id: &'static st
     #[cfg(feature = "tool-packs")]
     {
         let provider_groups =
-            bitfun_tool_packs::try_product_tool_provider_group_plan_for_ids(&[provider_id])
+            halo_tool_packs::try_product_tool_provider_group_plan_for_ids(&[provider_id])
                 .expect("shared coding mode provider group must exist");
         for group in provider_groups {
             tools.extend(
@@ -177,11 +177,11 @@ pub trait Agent: Send + Sync + 'static {
     fn user_context_policy(&self) -> UserContextPolicy;
 
     /// Build the system prompt for this agent
-    async fn build_prompt(&self, context: &PromptBuilderContext) -> BitFunResult<String> {
+    async fn build_prompt(&self, context: &PromptBuilderContext) -> HaloResult<String> {
         let prompt_components = PromptBuilder::new(context.clone());
         let template_name = self.prompt_template_name(context.model_name.as_deref());
         let system_prompt_template = get_embedded_prompt(template_name).ok_or_else(|| {
-            BitFunError::Agent(format!("{} not found in embedded files", template_name))
+            HaloError::Agent(format!("{} not found in embedded files", template_name))
         })?;
 
         let prompt = prompt_components
@@ -195,11 +195,11 @@ pub trait Agent: Send + Sync + 'static {
     async fn get_system_prompt(
         &self,
         context: Option<&PromptBuilderContext>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         if let Some(context) = context {
             self.build_prompt(context).await
         } else {
-            Err(BitFunError::Agent(
+            Err(HaloError::Agent(
                 "Prompt build context is required".to_string(),
             ))
         }
@@ -214,11 +214,11 @@ pub trait Agent: Send + Sync + 'static {
         &self,
         _previous_agent_type: Option<&str>,
         _workspace: Option<&WorkspaceBinding>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         if let Some(system_reminder_template_name) = self.system_reminder_template_name() {
             let system_reminder =
                 get_embedded_prompt(system_reminder_template_name).ok_or_else(|| {
-                    BitFunError::Agent(format!(
+                    HaloError::Agent(format!(
                         "{} not found in embedded files",
                         system_reminder_template_name
                     ))

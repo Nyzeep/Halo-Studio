@@ -2,7 +2,7 @@
 
 use serde_json::{json, Value};
 
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     AgentDialogTurnRequest, AgentSubmissionSource, AgentTurnCancellationRequest,
     DialogSubmissionPolicy, DialogTriggerSource,
 };

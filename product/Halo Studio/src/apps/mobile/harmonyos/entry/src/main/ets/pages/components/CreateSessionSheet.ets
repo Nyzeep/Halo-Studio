@@ -205,7 +205,7 @@ export struct CreateSessionSheet {
   }
 
   private workspaceTitle(): string {
-    const base = this.workspaceName || 'BitFun';
+    const base = this.workspaceName || 'Halo Studio';
     return this.workspaceBranch.length > 0 ? `${base} / ${this.workspaceBranch}` : base;
   }
 

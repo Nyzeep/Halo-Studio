@@ -1,12 +1,12 @@
 [package]
-name = "bitfun-services-integrations"
+name = "halo-services-integrations"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "BitFun integration service owner crate"
+description = "Halo integration service owner crate"
 
 [lib]
-name = "bitfun_services_integrations"
+name = "halo_services_integrations"
 crate-type = ["rlib"]
 
 [dependencies]
@@ -14,19 +14,19 @@ tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
-bitfun-agent-runtime = { path = "../../execution/agent-runtime", optional = true }
-bitfun-agent-tools = { path = "../../execution/tool-contracts", optional = true }
-bitfun-events = { path = "../../contracts/events" }
-bitfun-core-types = { path = "../../contracts/core-types", optional = true }
-bitfun-product-domains = { path = "../../contracts/product-domains", default-features = false, optional = true }
-bitfun-runtime-ports = { path = "../../contracts/runtime-ports", optional = true }
+halo-agent-runtime = { path = "../../execution/agent-runtime", optional = true }
+halo-agent-tools = { path = "../../execution/tool-contracts", optional = true }
+halo-events = { path = "../../contracts/events" }
+halo-core-types = { path = "../../contracts/core-types", optional = true }
+halo-product-domains = { path = "../../contracts/product-domains", default-features = false, optional = true }
+halo-runtime-ports = { path = "../../contracts/runtime-ports", optional = true }
 aes-gcm = { workspace = true, optional = true }
 aes = { workspace = true, optional = true }
 anyhow = { workspace = true, optional = true }
 argon2 = { workspace = true, optional = true }
 async-trait = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
-bitfun-services-core = { path = "../services-core", default-features = false, optional = true }
+halo-services-core = { path = "../services-core", default-features = false, optional = true }
 bzip2 = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 dunce = { workspace = true, optional = true }
@@ -95,21 +95,21 @@ zbus-secret-service-keyring-store = { workspace = true, optional = true }
 [features]
 default = []
 announcement = ["reqwest"]
-browser-control = ["anyhow", "bitfun-services-core", "dirs", "reqwest", "thiserror"]
+browser-control = ["anyhow", "halo-services-core", "dirs", "reqwest", "thiserror"]
 canvas-runtime = [
-    "dep:bitfun-product-domains",
+    "dep:halo-product-domains",
     "oxc",
     "sha2",
     "urlencoding",
     "uuid",
 ]
 debug-log = ["anyhow", "chrono", "reqwest", "uuid"]
-deep-research = ["bitfun-agent-runtime"]
-git = ["bitfun-services-core", "chrono", "git2", "thiserror"]
+deep-research = ["halo-agent-runtime"]
+git = ["halo-services-core", "chrono", "git2", "thiserror"]
 file-watch = ["notify"]
 function-agents = [
-    "bitfun-product-domains/function-agents",
-    "dep:bitfun-product-domains",
+    "halo-product-domains/function-agents",
+    "dep:halo-product-domains",
     "git",
 ]
 mcp = [
@@ -117,8 +117,8 @@ mcp = [
     "anyhow",
     "async-trait",
     "base64",
-    "bitfun-agent-tools",
-    "bitfun-services-core",
+    "halo-agent-tools",
+    "halo-services-core",
     "futures",
     "hex",
     "rand",
@@ -132,9 +132,9 @@ mcp = [
 ]
 miniapp-runtime = [
     "base64",
-    "bitfun-product-domains/miniapp",
-    "bitfun-services-core",
-    "dep:bitfun-product-domains",
+    "halo-product-domains/miniapp",
+    "halo-services-core",
+    "dep:halo-product-domains",
     "dirs",
     "reqwest",
     "uuid",
@@ -156,8 +156,8 @@ miniapp-market = [
     "zip",
 ]
 plugin-source = [
-    "bitfun-product-domains/plugin-source",
-    "dep:bitfun-product-domains",
+    "halo-product-domains/plugin-source",
+    "dep:halo-product-domains",
     "dunce",
     "fs2",
     "hex",
@@ -168,10 +168,10 @@ plugin-source = [
     "windows",
 ]
 hook-import = [
-    "bitfun-agent-runtime",
-    "bitfun-product-domains/external-sources",
-    "bitfun-services-core",
-    "dep:bitfun-product-domains",
+    "halo-agent-runtime",
+    "halo-product-domains/external-sources",
+    "halo-services-core",
+    "dep:halo-product-domains",
     "hex",
     "sha2",
     "thiserror",
@@ -184,9 +184,9 @@ remote-connect = [
     "argon2",
     "async-trait",
     "base64",
-    "bitfun-agent-tools",
-    "bitfun-services-core",
-    "bitfun-runtime-ports",
+    "halo-agent-tools",
+    "halo-services-core",
+    "halo-runtime-ports",
     "chrono",
     "dirs",
     "futures",
@@ -212,7 +212,7 @@ remote-connect = [
 remote-ssh = [
     "anyhow",
     "async-trait",
-    "bitfun-runtime-ports",
+    "halo-runtime-ports",
     "dunce",
     "sha2",
     "terminal-core",
@@ -225,8 +225,8 @@ remote-ssh-concrete = [
     "anyhow",
     "async-trait",
     "base64",
-    "bitfun-services-core",
-    "bitfun-runtime-ports",
+    "halo-services-core",
+    "halo-runtime-ports",
     "chrono",
     "dirs",
     "minisign-verify",
@@ -243,7 +243,7 @@ remote-ssh-concrete = [
 ]
 review-platform = [
     "async-trait",
-    "bitfun-services-core",
+    "halo-services-core",
     "chrono",
     "futures",
     "reqwest",
@@ -257,7 +257,7 @@ speech = [
     "base64",
     "bzip2",
     "chrono",
-    "dep:bitfun-core-types",
+    "dep:halo-core-types",
     "futures-util",
     "reqwest",
     "sha2",
@@ -269,13 +269,13 @@ speech = [
 ]
 workspace-search = [
     "async-trait",
-    "bitfun-services-core",
+    "halo-services-core",
     "dunce",
     "thiserror",
     "which",
 ]
-process-tree = ["bitfun-services-core"]
-script-tool-runtime = ["async-trait", "bitfun-runtime-ports", "process-tree", "which"]
+process-tree = ["halo-services-core"]
+script-tool-runtime = ["async-trait", "halo-runtime-ports", "process-tree", "which"]
 web-tools = ["reqwest", "thiserror"]
 product-full = [
     "announcement",

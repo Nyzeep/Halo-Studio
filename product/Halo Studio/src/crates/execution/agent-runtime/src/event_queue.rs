@@ -1,8 +1,8 @@
 //! Provider-neutral runtime event queue.
 
 use crate::event_bus::EventBusResult;
-use bitfun_agent_stream::StreamEventSink;
-use bitfun_events::{
+use halo_agent_stream::StreamEventSink;
+use halo_events::{
     AgenticEvent, AgenticEventEnvelope as EventEnvelope, AgenticEventPriority as EventPriority,
 };
 use log::{debug, trace, warn};
@@ -391,7 +391,7 @@ impl StreamEventSink for EventQueue {
 #[cfg(test)]
 mod tests {
     use super::{EventQueue, EventQueueConfig};
-    use bitfun_events::AgenticEvent;
+    use halo_events::AgenticEvent;
     use std::sync::Arc;
     use tokio::sync::Barrier;
 

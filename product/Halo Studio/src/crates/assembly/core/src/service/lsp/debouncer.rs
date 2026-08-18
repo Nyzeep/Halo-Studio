@@ -1,5 +1,5 @@
 //! Compatibility re-exports for LSP request debouncing.
 //!
-//! The reusable debouncer lives in `bitfun-services-core`.
+//! The reusable debouncer lives in `halo-services-core`.
 
-pub use bitfun_services_core::lsp::debouncer::RequestDebouncer;
+pub use halo_services_core::lsp::debouncer::RequestDebouncer;

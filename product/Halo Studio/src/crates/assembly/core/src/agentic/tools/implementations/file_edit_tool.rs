@@ -10,7 +10,7 @@ use crate::agentic::tools::framework::{
     PermissionIntent, Tool, ToolPathResolution, ToolResult, ToolUseContext, ValidationResult,
 };
 use crate::agentic::tools::ToolPathOperation;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::path::Path;
@@ -25,7 +25,7 @@ const EDIT_TOOL_PROMPT: &str = r#"Performs exact string replacements in files.
 
 Usage:
 - You must use your `Read` tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file.
-- The `file_path` parameter must be a workspace-relative path, an absolute path inside the current workspace, or an exact `bitfun://...` URI returned by another tool.
+- The `file_path` parameter must be a workspace-relative path, an absolute path inside the current workspace, or an exact `halo://...` URI returned by another tool.
 - When editing text from Read tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears AFTER the line number prefix. The line number prefix format is: spaces + line number + tab. Everything after that is the actual file content to match. Never include any part of the line number prefix in the old_string or new_string.
 - Copy `old_string` verbatim from your latest Read of this file. Do not reformat HTML/CSS/JS, do not normalize indentation, and do not reconstruct the block from memory.
 - Use the smallest `old_string` that is clearly unique — usually 2-4 adjacent lines with stable surrounding context is sufficient.
@@ -82,7 +82,7 @@ impl FileEditTool {
         context: &ToolUseContext,
         resolved: &ToolPathResolution,
         content: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if !read_state_tracking_enabled(context) {
             return Ok(());
         }
@@ -100,7 +100,7 @@ impl FileEditTool {
             assert_file_not_unexpectedly_modified(read_state.as_ref(), content, current_mtime_ms)
                 .err()
         {
-            return Err(BitFunError::tool(file_tool_guidance_message(
+            return Err(HaloError::tool(file_tool_guidance_message(
                 Self::format_edit_freshness_guidance(&resolved.logical_path, error),
             )));
         }
@@ -115,7 +115,7 @@ impl Tool for FileEditTool {
         "Edit"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(EDIT_TOOL_PROMPT.to_string())
     }
 
@@ -162,11 +162,11 @@ impl Tool for FileEditTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<PermissionIntent>> {
+    ) -> HaloResult<Vec<PermissionIntent>> {
         let file_path = input
             .get("file_path")
             .and_then(Value::as_str)
-            .ok_or_else(|| BitFunError::validation("file_path is required".to_string()))?;
+            .ok_or_else(|| HaloError::validation("file_path is required".to_string()))?;
         file_permission_intents_allowing_managed_plan_edits("edit", [file_path], context)
     }
 
@@ -309,21 +309,21 @@ impl Tool for FileEditTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let file_path = input
             .get("file_path")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| BitFunError::tool("file_path is required".to_string()))?;
+            .ok_or_else(|| HaloError::tool("file_path is required".to_string()))?;
 
         let new_string = input
             .get("new_string")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| BitFunError::tool("new_string is required".to_string()))?;
+            .ok_or_else(|| HaloError::tool("new_string is required".to_string()))?;
 
         let old_string = input
             .get("old_string")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| BitFunError::tool("old_string is required".to_string()))?;
+            .ok_or_else(|| HaloError::tool("old_string is required".to_string()))?;
 
         let replace_all = input
             .get("replace_all")
@@ -343,26 +343,26 @@ impl Tool for FileEditTool {
         // For remote workspace paths, use the abstract FS to read → edit in memory → write back.
         if resolved.uses_remote_workspace_backend() {
             let ws_fs = context.ws_fs().ok_or_else(|| {
-                BitFunError::tool("Remote workspace file system is unavailable".to_string())
+                HaloError::tool("Remote workspace file system is unavailable".to_string())
             })?;
             let content = ws_fs
                 .read_file_text(&resolved.resolved_path)
                 .await
-                .map_err(|e| BitFunError::tool(format!("Failed to read file: {}", e)))?;
+                .map_err(|e| HaloError::tool(format!("Failed to read file: {}", e)))?;
             Self::assert_atomic_edit_freshness(context, &resolved, &content)?;
             let edit_result = apply_edit_to_content(&content, old_string, new_string, replace_all)
                 .map_err(|error| {
                     if is_edit_content_guardrail_error(&error) {
-                        BitFunError::tool(file_tool_guidance_message(error))
+                        HaloError::tool(file_tool_guidance_message(error))
                     } else {
-                        BitFunError::tool(error)
+                        HaloError::tool(error)
                     }
                 })?;
 
             ws_fs
                 .write_file(&resolved.resolved_path, edit_result.new_content.as_bytes())
                 .await
-                .map_err(|e| BitFunError::tool(format!("Failed to write file: {}", e)))?;
+                .map_err(|e| HaloError::tool(format!("Failed to write file: {}", e)))?;
 
             let timestamp_ms = file_mutation_timestamp_ms(context, &resolved).await;
             update_file_read_state_after_mutation(
@@ -397,7 +397,7 @@ impl Tool for FileEditTool {
 
         // Local: core keeps freshness/checkpoint, tool-runtime owns edit application and write-back.
         let content = std::fs::read_to_string(&resolved.resolved_path).map_err(|e| {
-            BitFunError::tool(format!(
+            HaloError::tool(format!(
                 "Failed to read file {}: {}",
                 resolved.logical_path, e
             ))
@@ -413,9 +413,9 @@ impl Tool for FileEditTool {
         })
         .map_err(|error| {
             if is_edit_content_guardrail_error(&error) {
-                BitFunError::tool(file_tool_guidance_message(error))
+                HaloError::tool(file_tool_guidance_message(error))
             } else {
-                BitFunError::tool(error)
+                HaloError::tool(error)
             }
         })?;
 

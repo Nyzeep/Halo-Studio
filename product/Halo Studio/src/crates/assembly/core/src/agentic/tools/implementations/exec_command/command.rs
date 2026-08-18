@@ -13,10 +13,10 @@ use crate::agentic::tools::framework::{
 use crate::infrastructure::events::event_system::{
     get_global_event_system, BackendEvent::BackgroundCommandLifecycle,
 };
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use crate::util::types::event::BackgroundCommandLifecycleInfo;
 use async_trait::async_trait;
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     RemoteExecCommandRequest, RemoteExecOneShotCommandRequest, RemoteExecPort,
     RemoteExecProcessLifecycleEvent, RemoteExecProcessLifecycleStatus, TerminalExecCommandRequest,
     TerminalExecProcessLifecycleEvent, TerminalExecProcessLifecycleStatus,
@@ -82,7 +82,7 @@ impl ExecCommandTool {
         exec_command_noninteractive_env()
     }
 
-    fn resolve_workdir(input: &Value, context: &ToolUseContext) -> BitFunResult<PathBuf> {
+    fn resolve_workdir(input: &Value, context: &ToolUseContext) -> HaloResult<PathBuf> {
         let raw = input
             .get("workdir")
             .and_then(|value| value.as_str())
@@ -98,17 +98,17 @@ impl ExecCommandTool {
                 })
             })
             .ok_or_else(|| {
-                BitFunError::tool("workspace root is required for ExecCommand".to_string())
+                HaloError::tool("workspace root is required for ExecCommand".to_string())
             })?;
 
         let path = PathBuf::from(&raw);
         if !path.is_absolute() {
-            return Err(BitFunError::tool(
+            return Err(HaloError::tool(
                 "workdir must be an absolute path for ExecCommand".to_string(),
             ));
         }
         if !path.is_dir() {
-            return Err(BitFunError::tool(format!(
+            return Err(HaloError::tool(format!(
                 "workdir does not exist or is not a directory: {}",
                 path.display()
             )));
@@ -119,7 +119,7 @@ impl ExecCommandTool {
     async fn resolve_remote_workdir(
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let raw = input
             .get("workdir")
             .and_then(|value| value.as_str())
@@ -132,27 +132,27 @@ impl ExecCommandTool {
                     .map(|path| path.to_string_lossy().to_string())
             })
             .ok_or_else(|| {
-                BitFunError::tool("workspace root is required for ExecCommand".to_string())
+                HaloError::tool("workspace root is required for ExecCommand".to_string())
             })?;
 
         if !raw.starts_with('/') {
-            return Err(BitFunError::tool(
+            return Err(HaloError::tool(
                 "workdir must be an absolute remote path for ExecCommand".to_string(),
             ));
         }
 
         let resolved = context.resolve_workspace_tool_path(&raw)?;
         let fs = context.ws_fs().ok_or_else(|| {
-            BitFunError::tool("remote workspace filesystem is required for ExecCommand".to_string())
+            HaloError::tool("remote workspace filesystem is required for ExecCommand".to_string())
         })?;
         let is_dir = fs.is_dir(&resolved).await.map_err(|error| {
-            BitFunError::tool(format!(
+            HaloError::tool(format!(
                 "failed to check remote workdir '{}': {}",
                 resolved, error
             ))
         })?;
         if !is_dir {
-            return Err(BitFunError::tool(format!(
+            return Err(HaloError::tool(format!(
                 "remote workdir does not exist or is not a directory: {}",
                 resolved
             )));
@@ -393,9 +393,9 @@ impl ExecCommandTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let parsed_input = exec_command_run_input_from_input(input)
-            .ok_or_else(|| BitFunError::tool("cmd is required for ExecCommand".to_string()))?;
+            .ok_or_else(|| HaloError::tool("cmd is required for ExecCommand".to_string()))?;
         let cmd = parsed_input.cmd;
         let tty = parsed_input.tty;
 
@@ -405,11 +405,11 @@ impl ExecCommandTool {
             .as_ref()
             .and_then(|workspace| workspace.connection_id())
             .ok_or_else(|| {
-                BitFunError::tool("remote connection id is required for ExecCommand".to_string())
+                HaloError::tool("remote connection id is required for ExecCommand".to_string())
             })?
             .to_string();
         let remote_exec_port = context.remote_exec_port().ok_or_else(|| {
-            BitFunError::tool("remote exec runtime service is required for ExecCommand".to_string())
+            HaloError::tool("remote exec runtime service is required for ExecCommand".to_string())
         })?;
         let yield_time_ms = parsed_input.yield_time_ms;
         let shell = Self::resolve_remote_shell(remote_exec_port, &connection_id).await;
@@ -476,7 +476,7 @@ impl ExecCommandTool {
                         .finish(capture_id, BackgroundCommandOutputStatus::Failed, None)
                         .await;
                 }
-                return Err(BitFunError::tool(format!(
+                return Err(HaloError::tool(format!(
                     "ExecCommand failed: {}",
                     error.message
                 )));
@@ -538,7 +538,7 @@ impl Tool for ExecCommandTool {
         "ExecCommand"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(r#"Runs a shell command in a separate process.
 
 TTY modes:
@@ -563,7 +563,7 @@ Output:
     async fn description_with_context(
         &self,
         context: Option<&ToolUseContext>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let mut base = self.description().await?;
         if context.map(|c| c.is_remote()).unwrap_or(false) {
             base = format!(
@@ -618,11 +618,11 @@ Output:
         &self,
         input: &Value,
         _context: &ToolUseContext,
-    ) -> BitFunResult<Vec<PermissionIntent>> {
+    ) -> HaloResult<Vec<PermissionIntent>> {
         let command = exec_command_run_input_from_input(input)
             .map(|parsed| parsed.cmd.trim().to_string())
             .filter(|command| !command.is_empty())
-            .ok_or_else(|| BitFunError::validation("cmd is required".to_string()))?;
+            .ok_or_else(|| HaloError::validation("cmd is required".to_string()))?;
         Ok(vec![PermissionIntent::new("bash", vec![command])])
     }
 
@@ -664,20 +664,20 @@ Output:
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         if context.is_remote() {
             return self.call_remote_pipe(input, context).await;
         }
 
         let parsed_input = exec_command_run_input_from_input(input)
-            .ok_or_else(|| BitFunError::tool("cmd is required for ExecCommand".to_string()))?;
+            .ok_or_else(|| HaloError::tool("cmd is required for ExecCommand".to_string()))?;
         let cmd = parsed_input.cmd;
         let workdir = Self::resolve_workdir(input, context)?;
         let tty = parsed_input.tty;
         let shell = resolve_local_exec_shell().await;
         let yield_time_ms = parsed_input.yield_time_ms;
         let terminal_port = context.terminal_port().ok_or_else(|| {
-            BitFunError::tool("terminal runtime service is required for ExecCommand".to_string())
+            HaloError::tool("terminal runtime service is required for ExecCommand".to_string())
         })?;
         let output_capture_tx = if let Some(capture_id) = context.tool_call_id.as_ref() {
             Some(
@@ -725,7 +725,7 @@ Output:
                         .finish(capture_id, BackgroundCommandOutputStatus::Failed, None)
                         .await;
                 }
-                return Err(BitFunError::tool(format!(
+                return Err(HaloError::tool(format!(
                     "ExecCommand failed: {}",
                     error.message
                 )));
@@ -795,70 +795,70 @@ mod tests {
 
     #[derive(Debug)]
     struct ShellProbeRemoteExecPort {
-        response: bitfun_runtime_ports::RemoteExecOneShotCommandResponse,
+        response: halo_runtime_ports::RemoteExecOneShotCommandResponse,
     }
 
-    impl bitfun_runtime_ports::RuntimeServicePort for ShellProbeRemoteExecPort {
-        fn capability(&self) -> bitfun_runtime_ports::RuntimeServiceCapability {
-            bitfun_runtime_ports::RuntimeServiceCapability::RemoteExec
+    impl halo_runtime_ports::RuntimeServicePort for ShellProbeRemoteExecPort {
+        fn capability(&self) -> halo_runtime_ports::RuntimeServiceCapability {
+            halo_runtime_ports::RuntimeServiceCapability::RemoteExec
         }
     }
 
     #[async_trait::async_trait]
-    impl bitfun_runtime_ports::RemoteExecPort for ShellProbeRemoteExecPort {
+    impl halo_runtime_ports::RemoteExecPort for ShellProbeRemoteExecPort {
         async fn exec_command_once(
             &self,
-            _request: bitfun_runtime_ports::RemoteExecOneShotCommandRequest,
-        ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::RemoteExecOneShotCommandResponse>
+            _request: halo_runtime_ports::RemoteExecOneShotCommandRequest,
+        ) -> halo_runtime_ports::PortResult<halo_runtime_ports::RemoteExecOneShotCommandResponse>
         {
             Ok(self.response.clone())
         }
 
         async fn exec_command(
             &self,
-            _request: bitfun_runtime_ports::RemoteExecCommandRequest,
-        ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::RemoteExecCommandResponse>
+            _request: halo_runtime_ports::RemoteExecCommandRequest,
+        ) -> halo_runtime_ports::PortResult<halo_runtime_ports::RemoteExecCommandResponse>
         {
             panic!("shell probe must not use managed remote exec sessions");
         }
 
         async fn exec_command_streaming(
             &self,
-            _request: bitfun_runtime_ports::RemoteExecCommandRequest,
-            _output_sink: bitfun_runtime_ports::RemoteExecStreamingOutputSink,
-        ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::RemoteExecCommandResponse>
+            _request: halo_runtime_ports::RemoteExecCommandRequest,
+            _output_sink: halo_runtime_ports::RemoteExecStreamingOutputSink,
+        ) -> halo_runtime_ports::PortResult<halo_runtime_ports::RemoteExecCommandResponse>
         {
             panic!("shell probe must not use managed remote exec sessions");
         }
 
         async fn write_stdin(
             &self,
-            _request: bitfun_runtime_ports::RemoteWriteStdinRequest,
-        ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::RemoteExecCommandResponse>
+            _request: halo_runtime_ports::RemoteWriteStdinRequest,
+        ) -> halo_runtime_ports::PortResult<halo_runtime_ports::RemoteExecCommandResponse>
         {
             panic!("shell probe must not write stdin");
         }
 
         async fn write_stdin_streaming(
             &self,
-            _request: bitfun_runtime_ports::RemoteWriteStdinRequest,
-            _output_sink: bitfun_runtime_ports::RemoteExecStreamingOutputSink,
-        ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::RemoteExecCommandResponse>
+            _request: halo_runtime_ports::RemoteWriteStdinRequest,
+            _output_sink: halo_runtime_ports::RemoteExecStreamingOutputSink,
+        ) -> halo_runtime_ports::PortResult<halo_runtime_ports::RemoteExecCommandResponse>
         {
             panic!("shell probe must not write stdin");
         }
 
         async fn send_stdin(
             &self,
-            _request: bitfun_runtime_ports::RemoteSendStdinRequest,
-        ) -> bitfun_runtime_ports::PortResult<()> {
+            _request: halo_runtime_ports::RemoteSendStdinRequest,
+        ) -> halo_runtime_ports::PortResult<()> {
             panic!("shell probe must not send stdin");
         }
 
         async fn control_session(
             &self,
-            _request: bitfun_runtime_ports::RemoteExecControlRequest,
-        ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::RemoteExecCommandResponse>
+            _request: halo_runtime_ports::RemoteExecControlRequest,
+        ) -> halo_runtime_ports::PortResult<halo_runtime_ports::RemoteExecCommandResponse>
         {
             panic!("shell probe must not control managed sessions");
         }
@@ -931,7 +931,7 @@ mod tests {
         );
 
         assert!(command.starts_with("cd '/home/me/project' && env "));
-        assert!(command.contains("'BITFUN_NONINTERACTIVE=1'"));
+        assert!(command.contains("'HALO_NONINTERACTIVE=1'"));
         assert!(command.ends_with(" '/bin/bash' -o pipefail -lc 'printf '\\''hi'\\'''"));
     }
 
@@ -988,13 +988,13 @@ mod tests {
             &ShellType::Bash,
         );
 
-        assert!(wrapper.contains("setsid \"$__bitfun_shell\" -o pipefail -lc \"$__bitfun_cmd\" &"));
-        assert!(wrapper.contains("trap '__bitfun_stop INT 130 2' INT"));
-        assert!(wrapper.contains("trap '__bitfun_stop KILL 137 0' TERM"));
-        assert!(wrapper.contains("__bitfun_grace=${3:-2}"));
-        assert!(wrapper.contains("sleep \"$__bitfun_grace\""));
-        assert!(wrapper.contains("kill -KILL \"-$__bitfun_pgid\""));
-        assert!(wrapper.contains("__bitfun_cmd='python3 -c '\\''print(1)'\\'''"));
+        assert!(wrapper.contains("setsid \"$__halo_shell\" -o pipefail -lc \"$__halo_cmd\" &"));
+        assert!(wrapper.contains("trap '__halo_stop INT 130 2' INT"));
+        assert!(wrapper.contains("trap '__halo_stop KILL 137 0' TERM"));
+        assert!(wrapper.contains("__halo_grace=${3:-2}"));
+        assert!(wrapper.contains("sleep \"$__halo_grace\""));
+        assert!(wrapper.contains("kill -KILL \"-$__halo_pgid\""));
+        assert!(wrapper.contains("__halo_cmd='python3 -c '\\''print(1)'\\'''"));
     }
 
     #[test]
@@ -1021,9 +1021,9 @@ mod tests {
 
     #[tokio::test]
     async fn remote_shell_probe_uses_stdout_only() {
-        let remote_exec_port: Arc<dyn bitfun_runtime_ports::RemoteExecPort> =
+        let remote_exec_port: Arc<dyn halo_runtime_ports::RemoteExecPort> =
             Arc::new(ShellProbeRemoteExecPort {
-                response: bitfun_runtime_ports::RemoteExecOneShotCommandResponse {
+                response: halo_runtime_ports::RemoteExecOneShotCommandResponse {
                     stdout: "/bin/bash\n".to_string(),
                     stderr: "/tmp/not-a-shell-from-stderr\n".to_string(),
                     exit_code: 0,
@@ -1074,7 +1074,7 @@ mod tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         };
 
         let remote_desc = tool
@@ -1102,7 +1102,7 @@ mod tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         };
         let workdir = std::env::current_dir().expect("test workdir should exist");
 

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio::sync::{broadcast, Mutex};
 
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     AgentDialogTurnRequest, AgentEventReceiver, AgentLocalCommandTurnRecordRequest, AgentRuntime,
     AgentSessionCreateRequest, AgentSessionDeleteRequest, AgentSessionForkRequest,
     AgentSessionForkResult, AgentSessionListRequest, AgentSessionModeUpdateRequest,
@@ -19,13 +19,13 @@ use bitfun_agent_runtime::sdk::{
     PermissionReply, PermissionRequest, PermissionRequestEventReceiver, PortError, PortErrorKind,
     RuntimeError, SessionTranscript, SessionTranscriptRequest, SessionUsageReport,
 };
-use bitfun_agent_runtime_ipc::{
+use halo_agent_runtime_ipc::{
     RuntimeIpcClient, RuntimeIpcClientError, RuntimeIpcClientEvent, RuntimeIpcErrorCode,
     RuntimeIpcEvent, RuntimeIpcOperation, RuntimeIpcOperationResult,
     RuntimeIpcStreamInvalidationReason, RuntimeSessionRestoreRequest, RuntimeUserAnswersRequest,
 };
-use bitfun_events::{AgenticEvent, AgenticEventEnvelope};
-use bitfun_runtime_ports::{
+use halo_events::{AgenticEvent, AgenticEventEnvelope};
+use halo_runtime_ports::{
     AgentSessionSummary, AgentSessionWorkspaceBinding, AgentSessionWorkspaceRequest,
     AgentSubmissionSource, DialogSubmissionPolicy, SessionExecutionTarget,
 };
@@ -156,7 +156,7 @@ pub(crate) struct CliAgentRuntimeClient {
     current_turn_id: Arc<Mutex<Option<String>>>,
     shared_agent_events: Option<SharedBroadcast<AgenticEventEnvelope>>,
     shared_permission_events:
-        Option<SharedBroadcast<bitfun_agent_runtime::sdk::PermissionRequestEvent>>,
+        Option<SharedBroadcast<halo_agent_runtime::sdk::PermissionRequestEvent>>,
     shared_pending_permissions: Arc<RwLock<HashMap<String, PermissionRequest>>>,
 }
 
@@ -216,7 +216,7 @@ impl CliAgentRuntimeClient {
         match &self.backend {
             CliAgentRuntimeBackend::Embedded(runtime) => Ok(runtime),
             CliAgentRuntimeBackend::Shared(_) => Err(anyhow::anyhow!(
-                "{operation} is not available in the first Shared TUI slice; use default Embedded `bitfun chat`"
+                "{operation} is not available in the first Shared TUI slice; use default Embedded `halo chat`"
             )),
         }
     }
@@ -1025,9 +1025,9 @@ fn shared_receiver<T: Clone>(
 fn spawn_shared_event_bridge(
     mut source: broadcast::Receiver<RuntimeIpcClientEvent>,
     agent_sender: broadcast::Sender<AgenticEventEnvelope>,
-    permission_sender: broadcast::Sender<bitfun_agent_runtime::sdk::PermissionRequestEvent>,
+    permission_sender: broadcast::Sender<halo_agent_runtime::sdk::PermissionRequestEvent>,
     agent_owner: SharedBroadcast<AgenticEventEnvelope>,
-    permission_owner: SharedBroadcast<bitfun_agent_runtime::sdk::PermissionRequestEvent>,
+    permission_owner: SharedBroadcast<halo_agent_runtime::sdk::PermissionRequestEvent>,
     pending: Arc<RwLock<HashMap<String, PermissionRequest>>>,
 ) {
     tokio::spawn(async move {
@@ -1042,17 +1042,17 @@ fn spawn_shared_event_bridge(
                 })) => {
                     project_routed_permission_event(&mut event, &session_id);
                     match &event {
-                        bitfun_agent_runtime::sdk::PermissionRequestEvent::Asked { request } => {
+                        halo_agent_runtime::sdk::PermissionRequestEvent::Asked { request } => {
                             pending
                                 .write()
                                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                                 .insert(request.request_id.clone(), request.clone());
                         }
-                        bitfun_agent_runtime::sdk::PermissionRequestEvent::Replied {
+                        halo_agent_runtime::sdk::PermissionRequestEvent::Replied {
                             request_id,
                             ..
                         }
-                        | bitfun_agent_runtime::sdk::PermissionRequestEvent::Cancelled {
+                        | halo_agent_runtime::sdk::PermissionRequestEvent::Cancelled {
                             request_id,
                             ..
                         } => {
@@ -1074,7 +1074,7 @@ fn spawn_shared_event_bridge(
                     };
                     let _ = agent_sender.send(AgenticEventEnvelope::new(
                         event,
-                        bitfun_events::AgenticEventPriority::Critical,
+                        halo_events::AgenticEventPriority::Critical,
                     ));
                     break;
                 }
@@ -1088,7 +1088,7 @@ fn spawn_shared_event_bridge(
                     };
                     let _ = agent_sender.send(AgenticEventEnvelope::new(
                         event,
-                        bitfun_events::AgenticEventPriority::Critical,
+                        halo_events::AgenticEventPriority::Critical,
                     ));
                     break;
                 }
@@ -1114,10 +1114,10 @@ fn shared_disconnect_message(reason: Option<RuntimeIpcStreamInvalidationReason>)
 }
 
 fn project_routed_permission_event(
-    event: &mut bitfun_agent_runtime::sdk::PermissionRequestEvent,
+    event: &mut halo_agent_runtime::sdk::PermissionRequestEvent,
     routed_session_id: &str,
 ) {
-    let bitfun_agent_runtime::sdk::PermissionRequestEvent::Asked { request } = event else {
+    let halo_agent_runtime::sdk::PermissionRequestEvent::Asked { request } = event else {
         return;
     };
     if request.session_id == routed_session_id {
@@ -1141,7 +1141,7 @@ fn unexpected_shared_result(operation: &str) -> anyhow::Error {
 
 #[cfg(test)]
 mod recovery_tests {
-    use bitfun_agent_runtime::sdk::{PortError, PortErrorKind, RuntimeError};
+    use halo_agent_runtime::sdk::{PortError, PortErrorKind, RuntimeError};
 
     use super::CliAgentRuntimeClient;
 
@@ -1165,22 +1165,22 @@ mod recovery_tests {
 mod tests {
     use std::path::Path;
 
-    use bitfun_runtime_ports::{
+    use halo_runtime_ports::{
         AgentSessionSummary, AgentSessionWorkspaceBinding, SessionExecutionTarget,
         SessionExecutionTargetKind, WorktreeLifecycle,
     };
 
-    use bitfun_agent_runtime::sdk::{
+    use halo_agent_runtime::sdk::{
         PermissionDelegationContext, PermissionRequest, PermissionRequestEvent,
         PermissionRequestSource, PermissionRequestSourceKind,
     };
-    use bitfun_agent_runtime_ipc::{RuntimeIpcClientError, RuntimeIpcError, RuntimeIpcErrorCode};
+    use halo_agent_runtime_ipc::{RuntimeIpcClientError, RuntimeIpcError, RuntimeIpcErrorCode};
 
     use super::{
         project_routed_permission_event, session_mode_migration_notice, shared_disconnect_message,
         shared_restore_error, validated_session_summary, CliWorkspacePaths,
     };
-    use bitfun_agent_runtime_ipc::RuntimeIpcStreamInvalidationReason;
+    use halo_agent_runtime_ipc::RuntimeIpcStreamInvalidationReason;
 
     #[test]
     fn oversized_shared_restore_explains_the_embedded_handoff() {
@@ -1190,7 +1190,7 @@ mod tests {
         }));
         let message = error.to_string();
         assert!(message.contains("history is too large"));
-        assert!(message.contains("default Embedded `bitfun chat`"));
+        assert!(message.contains("default Embedded `halo chat`"));
     }
 
     #[test]
@@ -1198,7 +1198,7 @@ mod tests {
         let message =
             shared_disconnect_message(Some(RuntimeIpcStreamInvalidationReason::FrameTooLarge));
         assert!(message.contains("cancellation was requested"));
-        assert!(message.contains("default Embedded `bitfun chat`"));
+        assert!(message.contains("default Embedded `halo chat`"));
     }
 
     #[test]

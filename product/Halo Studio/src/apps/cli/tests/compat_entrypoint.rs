@@ -1,6 +1,6 @@
 use std::process::{Command, Output};
 
-const DEPRECATION: &str = "Warning: `bitfun-cli` is deprecated; use `bitfun` instead.";
+const DEPRECATION: &str = "Warning: `halo-cli` is deprecated; use `halo` instead.";
 
 /// Run a just-written executable, retrying while Linux reports `ETXTBSY`.
 ///
@@ -27,14 +27,14 @@ fn run_freshly_written(command: &mut Command) -> std::io::Result<Output> {
 
 #[test]
 fn legacy_version_matches_primary_and_warns_only_on_stderr() {
-    let primary = Command::new(env!("CARGO_BIN_EXE_bitfun"))
+    let primary = Command::new(env!("CARGO_BIN_EXE_halo"))
         .arg("--version")
         .output()
-        .expect("run bitfun --version");
-    let legacy = Command::new(env!("CARGO_BIN_EXE_bitfun-cli"))
+        .expect("run halo --version");
+    let legacy = Command::new(env!("CARGO_BIN_EXE_halo-cli"))
         .arg("--version")
         .output()
-        .expect("run deprecated bitfun-cli --version");
+        .expect("run deprecated halo-cli --version");
 
     assert!(primary.status.success());
     assert!(legacy.status.success());
@@ -45,11 +45,11 @@ fn legacy_version_matches_primary_and_warns_only_on_stderr() {
 
 #[test]
 fn legacy_forwards_clap_failure_exit_code() {
-    let primary = Command::new(env!("CARGO_BIN_EXE_bitfun"))
+    let primary = Command::new(env!("CARGO_BIN_EXE_halo"))
         .arg("--not-a-real-option")
         .output()
         .expect("run invalid primary command");
-    let legacy = Command::new(env!("CARGO_BIN_EXE_bitfun-cli"))
+    let legacy = Command::new(env!("CARGO_BIN_EXE_halo-cli"))
         .arg("--not-a-real-option")
         .output()
         .expect("run invalid legacy command");
@@ -62,12 +62,12 @@ fn legacy_forwards_clap_failure_exit_code() {
 fn legacy_reports_a_missing_primary_without_recursing() {
     let temp = tempfile::tempdir().expect("create temporary install directory");
     let file_name = if cfg!(windows) {
-        "bitfun-cli.exe"
+        "halo-cli.exe"
     } else {
-        "bitfun-cli"
+        "halo-cli"
     };
     let copied = temp.path().join(file_name);
-    std::fs::copy(env!("CARGO_BIN_EXE_bitfun-cli"), &copied)
+    std::fs::copy(env!("CARGO_BIN_EXE_halo-cli"), &copied)
         .expect("copy deprecated launcher without primary sibling");
     let output = run_freshly_written(Command::new(copied).arg("--version"))
         .expect("run isolated deprecated launcher");
@@ -76,6 +76,6 @@ fn legacy_reports_a_missing_primary_without_recursing() {
     assert!(!output.status.success());
     assert!(stderr.starts_with(DEPRECATION));
     assert!(stderr.contains("incomplete installation"));
-    assert!(stderr.contains("install both `bitfun` and `bitfun-cli`"));
+    assert!(stderr.contains("install both `halo` and `halo-cli`"));
     assert_eq!(stderr.matches(DEPRECATION).count(), 1);
 }

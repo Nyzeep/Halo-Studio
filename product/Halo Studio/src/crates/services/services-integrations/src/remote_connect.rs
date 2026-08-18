@@ -5,7 +5,7 @@
 //! Pairing, encryption, QR generation, relay websocket lifecycle primitives,
 //! wire command routing, and provider-neutral IM bot support live here. Product
 //! assembly, concrete runtime hosts, and IM bot command routing that still needs
-//! session/runtime hosts stay in `bitfun-core` until their ports are explicit.
+//! session/runtime hosts stay in `halo-core` until their ports are explicit.
 
 pub mod account;
 pub mod bot;
@@ -23,12 +23,12 @@ mod relay_http;
 pub mod session_store;
 pub mod sync_state;
 
-use bitfun_events::AgenticEvent;
-use bitfun_runtime_ports::{
+use halo_events::AgenticEvent;
+use halo_runtime_ports::{
     AgentInputAttachment, AgentSessionCreateRequest, AgentSubmissionRequest, AgentSubmissionSource,
     RemoteControlStateSnapshot,
 };
-pub use bitfun_runtime_ports::{
+pub use halo_runtime_ports::{
     RemoteAssistantWorkspaceFacts, RemoteFileChunkRange, RemoteInitialSyncRuntimeHost,
     RemoteProjectionPort, RemoteRecentWorkspaceFacts, RemoteSessionMetadata,
     RemoteSessionWorkspaceIdentity, RemoteWorkspaceFacts, RemoteWorkspaceFileChunk,
@@ -70,12 +70,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
-pub(crate) fn bitfun_home_dir() -> Option<PathBuf> {
-    std::env::var_os("BITFUN_HOME")
-        .or_else(|| std::env::var_os("BITFUN_E2E_HOME"))
+pub(crate) fn halo_home_dir() -> Option<PathBuf> {
+    std::env::var_os("HALO_HOME")
+        .or_else(|| std::env::var_os("HALO_E2E_HOME"))
         .map(PathBuf::from)
         .filter(|path| !path.as_os_str().is_empty())
-        .or_else(|| dirs::home_dir().map(|home| home.join(".bitfun")))
+        .or_else(|| dirs::home_dir().map(|home| home.join(".halo-studio")))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2777,7 +2777,7 @@ impl RemoteSessionStateTracker {
     }
 
     pub fn handle_agentic_event(&self, event: &AgenticEvent) {
-        use bitfun_events::AgenticEvent as AE;
+        use halo_events::AgenticEvent as AE;
 
         if let AE::SubagentSessionLinked {
             session_id,
@@ -2882,13 +2882,13 @@ impl RemoteSessionStateTracker {
                 let tool_id = tool_event.tool_id().to_string();
                 let tool_name = tool_event.effective_tool_name().to_string();
                 let effective_params = match tool_event {
-                    bitfun_events::ToolEventData::Started {
+                    halo_events::ToolEventData::Started {
                         identity, params, ..
                     }
-                    | bitfun_events::ToolEventData::ConfirmationNeeded {
+                    | halo_events::ToolEventData::ConfirmationNeeded {
                         identity, params, ..
                     } => Some(
-                        bitfun_agent_tools::effective_tool_invocation(&identity.tool_name, params)
+                        halo_agent_tools::effective_tool_invocation(&identity.tool_name, params)
                             .1
                             .clone(),
                     ),

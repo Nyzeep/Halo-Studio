@@ -5,30 +5,30 @@ use crate::util::errors::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-pub use bitfun_services_core::persistence::StorageOptions;
+pub use halo_services_core::persistence::StorageOptions;
 
 pub struct PersistenceService {
-    inner: bitfun_services_core::persistence::PersistenceService,
+    inner: halo_services_core::persistence::PersistenceService,
     path_manager: Arc<PathManager>,
 }
 
 impl PersistenceService {
-    pub async fn new(base_dir: PathBuf) -> BitFunResult<Self> {
+    pub async fn new(base_dir: PathBuf) -> HaloResult<Self> {
         let path_manager = try_get_path_manager_arc()?;
-        let inner = bitfun_services_core::persistence::PersistenceService::new(base_dir)
+        let inner = halo_services_core::persistence::PersistenceService::new(base_dir)
             .await
-            .map_err(BitFunError::service)?;
+            .map_err(HaloError::service)?;
         Ok(Self {
             inner,
             path_manager,
         })
     }
 
-    pub async fn new_user_level(path_manager: Arc<PathManager>) -> BitFunResult<Self> {
+    pub async fn new_user_level(path_manager: Arc<PathManager>) -> HaloResult<Self> {
         let base_dir = path_manager.user_data_dir();
         path_manager.ensure_dir(&base_dir).await?;
         Ok(Self {
-            inner: bitfun_services_core::persistence::PersistenceService::from_base_dir(base_dir),
+            inner: halo_services_core::persistence::PersistenceService::from_base_dir(base_dir),
             path_manager,
         })
     }
@@ -36,10 +36,10 @@ impl PersistenceService {
     pub async fn new_project_level(
         path_manager: Arc<PathManager>,
         workspace_path: PathBuf,
-    ) -> BitFunResult<Self> {
+    ) -> HaloResult<Self> {
         let base_dir = path_manager.project_runtime_root(&workspace_path);
         Ok(Self {
-            inner: bitfun_services_core::persistence::PersistenceService::from_base_dir(base_dir),
+            inner: halo_services_core::persistence::PersistenceService::from_base_dir(base_dir),
             path_manager,
         })
     }
@@ -57,24 +57,24 @@ impl PersistenceService {
         key: &str,
         data: &T,
         options: StorageOptions,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.inner
             .save_json(key, data, options)
             .await
-            .map_err(BitFunError::service)
+            .map_err(HaloError::service)
     }
 
     pub async fn load_json<T: for<'de> serde::Deserialize<'de>>(
         &self,
         key: &str,
-    ) -> BitFunResult<Option<T>> {
+    ) -> HaloResult<Option<T>> {
         self.inner
             .load_json(key)
             .await
-            .map_err(BitFunError::service)
+            .map_err(HaloError::service)
     }
 
-    pub async fn delete(&self, key: &str) -> BitFunResult<bool> {
-        self.inner.delete(key).await.map_err(BitFunError::service)
+    pub async fn delete(&self, key: &str) -> HaloResult<bool> {
+        self.inner.delete(key).await.map_err(HaloError::service)
     }
 }

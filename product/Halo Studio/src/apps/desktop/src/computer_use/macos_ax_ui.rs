@@ -3,10 +3,10 @@
 //! Coordinates match CoreGraphics global space used by [`crate::computer_use::DesktopComputerUseHost`].
 
 use crate::computer_use::ui_locate_common;
-use bitfun_core::agentic::tools::computer_use_host::{
+use halo_core::agentic::tools::computer_use_host::{
     OcrAccessibilityHit, UiElementLocateQuery, UiElementLocateResult,
 };
-use bitfun_core::util::errors::{BitFunError, BitFunResult};
+use halo_core::util::errors::{HaloError, HaloResult};
 use core_foundation::array::{CFArray, CFArrayRef};
 use core_foundation::base::{CFGetTypeID, CFTypeRef, TCFType};
 use core_foundation::string::{CFString, CFStringRef};
@@ -48,16 +48,16 @@ unsafe extern "C" {
 const K_AX_VALUE_CGPOINT: u32 = 1;
 const K_AX_VALUE_CGSIZE: u32 = 2;
 
-fn frontmost_pid() -> BitFunResult<i32> {
+fn frontmost_pid() -> HaloResult<i32> {
     let out = std::process::Command::new("/usr/bin/osascript")
         .args([
             "-e",
             "tell application \"System Events\" to get unix id of first process whose frontmost is true",
         ])
         .output()
-        .map_err(|e| BitFunError::tool(format!("osascript spawn: {}", e)))?;
+        .map_err(|e| HaloError::tool(format!("osascript spawn: {}", e)))?;
     if !out.status.success() {
-        return Err(BitFunError::tool(format!(
+        return Err(HaloError::tool(format!(
             "osascript failed: {}",
             String::from_utf8_lossy(&out.stderr)
         )));
@@ -65,7 +65,7 @@ fn frontmost_pid() -> BitFunResult<i32> {
     let s = String::from_utf8_lossy(&out.stdout);
     s.trim()
         .parse::<i32>()
-        .map_err(|_| BitFunError::tool("Could not parse frontmost process id.".to_string()))
+        .map_err(|_| HaloError::tool("Could not parse frontmost process id.".to_string()))
 }
 
 unsafe fn ax_release(v: CFTypeRef) {
@@ -549,7 +549,7 @@ const MAX_CANDIDATES: usize = 10;
 /// Collects all matches, filters invisible/off-screen ones, ranks by relevance, returns the best.
 pub(super) fn locate_ui_element_center(
     query: &UiElementLocateQuery,
-) -> BitFunResult<UiElementLocateResult> {
+) -> HaloResult<UiElementLocateResult> {
     ui_locate_common::validate_query(query)?;
 
     // ── Batch 5: node_idx fast path ──────────────────────────────────────────
@@ -566,7 +566,7 @@ pub(super) fn locate_ui_element_center(
         let ax = match cached {
             Some(r) => r,
             None => {
-                return Err(BitFunError::tool(format!(
+                return Err(HaloError::tool(format!(
                     "[AX_IDX_STALE] node_idx={} no longer present in cached app state for pid={}. \
                      Re-call `desktop.get_app_state` and reuse the freshly returned idx.",
                     idx, pid
@@ -575,7 +575,7 @@ pub(super) fn locate_ui_element_center(
         };
         let nt = unsafe { read_node_text(ax.0) };
         let frame = unsafe { element_frame_global(ax.0) }.ok_or_else(|| {
-            BitFunError::tool(format!(
+            HaloError::tool(format!(
                 "[AX_IDX_STALE] node_idx={} resolved but has no AXFrame (off-screen / minimised). \
                  Re-call `desktop.get_app_state`.",
                 idx
@@ -609,7 +609,7 @@ pub(super) fn locate_ui_element_center(
     let pid = frontmost_pid()?;
     let root = unsafe { AXUIElementCreateApplication(pid) };
     if root.is_null() {
-        return Err(BitFunError::tool(
+        return Err(HaloError::tool(
             "AXUIElementCreateApplication returned null.".to_string(),
         ));
     }
@@ -739,7 +739,7 @@ pub(super) fn locate_ui_element_center(
     }
 
     if candidates.is_empty() {
-        return Err(BitFunError::tool(
+        return Err(HaloError::tool(
             "No accessibility element matched in the frontmost app. Tips: `role_substring` **`TextArea`** also matches **`AXTextField`**; use `text_contains` for any visible label; use `filter_combine: \"any\"` for OR matching; match the UI language; ensure the target app is focused. If the AX tree is sparse, fall back to `move_to_text` (OCR) or `describe_screen` / `screenshot` to observe, or `key_chord` keyboard navigation."
                 .to_string(),
         ));
@@ -1120,16 +1120,16 @@ pub(super) fn accessibility_hit_at_global_point(gx: f64, gy: f64) -> Option<OcrA
 
 /// Bounds of the foreground app's focused or main window in global screen coordinates (same space as pointer / screen capture).
 /// Used to crop **raw** pixels for Vision OCR without pointer overlays from the agent screenshot path.
-pub(super) fn frontmost_window_bounds_global() -> BitFunResult<(i32, i32, u32, u32)> {
+pub(super) fn frontmost_window_bounds_global() -> HaloResult<(i32, i32, u32, u32)> {
     let pid = frontmost_pid()?;
     window_bounds_global_for_pid(pid)
 }
 
 /// Bounds of the selected app's focused or main window in global screen coordinates.
-pub(super) fn window_bounds_global_for_pid(pid: i32) -> BitFunResult<(i32, i32, u32, u32)> {
+pub(super) fn window_bounds_global_for_pid(pid: i32) -> HaloResult<(i32, i32, u32, u32)> {
     let app = unsafe { AXUIElementCreateApplication(pid) };
     if app.is_null() {
-        return Err(BitFunError::tool(
+        return Err(HaloError::tool(
             "AXUIElementCreateApplication returned null for window bounds.".to_string(),
         ));
     }
@@ -1137,19 +1137,19 @@ pub(super) fn window_bounds_global_for_pid(pid: i32) -> BitFunResult<(i32, i32, 
         let win = try_frontmost_window_element(app);
         ax_release(app as CFTypeRef);
         let Some(win) = win else {
-            return Err(BitFunError::tool(
+            return Err(HaloError::tool(
                 "No AX window for target app (try AXFocusedWindow / AXMainWindow / AXWindows)."
                     .to_string(),
             ));
         };
         let frame = element_frame_global(win).ok_or_else(|| {
             ax_release(win as CFTypeRef);
-            BitFunError::tool("Could not read AXPosition/AXSize for target window.".to_string())
+            HaloError::tool("Could not read AXPosition/AXSize for target window.".to_string())
         })?;
         ax_release(win as CFTypeRef);
         let (_, _, bl, bt, bw, bh) = frame;
         if bw < 1.0 || bh < 1.0 {
-            return Err(BitFunError::tool(
+            return Err(HaloError::tool(
                 "Target window has invalid size for screenshot.".to_string(),
             ));
         }

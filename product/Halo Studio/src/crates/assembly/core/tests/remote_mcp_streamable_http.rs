@@ -10,7 +10,7 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::Json;
 use axum::Router;
-use bitfun_core::service::mcp::server::MCPConnection;
+use halo_core::service::mcp::server::MCPConnection;
 use futures::Stream;
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
@@ -192,7 +192,7 @@ async fn remote_mcp_streamable_http_accepts_202_and_delivers_response_via_sse() 
         .expect("remote connection should be created");
 
     connection
-        .initialize("BitFunTest", "0.0.0")
+        .initialize("HaloTest", "0.0.0")
         .await
         .expect("initialize should succeed");
 

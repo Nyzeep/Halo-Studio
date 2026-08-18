@@ -1,8 +1,8 @@
 use crate::agentic::image_analysis::ImageContextData;
 use crate::util::types::{Message as AIMessage, ToolCall as AIToolCall, ToolImageAttachment};
 use crate::util::TokenCounter;
-use bitfun_agent_runtime::prompt_markup::is_system_reminder_only;
-pub use bitfun_runtime_ports::{CompressionContract, CompressionContractItem};
+use halo_agent_runtime::prompt_markup::is_system_reminder_only;
+pub use halo_runtime_ports::{CompressionContract, CompressionContractItem};
 use log::warn;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
@@ -724,7 +724,7 @@ impl Display for MessageContent {
 mod tests {
     use super::{Message, ToolCall};
     use crate::util::types::Message as AIMessage;
-    use bitfun_agent_stream::ToolArgumentRepairKind;
+    use halo_agent_stream::ToolArgumentRepairKind;
     use serde_json::json;
 
     #[test]
@@ -740,7 +740,7 @@ mod tests {
 
     #[test]
     fn preserves_tool_argument_repair_provenance_from_stream_contract() {
-        let tool_call = ToolCall::from(bitfun_agent_stream::ToolCall {
+        let tool_call = ToolCall::from(halo_agent_stream::ToolCall {
             tool_id: "call_1".to_string(),
             tool_name: "Read".to_string(),
             arguments: json!({ "path": "src/main.rs" }),
@@ -783,9 +783,9 @@ pub struct ToolCall {
     /// Provenance for any argument repair accepted before tool validation.
     #[serde(
         default,
-        skip_serializing_if = "bitfun_agent_stream::ToolArgumentRepairKind::is_none"
+        skip_serializing_if = "halo_agent_stream::ToolArgumentRepairKind::is_none"
     )]
-    pub repair_kind: bitfun_agent_stream::ToolArgumentRepairKind,
+    pub repair_kind: halo_agent_stream::ToolArgumentRepairKind,
 }
 
 impl ToolCall {
@@ -794,8 +794,8 @@ impl ToolCall {
     }
 }
 
-impl From<bitfun_agent_stream::ToolCall> for ToolCall {
-    fn from(tool_call: bitfun_agent_stream::ToolCall) -> Self {
+impl From<halo_agent_stream::ToolCall> for ToolCall {
+    fn from(tool_call: halo_agent_stream::ToolCall) -> Self {
         Self {
             tool_id: tool_call.tool_id,
             tool_name: tool_call.tool_name,

@@ -1,11 +1,11 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use bitfun_pi_rpc_adapter::{
+use halo_pi_rpc_adapter::{
     MemoryPiCredentialStore, MemoryPiRuntimeConfigurationRepository,
     PiRuntimeConfigurationRepository, PiRuntimeConfigurationService, StaticPiProviderCapabilities,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     PiCredentialSecret, PiCredentialStorePort, PiProviderCapability, PiProviderCapabilityPort,
     PiProviderCapabilityRequest, PiProviderReadinessPort, PiRpcSessionMode, PiRuntimeConfiguration,
     PiStartupOptions, PiThinkingLevel, PortErrorKind,
@@ -52,7 +52,7 @@ async fn provider_capability_projection_contains_pi_api_and_model_metadata() {
         .expect("capability fixture");
 
     let projection =
-        bitfun_pi_rpc_adapter::pi_models_json_projection(&configuration, Some(&capability))
+        halo_pi_rpc_adapter::pi_models_json_projection(&configuration, Some(&capability))
             .expect("Pi models projection");
     let provider = &projection["providers"]["openai"];
     assert_eq!(provider["api"], "openai-completions");
@@ -154,7 +154,7 @@ async fn json_configuration_repository_persists_rollback_across_service_reconstr
     let root = tempfile::tempdir().expect("configuration repository root");
     let repository_path = root.path().join("halo-pi.json");
     let repository = Arc::new(
-        bitfun_pi_rpc_adapter::JsonFilePiRuntimeConfigurationRepository::new(
+        halo_pi_rpc_adapter::JsonFilePiRuntimeConfigurationRepository::new(
             repository_path.clone(),
         ),
     );
@@ -175,7 +175,7 @@ async fn json_configuration_repository_persists_rollback_across_service_reconstr
 
     let reconstructed = PiRuntimeConfigurationService::new(
         Arc::new(
-            bitfun_pi_rpc_adapter::JsonFilePiRuntimeConfigurationRepository::new(repository_path),
+            halo_pi_rpc_adapter::JsonFilePiRuntimeConfigurationRepository::new(repository_path),
         ),
         capabilities(),
     );
@@ -278,7 +278,7 @@ async fn credential_store_returns_only_a_reference_and_fails_closed_on_mismatch_
 #[test]
 fn controlled_launch_projection_has_isolated_session_modes_and_no_api_key_flag() {
     let configuration = configuration("gpt-5", Some("https://api.example.test/v1"));
-    let managed = bitfun_pi_rpc_adapter::pi_rpc_arguments(
+    let managed = halo_pi_rpc_adapter::pi_rpc_arguments(
         &configuration,
         PiRpcSessionMode::Managed,
         "C:/halo/extension.ts",
@@ -292,7 +292,7 @@ fn controlled_launch_projection_has_isolated_session_modes_and_no_api_key_flag()
         .iter()
         .any(|argument| argument.contains("api.example.test")));
 
-    let standard = bitfun_pi_rpc_adapter::pi_rpc_arguments(
+    let standard = halo_pi_rpc_adapter::pi_rpc_arguments(
         &configuration,
         PiRpcSessionMode::Standard,
         "C:/halo/extension.ts",

@@ -6,7 +6,7 @@
 use serde::Deserialize;
 use tauri::Manager;
 
-const VIDEO_DECODER_MODE_ENV: &str = "BITFUN_BROWSER_VIDEO_DECODER_MODE";
+const VIDEO_DECODER_MODE_ENV: &str = "HALO_BROWSER_VIDEO_DECODER_MODE";
 
 fn video_decoder_compatibility_script() -> String {
     let mode =
@@ -19,10 +19,10 @@ fn video_decoder_compatibility_script() -> String {
     let script = format!(
         r#"
 const isWebView2 = Boolean(window.chrome && window.chrome.webview);
-const isBitFunDocument = location.protocol === 'tauri:'
+const isHaloDocument = location.protocol === 'tauri:'
   || location.hostname === 'tauri.localhost'
   || (location.hostname === 'localhost' && location.port === '1422');
-if (isWebView2 && !isBitFunDocument) {{
+if (isWebView2 && !isHaloDocument) {{
   const decoderMode = {mode_json};
   if (decoderMode && typeof VideoDecoder === 'function') {{
     const originalConfigure = VideoDecoder.prototype.configure;

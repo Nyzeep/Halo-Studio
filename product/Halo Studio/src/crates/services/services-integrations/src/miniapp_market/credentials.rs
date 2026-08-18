@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Mutex, OnceLock};
 
-const KEYRING_SERVICE: &str = "openbitfun.bitfun.miniapp-market.v1";
+const KEYRING_SERVICE: &str = "openbitfun.halo.miniapp-market.v1";
 const KEYRING_ENTRY: &str = "github-oauth";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

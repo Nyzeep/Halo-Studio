@@ -14,29 +14,29 @@ use crate::runtime::{
     DesktopRuntimeContext, DesktopSessionApplicationError, DesktopSessionScopeRequest,
 };
 use crate::startup_trace::DesktopStartupTrace;
-use bitfun_agent_runtime::deep_review::sanitize_focused_review_public_metadata;
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::deep_review::sanitize_focused_review_public_metadata;
+use halo_agent_runtime::sdk::{
     AgentDialogTurnRequest, AgentInputAttachment, AgentSessionCreateResult,
     AgentSessionModelUpdateRequest, AgentSubmissionSource, AgentTurnCancellationRequest,
     PermissionAuditRecord, PermissionGrant, PermissionGrantKey, PermissionReply, PermissionRequest,
 };
-use bitfun_core::agentic::agents::AgentSource;
-use bitfun_core::agentic::coordination::{
+use halo_core::agentic::agents::AgentSource;
+use halo_core::agentic::coordination::{
     AssistantBootstrapBlockReason, AssistantBootstrapEnsureOutcome, AssistantBootstrapSkipReason,
     ConversationCoordinator, DialogScheduler, DialogSubmissionPolicy, DialogTriggerSource,
     SubagentTimeoutAction,
 };
-use bitfun_core::agentic::core::*;
-use bitfun_core::agentic::deep_review_policy::{
+use halo_core::agentic::core::*;
+use halo_core::agentic::deep_review_policy::{
     apply_deep_review_queue_control, default_review_team_definition, DeepReviewQueueControlAction,
     ReviewTeamDefinition,
 };
-use bitfun_core::agentic::goal_mode::{ThreadGoal, ThreadGoalStatus};
-use bitfun_core::agentic::image_analysis::ImageContextData;
-use bitfun_core::agentic::memories::{db::MemoryDatabase, workspace::reset_memory_workspace};
-use bitfun_core::agentic::session::SessionViewRestoreTiming;
-use bitfun_core::agentic::tools::image_context::get_image_context;
-use bitfun_core::agentic::tools::implementations::exec_command::{
+use halo_core::agentic::goal_mode::{ThreadGoal, ThreadGoalStatus};
+use halo_core::agentic::image_analysis::ImageContextData;
+use halo_core::agentic::memories::{db::MemoryDatabase, workspace::reset_memory_workspace};
+use halo_core::agentic::session::SessionViewRestoreTiming;
+use halo_core::agentic::tools::image_context::get_image_context;
+use halo_core::agentic::tools::implementations::exec_command::{
     background_command_output_capture, control_exec_command_session, send_exec_command_input,
     ExecCommandControlAction, ExecCommandControlOrigin, ExecCommandControlRequest,
     ExecCommandInputRequest, ListBackgroundCommandOutputRequest,
@@ -44,23 +44,23 @@ use bitfun_core::agentic::tools::implementations::exec_command::{
     ReadBackgroundCommandOutputRequest as CoreReadBackgroundCommandOutputRequest,
     ReadBackgroundCommandOutputResponse,
 };
-use bitfun_core::service::config::project_permission_store::{
+use halo_core::service::config::project_permission_store::{
     deserialize_project_permission_config, project_permission_file_path,
     project_permission_file_path_for_remote, ProjectPermissionConfig,
 };
-use bitfun_core::service::remote_ssh::workspace_state::resolve_workspace_session_identity;
-use bitfun_core::service::session::{
+use halo_core::service::remote_ssh::workspace_state::resolve_workspace_session_identity;
+use halo_core::service::session::{
     DialogTurnData, SessionMemoryMode, SessionMetadata, SessionRelationship,
     SessionRelationshipKind,
 };
-use bitfun_core::service::workspace::WorkspaceKind;
-use bitfun_core::service::workspace::{WorkspaceActivityMode, WorkspaceCreateOptions};
-use bitfun_core::service::worktree::{WorktreeCreateRequest, WorktreeListRequest, WorktreeService};
-use bitfun_core_types::{
+use halo_core::service::workspace::WorkspaceKind;
+use halo_core::service::workspace::{WorkspaceActivityMode, WorkspaceCreateOptions};
+use halo_core::service::worktree::{WorktreeCreateRequest, WorktreeListRequest, WorktreeService};
+use halo_core_types::{
     SessionExecutionTarget, SessionExecutionTargetKind, SessionExecutionTargetRequest,
     WorktreeError, WorktreeErrorCode,
 };
-use bitfun_product_domains::tool_permissions::PermissionRule;
+use halo_product_domains::tool_permissions::PermissionRule;
 
 const SESSION_VIEW_TOOL_RESULT_TOTAL_CHAR_BUDGET: usize = 512 * 1024;
 const SESSION_VIEW_TOOL_RESULT_STRING_CHAR_LIMIT: usize = 16 * 1024;
@@ -873,7 +873,7 @@ async fn permission_project_id_for_workspace(
     )
     .await
     .ok_or_else(|| format!("Workspace identity is unavailable: {workspace_id}"))?;
-    bitfun_core::agentic::tools::pipeline::permission_project_id_for_workspace_identity(
+    halo_core::agentic::tools::pipeline::permission_project_id_for_workspace_identity(
         &identity, remote,
     )
     .map_err(|error| error.to_string())
@@ -1062,7 +1062,7 @@ pub async fn save_project_permission_rules(
     let current_revision = project_permission_rules_revision(current_content.as_deref());
     if request.revision != current_revision {
         return Err(
-            "Project permission rules changed outside BitFun. Reload before saving.".to_string(),
+            "Project permission rules changed outside Halo. Reload before saving.".to_string(),
         );
     }
 
@@ -2404,7 +2404,7 @@ pub async fn cancel_dialog_turn(
 ) -> Result<(), String> {
     if let Some(acp_client_service) = app_state.acp_client_service.as_ref() {
         match acp_client_service
-            .cancel_bitfun_session(&request.session_id)
+            .cancel_halo_session(&request.session_id)
             .await
         {
             Ok(true) => return Ok(()),
@@ -2467,7 +2467,7 @@ pub async fn steer_dialog_turn(
         .map_err(|e| format!("Failed to steer dialog turn: {}", e))?;
 
     let steering_id = match outcome {
-        bitfun_core::agentic::coordination::DialogSteerOutcome::Buffered {
+        halo_core::agentic::coordination::DialogSteerOutcome::Buffered {
             steering_id, ..
         } => steering_id,
     };
@@ -2627,16 +2627,16 @@ pub async fn control_background_command(
     .map(|response| {
         if response.session_id.is_none() {
             let status = match response.completion.map(|completion| completion.status) {
-                Some(bitfun_core::agentic::tools::implementations::exec_command::ExecCommandCompletionStatus::Interrupted) => {
-                    bitfun_core::agentic::tools::implementations::exec_command::BackgroundCommandOutputStatus::Interrupted
+                Some(halo_core::agentic::tools::implementations::exec_command::ExecCommandCompletionStatus::Interrupted) => {
+                    halo_core::agentic::tools::implementations::exec_command::BackgroundCommandOutputStatus::Interrupted
                 }
-                Some(bitfun_core::agentic::tools::implementations::exec_command::ExecCommandCompletionStatus::Killed) => {
-                    bitfun_core::agentic::tools::implementations::exec_command::BackgroundCommandOutputStatus::Killed
+                Some(halo_core::agentic::tools::implementations::exec_command::ExecCommandCompletionStatus::Killed) => {
+                    halo_core::agentic::tools::implementations::exec_command::BackgroundCommandOutputStatus::Killed
                 }
-                Some(bitfun_core::agentic::tools::implementations::exec_command::ExecCommandCompletionStatus::Pruned) => {
-                    bitfun_core::agentic::tools::implementations::exec_command::BackgroundCommandOutputStatus::Pruned
+                Some(halo_core::agentic::tools::implementations::exec_command::ExecCommandCompletionStatus::Pruned) => {
+                    halo_core::agentic::tools::implementations::exec_command::BackgroundCommandOutputStatus::Pruned
                 }
-                _ => bitfun_core::agentic::tools::implementations::exec_command::BackgroundCommandOutputStatus::Exited,
+                _ => halo_core::agentic::tools::implementations::exec_command::BackgroundCommandOutputStatus::Exited,
             };
             let capture = background_command_output_capture();
             tauri::async_runtime::spawn(async move {
@@ -3183,10 +3183,10 @@ fn system_time_to_unix_secs(time: std::time::SystemTime) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitfun_core::service::session::{
+    use halo_core::service::session::{
         ModelRoundData, ToolCallData, ToolItemData, ToolResultData, TurnStatus, UserMessageData,
     };
-    use bitfun_product_domains::tool_permissions::{PermissionEffect, PermissionRule};
+    use halo_product_domains::tool_permissions::{PermissionEffect, PermissionRule};
     use serde_json::json;
 
     #[test]

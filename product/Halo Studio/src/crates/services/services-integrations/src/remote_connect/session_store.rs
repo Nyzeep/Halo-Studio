@@ -7,8 +7,8 @@
 //! requiring a fresh password entry while keeping copied session ciphertext
 //! unusable without the separate install key.
 //!
-//! File location: `<BITFUN_HOME>/account_session.enc` when configured,
-//! otherwise `~/.bitfun/account_session.enc`.
+//! File location: `<HALO_HOME>/account_session.enc` when configured,
+//! otherwise `~/.halo-studio/account_session.enc`.
 //! Format: base64(nonce || ciphertext) where the plaintext is a JSON
 //! payload `{ token, user_id, master_key_b64, relay_url }`.
 
@@ -49,7 +49,7 @@ fn session_store_directory() -> Result<PathBuf> {
         return Ok(path.clone());
     }
     drop(override_path);
-    super::bitfun_home_dir().ok_or_else(|| anyhow!("cannot determine BitFun home directory"))
+    super::halo_home_dir().ok_or_else(|| anyhow!("cannot determine Halo home directory"))
 }
 
 /// The on-disk JSON payload (plaintext before encryption).
@@ -77,7 +77,7 @@ fn session_key_file_path() -> Result<PathBuf> {
 
 /// Atomically replace a secret-bearing file and restrict it to the current
 /// OS user where Unix permission bits are available. The parent is also made
-/// private because older releases may have created `~/.bitfun` under a broad
+/// private because older releases may have created `~/.halo-studio` under a broad
 /// process umask.
 fn write_private_file(path: &std::path::Path, contents: &[u8]) -> Result<()> {
     let parent = path
@@ -163,7 +163,7 @@ fn derive_legacy_machine_key() -> [u8; 32] {
     hasher.update(b"|");
 
     // Application-specific constant to domain-separate the key
-    hasher.update(b"BitFun::session_store::v1");
+    hasher.update(b"Halo::session_store::v1");
 
     let result = hasher.finalize();
     let mut key = [0u8; 32];
@@ -174,7 +174,7 @@ fn derive_legacy_machine_key() -> [u8; 32] {
 fn derive_machine_key(local_secret: &[u8; 32]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(derive_legacy_machine_key());
-    hasher.update(b"|BitFun::session_store::v2|");
+    hasher.update(b"|Halo::session_store::v2|");
     hasher.update(local_secret);
     let result = hasher.finalize();
     let mut key = [0u8; 32];

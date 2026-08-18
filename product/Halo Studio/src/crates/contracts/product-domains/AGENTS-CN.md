@@ -4,12 +4,12 @@
 
 适用范围：`src/crates/contracts/product-domains`。
 
-`bitfun-product-domains` 承载可脱离完整 core runtime 编译的平台无关产品领域契约。这里应聚焦纯状态、DTO、策略和窄
+`halo-product-domains` 承载可脱离完整 core runtime 编译的平台无关产品领域契约。这里应聚焦纯状态、DTO、策略和窄
 ports；具体 runtime 行为不属于本 crate。
 
 ## 护栏
 
-- 不要让 `bitfun-product-domains` 依赖 `bitfun-core`。
+- 不要让 `halo-product-domains` 依赖 `halo-core`。
 - 保持 default feature 轻量。默认构建不得引入 runtime、service、desktop、network、process、AI 或 tool-runtime 依赖。
 - 本 crate 可以承载纯 DTO、枚举、序列化契约、搜索计划、命令选择决策、storage-shape parser、领域策略和产品领域 port trait。
 - 真正执行 IO、进程、AI 调用、Git service 调用、平台集成、tool exposure 或 desktop/Tauri 工作的 concrete adapter 属于本 crate 外部。
@@ -22,7 +22,7 @@ ports；具体 runtime 行为不属于本 crate。
   seed-plan facts、marker wire format、host primitive call plan 和窄 port。
 - `function-agents` 可以拥有 function-agent DTO、prompt/domain policy、response parsing/repair rule、file-shape analysis
   和 Git/AI port trait。
-- `plugin-source` 可以拥有 BitFun 插件包清单数据结构、来源标识、工作区信任记录和纯信任版本变更规则。
+- `plugin-source` 可以拥有 Halo Studio 插件包清单数据结构、来源标识、工作区信任记录和纯信任版本变更规则。
 - `external-sources` 可以拥有开放生态/来源标识、类型化能力 provider 端口、目录 DTO 与版本敏感冲突指纹；
   provider 刷新、文件观察、偏好持久化和生命周期协调属于 assembly、services 或 adapters。
 - 具体 filesystem writes、marker IO、host dispatch、worker side effect、compile orchestration、`PathManager` integration、
@@ -33,10 +33,10 @@ ports；具体 runtime 行为不属于本 crate。
 按改动范围选择最小验证：
 
 ```bash
-cargo test -p bitfun-product-domains --no-default-features
-cargo test -p bitfun-product-domains --features product-full
+cargo test -p halo-product-domains --no-default-features
+cargo test -p halo-product-domains --features product-full
 node scripts/check-core-boundaries.mjs
-cargo check -p bitfun-core --features product-full
+cargo check -p halo-core --features product-full
 ```
 
 仅改文档时运行 `git diff --check`。

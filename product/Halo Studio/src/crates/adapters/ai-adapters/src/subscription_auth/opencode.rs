@@ -286,7 +286,7 @@ pub(crate) async fn begin_login(
     Ok(StartedLogin {
         authorization_url,
         user_code: Some(user_code),
-        instructions: "Open the verification link and enter the code, then return to BitFun."
+        instructions: "Open the verification link and enter the code, then return to Halo."
             .to_string(),
         runner: Box::pin(runner),
     })

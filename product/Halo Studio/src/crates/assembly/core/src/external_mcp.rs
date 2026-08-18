@@ -3,8 +3,8 @@ use crate::service::mcp::{
     MCPServerType,
 };
 use async_trait::async_trait;
-use bitfun_external_sources::ExternalMcpCoordinatorSnapshot;
-use bitfun_product_domains::external_sources::{
+use halo_external_sources::ExternalMcpCoordinatorSnapshot;
+use halo_product_domains::external_sources::{
     external_mcp_approval_key, external_mcp_conflict_key, EcosystemId, ExternalMcpActivationState,
     ExternalMcpApprovalRequest, ExternalMcpCatalogEntry, ExternalMcpConflict,
     ExternalMcpConflictCandidate, ExternalMcpServerDefinition, ExternalMcpStaticStatus,
@@ -62,7 +62,7 @@ pub(super) enum ExternalMcpRuntimeStatus {
 }
 
 /// Narrow product-to-runtime port. Product reconciliation works only with
-/// source-neutral prepared MCP data; the concrete BitFun MCP manager remains
+/// source-neutral prepared MCP data; the concrete Halo MCP manager remains
 /// behind this implementation boundary.
 #[async_trait]
 pub(super) trait ExternalMcpRuntimePort: Send + Sync {
@@ -85,10 +85,10 @@ pub(super) trait ExternalMcpRuntimePort: Send + Sync {
     ) -> Result<(), String>;
 }
 
-pub(super) struct BitFunExternalMcpRuntime;
+pub(super) struct HaloExternalMcpRuntime;
 
 #[async_trait]
-impl ExternalMcpRuntimePort for BitFunExternalMcpRuntime {
+impl ExternalMcpRuntimePort for HaloExternalMcpRuntime {
     async fn install(
         &self,
         candidate: &ActiveExternalMcpCandidate,
@@ -172,7 +172,7 @@ impl ExternalMcpRuntimePort for BitFunExternalMcpRuntime {
 fn mcp_manager() -> Result<std::sync::Arc<crate::service::mcp::MCPServerManager>, String> {
     get_global_mcp_service()
         .map(|service| service.server_manager())
-        .ok_or_else(|| "The BitFun MCP runtime is not available in this product host".to_string())
+        .ok_or_else(|| "The Halo MCP runtime is not available in this product host".to_string())
 }
 
 pub(super) fn prepared_mcp_config(
@@ -250,7 +250,7 @@ pub(super) fn prepared_mcp_config(
         xaa: None,
     };
     config.validate().map_err(|_| {
-        "The external MCP configuration is not valid for the BitFun runtime".to_string()
+        "The external MCP configuration is not valid for the Halo runtime".to_string()
     })?;
     Ok(config)
 }
@@ -507,7 +507,7 @@ fn build_conflict(
     execution_domain_id: &str,
     workspace_key: &str,
     group: &CandidateGroup<'_>,
-    source_names: &BTreeMap<bitfun_product_domains::external_sources::SourceKey, String>,
+    source_names: &BTreeMap<halo_product_domains::external_sources::SourceKey, String>,
     conflict_choices: &BTreeMap<String, String>,
 ) -> ExternalMcpConflict {
     let server_name = group
@@ -536,7 +536,7 @@ fn build_conflict(
             behavior_version: candidate.behavior_version.clone(),
             available: candidate.enabled,
             unavailable_reason: (!candidate.enabled)
-                .then(|| "This BitFun MCP server is disabled".to_string()),
+                .then(|| "This Halo MCP server is disabled".to_string()),
         });
     }
     for definition in &group.external {

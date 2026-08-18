@@ -1,4 +1,4 @@
-use bitfun_services_core::markdown::FrontMatterMarkdown;
+use halo_services_core::markdown::FrontMatterMarkdown;
 use std::fs;
 
 #[test]

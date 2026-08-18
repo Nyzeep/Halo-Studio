@@ -1,4 +1,4 @@
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     PermissionPromptDenyState, PermissionPromptDescriptor, PermissionPromptEffectKind,
     PluginArtifactRef, PluginAuditRef, PluginCapabilityRef, PluginDataClassification,
     PluginDispatchEnvelope, PluginEffectCandidate, PluginEffectCandidatePayload, PluginManifestRef,
@@ -47,7 +47,7 @@ fn artifact_ref() -> PluginArtifactRef {
         artifact_id: "artifact-provider-1".to_string(),
         artifact_kind: "tool_provider_manifest".to_string(),
         display_name: "OpenCode provider manifest".to_string(),
-        uri: Some("bitfun://artifacts/provider-manifest".to_string()),
+        uri: Some("halo://artifacts/provider-manifest".to_string()),
     }
 }
 
@@ -136,7 +136,7 @@ fn envelope(id: &str) -> PluginDispatchEnvelope {
             schema_version: "agent.turn.completed.v1".to_string(),
             data_classification: PluginDataClassification::Workspace,
             redaction: PluginPayloadRedaction::Partial,
-            uri: Some("bitfun://payloads/payload-1".to_string()),
+            uri: Some("halo://payloads/payload-1".to_string()),
         }),
     }
 }

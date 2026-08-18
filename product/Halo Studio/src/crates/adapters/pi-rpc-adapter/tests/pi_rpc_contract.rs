@@ -7,11 +7,11 @@ use std::io::Write as _;
 #[cfg(windows)]
 use std::process::Stdio;
 
-use bitfun_pi_rpc_adapter::{
+use halo_pi_rpc_adapter::{
     MemoryPiCredentialStore, MemoryPiRuntimeConfigurationRepository, PiRpcAdapter, PiRpcConfig,
     PiRuntimeConfigurationService,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     PiCredentialSecret, PiCredentialStorePort, PiRpcAvailabilitySummary, PiRpcCancellationMode,
     PiRpcCapability, PiRpcCommand, PiRpcCompatibilityProfile, PiRpcEvent, PiRpcFailureKind,
     PiRpcOperationDecision, PiRpcOperationRiskLevel, PiRpcPort, PiRpcReply, PiRpcSessionMode,

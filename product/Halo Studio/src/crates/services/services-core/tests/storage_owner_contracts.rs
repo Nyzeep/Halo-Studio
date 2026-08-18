@@ -1,6 +1,6 @@
-use bitfun_services_core::persistence::{PersistenceService, StorageOptions};
-use bitfun_services_core::storage_cleanup::{CleanupPolicy, CleanupRoots, CleanupService};
-use bitfun_services_core::workspace_instructions::read_workspace_instruction_files;
+use halo_services_core::persistence::{PersistenceService, StorageOptions};
+use halo_services_core::storage_cleanup::{CleanupPolicy, CleanupRoots, CleanupService};
+use halo_services_core::workspace_instructions::read_workspace_instruction_files;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fs;
@@ -217,7 +217,7 @@ async fn workspace_instruction_override_replaces_agents_without_hiding_claude() 
 async fn token_usage_service_persists_records_and_filters_subagents_by_default() {
     let temp = tempfile::tempdir().expect("tempdir");
     let service =
-        bitfun_services_core::token_usage::TokenUsageService::new(temp.path().to_path_buf())
+        halo_services_core::token_usage::TokenUsageService::new(temp.path().to_path_buf())
             .await
             .expect("service");
 
@@ -251,10 +251,10 @@ async fn token_usage_service_persists_records_and_filters_subagents_by_default()
         .expect("record subagent");
 
     let summary = service
-        .get_summary(bitfun_services_core::token_usage::TokenUsageQuery {
+        .get_summary(halo_services_core::token_usage::TokenUsageQuery {
             model_id: Some("model-a".to_string()),
             session_id: None,
-            time_range: bitfun_services_core::token_usage::TimeRange::All,
+            time_range: halo_services_core::token_usage::TimeRange::All,
             limit: None,
             offset: None,
             include_subagent: false,
@@ -268,7 +268,7 @@ async fn token_usage_service_persists_records_and_filters_subagents_by_default()
     assert_eq!(summary.total_cache_write, 12);
 
     let reloaded =
-        bitfun_services_core::token_usage::TokenUsageService::new(temp.path().to_path_buf())
+        halo_services_core::token_usage::TokenUsageService::new(temp.path().to_path_buf())
             .await
             .expect("reloaded");
     let stats = reloaded
@@ -283,7 +283,7 @@ async fn token_usage_service_persists_records_and_filters_subagents_by_default()
 async fn token_usage_clear_does_not_replay_cached_record_batches() {
     let temp = tempfile::tempdir().expect("tempdir");
     let service =
-        bitfun_services_core::token_usage::TokenUsageService::new(temp.path().to_path_buf())
+        halo_services_core::token_usage::TokenUsageService::new(temp.path().to_path_buf())
             .await
             .expect("service");
 
@@ -318,10 +318,10 @@ async fn token_usage_clear_does_not_replay_cached_record_batches() {
         .expect("record new usage");
 
     let summary = service
-        .get_summary(bitfun_services_core::token_usage::TokenUsageQuery {
+        .get_summary(halo_services_core::token_usage::TokenUsageQuery {
             model_id: None,
             session_id: None,
-            time_range: bitfun_services_core::token_usage::TimeRange::All,
+            time_range: halo_services_core::token_usage::TimeRange::All,
             limit: None,
             offset: None,
             include_subagent: true,
@@ -346,7 +346,7 @@ async fn token_usage_clear_does_not_replay_cached_record_batches() {
 async fn token_usage_all_range_ignores_non_date_record_files() {
     let temp = tempfile::tempdir().expect("tempdir");
     let service =
-        bitfun_services_core::token_usage::TokenUsageService::new(temp.path().to_path_buf())
+        halo_services_core::token_usage::TokenUsageService::new(temp.path().to_path_buf())
             .await
             .expect("service");
 
@@ -373,10 +373,10 @@ async fn token_usage_all_range_ignores_non_date_record_files() {
     .expect("write stray record file");
 
     let summary = service
-        .get_summary(bitfun_services_core::token_usage::TokenUsageQuery {
+        .get_summary(halo_services_core::token_usage::TokenUsageQuery {
             model_id: None,
             session_id: None,
-            time_range: bitfun_services_core::token_usage::TimeRange::All,
+            time_range: halo_services_core::token_usage::TimeRange::All,
             limit: None,
             offset: None,
             include_subagent: true,

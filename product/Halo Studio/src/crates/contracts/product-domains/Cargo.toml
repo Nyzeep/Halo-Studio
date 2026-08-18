@@ -1,12 +1,12 @@
 [package]
-name = "bitfun-product-domains"
+name = "halo-product-domains"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "BitFun product domain owner crate"
+description = "Halo product domain owner crate"
 
 [lib]
-name = "bitfun_product_domains"
+name = "halo_product_domains"
 crate-type = ["rlib"]
 
 [[test]]

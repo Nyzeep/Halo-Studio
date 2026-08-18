@@ -9,22 +9,22 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use async_trait::async_trait;
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     AgentRuntime, AgentSessionArchiveStateRequest, AgentSessionDeleteRequest,
     AgentSessionForkAtTurnRequest, AgentSessionRenameRequest, AgentSessionUsageRequest,
 };
-use bitfun_core::agentic::coordination::{ConversationCoordinator, DialogScheduler};
-use bitfun_core::agentic::core::Session;
-use bitfun_core::agentic::persistence::{SessionBranchResult, SessionMetadataPage};
-use bitfun_core::agentic::session::SessionViewRestoreTiming;
-use bitfun_core::product_runtime::{CoreAgentRuntimeCompatibility, CoreProductAgentRuntime};
-use bitfun_core::service::remote_ssh::workspace_state::get_effective_session_path;
-use bitfun_core::service::remote_ssh::SSHConnectionManager;
-use bitfun_core::service::session::{DialogTurnData, SessionMetadata, SessionStatus};
-use bitfun_core::service::session_usage::SessionUsageReport;
-use bitfun_core::service::token_usage::TokenUsageService;
-use bitfun_core::service::workspace::WorkspaceService;
-use bitfun_core::util::errors::BitFunError;
+use halo_core::agentic::coordination::{ConversationCoordinator, DialogScheduler};
+use halo_core::agentic::core::Session;
+use halo_core::agentic::persistence::{SessionBranchResult, SessionMetadataPage};
+use halo_core::agentic::session::SessionViewRestoreTiming;
+use halo_core::product_runtime::{CoreAgentRuntimeCompatibility, CoreProductAgentRuntime};
+use halo_core::service::remote_ssh::workspace_state::get_effective_session_path;
+use halo_core::service::remote_ssh::SSHConnectionManager;
+use halo_core::service::session::{DialogTurnData, SessionMetadata, SessionStatus};
+use halo_core::service::session_usage::SessionUsageReport;
+use halo_core::service::token_usage::TokenUsageService;
+use halo_core::service::workspace::WorkspaceService;
+use halo_core::util::errors::HaloError;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -65,9 +65,9 @@ pub(crate) enum DesktopSessionApplicationError {
 
 pub(crate) type DesktopSessionApplicationResult<T> = Result<T, DesktopSessionApplicationError>;
 
-fn desktop_core_session_error(error: BitFunError) -> DesktopSessionApplicationError {
+fn desktop_core_session_error(error: HaloError) -> DesktopSessionApplicationError {
     match error {
-        BitFunError::SessionInUse { session_id } => DesktopSessionApplicationError::SessionInUse(
+        HaloError::SessionInUse { session_id } => DesktopSessionApplicationError::SessionInUse(
             format!("Session is already open for writing: {session_id}"),
         ),
         error => DesktopSessionApplicationError::Core(error.to_string()),
@@ -709,20 +709,20 @@ fn merge_ui_owned_session_metadata(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitfun_agent_runtime::sdk::{
+    use halo_agent_runtime::sdk::{
         AgentRuntimeBuilder, AgentSessionCreateRequest, AgentSessionCreateResult,
         AgentSessionListRequest, AgentSessionManagementPort, AgentSessionSummary,
         AgentSessionWorkspaceBinding, AgentSessionWorkspaceRequest, AgentSubmissionPort,
         AgentSubmissionRequest, AgentSubmissionResult, PortError, PortErrorKind, PortResult,
     };
-    use bitfun_core::service::session::{SessionKind, SessionMemoryMode};
+    use halo_core::service::session::{SessionKind, SessionMemoryMode};
     use serde_json::json;
     use std::sync::Mutex;
 
     #[test]
     fn session_writer_conflict_keeps_a_stable_desktop_transport_code() {
         let error =
-            desktop_core_session_error(bitfun_core::util::errors::BitFunError::SessionInUse {
+            desktop_core_session_error(halo_core::util::errors::HaloError::SessionInUse {
                 session_id: "session-1".to_string(),
             });
 
@@ -880,16 +880,16 @@ mod tests {
             Default::default(),
         );
         let mut live = restored.clone();
-        live.state = bitfun_core::agentic::core::SessionState::Processing {
+        live.state = halo_core::agentic::core::SessionState::Processing {
             current_turn_id: "turn-1".to_string(),
-            phase: bitfun_core::agentic::core::ProcessingPhase::Streaming,
+            phase: halo_core::agentic::core::ProcessingPhase::Streaming,
         };
 
         overlay_live_session_state(&mut restored, Some(live));
 
         assert!(matches!(
             restored.state,
-            bitfun_core::agentic::core::SessionState::Processing {
+            halo_core::agentic::core::SessionState::Processing {
                 ref current_turn_id,
                 ..
             } if current_turn_id == "turn-1"
@@ -909,14 +909,14 @@ mod tests {
 
         assert!(matches!(
             restored.state,
-            bitfun_core::agentic::core::SessionState::Idle
+            halo_core::agentic::core::SessionState::Idle
         ));
     }
 
     #[tokio::test]
     async fn local_session_storage_identity_survives_workspace_removal() {
         let root = std::env::temp_dir().join(format!(
-            "bitfun-desktop-session-path-test-{}",
+            "halo-desktop-session-path-test-{}",
             uuid::Uuid::new_v4()
         ));
         let workspace_path = root.join("project");
@@ -972,7 +972,7 @@ mod tests {
         let tauri_state = ["tauri", "::", "State"].concat();
         assert!(!source.contains(&tauri_namespace));
         assert!(!source.contains(&tauri_state));
-        for forbidden in [["crate", "::", "api"].concat(), ["bitfun", "_acp"].concat()] {
+        for forbidden in [["crate", "::", "api"].concat(), ["halo", "_acp"].concat()] {
             assert!(!source.contains(&forbidden), "unexpected {forbidden}");
         }
         for forbidden in [

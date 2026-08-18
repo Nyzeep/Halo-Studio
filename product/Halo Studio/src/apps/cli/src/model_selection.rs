@@ -1,4 +1,4 @@
-use bitfun_core::service::config::AIConfig;
+use halo_core::service::config::AIConfig;
 
 /// Resolve the shared future-mode selector to the concrete enabled model shown
 /// by CLI model pickers and status surfaces.

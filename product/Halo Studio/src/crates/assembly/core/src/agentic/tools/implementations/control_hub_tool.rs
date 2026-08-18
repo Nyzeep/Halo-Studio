@@ -21,10 +21,10 @@ use crate::agentic::tools::framework::{
 };
 use crate::infrastructure::events::{get_global_event_system, BackendEvent};
 use crate::service::config::{get_global_config_service, GlobalConfig};
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use crate::util::types::ToolImageAttachment;
 use async_trait::async_trait;
-use bitfun_services_core::system::{truncate_with_marker, LocalSystemProvider};
+use halo_services_core::system::{truncate_with_marker, LocalSystemProvider};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -82,9 +82,9 @@ impl ControlHubTool {
     fn default_browser_connect_hints(kind: &BrowserKind, port: u16) -> Vec<String> {
         let exe = BrowserLauncher::browser_executable(kind);
         vec![
-            "Drive pages over CDP rather than desktop mouse/keyboard automation. Note this is BitFun's managed browser profile, not the user's everyday profile: it keeps its own cookies and logins across runs, so on a login wall ask the user to sign in once in that window instead of retrying or typing credentials.".to_string(),
+            "Drive pages over CDP rather than desktop mouse/keyboard automation. Note this is Halo's managed browser profile, not the user's everyday profile: it keeps its own cookies and logins across runs, so on a login wall ask the user to sign in once in that window instead of retrying or typing credentials.".to_string(),
             format!(
-                "If CDP is not ready on test port {}, retry browser.connect — it starts \"{}\" against BitFun's managed profile with CDP enabled. Do not ask the user to enable a debug port on their everyday browser profile.",
+                "If CDP is not ready on test port {}, retry browser.connect — it starts \"{}\" against Halo's managed profile with CDP enabled. Do not ask the user to enable a debug port on their everyday browser profile.",
                 port, exe
             ),
             "After the browser is listening on the test port, use browser.connect / snapshot / click / fill to drive the DOM directly.".to_string(),
@@ -148,7 +148,7 @@ impl ControlHubTool {
         )
         .with_hints(Self::headless_browser_connect_hints(port))
         .with_hint(
-            "Use connect { mode: \"default\" } to drive the BitFun-managed browser profile instead.",
+            "Use connect { mode: \"default\" } to drive the Halo-managed browser profile instead.",
         ))
     }
 
@@ -198,12 +198,12 @@ Use this tool via `{ domain, action, params }` for browser automation, terminal 
 
 ### domain: "browser"  (DOM/CDP browser control)
 - Default URL-opening policy:
-  * For requests that only open, show, preview, or view a URL, use `open_builtin`. This is the default browser-opening action and keeps the page inside BitFun.
+  * For requests that only open, show, preview, or view a URL, use `open_builtin`. This is the default browser-opening action and keeps the page inside Halo.
   * Do not call `connect`, `tab_new`, or `navigate` merely to display a URL. Use the CDP workflow only when the agent must read page content or interact with the DOM.
 - UI action:
-  * `open_builtin { url, title?, replace_existing? }` — open an http(s) URL in BitFun's built-in right-side browser panel. This changes the BitFun UI only; it does not fetch page text for reasoning. The panel is display-only for the user — the agent cannot snapshot, read, or interact with it; use `connect` + `snapshot` when page content is needed.
+  * `open_builtin { url, title?, replace_existing? }` — open an http(s) URL in Halo's built-in right-side browser panel. This changes the Halo UI only; it does not fetch page text for reasoning. The panel is display-only for the user — the agent cannot snapshot, read, or interact with it; use `connect` + `snapshot` when page content is needed.
 - Automation modes (external managed browser):
-  * `connect { mode: "default" }` (default) — start or attach BitFun's managed browser profile with CDP enabled on port 9222.
+  * `connect { mode: "default" }` (default) — start or attach Halo's managed browser profile with CDP enabled on port 9222.
   * `connect { mode: "headless" }` — attach to an already-running headless browser on the headless test port 9223. This mode never starts a browser; when nothing is listening it returns `NOT_AVAILABLE` together with the exact launch command.
   * `params.port` overrides the CDP port for `connect` and for every other CDP action; after `connect`, actions reuse the connected session's port automatically.
 - Actions: open_builtin, connect, tab_new, navigate, back, forward, reload, snapshot, click, hover, fill, type, check, uncheck, select, press_key, scroll, auto_scroll, wait, get, get_text, get_url, get_title, get_html, screenshot, evaluate, fetch, cookies, set_cookies, set_file_input_files, cdp, network, console, errors, trace, dialog, read_article, close, list_pages, tab_query, switch_page, list_sessions.
@@ -238,7 +238,7 @@ Branch on `ok` and `error.code`, not on English messages.
         action: &str,
         params: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         match domain {
             "desktop" => {
                 let hint = if context.is_remote() {
@@ -317,14 +317,14 @@ Branch on `ok` and `error.code`, not on English messages.
         action: &str,
         params: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         match action {
             "capabilities" => {
                 // `terminal` (TerminalApi) is delivered through a global
                 // registry rather than a field on the context, so we can't be
                 // 100% sure here without round-tripping. We report "likely
                 // available iff a desktop host is present" because that bridge
-                // only exists in BitFun's desktop runtime; the actual call will
+                // only exists in Halo's desktop runtime; the actual call will
                 // surface a clean error if the bridge is offline.
                 let likely_terminal_available = context.computer_use_host.is_some();
                 let browser_default = browser_sessions().default_id().await;
@@ -418,7 +418,7 @@ Branch on `ok` and `error.code`, not on English messages.
                     .get("intent")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| {
-                        BitFunError::tool("route_hint requires 'intent' (string)".to_string())
+                        HaloError::tool("route_hint requires 'intent' (string)".to_string())
                     })?;
                 let lower = intent.to_lowercase();
 
@@ -589,7 +589,7 @@ Branch on `ok` and `error.code`, not on English messages.
                     }),
                 )])
             }
-            other => Err(BitFunError::tool(format!(
+            other => Err(HaloError::tool(format!(
                 "Unknown meta action: '{}'. Valid actions: capabilities, route_hint",
                 other
             ))),
@@ -627,7 +627,7 @@ Branch on `ok` and `error.code`, not on English messages.
         action: &str,
         params: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let session_id_param = params
             .get("session_id")
             .and_then(|v| v.as_str())
@@ -685,7 +685,7 @@ Branch on `ok` and `error.code`, not on English messages.
                     })
                     .await
                     .map_err(|error| {
-                        BitFunError::tool(format!("failed to open built-in browser: {error}"))
+                        HaloError::tool(format!("failed to open built-in browser: {error}"))
                     })?;
 
                 Ok(vec![ToolResult::ok(
@@ -835,10 +835,10 @@ Branch on `ok` and `error.code`, not on English messages.
                             })
                             .or_else(|| pages.first())
                             .ok_or_else(|| {
-                                BitFunError::tool("No browser pages found via CDP".to_string())
+                                HaloError::tool("No browser pages found via CDP".to_string())
                             })?;
                         let ws_url = page.web_socket_debugger_url.as_ref().ok_or_else(|| {
-                            BitFunError::tool("Page has no WebSocket debugger URL".to_string())
+                            HaloError::tool("Page has no WebSocket debugger URL".to_string())
                         })?;
                         let client = CdpClient::connect(ws_url).await?;
                         let session = BrowserSession {
@@ -1040,7 +1040,7 @@ Branch on `ok` and `error.code`, not on English messages.
                 let ws_url = page
                     .web_socket_debugger_url
                     .as_ref()
-                    .ok_or_else(|| BitFunError::tool("New tab has no WebSocket URL".to_string()))?;
+                    .ok_or_else(|| HaloError::tool("New tab has no WebSocket URL".to_string()))?;
                 let client = CdpClient::connect(ws_url).await?;
                 let session = BrowserSession {
                     session_id: page.id.clone(),
@@ -1075,7 +1075,7 @@ Branch on `ok` and `error.code`, not on English messages.
                     .get("page_id")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| {
-                        BitFunError::tool("switch_page requires 'page_id'".to_string())
+                        HaloError::tool("switch_page requires 'page_id'".to_string())
                     })?;
                 // Phase 2: by default ALSO surface the chosen tab in the
                 // user's actual browser window via `Page.bringToFront`. The
@@ -1096,10 +1096,10 @@ Branch on `ok` and `error.code`, not on English messages.
                 } else {
                     let pages = CdpClient::list_pages(port).await?;
                     let page = pages.iter().find(|p| p.id == page_id).ok_or_else(|| {
-                        BitFunError::tool(format!("Page '{}' not found", page_id))
+                        HaloError::tool(format!("Page '{}' not found", page_id))
                     })?;
                     let ws_url = page.web_socket_debugger_url.as_ref().ok_or_else(|| {
-                        BitFunError::tool("Page has no WebSocket URL".to_string())
+                        HaloError::tool("Page has no WebSocket URL".to_string())
                     })?;
                     let client = CdpClient::connect(ws_url).await?;
                     let session = BrowserSession {
@@ -1352,7 +1352,7 @@ Branch on `ok` and `error.code`, not on English messages.
                             .get("url")
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| {
-                                BitFunError::tool("navigate requires 'url'".to_string())
+                                HaloError::tool("navigate requires 'url'".to_string())
                             })?;
                         let result = actions.navigate(url).await?;
                         Ok(vec![ToolResult::ok(result, Some(format!("Navigated to {}", url)))])
@@ -1405,7 +1405,7 @@ Branch on `ok` and `error.code`, not on English messages.
                             .get("value")
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| {
-                                BitFunError::tool("fill requires 'value'".to_string())
+                                HaloError::tool("fill requires 'value'".to_string())
                             })?;
                         let result = actions.fill(selector, value).await?;
                         Ok(vec![ToolResult::ok(
@@ -1418,7 +1418,7 @@ Branch on `ok` and `error.code`, not on English messages.
                             .get("text")
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| {
-                                BitFunError::tool("type requires 'text'".to_string())
+                                HaloError::tool("type requires 'text'".to_string())
                             })?;
                         let result = actions.type_text(text).await?;
                         Ok(vec![ToolResult::ok(result, Some("Typed text".to_string()))])
@@ -1434,7 +1434,7 @@ Branch on `ok` and `error.code`, not on English messages.
                             .get("option_text")
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| {
-                                BitFunError::tool("select requires 'option_text'".to_string())
+                                HaloError::tool("select requires 'option_text'".to_string())
                             })?;
                         let result = actions.select(selector, option_text).await?;
                         // Phase 3: the underlying JS returns `{ error, available }`
@@ -1481,7 +1481,7 @@ Branch on `ok` and `error.code`, not on English messages.
                             .get("key")
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| {
-                                BitFunError::tool("press_key requires 'key'".to_string())
+                                HaloError::tool("press_key requires 'key'".to_string())
                             })?;
                         let result = actions.press_key(key).await?;
                         Ok(vec![ToolResult::ok(
@@ -1603,7 +1603,7 @@ Branch on `ok` and `error.code`, not on English messages.
                         // `data`, flood the context window.
                         let (mime_type, data_base64) = {
                             let obj = result.as_object_mut().ok_or_else(|| {
-                                BitFunError::tool(
+                                HaloError::tool(
                                     "screenshot returned a non-object result".to_string(),
                                 )
                             })?;
@@ -1642,7 +1642,7 @@ Branch on `ok` and `error.code`, not on English messages.
                             .get("expression")
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| {
-                                BitFunError::tool("evaluate requires 'expression'".to_string())
+                                HaloError::tool("evaluate requires 'expression'".to_string())
                             })?;
                         let await_promise = params
                             .get("await_promise")
@@ -1806,7 +1806,7 @@ Branch on `ok` and `error.code`, not on English messages.
                             .get("url")
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| {
-                                BitFunError::tool("fetch requires 'url'".to_string())
+                                HaloError::tool("fetch requires 'url'".to_string())
                             })?;
                         let method = params
                             .get("method")
@@ -1876,7 +1876,7 @@ Branch on `ok` and `error.code`, not on English messages.
                             .get("cookies")
                             .and_then(|v| v.as_array())
                             .ok_or_else(|| {
-                                BitFunError::tool("set_cookies requires 'cookies' array".to_string())
+                                HaloError::tool("set_cookies requires 'cookies' array".to_string())
                             })?;
                         let result = actions.set_cookies(cookies).await?;
                         let set = result.get("set").and_then(|v| v.as_u64()).unwrap_or(0);
@@ -1891,7 +1891,7 @@ Branch on `ok` and `error.code`, not on English messages.
                             .get("files")
                             .and_then(|v| v.as_array())
                             .ok_or_else(|| {
-                                BitFunError::tool("set_file_input_files requires 'files' array".to_string())
+                                HaloError::tool("set_file_input_files requires 'files' array".to_string())
                             })?
                             .iter()
                             .filter_map(|v| v.as_str().map(str::to_string))
@@ -1904,7 +1904,7 @@ Branch on `ok` and `error.code`, not on English messages.
                             .get("method")
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| {
-                                BitFunError::tool("cdp requires 'method'".to_string())
+                                HaloError::tool("cdp requires 'method'".to_string())
                             })?;
                         if !Self::is_allowed_browser_cdp_method(method) {
                             return Ok(err_response(
@@ -1968,7 +1968,7 @@ Branch on `ok` and `error.code`, not on English messages.
                         browser_sessions().remove(&session.session_id).await;
                         Ok(vec![ToolResult::ok(result, Some("Page closed".to_string()))])
                     }
-                    other => Err(BitFunError::tool(format!(
+                    other => Err(HaloError::tool(format!(
                         "Unknown browser action: '{}'. Valid: connect, tab_new, navigate, back, forward, reload, snapshot, click, hover, fill, type, check, uncheck, select, press_key, scroll, auto_scroll, wait, get, get_text, get_url, get_title, get_html, screenshot, evaluate, fetch, cookies, set_cookies, set_file_input_files, cdp, network, console, errors, trace, dialog, read_article, close, list_pages, tab_query, switch_page, list_sessions",
                         other
                     ))),
@@ -1984,17 +1984,17 @@ Branch on `ok` and `error.code`, not on English messages.
         action: &str,
         params: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         // Phase 4: enumerate live terminal sessions so the model can resolve
         // a `terminal_session_id` *before* attempting `kill` / `interrupt`.
         // Previously this required digging through earlier `Bash` results.
         if action == "list_sessions" {
             let api = crate::service::terminal::api::TerminalApi::from_singleton()
-                .map_err(|e| BitFunError::tool(format!("TerminalApi unavailable: {}", e)))?;
+                .map_err(|e| HaloError::tool(format!("TerminalApi unavailable: {}", e)))?;
             let sessions = api
                 .list_sessions()
                 .await
-                .map_err(|e| BitFunError::tool(format!("list_sessions failed: {}", e)))?;
+                .map_err(|e| HaloError::tool(format!("list_sessions failed: {}", e)))?;
             let summary: Vec<Value> = sessions
                 .iter()
                 .map(|s| {
@@ -2023,11 +2023,11 @@ Branch on `ok` and `error.code`, not on English messages.
             Some(s) => s.to_string(),
             None => {
                 let api = crate::service::terminal::api::TerminalApi::from_singleton()
-                    .map_err(|e| BitFunError::tool(format!("TerminalApi unavailable: {}", e)))?;
+                    .map_err(|e| HaloError::tool(format!("TerminalApi unavailable: {}", e)))?;
                 let sessions = api
                     .list_sessions()
                     .await
-                    .map_err(|e| BitFunError::tool(format!("list_sessions failed: {}", e)))?;
+                    .map_err(|e| HaloError::tool(format!("list_sessions failed: {}", e)))?;
                 let live: Vec<_> = sessions
                     .iter()
                     .filter(|s| {
@@ -2080,7 +2080,7 @@ Branch on `ok` and `error.code`, not on English messages.
     }
 }
 
-fn parse_browser_kind(browser: &str) -> BitFunResult<BrowserKind> {
+fn parse_browser_kind(browser: &str) -> HaloResult<BrowserKind> {
     match BrowserLauncher::browser_kind_from_config(browser) {
         Some(kind) => Ok(kind),
         None => BrowserLauncher::detect_default_browser(),
@@ -2137,7 +2137,7 @@ impl Tool for ControlHubTool {
         "ControlHub"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(Self::description_text())
     }
 
@@ -2152,7 +2152,7 @@ impl Tool for ControlHubTool {
     async fn description_with_context(
         &self,
         context: Option<&ToolUseContext>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let mut base = Self::description_text();
         if context.map(|c| c.is_remote()).unwrap_or(false) {
             base.push_str("\n\n**Remote workspace:** Only `browser` and `meta` domains are available. `desktop` and `system` domains (screenshots, OCR, mouse/keyboard, app launching, clipboard, OS info, local scripts) are **not available** in remote sessions — the `ComputerUse` tool is disabled. Use `ExecCommand` for shell-based alternatives on the remote SSH host.");
@@ -2249,7 +2249,7 @@ impl Tool for ControlHubTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let domain = input.get("domain").and_then(|v| v.as_str()).unwrap_or("");
         let action = input.get("action").and_then(|v| v.as_str()).unwrap_or("");
 
@@ -2407,16 +2407,16 @@ fn envelope_wrap_results(domain: &str, action: &str, results: Vec<ToolResult>) -
         .collect()
 }
 
-/// Best-effort classification of a legacy `BitFunError` into a structured
+/// Best-effort classification of a legacy `HaloError` into a structured
 /// ControlHub error. Domain handlers should be migrated to return structured
 /// envelopes directly; this is the safety net for the transition.
-fn map_dispatch_error(domain: &str, _action: &str, err: BitFunError) -> ControlHubError {
+fn map_dispatch_error(domain: &str, _action: &str, err: HaloError) -> ControlHubError {
     let msg = err.to_string();
 
     // Frontend bridges may send back `[CODE] message\nHints: a | b` strings —
     // parse that prefix back into a structured ControlHubError so the model
     // sees the *actual* error code and hints instead of an INTERNAL fallback.
-    // `BitFunError::Tool` wraps the message with `"Tool error: "`, so we try
+    // `HaloError::Tool` wraps the message with `"Tool error: "`, so we try
     // both the raw form and the form after stripping that wrapper.
     let strip_candidate = msg
         .strip_prefix("Tool error: ")
@@ -2487,7 +2487,7 @@ mod control_hub_tests {
             custom_data: std::collections::HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: Default::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         }
     }
 
@@ -2622,7 +2622,7 @@ mod control_hub_tests {
             .block_on(tool.dispatch(
                 "meta",
                 "route_hint",
-                &json!({ "intent": "切换 BitFun 默认模型" }),
+                &json!({ "intent": "切换 Halo 默认模型" }),
                 &ctx,
             ))
             .unwrap();
@@ -2678,7 +2678,7 @@ mod control_hub_tests {
         let err = map_dispatch_error(
             "desktop",
             "click",
-            BitFunError::tool(
+            HaloError::tool(
                 "[AMBIGUOUS] 3 matches for text 'Save'\nHints: pass index | use selector"
                     .to_string(),
             ),
@@ -2692,7 +2692,7 @@ mod control_hub_tests {
         let err = map_dispatch_error(
             "desktop",
             "x",
-            BitFunError::tool("[WAT_IS_THIS] ouch".to_string()),
+            HaloError::tool("[WAT_IS_THIS] ouch".to_string()),
         );
         assert!(matches!(err.code, ErrorCode::FrontendError));
     }
@@ -2702,7 +2702,7 @@ mod control_hub_tests {
         let err = map_dispatch_error(
             "browser",
             "click",
-            BitFunError::tool(
+            HaloError::tool(
                 "Browser session 'AB' is no longer connected (the tab was likely closed)."
                     .to_string(),
             ),
@@ -2712,7 +2712,7 @@ mod control_hub_tests {
 
     #[test]
     fn map_dispatch_error_classifies_known_phrases() {
-        let mk = |s: &str| BitFunError::tool(s.to_string());
+        let mk = |s: &str| HaloError::tool(s.to_string());
         assert!(matches!(
             map_dispatch_error("browser", "select", mk("element not found")).code,
             ErrorCode::NotFound
@@ -2766,7 +2766,7 @@ mod control_hub_tests {
         let err = map_dispatch_error(
             "browser",
             "snapshot",
-            actions::classify_transport_error(BitFunError::tool(
+            actions::classify_transport_error(HaloError::tool(
                 "CDP send failed: broken pipe".to_string(),
             )),
         );
@@ -2955,7 +2955,7 @@ mod control_hub_tests {
         let joined = hints.join(" | ");
         assert!(
             joined.contains("managed profile"),
-            "hints must guide toward BitFun's managed profile launch: {joined}"
+            "hints must guide toward Halo's managed profile launch: {joined}"
         );
         assert!(
             !joined.contains("--remote-debugging-port"),
@@ -3011,7 +3011,7 @@ mod control_hub_tests {
         let results = tool
             .handle_system(
                 "open_file",
-                &json!({ "path": "/definitely/does/not/exist/bitfun-test.xyz" }),
+                &json!({ "path": "/definitely/does/not/exist/halo-test.xyz" }),
                 &ctx,
             )
             .await
@@ -3142,9 +3142,9 @@ mod control_hub_tests {
         let ctx = empty_context();
         let probe = if cfg!(target_os = "windows") {
             // PowerShell prints with the Unicode code page configured above.
-            "Write-Output 'hello-bitfun'"
+            "Write-Output 'hello-halo'"
         } else {
-            "echo hello-bitfun"
+            "echo hello-halo"
         };
         let results = tool
             .handle_system(
@@ -3162,15 +3162,15 @@ mod control_hub_tests {
         );
         let out = payload.get("output").and_then(|v| v.as_str()).unwrap_or("");
         assert!(
-            out.contains("hello-bitfun"),
-            "expected stdout to contain 'hello-bitfun', got '{out}'"
+            out.contains("hello-halo"),
+            "expected stdout to contain 'hello-halo', got '{out}'"
         );
     }
 
     #[tokio::test]
     async fn terminal_list_sessions_without_singleton_returns_clean_error() {
         // The TerminalApi singleton is initialized only inside the desktop /
-        // server runtimes, so in `cargo test -p bitfun-core` it must surface
+        // server runtimes, so in `cargo test -p halo-core` it must surface
         // a structured error rather than panicking.
         let tool = ControlHubTool::new();
         let ctx = empty_context();

@@ -1,10 +1,10 @@
 //! Remote announcement fetcher compatibility wrapper.
 //!
 //! HTTP fetch, cache TTL, and cache hydration live in
-//! `bitfun-services-integrations`; core only supplies product configuration.
+//! `halo-services-integrations`; core only supplies product configuration.
 
 use crate::infrastructure::app_paths::PathManager;
-use bitfun_services_integrations::announcement::{
+use halo_services_integrations::announcement::{
     AnnouncementRemoteFetchRequest, RemoteAnnouncementFetcher,
 };
 use std::sync::Arc;

@@ -209,7 +209,7 @@ pub fn resolve_deep_review_shared_context_tool_use(
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())?;
-    if is_bitfun_runtime_uri(file_path) {
+    if is_halo_runtime_uri(file_path) {
         return None;
     }
 
@@ -252,6 +252,6 @@ fn git_relative_path(workspace_root: &Path, path: &str) -> Option<String> {
     Some(relative.to_string_lossy().replace('\\', "/"))
 }
 
-fn is_bitfun_runtime_uri(path: &str) -> bool {
-    path.trim().starts_with("bitfun://runtime/")
+fn is_halo_runtime_uri(path: &str) -> bool {
+    path.trim().starts_with("halo://runtime/")
 }

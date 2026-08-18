@@ -15,13 +15,13 @@ async fn standalone_sdk_host_negotiates_and_shuts_down_without_cli() {
         std::fs::create_dir_all(path).expect("SDK Host fixture directory");
     }
 
-    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_bitfun-sdk-host"))
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_halo-sdk-host"))
         .current_dir(&workspace)
-        .env_remove("BITFUN_USER_ROOT")
-        .env_remove("BITFUN_HOME")
-        .env("BITFUN_E2E_STORAGE_GUARD", "1")
-        .env("BITFUN_E2E_USER_ROOT", &user_root)
-        .env("BITFUN_E2E_HOME", &home_root)
+        .env_remove("HALO_USER_ROOT")
+        .env_remove("HALO_HOME")
+        .env("HALO_E2E_STORAGE_GUARD", "1")
+        .env("HALO_E2E_USER_ROOT", &user_root)
+        .env("HALO_E2E_HOME", &home_root)
         .env("APPDATA", &config_root)
         .env("XDG_CONFIG_HOME", &config_root)
         .env("HOME", &home_root)

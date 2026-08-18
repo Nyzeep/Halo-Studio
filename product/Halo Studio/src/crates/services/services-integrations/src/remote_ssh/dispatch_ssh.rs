@@ -1,6 +1,6 @@
-//! SSH transport for persistent BitFun dispatch jobs.
+//! SSH transport for persistent Halo dispatch jobs.
 //!
-//! The target-side runner is the `bitfun dispatch` CLI surface. This module is
+//! The target-side runner is the `halo dispatch` CLI surface. This module is
 //! deliberately only a submit/poll transport: the remote CLI owns jobs,
 //! sessions, transcripts, process detachment, and cancellation semantics.
 //!
@@ -24,10 +24,10 @@ use super::types::SSHCommandOptions;
 
 const RELEASE_BASE: &str = "https://github.com/GCWing/BitFun/releases";
 const RELEASE_VERSION: &str = env!("CARGO_PKG_VERSION");
-const INSTALL_STATE_DIR: &str = ".bitfun/dispatch/install";
-const REQUEST_STATE_DIR: &str = ".bitfun/dispatch/requests";
+const INSTALL_STATE_DIR: &str = ".halo-studio/dispatch/install";
+const REQUEST_STATE_DIR: &str = ".halo-studio/dispatch/requests";
 const INSTALL_STEM: &str = "install-cli";
-const INSTALL_DONE_MARKER: &str = "BITFUN_DISPATCH_CLI_INSTALL_DONE";
+const INSTALL_DONE_MARKER: &str = "HALO_DISPATCH_CLI_INSTALL_DONE";
 const INSTALL_PREPARE_GRACE_SECONDS: u64 = 30;
 const COMMAND_TIMEOUT_MS: u64 = 30_000;
 const RELEASE_READ_TIMEOUT_SECONDS: u64 = 30;
@@ -238,11 +238,11 @@ pub fn validate_dispatch_protocol(protocol: &Value, approval_policy: Option<&str
     Ok(())
 }
 
-/// Explicitly install the matching BitFun CLI release on the SSH target.
+/// Explicitly install the matching Halo CLI release on the SSH target.
 ///
 /// This function fails closed when the build has no release trust root, a
 /// checksum/signature is absent, or either verification fails. It never uses
-/// sudo and writes only below `~/.local/bin` and `~/.bitfun`.
+/// sudo and writes only below `~/.local/bin` and `~/.halo-studio`.
 pub async fn install_cli_start(
     manager: &SSHConnectionManager,
     connection_id: &str,
@@ -264,7 +264,7 @@ pub async fn install_cli_start(
     // may still be reading the archive or paths this attempt would replace.
     install_cli_cancel(manager, connection_id)
         .await
-        .context("stop an earlier BitFun CLI installation")?;
+        .context("stop an earlier Halo CLI installation")?;
 
     let dir = format!("{}/{}", target.home, INSTALL_STATE_DIR);
     let archive_path = format!("{dir}/{}", release.filename);
@@ -275,15 +275,15 @@ pub async fn install_cli_start(
     let driver_pid_path = format!("{dir}/{INSTALL_STEM}.driver.pid");
     let prepare_path = format!("{dir}/{INSTALL_STEM}.preparing");
     let exit_path = format!("{dir}/{INSTALL_STEM}.exit");
-    let install_token = format!("bitfun-install-{}", uuid::Uuid::new_v4().as_simple());
+    let install_token = format!("halo-install-{}", uuid::Uuid::new_v4().as_simple());
 
     exec_ok(
         manager,
         connection_id,
         &format!(
             "mkdir -p {dir} && chmod 700 {root} {dispatch} {dir}",
-            root = shell_quote_posix(&format!("{}/.bitfun", target.home)),
-            dispatch = shell_quote_posix(&format!("{}/.bitfun/dispatch", target.home)),
+            root = shell_quote_posix(&format!("{}/.halo-studio", target.home)),
+            dispatch = shell_quote_posix(&format!("{}/.halo-studio/dispatch", target.home)),
             dir = shell_quote_posix(&dir),
         ),
     )
@@ -298,15 +298,15 @@ pub async fn install_cli_start(
     manager
         .sftp_write(connection_id, &archive_path, &archive)
         .await
-        .context("stage verified BitFun CLI archive")?;
+        .context("stage verified Halo CLI archive")?;
     manager
         .sftp_write(connection_id, &body_path, body.as_bytes())
         .await
-        .context("stage BitFun CLI install body")?;
+        .context("stage Halo CLI install body")?;
     manager
         .sftp_write(connection_id, &script_path, driver.as_bytes())
         .await
-        .context("stage BitFun CLI install driver")?;
+        .context("stage Halo CLI install driver")?;
 
     exec_ok(
         manager,
@@ -344,7 +344,7 @@ pub async fn install_cli_start(
         Ok(channel) => channel,
         Err(error) => {
             let _ = install_cli_cancel(manager, connection_id).await;
-            return Err(error).context("start remote BitFun CLI installer");
+            return Err(error).context("start remote Halo CLI installer");
         }
     };
     tokio::spawn(async move {
@@ -367,7 +367,7 @@ fn ensure_confirmed_release(
 ) -> Result<()> {
     if resolved != expected {
         return Err(anyhow!(
-            "BitFun CLI release metadata changed after confirmation; probe the target and confirm the new asset"
+            "Halo CLI release metadata changed after confirmation; probe the target and confirm the new asset"
         ));
     }
     Ok(())
@@ -428,7 +428,7 @@ pub async fn install_cli_poll(
     };
     let mut output = output.to_string();
     if status == DispatchInstallStatus::Failed && exit_code == Some(130) && output.is_empty() {
-        output.push_str("BitFun CLI installation was cancelled.\n");
+        output.push_str("Halo CLI installation was cancelled.\n");
     }
     Ok(DispatchInstallPoll {
         cursor: size,
@@ -504,7 +504,7 @@ async fn invoke_json(
     ensure_plain_ssh_target(manager, connection_id).await?;
     let target = probe_remote_target(manager, connection_id).await?;
     let cli_path = target.cli_path.as_deref().ok_or_else(|| {
-        anyhow!("BitFun CLI is not installed on the SSH target; confirm installation first")
+        anyhow!("Halo CLI is not installed on the SSH target; confirm installation first")
     })?;
     invoke_json_at_path(
         manager,
@@ -535,8 +535,8 @@ async fn invoke_json_at_path(
         connection_id,
         &format!(
             "mkdir -p {dir} && chmod 700 {root} {dispatch} {dir}",
-            root = shell_quote_posix(&format!("{home}/.bitfun")),
-            dispatch = shell_quote_posix(&format!("{home}/.bitfun/dispatch")),
+            root = shell_quote_posix(&format!("{home}/.halo-studio")),
+            dispatch = shell_quote_posix(&format!("{home}/.halo-studio/dispatch")),
             dir = shell_quote_posix(&request_dir)
         ),
     )
@@ -688,12 +688,12 @@ printf 'os=%s\n' "$(uname -s 2>/dev/null || true)"
 printf 'arch=%s\n' "$(uname -m 2>/dev/null || true)"
 printf 'home=%s\n' "$HOME"
 if command -v tar >/dev/null 2>&1; then printf 'tar=1\n'; else printf 'tar=0\n'; fi
-if [ -x "$HOME/.local/bin/bitfun" ]; then
-  BITFUN_BIN="$HOME/.local/bin/bitfun"
+if [ -x "$HOME/.local/bin/halo" ]; then
+  HALO_BIN="$HOME/.local/bin/halo"
 else
-  BITFUN_BIN="$(command -v bitfun 2>/dev/null || true)"
+  HALO_BIN="$(command -v halo 2>/dev/null || true)"
 fi
-printf 'cli=%s\n' "$BITFUN_BIN"
+printf 'cli=%s\n' "$HALO_BIN"
 "#
 }
 
@@ -701,7 +701,7 @@ async fn resolve_release(os: &str, arch: &str) -> Result<ResolvedRelease> {
     let pubkey = require_release_pubkey()?;
     let target = release_target(os, arch)?;
     let version = RELEASE_VERSION.split('+').next().unwrap_or(RELEASE_VERSION);
-    let filename = format!("bitfun-cli-{version}-{target}.tar.gz");
+    let filename = format!("halo-cli-{version}-{target}.tar.gz");
     let tag = release_tag_for_version(RELEASE_VERSION);
     let url = format!("{RELEASE_BASE}/download/{tag}/{filename}");
     let checksum_url = format!("{url}.sha256");
@@ -733,7 +733,7 @@ fn release_target(os: &str, arch: &str) -> Result<&'static str> {
         ("Darwin", "x86_64" | "amd64") => Ok("x86_64-apple-darwin"),
         ("Darwin", "aarch64" | "arm64") => Ok("aarch64-apple-darwin"),
         (os, arch) => Err(anyhow!(
-            "BitFun SSH dispatch CLI install does not support {os} {arch}"
+            "Halo SSH dispatch CLI install does not support {os} {arch}"
         )),
     }
 }
@@ -746,7 +746,7 @@ fn release_http_client() -> Result<reqwest::Client> {
         // still fail instead of hanging the installer forever.
         .read_timeout(Duration::from_secs(RELEASE_READ_TIMEOUT_SECONDS))
         .build()
-        .context("build BitFun release HTTP client")
+        .context("build Halo release HTTP client")
 }
 
 async fn fetch_required_text(client: &reqwest::Client, url: &str) -> Result<String> {
@@ -790,7 +790,7 @@ async fn download_verified_archive(release: &ResolvedRelease) -> Result<Vec<u8>>
         .is_some_and(|length| length > MAX_ARCHIVE_BYTES as u64)
     {
         return Err(anyhow!(
-            "BitFun CLI archive exceeds the {} MB safety limit",
+            "Halo CLI archive exceeds the {} MB safety limit",
             MAX_ARCHIVE_BYTES / (1024 * 1024)
         ));
     }
@@ -812,7 +812,7 @@ async fn download_verified_archive(release: &ResolvedRelease) -> Result<Vec<u8>>
 fn extend_bounded_archive(archive: &mut Vec<u8>, chunk: &[u8], limit: usize) -> Result<()> {
     if archive.len().saturating_add(chunk.len()) > limit {
         return Err(anyhow!(
-            "BitFun CLI archive exceeds the {} MB safety limit",
+            "Halo CLI archive exceeds the {} MB safety limit",
             limit / (1024 * 1024)
         ));
     }
@@ -832,12 +832,12 @@ TOKEN="${{1:-}}"
 PIDF="$D/{INSTALL_STEM}.pid"
 EXITF="$D/{INSTALL_STEM}.exit"
 TMP="$D/unpack.$$"
-PRIMARY_TARGET="$HOME/.local/bin/bitfun"
-LEGACY_TARGET="$HOME/.local/bin/bitfun-cli"
-PRIMARY_NEW="$HOME/.local/bin/.bitfun-dispatch-new-$$"
-LEGACY_NEW="$HOME/.local/bin/.bitfun-cli-dispatch-new-$$"
-PRIMARY_BACKUP="$D/previous-bitfun.$$"
-LEGACY_BACKUP="$D/previous-bitfun-cli.$$"
+PRIMARY_TARGET="$HOME/.local/bin/halo"
+LEGACY_TARGET="$HOME/.local/bin/halo-cli"
+PRIMARY_NEW="$HOME/.local/bin/.halo-dispatch-new-$$"
+LEGACY_NEW="$HOME/.local/bin/.halo-cli-dispatch-new-$$"
+PRIMARY_BACKUP="$D/previous-halo.$$"
+LEGACY_BACKUP="$D/previous-halo-cli.$$"
 HAD_PRIMARY=0
 HAD_LEGACY=0
 PRIMARY_INSTALLED=0
@@ -848,11 +848,11 @@ rollback_install() {{
   if [ "$PRIMARY_INSTALLED" = "1" ]; then rm -f "$PRIMARY_TARGET"; fi
   if [ "$HAD_LEGACY" = "1" ] && [ -f "$LEGACY_BACKUP" ]; then
     mv -f "$LEGACY_BACKUP" "$LEGACY_TARGET" \
-      || echo "ERROR: could not restore previous bitfun-cli" >&2
+      || echo "ERROR: could not restore previous halo-cli" >&2
   fi
   if [ "$HAD_PRIMARY" = "1" ] && [ -f "$PRIMARY_BACKUP" ]; then
     mv -f "$PRIMARY_BACKUP" "$PRIMARY_TARGET" \
-      || echo "ERROR: could not restore previous bitfun" >&2
+      || echo "ERROR: could not restore previous halo" >&2
   fi
 }}
 finish() {{
@@ -870,23 +870,23 @@ finish() {{
 trap finish EXIT
 trap 'exit 130' HUP INT TERM
 rm -f "$EXITF"
-mkdir -p "$TMP" "$HOME/.local/bin" "$HOME/.bitfun"
-chmod 700 "$HOME/.bitfun"
+mkdir -p "$TMP" "$HOME/.local/bin" "$HOME/.halo-studio"
+chmod 700 "$HOME/.halo-studio"
 tar -xzf "$ARCHIVE" -C "$TMP"
 PRIMARY=""
 LEGACY=""
-for candidate in "$TMP"/*/bitfun; do
+for candidate in "$TMP"/*/halo; do
   [ -f "$candidate" ] || continue
-  [ -z "$PRIMARY" ] || {{ echo "ERROR: archive contains multiple bitfun binaries" >&2; exit 1; }}
+  [ -z "$PRIMARY" ] || {{ echo "ERROR: archive contains multiple halo binaries" >&2; exit 1; }}
   PRIMARY="$candidate"
 done
-for candidate in "$TMP"/*/bitfun-cli; do
+for candidate in "$TMP"/*/halo-cli; do
   [ -f "$candidate" ] || continue
-  [ -z "$LEGACY" ] || {{ echo "ERROR: archive contains multiple bitfun-cli binaries" >&2; exit 1; }}
+  [ -z "$LEGACY" ] || {{ echo "ERROR: archive contains multiple halo-cli binaries" >&2; exit 1; }}
   LEGACY="$candidate"
 done
-[ -n "$PRIMARY" ] || {{ echo "ERROR: archive contains no bitfun binary" >&2; exit 1; }}
-[ -n "$LEGACY" ] || {{ echo "ERROR: archive contains no bitfun-cli binary" >&2; exit 1; }}
+[ -n "$PRIMARY" ] || {{ echo "ERROR: archive contains no halo binary" >&2; exit 1; }}
+[ -n "$LEGACY" ] || {{ echo "ERROR: archive contains no halo-cli binary" >&2; exit 1; }}
 cp "$PRIMARY" "$PRIMARY_NEW"
 cp "$LEGACY" "$LEGACY_NEW"
 chmod 755 "$PRIMARY_NEW" "$LEGACY_NEW"
@@ -896,7 +896,7 @@ case "$staged" in
   *) echo "ERROR: staged CLI version did not match $EXPECTED_VERSION: $staged" >&2; exit 1 ;;
 esac
 "$LEGACY_NEW" --version >/dev/null 2>&1 \
-  || {{ echo "ERROR: staged bitfun-cli companion did not run" >&2; exit 1; }}
+  || {{ echo "ERROR: staged halo-cli companion did not run" >&2; exit 1; }}
 if [ -e "$PRIMARY_TARGET" ]; then
   mv -f "$PRIMARY_TARGET" "$PRIMARY_BACKUP"
   HAD_PRIMARY=1
@@ -915,10 +915,10 @@ case "$installed" in
   *) echo "ERROR: installed CLI version did not match $EXPECTED_VERSION: $installed" >&2; exit 1 ;;
 esac
 "$LEGACY_TARGET" --version >/dev/null 2>&1 \
-  || {{ echo "ERROR: installed bitfun-cli companion did not run" >&2; exit 1; }}
+  || {{ echo "ERROR: installed halo-cli companion did not run" >&2; exit 1; }}
 COMMITTED=1
 rm -f "$ARCHIVE"
-echo "Installed $installed at $HOME/.local/bin/bitfun"
+echo "Installed $installed at $HOME/.local/bin/halo"
 echo {INSTALL_DONE_MARKER}
 "#,
         dir = shell_quote_posix(dir),
@@ -1180,7 +1180,7 @@ fi
 rm -f "$PIDF" "$DRIVER_PIDF" "$PREPF"
 if [ "$active" = "1" ]; then
   printf '130\n' >"$EXITF"
-  printf '\nBitFun CLI installation cancelled by client.\n' >>"$LOG"
+  printf '\nHalo CLI installation cancelled by client.\n' >>"$LOG"
 fi
 exit 0
 "#
@@ -1269,14 +1269,14 @@ mod tests {
     #[test]
     fn generated_install_scripts_are_lf_only_and_never_use_sudo() {
         let body = install_body_script(
-            "/home/user/.bitfun/dispatch/install",
-            "/home/user/.bitfun/dispatch/install/archive.tar.gz",
+            "/home/user/.halo-studio/dispatch/install",
+            "/home/user/.halo-studio/dispatch/install/archive.tar.gz",
             "1.2.3",
         );
         let driver = install_driver_script(
-            "/home/user/.bitfun/dispatch/install",
-            "/home/user/.bitfun/dispatch/install/install-cli-body.sh",
-            "bitfun-install-test-token",
+            "/home/user/.halo-studio/dispatch/install",
+            "/home/user/.halo-studio/dispatch/install/install-cli-body.sh",
+            "halo-install-test-token",
         );
         for (name, script) in [("body", body), ("driver", driver)] {
             let script = to_unix_script(&script);
@@ -1294,14 +1294,14 @@ mod tests {
     fn generated_install_scripts_parse_as_bash() {
         for script in [
             install_body_script(
-                "/home/user/.bitfun/dispatch/install",
-                "/home/user/.bitfun/dispatch/install/archive.tar.gz",
+                "/home/user/.halo-studio/dispatch/install",
+                "/home/user/.halo-studio/dispatch/install/archive.tar.gz",
                 "1.2.3",
             ),
             install_driver_script(
-                "/home/user/.bitfun/dispatch/install",
-                "/home/user/.bitfun/dispatch/install/install-cli-body.sh",
-                "bitfun-install-test-token",
+                "/home/user/.halo-studio/dispatch/install",
+                "/home/user/.halo-studio/dispatch/install/install-cli-body.sh",
+                "halo-install-test-token",
             ),
             install_poll_script(17),
             install_cancel_script(),
@@ -1389,7 +1389,7 @@ mod tests {
         std::fs::create_dir_all(&state_dir).expect("install state dir");
         let body_path = state_dir.join(format!("{INSTALL_STEM}-body.sh"));
         std::fs::write(&body_path, "sleep 30\n").expect("installer body");
-        let token = "bitfun-install-test-token";
+        let token = "halo-install-test-token";
         let mut installer = std::process::Command::new("bash")
             .arg(&body_path)
             .arg(token)
@@ -1437,7 +1437,7 @@ mod tests {
             format!("touch {}\n", shell_quote_posix(&sentinel.to_string_lossy())),
         )
         .expect("installer body");
-        let token = "bitfun-install-cancelled-before-driver";
+        let token = "halo-install-cancelled-before-driver";
         let driver = install_driver_script(
             &state_dir.to_string_lossy(),
             &body_path.to_string_lossy(),
@@ -1469,7 +1469,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("temp dir");
         let bin_dir = temp.path().join("bin with space");
         std::fs::create_dir_all(&bin_dir).expect("bin dir");
-        let cli = bin_dir.join("bitfun's");
+        let cli = bin_dir.join("halo's");
         std::fs::write(&cli, "#!/bin/sh\ncat\n").expect("fake CLI");
         let mut permissions = std::fs::metadata(&cli).unwrap().permissions();
         permissions.set_mode(0o700);
@@ -1515,9 +1515,9 @@ mod tests {
     fn probe_prefers_the_managed_cli_over_an_incompatible_path_copy() {
         let script = probe_remote_target_script();
         let managed = script
-            .find(r#"[ -x "$HOME/.local/bin/bitfun" ]"#)
+            .find(r#"[ -x "$HOME/.local/bin/halo" ]"#)
             .expect("managed CLI check");
-        let path_lookup = script.find("command -v bitfun").expect("PATH fallback");
+        let path_lookup = script.find("command -v halo").expect("PATH fallback");
         assert!(managed < path_lookup);
     }
 
@@ -1558,7 +1558,7 @@ mod tests {
         let confirmed = DispatchCliRelease {
             version: "1.2.3".to_string(),
             target: "aarch64-apple-darwin".to_string(),
-            url: "https://example.test/bitfun.tar.gz".to_string(),
+            url: "https://example.test/halo.tar.gz".to_string(),
             sha256: "a".repeat(64),
         };
         ensure_confirmed_release(&confirmed, &confirmed).expect("exact asset");

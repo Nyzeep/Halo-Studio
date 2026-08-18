@@ -2,7 +2,7 @@
 
 Scope: this guide applies to `src/crates/assembly/product-capabilities`.
 
-`bitfun-product-capabilities` owns product capability pack assembly facts: which
+`halo-product-capabilities` owns product capability pack assembly facts: which
 delivery profiles, runtime services, feature groups, tool provider group ids,
 harness provider descriptors, profile-scoped harness registries, and runtime
 service availability wrappers a product capability selects. It does not own
@@ -10,7 +10,7 @@ concrete runtime execution.
 
 ## Guardrails
 
-- Do not depend on `bitfun-core`, app crates, Tauri, product-domain
+- Do not depend on `halo-core`, app crates, Tauri, product-domain
   implementations, concrete service crates, AI adapters, transport adapters,
   terminal, tool-runtime, or concrete tool implementations.
 - Keep this crate limited to stable delivery profile facts, capability ids,
@@ -27,7 +27,7 @@ concrete runtime execution.
 ## Verification
 
 ```bash
-cargo test -p bitfun-product-capabilities
+cargo test -p halo-product-capabilities
 node scripts/check-core-boundaries.mjs
 ```
 

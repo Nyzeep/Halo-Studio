@@ -1,5 +1,5 @@
-use bitfun_agent_runtime::custom_agent::CustomAgentKind;
-use bitfun_agent_runtime::custom_subagent::{
+use halo_agent_runtime::custom_agent::CustomAgentKind;
+use halo_agent_runtime::custom_subagent::{
     custom_subagent_possible_dirs, custom_subagent_save_markdown_file,
     load_custom_subagent_definitions, CustomSubagentDefinition, CustomSubagentDiscoveryRoots,
     CustomSubagentKind,
@@ -31,25 +31,25 @@ fn build_definition(
 }
 
 #[test]
-fn custom_subagent_discovery_preserves_bitfun_priority_and_ignores_foreign_agent_dirs() {
-    let workspace = TestTempDir::new("bitfun-runtime-subagent-workspace");
-    let bitfun_user = TestTempDir::new("bitfun-runtime-subagent-user");
-    let home = TestTempDir::new("bitfun-runtime-subagent-home");
+fn custom_subagent_discovery_preserves_halo_priority_and_ignores_foreign_agent_dirs() {
+    let workspace = TestTempDir::new("halo-runtime-subagent-workspace");
+    let halo_user = TestTempDir::new("halo-runtime-subagent-user");
+    let home = TestTempDir::new("halo-runtime-subagent-home");
 
-    let project_bitfun = workspace.path.join(".bitfun").join("agents");
+    let project_halo = workspace.path.join(".halo-studio").join("agents");
     let project_claude = workspace.path.join(".claude").join("agents");
-    let user_bitfun = bitfun_user.path.join("agents");
+    let user_halo = halo_user.path.join("agents");
     let home_claude = home.path.join(".claude").join("agents");
-    fs::create_dir_all(&project_bitfun).expect("project bitfun agents dir should be created");
+    fs::create_dir_all(&project_halo).expect("project halo agents dir should be created");
     fs::create_dir_all(&project_claude).expect("project claude agents dir should be created");
-    fs::create_dir_all(&user_bitfun).expect("user bitfun agents dir should be created");
+    fs::create_dir_all(&user_halo).expect("user halo agents dir should be created");
     fs::create_dir_all(&home_claude).expect("home claude agents dir should be created");
 
     write_agent(
-        &project_bitfun.join("shared.md"),
+        &project_halo.join("shared.md"),
         "Shared",
         "Shared",
-        "Project BitFun agent",
+        "Project Halo agent",
         CustomSubagentKind::Project,
     );
     write_agent(
@@ -60,10 +60,10 @@ fn custom_subagent_discovery_preserves_bitfun_priority_and_ignores_foreign_agent
         CustomSubagentKind::Project,
     );
     write_agent(
-        &user_bitfun.join("user-only.md"),
+        &user_halo.join("user-only.md"),
         "UserOnly",
         "UserOnly",
-        "BitFun user agent",
+        "Halo user agent",
         CustomSubagentKind::User,
     );
     write_agent(
@@ -73,11 +73,11 @@ fn custom_subagent_discovery_preserves_bitfun_priority_and_ignores_foreign_agent
         "Claude user agent",
         CustomSubagentKind::User,
     );
-    fs::write(project_bitfun.join("ignored.txt"), "ignored")
+    fs::write(project_halo.join("ignored.txt"), "ignored")
         .expect("ignored text file should be written");
-    fs::create_dir_all(project_bitfun.join("nested")).expect("nested dir should be created");
+    fs::create_dir_all(project_halo.join("nested")).expect("nested dir should be created");
     write_agent(
-        &project_bitfun.join("nested").join("nested.md"),
+        &project_halo.join("nested").join("nested.md"),
         "Nested",
         "Nested",
         "Nested project agent",
@@ -86,7 +86,7 @@ fn custom_subagent_discovery_preserves_bitfun_priority_and_ignores_foreign_agent
 
     let roots = CustomSubagentDiscoveryRoots {
         workspace_root: Some(workspace.path.clone()),
-        bitfun_user_agents_dir: Some(user_bitfun.clone()),
+        halo_user_agents_dir: Some(user_halo.clone()),
         home_dir: Some(home.path.clone()),
     };
 
@@ -95,7 +95,7 @@ fn custom_subagent_discovery_preserves_bitfun_priority_and_ignores_foreign_agent
         dirs.iter()
             .map(|entry| entry.path.as_path())
             .collect::<Vec<_>>(),
-        vec![project_bitfun.as_path(), user_bitfun.as_path()]
+        vec![project_halo.as_path(), user_halo.as_path()]
     );
     assert_eq!(
         dirs.iter().map(|entry| entry.level).collect::<Vec<_>>(),
@@ -114,20 +114,20 @@ fn custom_subagent_discovery_preserves_bitfun_priority_and_ignores_foreign_agent
     );
     assert_eq!(
         report.definitions[0].definition.description,
-        "Project BitFun agent"
+        "Project Halo agent"
     );
-    assert_eq!(report.definitions[0].path, project_bitfun.join("shared.md"));
+    assert_eq!(report.definitions[0].path, project_halo.join("shared.md"));
 }
 
 #[test]
 fn custom_subagent_discovery_reports_parse_errors_without_dropping_valid_files() {
-    let workspace = TestTempDir::new("bitfun-runtime-subagent-invalid");
-    let project_bitfun = workspace.path.join(".bitfun").join("agents");
-    fs::create_dir_all(&project_bitfun).expect("project agents dir should be created");
-    let broken_path = project_bitfun.join("broken.md");
+    let workspace = TestTempDir::new("halo-runtime-subagent-invalid");
+    let project_halo = workspace.path.join(".halo-studio").join("agents");
+    fs::create_dir_all(&project_halo).expect("project agents dir should be created");
+    let broken_path = project_halo.join("broken.md");
     fs::write(&broken_path, "No front matter").expect("broken markdown file should be written");
     write_agent(
-        &project_bitfun.join("valid.md"),
+        &project_halo.join("valid.md"),
         "Valid",
         "Valid",
         "Valid project agent",
@@ -136,7 +136,7 @@ fn custom_subagent_discovery_reports_parse_errors_without_dropping_valid_files()
 
     let roots = CustomSubagentDiscoveryRoots {
         workspace_root: Some(workspace.path.clone()),
-        bitfun_user_agents_dir: None,
+        halo_user_agents_dir: None,
         home_dir: None,
     };
 

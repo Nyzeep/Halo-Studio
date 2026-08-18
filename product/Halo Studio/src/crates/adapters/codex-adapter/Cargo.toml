@@ -1,17 +1,17 @@
 [package]
-name = "bitfun-codex-adapter"
+name = "halo-codex-adapter"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Codex static source adapter for BitFun"
+description = "Codex static source adapter for Halo"
 
 [lib]
-name = "bitfun_codex_adapter"
+name = "halo_codex_adapter"
 crate-type = ["rlib"]
 
 [dependencies]
-bitfun-product-domains = { path = "../../contracts/product-domains", default-features = false, features = ["external-sources"] }
-bitfun-static-hook-support = { path = "../static-hook-support" }
+halo-product-domains = { path = "../../contracts/product-domains", default-features = false, features = ["external-sources"] }
+halo-static-hook-support = { path = "../static-hook-support" }
 dirs = { workspace = true }
 dunce = { workspace = true }
 hex = { workspace = true }

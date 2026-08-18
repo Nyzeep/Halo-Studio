@@ -7,18 +7,18 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::State;
 
-use bitfun_agent_runtime::sdk::AgentUserAnswersRequest;
-use bitfun_core::agentic::{
+use halo_agent_runtime::sdk::AgentUserAnswersRequest;
+use halo_core::agentic::{
     tools::framework::ToolUseContext,
     tools::{get_all_tools, get_readonly_tools},
     workspace::{local_workspace_services, remote_workspace_services},
     WorkspaceBinding,
 };
-use bitfun_core::product_runtime::CoreRuntimeServicesProvider;
-use bitfun_core::service::remote_ssh::workspace_state::{
+use halo_core::product_runtime::CoreRuntimeServicesProvider;
+use halo_core::service::remote_ssh::workspace_state::{
     get_remote_workspace_manager, lookup_remote_connection, workspace_session_identity,
 };
-use bitfun_core::util::elapsed_ms_u64;
+use halo_core::util::elapsed_ms_u64;
 
 use crate::runtime::DesktopRuntimeContext;
 
@@ -108,7 +108,7 @@ async fn build_tool_context(workspace_path: Option<&str>) -> ToolUseContext {
                     Some(&entry.ssh_host),
                 )
                 .unwrap_or_else(|| {
-                    bitfun_core::service::remote_ssh::workspace_state::WorkspaceSessionIdentity {
+                    halo_core::service::remote_ssh::workspace_state::WorkspaceSessionIdentity {
                         hostname: entry.ssh_host.clone(),
                         logical_workspace_path: entry.remote_root.clone(),
                         remote_connection_id: Some(entry.connection_id.clone()),
@@ -166,7 +166,7 @@ async fn build_tool_context(workspace_path: Option<&str>) -> ToolUseContext {
 }
 
 fn to_dynamic_mcp_tool_info(
-    info: bitfun_core::agentic::tools::framework::DynamicMcpToolInfo,
+    info: halo_core::agentic::tools::framework::DynamicMcpToolInfo,
 ) -> DynamicMcpToolInfo {
     DynamicMcpToolInfo {
         server_id: info.server_id,
@@ -176,7 +176,7 @@ fn to_dynamic_mcp_tool_info(
 }
 
 fn to_dynamic_tool_info(
-    info: bitfun_core::agentic::tools::framework::DynamicToolInfo,
+    info: halo_core::agentic::tools::framework::DynamicToolInfo,
 ) -> DynamicToolInfo {
     DynamicToolInfo {
         provider_id: info.provider_id,
@@ -185,7 +185,7 @@ fn to_dynamic_tool_info(
     }
 }
 
-async fn build_tool_info(tool: &Arc<dyn bitfun_core::agentic::tools::framework::Tool>) -> ToolInfo {
+async fn build_tool_info(tool: &Arc<dyn halo_core::agentic::tools::framework::Tool>) -> ToolInfo {
     let description = tool
         .description()
         .await
@@ -355,15 +355,15 @@ pub async fn execute_tool(request: ToolExecutionRequest) -> Result<ToolExecution
                 Ok(results) => {
                     let combined_result = if results.len() == 1 {
                         match &results[0] {
-                            bitfun_core::agentic::tools::framework::ToolResult::Result {
+                            halo_core::agentic::tools::framework::ToolResult::Result {
                                 data,
                                 ..
                             } => Some(data.clone()),
-                            bitfun_core::agentic::tools::framework::ToolResult::Progress {
+                            halo_core::agentic::tools::framework::ToolResult::Progress {
                                 content,
                                 ..
                             } => Some(content.clone()),
-                            bitfun_core::agentic::tools::framework::ToolResult::StreamChunk {
+                            halo_core::agentic::tools::framework::ToolResult::StreamChunk {
                                 data,
                                 ..
                             } => Some(data.clone()),
@@ -371,11 +371,11 @@ pub async fn execute_tool(request: ToolExecutionRequest) -> Result<ToolExecution
                     } else {
                         Some(serde_json::json!({
                                         "results": results.iter().map(|r| match r {
-                        bitfun_core::agentic::tools::framework::ToolResult::Result { data, .. } => {
+                        halo_core::agentic::tools::framework::ToolResult::Result { data, .. } => {
                             data.clone()
                         }
-                        bitfun_core::agentic::tools::framework::ToolResult::Progress { content, .. } => content.clone(),
-                        bitfun_core::agentic::tools::framework::ToolResult::StreamChunk { data, .. } => data.clone(),
+                        halo_core::agentic::tools::framework::ToolResult::Progress { content, .. } => content.clone(),
+                        halo_core::agentic::tools::framework::ToolResult::StreamChunk { data, .. } => data.clone(),
                                         }).collect::<Vec<_>>()
                                     }))
                     };

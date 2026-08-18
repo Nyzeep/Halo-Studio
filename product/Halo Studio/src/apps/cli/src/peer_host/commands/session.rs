@@ -5,13 +5,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
 
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     AgentSessionRestoreRequest, AgentSessionRestoreResult, PortErrorKind, RuntimeError,
 };
-use bitfun_core::agentic::core::Session;
-use bitfun_core::agentic::get_agent_registry;
-use bitfun_core::util::errors::BitFunError;
-use bitfun_runtime_ports::{
+use halo_core::agentic::core::Session;
+use halo_core::agentic::get_agent_registry;
+use halo_core::util::errors::HaloError;
+use halo_runtime_ports::{
     AgentSessionArchiveRequest, AgentSessionCreateRequest, AgentSessionDeleteRequest,
     AgentSessionModelUpdateRequest, AgentSessionRenameRequest, AgentThreadGoalGetRequest,
     SessionStoragePathRequest,
@@ -68,7 +68,7 @@ pub(super) async fn resolved_session_storage_scope(
 
 fn validated_session_id(request: &Value) -> Result<String, String> {
     let session_id = get_string(request, "sessionId")?;
-    bitfun_agent_runtime::session_control::validate_session_id(&session_id)?;
+    halo_agent_runtime::session_control::validate_session_id(&session_id)?;
     Ok(session_id)
 }
 
@@ -116,9 +116,9 @@ fn restored_session_to_json(restored: AgentSessionRestoreResult) -> Value {
     })
 }
 
-fn peer_core_session_error(operation: &str, error: BitFunError) -> String {
+fn peer_core_session_error(operation: &str, error: HaloError) -> String {
     match error {
-        BitFunError::SessionInUse { session_id } => format!(
+        HaloError::SessionInUse { session_id } => format!(
             "{SESSION_IN_USE_ERROR_CODE}: Session is already open for writing: {session_id}"
         ),
         error => format!("{operation}: {error}"),
@@ -532,7 +532,7 @@ pub(crate) async fn get_session_stats(
     let request = request_value(args);
     let session_id = get_string(request, "sessionId")?;
     let workspace_path = get_string(request, "workspacePath")?;
-    bitfun_agent_runtime::session_control::validate_session_id(&session_id)
+    halo_agent_runtime::session_control::validate_session_id(&session_id)
         .map_err(session_stats_validation_error)?;
     require_local_snapshot_workspace(request, &workspace_path).await?;
 
@@ -568,11 +568,11 @@ pub(crate) async fn save_session_turn(
         .cloned()
         .ok_or_else(|| "Missing 'turn_data' field".to_string())?;
 
-    let turn: bitfun_core::service::session::DialogTurnData =
+    let turn: halo_core::service::session::DialogTurnData =
         serde_json::from_value(turn_data).map_err(|e| format!("Invalid turn_data: {e}"))?;
-    bitfun_agent_runtime::session_control::validate_session_id(&turn.session_id)?;
+    halo_agent_runtime::session_control::validate_session_id(&turn.session_id)?;
     if let Some(request_session_id) = optional_string(request, "sessionId") {
-        bitfun_agent_runtime::session_control::validate_session_id(&request_session_id)?;
+        halo_agent_runtime::session_control::validate_session_id(&request_session_id)?;
         if request_session_id != turn.session_id {
             return Err("turn_data session_id does not match request session_id".to_string());
         }
@@ -597,20 +597,20 @@ mod tests {
         overlay_live_session_state, peer_core_session_error, peer_runtime_session_error,
         restored_session_to_json, session_stats_validation_error,
     };
-    use bitfun_agent_runtime::sdk::{
+    use halo_agent_runtime::sdk::{
         AgentSessionRestoreResult, AgentSessionSummary, PortError, PortErrorKind, RuntimeError,
         SessionState,
     };
-    use bitfun_core::agentic::core::{
+    use halo_core::agentic::core::{
         ProcessingPhase, Session as CoreSession, SessionConfig, SessionState as CoreSessionState,
     };
-    use bitfun_core::util::errors::BitFunError;
+    use halo_core::util::errors::HaloError;
 
     #[test]
     fn peer_writer_conflicts_keep_the_stable_transport_code() {
         let core_error = peer_core_session_error(
             "Failed to restore session with turns",
-            BitFunError::SessionInUse {
+            HaloError::SessionInUse {
                 session_id: "session-1".to_string(),
             },
         );

@@ -20,7 +20,7 @@ pub use backend::{
     BackgroundCommandLifecycleInfo, ToolExecutionCompletedInfo, ToolExecutionErrorInfo,
     ToolExecutionProgressInfo, ToolExecutionStartedInfo, ToolTerminalReadyInfo,
 };
-pub use bitfun_core_types::ToolImageAttachment;
+pub use halo_core_types::ToolImageAttachment;
 pub use emitter::EventEmitter;
 pub use frontend_projection::{project_agentic_frontend_event, AgenticFrontendEvent};
 pub use speech::{SPEECH_MODEL_PROGRESS_EVENT, SPEECH_MODEL_STATUS_CHANGED_EVENT};

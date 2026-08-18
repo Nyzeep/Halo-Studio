@@ -5,7 +5,7 @@ use super::coordination_store::{
 use super::coordinator::{SubagentResult, SubagentResultStatus};
 use crate::agentic::session::SessionManager;
 use crate::service::session::TurnStatus;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use dashmap::DashMap;
 use log::warn;
 use std::collections::HashSet;
@@ -113,7 +113,7 @@ impl BackgroundSubagentOutcomeStore {
     pub(crate) async fn register(
         &self,
         registration: BackgroundTaskRegistration,
-    ) -> BitFunResult<RegisteredBackgroundTask> {
+    ) -> HaloResult<RegisteredBackgroundTask> {
         let registered = self
             .coordination_store
             .register_background_task(registration)
@@ -125,7 +125,7 @@ impl BackgroundSubagentOutcomeStore {
     pub(crate) async fn complete(
         &self,
         task_pk: i64,
-        result: Result<&SubagentResult, &BitFunError>,
+        result: Result<&SubagentResult, &HaloError>,
     ) {
         let live_result = match result {
             Ok(result) => LiveBackgroundResult {
@@ -137,7 +137,7 @@ impl BackgroundSubagentOutcomeStore {
                 error: result.reason.clone(),
             },
             Err(error) => LiveBackgroundResult {
-                status: if matches!(error, BitFunError::Cancelled(_)) {
+                status: if matches!(error, HaloError::Cancelled(_)) {
                     BackgroundTaskStatus::Cancelled
                 } else {
                     BackgroundTaskStatus::Failed
@@ -199,7 +199,7 @@ impl BackgroundSubagentOutcomeStore {
         self.changes.notify_waiters();
     }
 
-    pub(crate) async fn discard(&self, task_pk: i64) -> BitFunResult<()> {
+    pub(crate) async fn discard(&self, task_pk: i64) -> HaloResult<()> {
         self.live_results.remove(&task_pk);
         self.coordination_store
             .delete_background_task(task_pk)
@@ -216,7 +216,7 @@ impl BackgroundSubagentOutcomeStore {
         timeout: Duration,
         delivered_parent_dialog_turn_id: &str,
         cancellation_token: Option<&CancellationToken>,
-    ) -> BitFunResult<BackgroundSubagentWaitResult> {
+    ) -> HaloResult<BackgroundSubagentWaitResult> {
         self.reconcile_stale_running_tasks(parent_session_id)
             .await?;
         let selected = self
@@ -296,7 +296,7 @@ impl BackgroundSubagentOutcomeStore {
                 Some(token) => {
                     tokio::select! {
                         _ = token.cancelled() => {
-                            return Err(BitFunError::cancelled("AgentWait was cancelled".to_string()));
+                            return Err(HaloError::cancelled("AgentWait was cancelled".to_string()));
                         }
                         _ = &mut notified => {}
                         _ = sleep_until(wake_at) => {}
@@ -312,7 +312,7 @@ impl BackgroundSubagentOutcomeStore {
         }
     }
 
-    async fn collect_available(&self, task_pks: &[i64]) -> BitFunResult<AvailableOutcomes> {
+    async fn collect_available(&self, task_pks: &[i64]) -> HaloResult<AvailableOutcomes> {
         let records = self
             .coordination_store
             .records_by_task_pks(task_pks)
@@ -339,7 +339,7 @@ impl BackgroundSubagentOutcomeStore {
         delivered_parent_dialog_turn_id: &str,
         status: BackgroundSubagentWaitStatus,
         available: AvailableOutcomes,
-    ) -> BitFunResult<Option<BackgroundSubagentWaitResult>> {
+    ) -> HaloResult<Option<BackgroundSubagentWaitResult>> {
         let task_pks = available
             .outcomes
             .iter()
@@ -369,7 +369,7 @@ impl BackgroundSubagentOutcomeStore {
     async fn outcome_from_record(
         &self,
         record: &BackgroundTaskRecord,
-    ) -> BitFunResult<BackgroundSubagentOutcome> {
+    ) -> HaloResult<BackgroundSubagentOutcome> {
         if let Some(live) = self.live_results.get(&record.task_pk) {
             return Ok(BackgroundSubagentOutcome {
                 task_pk: record.task_pk,
@@ -402,7 +402,7 @@ impl BackgroundSubagentOutcomeStore {
     async fn load_persisted_result_text(
         &self,
         record: &BackgroundTaskRecord,
-    ) -> BitFunResult<Option<String>> {
+    ) -> HaloResult<Option<String>> {
         let turn = self
             .session_manager
             .load_related_dialog_turn(
@@ -412,7 +412,7 @@ impl BackgroundSubagentOutcomeStore {
             )
             .await?
             .ok_or_else(|| {
-                BitFunError::tool(format!(
+                HaloError::tool(format!(
                     "Persisted subagent result is unavailable for {}",
                     record.bg_task_id
                 ))
@@ -426,7 +426,7 @@ impl BackgroundSubagentOutcomeStore {
             .map(|item| item.content.clone()))
     }
 
-    async fn reconcile_stale_running_tasks(&self, parent_session_id: &str) -> BitFunResult<()> {
+    async fn reconcile_stale_running_tasks(&self, parent_session_id: &str) -> HaloResult<()> {
         let stale = self
             .coordination_store
             .stale_running_tasks(parent_session_id)
@@ -473,7 +473,7 @@ impl BackgroundSubagentOutcomeStore {
         &self,
         parent_session_id: &str,
         child_session_id: &str,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         self.coordination_store
             .agent_id_for_session(parent_session_id, child_session_id)
             .await
@@ -483,13 +483,13 @@ impl BackgroundSubagentOutcomeStore {
         &self,
         parent_session_id: &str,
         agent_id: &str,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         self.coordination_store
             .resolve_agent_id(parent_session_id, agent_id)
             .await
     }
 
-    pub(crate) async fn delete_session_references(&self, session_id: &str) -> BitFunResult<()> {
+    pub(crate) async fn delete_session_references(&self, session_id: &str) -> HaloResult<()> {
         let deleted_task_pks = self
             .coordination_store
             .delete_session_references(session_id)
@@ -505,7 +505,7 @@ impl BackgroundSubagentOutcomeStore {
         &self,
         parent_session_id: &str,
         parent_dialog_turn_ids: &[String],
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let deleted_task_pks = self
             .coordination_store
             .rollback_parent_turns(parent_session_id, parent_dialog_turn_ids)
@@ -521,7 +521,7 @@ impl BackgroundSubagentOutcomeStore {
         &self,
         source_parent_session_id: &str,
         target_parent_session_id: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.coordination_store
             .initialize_fork(source_parent_session_id, target_parent_session_id)
             .await

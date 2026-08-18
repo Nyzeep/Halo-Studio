@@ -46,15 +46,15 @@ use crate::service::config::types::{
 use crate::service::instruction_context::{
     build_workspace_instruction_files_context, build_workspace_instruction_files_context_with_fs,
 };
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use crate::util::token_counter::TokenCounter;
 use crate::util::types::Message as AIMessage;
 use crate::util::types::ToolDefinition;
 use crate::util::{elapsed_ms_u64, truncate_at_char_boundary};
-use bitfun_agent_runtime::output_surface::TOOL_CONTEXT_INLINE_MARKDOWN_IMAGE_DISPLAY_KEY;
-use bitfun_agent_runtime::remote_file_delivery::TOOL_CONTEXT_REMOTE_FILE_DELIVERY_KEY;
-use bitfun_ai_adapters::ModelExchangeTraceConfig;
-use bitfun_core_types::SessionModelBindingPolicy;
+use halo_agent_runtime::output_surface::TOOL_CONTEXT_INLINE_MARKDOWN_IMAGE_DISPLAY_KEY;
+use halo_agent_runtime::remote_file_delivery::TOOL_CONTEXT_REMOTE_FILE_DELIVERY_KEY;
+use halo_ai_adapters::ModelExchangeTraceConfig;
+use halo_core_types::SessionModelBindingPolicy;
 use log::{debug, error, info, trace, warn};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
@@ -845,10 +845,10 @@ impl ExecutionEngine {
         missing_path && missing_data_url && has_redaction_hint
     }
 
-    fn is_recoverable_historical_image_error(err: &BitFunError) -> bool {
+    fn is_recoverable_historical_image_error(err: &HaloError) -> bool {
         match err {
-            BitFunError::Io(_) | BitFunError::Deserialization(_) => true,
-            BitFunError::Validation(msg) => {
+            HaloError::Io(_) | HaloError::Deserialization(_) => true,
+            HaloError::Validation(msg) => {
                 msg.starts_with("Failed to decode image data")
                     || msg.starts_with("Unsupported or unrecognized image format")
                     || msg.starts_with("Invalid data URL format")
@@ -860,12 +860,12 @@ impl ExecutionEngine {
 
     fn can_fallback_to_text_only(
         images: &[ImageContextData],
-        err: &BitFunError,
+        err: &HaloError,
         is_current_turn_message: bool,
     ) -> bool {
         let is_redacted_payload_error = matches!(
             err,
-            BitFunError::Validation(msg) if msg.starts_with("Image context missing image_path/data_url")
+            HaloError::Validation(msg) if msg.starts_with("Image context missing image_path/data_url")
         ) && !images.is_empty()
             && images.iter().all(Self::is_redacted_image_context);
 
@@ -1007,7 +1007,7 @@ impl ExecutionEngine {
     ) -> (Option<String>, bool) {
         let mut cacheable = true;
         if policy.includes(UserContextSection::WorkspaceInstructions) {
-            let instruction_context: BitFunResult<Option<String>> =
+            let instruction_context: HaloResult<Option<String>> =
                 if let Some(workspace) = workspace {
                     if let Some(services) = workspace_services {
                         build_workspace_instruction_files_context_with_fs(
@@ -1159,7 +1159,7 @@ impl ExecutionEngine {
         session_id: &str,
         current_agent: &dyn crate::agentic::agents::Agent,
         prompt_context: Option<&PromptBuilderContext>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let identity = prompt_context
             .map(|context| {
                 current_agent.system_prompt_cache_identity(context.model_name.as_deref())
@@ -1192,7 +1192,7 @@ impl ExecutionEngine {
     async fn resolve_turn_prompt_scaffold(
         &self,
         input: TurnPromptScaffoldInput<'_>,
-    ) -> BitFunResult<TurnPromptScaffold> {
+    ) -> HaloResult<TurnPromptScaffold> {
         debug!(
             "Resolving turn prompt scaffold: session_id={}, turn_id={}, stage={}, agent={}, model={}",
             input.context.session_id,
@@ -1299,9 +1299,9 @@ impl ExecutionEngine {
         workspace: Option<&WorkspaceBinding>,
         original_user_input: &str,
         turn_index: usize,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let config_service = get_global_config_service().await.map_err(|e| {
-            BitFunError::AIClient(format!(
+            HaloError::AIClient(format!(
                 "Failed to get config service for model resolution: {}",
                 e
             ))
@@ -1321,7 +1321,7 @@ impl ExecutionEngine {
                 .map(str::trim)
                 .filter(|model_id| !model_id.is_empty())
                 .ok_or_else(|| {
-                    BitFunError::AIClient(
+                    HaloError::AIClient(
                         "Approved immutable session has no concrete model id".to_string(),
                     )
                 })?;
@@ -1330,7 +1330,7 @@ impl ExecutionEngine {
                 .model_binding_fingerprint
                 .as_deref()
                 .ok_or_else(|| {
-                    BitFunError::AIClient(
+                    HaloError::AIClient(
                         "Approved immutable session has no model binding fingerprint".to_string(),
                     )
                 })?;
@@ -1339,7 +1339,7 @@ impl ExecutionEngine {
                 .iter()
                 .filter(|model| model.enabled && model.id == model_id);
             let model = matches.next().ok_or_else(|| {
-                BitFunError::AIClient(format!(
+                HaloError::AIClient(format!(
                     "Approved model configuration is unavailable: {}",
                     model_id
                 ))
@@ -1347,7 +1347,7 @@ impl ExecutionEngine {
             if matches.next().is_some()
                 || model_runtime_binding_fingerprint(model) != expected_fingerprint
             {
-                return Err(BitFunError::AIClient(format!(
+                return Err(HaloError::AIClient(format!(
                     "Approved model binding changed before execution: {}",
                     model_id
                 )));
@@ -1359,7 +1359,7 @@ impl ExecutionEngine {
         let fallback_model_id = agent_registry
             .get_model_id_for_agent(agent_type, workspace.map(|binding| binding.root_path()))
             .await
-            .map_err(|e| BitFunError::AIClient(format!("Failed to get model ID: {}", e)))?;
+            .map_err(|e| HaloError::AIClient(format!("Failed to get model ID: {}", e)))?;
         let configured_model_id = session
             .config
             .model_id
@@ -1447,7 +1447,7 @@ impl ExecutionEngine {
             .collect()
     }
 
-    async fn run_finalize_round(&self, input: FinalizeRoundInput<'_>) -> BitFunResult<RoundResult> {
+    async fn run_finalize_round(&self, input: FinalizeRoundInput<'_>) -> HaloResult<RoundResult> {
         // Keep the original tool definitions attached to the finalize request
         // even though finalize forbids tool execution at runtime. Dropping the
         // tools here would change the provider request shape, which breaks
@@ -1523,7 +1523,7 @@ impl ExecutionEngine {
         current_turn_id: &str,
         attach_images: bool,
         prepended_reminders: &[&str],
-    ) -> BitFunResult<Vec<AIMessage>> {
+    ) -> HaloResult<Vec<AIMessage>> {
         /// Only the last this many **messages** that contain images keep their images for the API.
         const MAX_IMAGE_BEARING_MESSAGE_ROUNDS: usize = 2;
 
@@ -1604,7 +1604,7 @@ impl ExecutionEngine {
                         Ok(processed) => {
                             let next_count = attached_image_count + processed.len();
                             if next_count > limits.max_images_per_request {
-                                return Err(BitFunError::validation(format!(
+                                return Err(HaloError::validation(format!(
                                     "Too many images in one request: {} > {}",
                                     next_count, limits.max_images_per_request
                                 )));
@@ -1617,7 +1617,7 @@ impl ExecutionEngine {
                             result.extend(multimodal);
                         }
                         Err(err) => {
-                            if matches!(&err, BitFunError::Validation(msg) if msg.starts_with("Too many images in one request"))
+                            if matches!(&err, HaloError::Validation(msg) if msg.starts_with("Too many images in one request"))
                             {
                                 return Err(err);
                             }
@@ -1650,7 +1650,7 @@ impl ExecutionEngine {
                             if keep_this_message_images {
                                 let next_count = attached_image_count + atts.len();
                                 if next_count > limits.max_images_per_request {
-                                    return Err(BitFunError::validation(format!(
+                                    return Err(HaloError::validation(format!(
                                         "Too many images in one request: {} > {}",
                                         next_count, limits.max_images_per_request
                                     )));
@@ -1732,7 +1732,7 @@ impl ExecutionEngine {
         provider: &str,
         attach_images: bool,
         prepended_prompt_reminders: &PrependedPromptReminders,
-    ) -> BitFunResult<Vec<AIMessage>> {
+    ) -> HaloResult<Vec<AIMessage>> {
         let prepended_reminders = prepended_prompt_reminders.ordered_reminders();
         let mut compression_messages = Self::build_ai_messages_for_send(
             runtime_messages,
@@ -1756,7 +1756,7 @@ impl ExecutionEngine {
         tool_definitions: Option<Vec<ToolDefinition>>,
         trace_config: Option<ModelExchangeTraceConfig>,
         max_tries: usize,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let mut last_error = None;
         let base_wait_time_ms = 500;
 
@@ -1772,7 +1772,7 @@ impl ExecutionEngine {
             match result {
                 Ok(response) => {
                     if response.tool_calls.is_some() {
-                        return Err(BitFunError::AIClient(
+                        return Err(HaloError::AIClient(
                             "Compression request returned tool calls instead of a summary"
                                 .to_string(),
                         ));
@@ -1788,7 +1788,7 @@ impl ExecutionEngine {
                 }
                 Err(err) => {
                     let provider_error = err
-                        .downcast_ref::<bitfun_core_types::errors::AiProviderError>()
+                        .downcast_ref::<halo_core_types::errors::AiProviderError>()
                         .cloned();
                     let err_msg = err.to_string();
                     warn!(
@@ -1801,14 +1801,14 @@ impl ExecutionEngine {
                         .as_ref()
                         .map(|error| error.category.clone())
                         .unwrap_or_else(|| {
-                            bitfun_core_types::errors::classify_ai_error_message(&err_msg)
+                            halo_core_types::errors::classify_ai_error_message(&err_msg)
                         });
-                    if category == bitfun_core_types::errors::ErrorCategory::ContextOverflow {
-                        return Err(BitFunError::RecoverableContextOverflow(
+                    if category == halo_core_types::errors::ErrorCategory::ContextOverflow {
+                        return Err(HaloError::RecoverableContextOverflow(
                             provider_error.unwrap_or_else(|| {
-                                bitfun_core_types::errors::AiProviderError::classified(
+                                halo_core_types::errors::AiProviderError::classified(
                                     err_msg,
-                                    bitfun_core_types::errors::ErrorCategory::ContextOverflow,
+                                    halo_core_types::errors::ErrorCategory::ContextOverflow,
                                 )
                             }),
                         ));
@@ -1828,7 +1828,7 @@ impl ExecutionEngine {
             }
         }
 
-        Err(BitFunError::AIClient(format!(
+        Err(HaloError::AIClient(format!(
             "Compression summary generation failed after {} attempts: {}",
             max_tries,
             last_error
@@ -1840,7 +1840,7 @@ impl ExecutionEngine {
     async fn generate_compression_model_summary(
         &self,
         input: CompressionModelSummaryInput<'_>,
-    ) -> BitFunResult<Option<String>> {
+    ) -> HaloResult<Option<String>> {
         let request_messages = self
             .build_compression_request_messages(
                 input.runtime_messages,
@@ -1863,7 +1863,7 @@ impl ExecutionEngine {
             .await?;
         let summary =
             ContextCompressor::normalize_model_summary_output(&raw_summary).ok_or_else(|| {
-                BitFunError::AIClient(
+                HaloError::AIClient(
                     "Model-based compression returned <analysis> without a usable <summary>"
                         .to_string(),
                 )
@@ -1875,7 +1875,7 @@ impl ExecutionEngine {
         &self,
         session: &Session,
         context: &ExecutionContext,
-    ) -> BitFunResult<CompressionRuntimeScaffold> {
+    ) -> HaloResult<CompressionRuntimeScaffold> {
         let agent_registry = get_agent_registry();
         agent_registry
             .load_custom_agents(
@@ -1895,7 +1895,7 @@ impl ExecutionEngine {
                     .map(|workspace| workspace.root_path()),
             )
             .ok_or_else(|| {
-                BitFunError::NotFound(format!("Agent not found: {}", context.agent_type))
+                HaloError::NotFound(format!("Agent not found: {}", context.agent_type))
             })?;
 
         let original_user_input = context
@@ -1914,7 +1914,7 @@ impl ExecutionEngine {
             .await?;
 
         let ai_client_factory = get_global_ai_client_factory().await.map_err(|e| {
-            BitFunError::AIClient(format!("Failed to get AI client factory: {}", e))
+            HaloError::AIClient(format!("Failed to get AI client factory: {}", e))
         })?;
         let ai_client_result = if matches!(
             session.config.model_binding_policy,
@@ -1934,7 +1934,7 @@ impl ExecutionEngine {
             ai_client_factory.get_client_resolved(&model_id).await
         };
         let ai_client = ai_client_result.map_err(|e| {
-            BitFunError::AIClient(format!(
+            HaloError::AIClient(format!(
                 "Failed to get AI client (model_id={}): {}",
                 model_id, e
             ))
@@ -2086,11 +2086,11 @@ impl ExecutionEngine {
         primary_supports_image_understanding: bool,
         compression_contract_limit: usize,
         workspace: Option<&WorkspaceBinding>,
-    ) -> BitFunResult<Option<(usize, Vec<Message>)>> {
+    ) -> HaloResult<Option<(usize, Vec<Message>)>> {
         let mut session = self
             .session_manager
             .get_session(session_id)
-            .ok_or_else(|| BitFunError::NotFound(format!("Session not found: {}", session_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Session not found: {}", session_id)))?;
 
         // Record start time
         let start_time = std::time::Instant::now();
@@ -2404,7 +2404,7 @@ impl ExecutionEngine {
                 )
                 .await;
 
-                Err(BitFunError::Session(e.to_string()))
+                Err(HaloError::Session(e.to_string()))
             }
         }
     }
@@ -2419,11 +2419,11 @@ impl ExecutionEngine {
         context: ExecutionContext,
         messages: Vec<Message>,
         trigger: &str,
-    ) -> BitFunResult<ContextCompactionOutcome> {
+    ) -> HaloResult<ContextCompactionOutcome> {
         let mut session = self
             .session_manager
             .get_session(&session_id)
-            .ok_or_else(|| BitFunError::NotFound(format!("Session not found: {}", session_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Session not found: {}", session_id)))?;
         let start_time = std::time::Instant::now();
         let compression_id = format!("compression_{}", uuid::Uuid::new_v4());
         let scaffold = self
@@ -2740,7 +2740,7 @@ impl ExecutionEngine {
                 )
                 .await;
 
-                Err(BitFunError::Session(err.to_string()))
+                Err(HaloError::Session(err.to_string()))
             }
         }
     }
@@ -2752,7 +2752,7 @@ impl ExecutionEngine {
         agent_type: String,
         initial_messages: Vec<Message>,
         context: ExecutionContext,
-    ) -> BitFunResult<ExecutionResult> {
+    ) -> HaloResult<ExecutionResult> {
         let start_time = std::time::Instant::now();
         let initial_count = initial_messages.len();
 
@@ -2791,7 +2791,7 @@ impl ExecutionEngine {
         context: ExecutionContext,
         start_time: std::time::Instant,
         initial_count: usize,
-    ) -> BitFunResult<ExecutionResult> {
+    ) -> HaloResult<ExecutionResult> {
         let dialog_turn_id = context.dialog_turn_id.clone();
 
         debug!(
@@ -2818,7 +2818,7 @@ impl ExecutionEngine {
                     .as_ref()
                     .map(|workspace| workspace.root_path()),
             )
-            .ok_or_else(|| BitFunError::NotFound(format!("Agent not found: {}", agent_type)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Agent not found: {}", agent_type)))?;
         info!(
             "Current Agent: {} ({})",
             current_agent.name(),
@@ -2829,7 +2829,7 @@ impl ExecutionEngine {
             .session_manager
             .get_session(&context.session_id)
             .ok_or_else(|| {
-                BitFunError::Session(format!("Session not found: {}", context.session_id))
+                HaloError::Session(format!("Session not found: {}", context.session_id))
             })?;
 
         // 2. Get AI client
@@ -2894,7 +2894,7 @@ impl ExecutionEngine {
         );
 
         let ai_client_factory = get_global_ai_client_factory().await.map_err(|e| {
-            BitFunError::AIClient(format!("Failed to get AI client factory: {}", e))
+            HaloError::AIClient(format!("Failed to get AI client factory: {}", e))
         })?;
 
         // Get AI client by model ID
@@ -2916,7 +2916,7 @@ impl ExecutionEngine {
             ai_client_factory.get_client_resolved(&model_id).await
         };
         let ai_client = ai_client_result.map_err(|e| {
-            BitFunError::AIClient(format!(
+            HaloError::AIClient(format!(
                 "Failed to get AI client (model_id={}): {}",
                 model_id, e
             ))
@@ -4100,7 +4100,7 @@ impl ExecutionEngine {
                 }
 
                 // Note: Token will be cleaned up when outer function exits
-                return Err(BitFunError::cancelled("Dialog cancelled"));
+                return Err(HaloError::cancelled("Dialog cancelled"));
             }
 
             // Continue to next round
@@ -4273,12 +4273,12 @@ impl ExecutionEngine {
         // dialog success) so other agents and failed turns are unaffected.
         #[cfg(feature = "product-full")]
         {
-            if bitfun_agent_runtime::deep_research::should_post_process_research_report(
+            if halo_agent_runtime::deep_research::should_post_process_research_report(
                 &agent_type,
                 success,
             ) {
                 if let Some(workspace) = context.workspace.as_ref() {
-                    bitfun_services_integrations::deep_research::run_for_session_workspace(
+                    halo_services_integrations::deep_research::run_for_session_workspace(
                         workspace.root_path(),
                         &context.session_id,
                     )
@@ -4355,7 +4355,7 @@ impl ExecutionEngine {
     }
 
     /// Cancel dialog turn execution
-    pub async fn cancel_dialog_turn(&self, dialog_turn_id: &str) -> BitFunResult<()> {
+    pub async fn cancel_dialog_turn(&self, dialog_turn_id: &str) -> HaloResult<()> {
         debug!("Cancelling dialog turn: dialog_turn_id={}", dialog_turn_id);
         let result = self.round_executor.cancel_dialog_turn(dialog_turn_id).await;
         if result.is_ok() {
@@ -4416,7 +4416,7 @@ mod tests {
     use crate::service::config::types::AIModelConfig;
     use crate::service::remote_ssh::workspace_state::workspace_session_identity;
     use crate::util::types::ToolDefinition;
-    use bitfun_runtime_ports::{WorkspaceDirEntry, WorkspaceFileSystem};
+    use halo_runtime_ports::{WorkspaceDirEntry, WorkspaceFileSystem};
     use serde_json::json;
     use sha2::{Digest, Sha256};
     use std::collections::HashMap;
@@ -4951,7 +4951,7 @@ mod tests {
             subagent_parent_info: None,
             permission_delegation: None,
             permission_runtime_ceiling: None,
-            delegation_policy: bitfun_runtime_ports::DelegationPolicy::top_level(),
+            delegation_policy: halo_runtime_ports::DelegationPolicy::top_level(),
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
             workspace_services: None,
             terminal_port: None,

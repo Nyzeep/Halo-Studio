@@ -34,9 +34,9 @@ pub struct LspPlugin {
     /// Checksum.
     #[serde(default)]
     pub checksum: String,
-    /// Minimum BitFun version.
+    /// Minimum Halo version.
     #[serde(default)]
-    pub min_bitfun_version: String,
+    pub min_halo_version: String,
 }
 
 /// Server configuration.

@@ -4,7 +4,7 @@ use crate::infrastructure::{
 };
 use crate::util::elapsed_ms_u64;
 use crate::util::errors::*;
-use bitfun_services_core::filesystem::FileSystemService as BaseFileSystemService;
+use halo_services_core::filesystem::FileSystemService as BaseFileSystemService;
 use log::debug;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
@@ -14,14 +14,14 @@ use super::types::{DirectoryScanResult, DirectoryStats, FileSearchOptions, FileS
 
 const SLOW_FILESYSTEM_OPERATION_LOG_MS: u64 = 500;
 
-fn map_filesystem_error(error: impl std::fmt::Display) -> BitFunError {
-    BitFunError::service(error.to_string())
+fn map_filesystem_error(error: impl std::fmt::Display) -> HaloError {
+    HaloError::service(error.to_string())
 }
 
 async fn read_remote_directory_contents(
     path: &str,
     preferred_remote_connection_id: Option<&str>,
-) -> Option<BitFunResult<Vec<FileTreeNode>>> {
+) -> Option<HaloResult<Vec<FileTreeNode>>> {
     let entry = crate::service::remote_ssh::workspace_state::lookup_remote_connection_with_hint(
         path,
         preferred_remote_connection_id,
@@ -45,7 +45,7 @@ async fn read_remote_directory_contents(
                     )
                 })
                 .collect()),
-            Err(error) => Err(BitFunError::service(format!(
+            Err(error) => Err(HaloError::service(format!(
                 "Failed to read remote directory: {}",
                 error
             ))),
@@ -73,7 +73,7 @@ impl FileSystemService {
     }
 
     /// Builds a file tree.
-    pub async fn build_file_tree(&self, root_path: &str) -> BitFunResult<Vec<FileTreeNode>> {
+    pub async fn build_file_tree(&self, root_path: &str) -> HaloResult<Vec<FileTreeNode>> {
         self.build_file_tree_with_remote_hint(root_path, None).await
     }
 
@@ -82,7 +82,7 @@ impl FileSystemService {
         &self,
         root_path: &str,
         preferred_remote_connection_id: Option<&str>,
-    ) -> BitFunResult<Vec<FileTreeNode>> {
+    ) -> HaloResult<Vec<FileTreeNode>> {
         let started_at = std::time::Instant::now();
         let tree = if crate::service::remote_ssh::workspace_state::is_remote_path(root_path).await {
             self.get_directory_contents_with_remote_hint(root_path, preferred_remote_connection_id)
@@ -109,7 +109,7 @@ impl FileSystemService {
     }
 
     /// Scans a directory and returns a detailed result.
-    pub async fn scan_directory(&self, root_path: &str) -> BitFunResult<DirectoryScanResult> {
+    pub async fn scan_directory(&self, root_path: &str) -> HaloResult<DirectoryScanResult> {
         let start_time = std::time::Instant::now();
 
         let (files, statistics) =
@@ -158,7 +158,7 @@ impl FileSystemService {
     }
 
     /// Gets directory contents (shallow).
-    pub async fn get_directory_contents(&self, path: &str) -> BitFunResult<Vec<FileTreeNode>> {
+    pub async fn get_directory_contents(&self, path: &str) -> HaloResult<Vec<FileTreeNode>> {
         self.get_directory_contents_with_remote_hint(path, None)
             .await
     }
@@ -167,7 +167,7 @@ impl FileSystemService {
         &self,
         path: &str,
         preferred_remote_connection_id: Option<&str>,
-    ) -> BitFunResult<Vec<FileTreeNode>> {
+    ) -> HaloResult<Vec<FileTreeNode>> {
         if let Some(result) =
             read_remote_directory_contents(path, preferred_remote_connection_id).await
         {
@@ -186,7 +186,7 @@ impl FileSystemService {
         root_path: &str,
         pattern: &str,
         options: FileSearchOptions,
-    ) -> BitFunResult<Vec<FileSearchResult>> {
+    ) -> HaloResult<Vec<FileSearchResult>> {
         self.inner
             .search_files(root_path, pattern, options)
             .await
@@ -199,7 +199,7 @@ impl FileSystemService {
         pattern: &str,
         options: FileSearchOptions,
         cancel_flag: Option<Arc<AtomicBool>>,
-    ) -> BitFunResult<FileSearchOutcome> {
+    ) -> HaloResult<FileSearchOutcome> {
         self.search_file_names_with_progress(root_path, pattern, options, cancel_flag, None)
             .await
     }
@@ -211,7 +211,7 @@ impl FileSystemService {
         options: FileSearchOptions,
         cancel_flag: Option<Arc<AtomicBool>>,
         progress_sink: Option<Arc<dyn FileSearchProgressSink>>,
-    ) -> BitFunResult<FileSearchOutcome> {
+    ) -> HaloResult<FileSearchOutcome> {
         self.inner
             .search_file_names_with_progress(
                 root_path,
@@ -230,7 +230,7 @@ impl FileSystemService {
         pattern: &str,
         options: FileSearchOptions,
         cancel_flag: Option<Arc<AtomicBool>>,
-    ) -> BitFunResult<FileSearchOutcome> {
+    ) -> HaloResult<FileSearchOutcome> {
         self.search_file_contents_with_progress(root_path, pattern, options, cancel_flag, None)
             .await
     }
@@ -242,7 +242,7 @@ impl FileSystemService {
         options: FileSearchOptions,
         cancel_flag: Option<Arc<AtomicBool>>,
         progress_sink: Option<Arc<dyn FileSearchProgressSink>>,
-    ) -> BitFunResult<FileSearchOutcome> {
+    ) -> HaloResult<FileSearchOutcome> {
         self.inner
             .search_file_contents_with_progress(
                 root_path,
@@ -256,7 +256,7 @@ impl FileSystemService {
     }
 
     /// Reads a file.
-    pub async fn read_file(&self, file_path: &str) -> BitFunResult<FileReadResult> {
+    pub async fn read_file(&self, file_path: &str) -> HaloResult<FileReadResult> {
         self.inner
             .read_file(file_path)
             .await
@@ -268,7 +268,7 @@ impl FileSystemService {
         &self,
         file_path: &str,
         content: &str,
-    ) -> BitFunResult<FileWriteResult> {
+    ) -> HaloResult<FileWriteResult> {
         self.inner
             .write_file(file_path, content)
             .await
@@ -281,7 +281,7 @@ impl FileSystemService {
         file_path: &str,
         content: &str,
         options: FileOperationOptions,
-    ) -> BitFunResult<FileWriteResult> {
+    ) -> HaloResult<FileWriteResult> {
         self.inner
             .write_file_with_options(file_path, content, options)
             .await
@@ -289,7 +289,7 @@ impl FileSystemService {
     }
 
     /// Copies a file.
-    pub async fn copy_file(&self, from: &str, to: &str) -> BitFunResult<u64> {
+    pub async fn copy_file(&self, from: &str, to: &str) -> HaloResult<u64> {
         self.inner
             .copy_file(from, to)
             .await
@@ -297,7 +297,7 @@ impl FileSystemService {
     }
 
     /// Moves a file.
-    pub async fn move_file(&self, from: &str, to: &str) -> BitFunResult<()> {
+    pub async fn move_file(&self, from: &str, to: &str) -> HaloResult<()> {
         self.inner
             .move_file(from, to)
             .await
@@ -305,7 +305,7 @@ impl FileSystemService {
     }
 
     /// Deletes a file.
-    pub async fn delete_file(&self, file_path: &str) -> BitFunResult<()> {
+    pub async fn delete_file(&self, file_path: &str) -> HaloResult<()> {
         self.inner
             .delete_file(file_path)
             .await
@@ -313,7 +313,7 @@ impl FileSystemService {
     }
 
     /// Gets file info.
-    pub async fn get_file_info(&self, file_path: &str) -> BitFunResult<FileInfo> {
+    pub async fn get_file_info(&self, file_path: &str) -> HaloResult<FileInfo> {
         self.inner
             .get_file_info(file_path)
             .await
@@ -321,7 +321,7 @@ impl FileSystemService {
     }
 
     /// Creates a directory.
-    pub async fn create_directory(&self, dir_path: &str) -> BitFunResult<()> {
+    pub async fn create_directory(&self, dir_path: &str) -> HaloResult<()> {
         self.inner
             .create_directory(dir_path)
             .await
@@ -329,7 +329,7 @@ impl FileSystemService {
     }
 
     /// Deletes a directory.
-    pub async fn delete_directory(&self, dir_path: &str, recursive: bool) -> BitFunResult<()> {
+    pub async fn delete_directory(&self, dir_path: &str, recursive: bool) -> HaloResult<()> {
         self.inner
             .delete_directory(dir_path, recursive)
             .await
@@ -352,7 +352,7 @@ impl FileSystemService {
     }
 
     /// Gets the file size.
-    pub async fn get_file_size(&self, file_path: &str) -> BitFunResult<u64> {
+    pub async fn get_file_size(&self, file_path: &str) -> HaloResult<u64> {
         self.inner
             .get_file_size(file_path)
             .await
@@ -360,7 +360,7 @@ impl FileSystemService {
     }
 
     /// Reads a text file quickly.
-    pub async fn read_text_file(&self, file_path: &str) -> BitFunResult<String> {
+    pub async fn read_text_file(&self, file_path: &str) -> HaloResult<String> {
         self.inner
             .read_text_file(file_path)
             .await
@@ -368,7 +368,7 @@ impl FileSystemService {
     }
 
     /// Writes a text file quickly.
-    pub async fn write_text_file(&self, file_path: &str, content: &str) -> BitFunResult<()> {
+    pub async fn write_text_file(&self, file_path: &str, content: &str) -> HaloResult<()> {
         self.inner
             .write_text_file(file_path, content)
             .await
@@ -376,7 +376,7 @@ impl FileSystemService {
     }
 
     /// Lists all files in a directory (recursive).
-    pub async fn list_all_files(&self, root_path: &str) -> BitFunResult<Vec<String>> {
+    pub async fn list_all_files(&self, root_path: &str) -> HaloResult<Vec<String>> {
         let tree = self.build_file_tree(root_path).await?;
         let mut files = Vec::new();
 
@@ -396,7 +396,7 @@ impl FileSystemService {
     }
 
     /// Calculates the directory size.
-    pub async fn calculate_directory_size(&self, dir_path: &str) -> BitFunResult<u64> {
+    pub async fn calculate_directory_size(&self, dir_path: &str) -> HaloResult<u64> {
         let scan_result = self.scan_directory(dir_path).await?;
         Ok(scan_result.statistics.total_size_bytes)
     }
@@ -406,7 +406,7 @@ impl FileSystemService {
         &self,
         root_path: &str,
         extension: &str,
-    ) -> BitFunResult<Vec<String>> {
+    ) -> HaloResult<Vec<String>> {
         let options = FileSearchOptions {
             include_content: false,
             file_extensions: Some(vec![extension.to_lowercase()]),
@@ -422,7 +422,7 @@ impl FileSystemService {
     }
 
     /// Gets directory statistics.
-    pub async fn get_directory_stats(&self, dir_path: &str) -> BitFunResult<DirectoryStats> {
+    pub async fn get_directory_stats(&self, dir_path: &str) -> HaloResult<DirectoryStats> {
         let scan_result = self.scan_directory(dir_path).await?;
         let stats = scan_result.statistics;
 
@@ -444,7 +444,7 @@ impl FileSystemService {
     }
 
     /// SHA-256 hex of on-disk content after editor-sync normalization (see `FileOperationService`).
-    pub async fn editor_sync_content_sha256_hex(&self, file_path: &str) -> BitFunResult<String> {
+    pub async fn editor_sync_content_sha256_hex(&self, file_path: &str) -> HaloResult<String> {
         self.inner
             .editor_sync_content_sha256_hex(file_path)
             .await

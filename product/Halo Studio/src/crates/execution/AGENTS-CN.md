@@ -10,13 +10,13 @@
 |---|---|---|
 | `agent-runtime` | Agent registry、scheduler、session/config/context facts、prompt cache、hooks、goal、prompt facts、port-backed `AgentRuntime` facade、DeepReview provider-neutral state、DeepResearch citation renumbering，以及 runtime control / confirmation 契约 | [AGENTS.md](agent-runtime/AGENTS.md) |
 | `agent-stream` | Provider-neutral stream DTO、tool-call 累积和 replay 契约 | [AGENTS.md](agent-stream/AGENTS.md) |
-| `tool-contracts` | Tool 契约、execution gate、input validation 和 result presentation 契约；Cargo package 仍为 `bitfun-agent-tools` | [AGENTS.md](tool-contracts/AGENTS.md) |
+| `tool-contracts` | Tool 契约、execution gate、input validation 和 result presentation 契约；Cargo package 仍为 `halo-agent-tools` | [AGENTS.md](tool-contracts/AGENTS.md) |
 | `harness` | Harness workflow 契约和 registry primitive | [AGENTS.md](harness/AGENTS.md) |
 | `plugin-runtime-client` | `PluginRuntimeClient` 的默认实现，负责派发、重复请求结果和故障诊断；JS/TS Plugin Host 是经服务端口管理的子进程 | [AGENTS.md](plugin-runtime-client/AGENTS.md) |
 | `runtime-services` | Typed runtime service assembly 和 service availability facts | [AGENTS.md](runtime-services/AGENTS.md) |
-| `tool-provider-groups` | Tool provider group facts 和 product-full tool group composition；Cargo package 仍为 `bitfun-tool-packs` | [AGENTS.md](tool-provider-groups/AGENTS.md) |
+| `tool-provider-groups` | Tool provider group facts 和 product-full tool group composition；Cargo package 仍为 `halo-tool-packs` | [AGENTS.md](tool-provider-groups/AGENTS.md) |
 | `tool-execution` | 底层 file/search/tool IO helper、ExecCommand presentation facts、Computer Use loop/retry policy、prompt-safe tool context facts 和 provider-neutral tool runtime policy；Cargo package 仍为 `tool-runtime` | [AGENTS.md](tool-execution/AGENTS.md) |
-| `tool-call-jsonrepair` | 流式 tool-call 参数的有界 JSON 修复（`jsonrepair-rs` 本地 fork，采用不把 `#`/`//`/`/* */` 视为注释的 tool-argument profile）；Cargo package 仍为 `bitfun-tool-call-jsonrepair` | [README.md](tool-call-jsonrepair/README.md) |
+| `tool-call-jsonrepair` | 流式 tool-call 参数的有界 JSON 修复（`jsonrepair-rs` 本地 fork，采用不把 `#`/`//`/`/* */` 视为注释的 tool-argument profile）；Cargo package 仍为 `halo-tool-call-jsonrepair` | [README.md](tool-call-jsonrepair/README.md) |
 
 ## 放置规则
 

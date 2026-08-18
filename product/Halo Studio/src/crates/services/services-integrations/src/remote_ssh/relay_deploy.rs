@@ -11,9 +11,9 @@
 //!    best-effort compose teardown for in-progress deploys).
 //! 5. `import_account` — hand a locally-provisioned account to `relay-admin import-user`.
 //!
-//! Remote deploy state lives under `~/.bitfun/relay-deploy/`. Published binaries
-//! are staged under `~/.bitfun/relay-release/`; only the automatic fallback clones
-//! source under `~/.bitfun/relay-src/` (never `$HOME/bitfun`, which may be the
+//! Remote deploy state lives under `~/.halo-studio/relay-deploy/`. Published binaries
+//! are staged under `~/.halo-studio/relay-release/`; only the automatic fallback clones
+//! source under `~/.halo-studio/relay-src/` (never `$HOME/halo`, which may be the
 //! user's own project).
 //!
 //! Product / regression invariants (wizard + entry points):
@@ -44,9 +44,9 @@ pub fn normalize_relay_port(port: u16) -> Result<u16> {
     Ok(port)
 }
 /// Relay container name, matching docker-compose.yml.
-const RELAY_CONTAINER_NAME: &str = "bitfun-relay";
+const RELAY_CONTAINER_NAME: &str = "halo-relay";
 /// Account DB path inside the relay container (RELAY_DB_PATH in docker-compose.yml).
-const RELAY_CONTAINER_DB: &str = "/app/data/bitfun_relay.db";
+const RELAY_CONTAINER_DB: &str = "/app/data/halo_relay.db";
 /// Canonical git remote for incremental source updates on the target server.
 const REPO_GIT_URL: &str = "https://github.com/GCWing/BitFun.git";
 /// Branch tracked by one-click deploy.
@@ -56,7 +56,7 @@ const REPO_TARBALL_URL: &str = "https://github.com/GCWing/BitFun/archive/refs/he
 /// Release asset base. Asset names are stable across tags so the embedded
 /// Desktop version can address its matching server build without a GitHub API call.
 const RELEASE_BASE: &str = "https://github.com/GCWing/BitFun/releases";
-const OPENBITFUN_RELEASE_BASE: &str = "https://openbitfun.com/release";
+const OPENHALO_RELEASE_BASE: &str = "https://openbitfun.com/release";
 const RELEASE_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Ranked-source download tuning, shared with the CLI self-updater
 /// (`src/apps/cli/src/self_update.rs`) so both paths behave the same on a slow
@@ -90,10 +90,10 @@ const RELAY_RELEASE_DOWNLOAD_SH: &str = include_str!(concat!(
     "/../../../apps/relay-server/release-download.sh"
 ));
 /// Remote directory (relative to the SSH user's home) holding deploy state.
-const DEPLOY_STATE_DIR: &str = ".bitfun/relay-deploy";
-/// BitFun-managed source checkout (relative to home). Must stay under `.bitfun/`
-/// so deploy never deletes or overwrites a user directory named `bitfun`/`BitFun`.
-const SOURCE_DIR: &str = ".bitfun/relay-src";
+const DEPLOY_STATE_DIR: &str = ".halo-studio/relay-deploy";
+/// Halo-managed source checkout (relative to home). Must stay under `.halo-studio/`
+/// so deploy never deletes or overwrites a user directory named `halo`/`Halo`.
+const SOURCE_DIR: &str = ".halo-studio/relay-src";
 /// Line printed by task scripts on success; polled to detect completion.
 const TASK_DONE_MARKER: &str = "RELAY_TASK_DONE";
 /// How long the seeded `preparing` flag may sit with no live driver process
@@ -166,13 +166,13 @@ pub struct RelayPreflight {
     pub port_busy: bool,
     /// Port that was probed (`port_busy` / selected-port health).
     pub probed_port: u16,
-    /// Selected port is published by the existing `bitfun-relay` container (or
+    /// Selected port is published by the existing `halo-relay` container (or
     /// answers `/health` as that relay). Used to distinguish "our relay" from
     /// an unrelated occupant when the user changes the listen port.
     pub port_owned_by_relay: bool,
-    /// A `bitfun-relay` container already exists (any state).
+    /// A `halo-relay` container already exists (any state).
     pub container_exists: bool,
-    /// A `bitfun-relay` container is currently running.
+    /// A `halo-relay` container is currently running.
     pub container_running: bool,
     /// Host port published by the running relay (0 if unknown / not running).
     pub existing_relay_port: u16,
@@ -244,7 +244,7 @@ if [ ! -e "$HOME/.docker" ]; then echo "docker_home_writable=1"
 elif [ -w "$HOME/.docker" ] && {{ [ ! -e "$HOME/.docker/buildx" ] || [ -w "$HOME/.docker/buildx" ]; }}; then echo "docker_home_writable=1"
 else echo "docker_home_writable=0"; fi
 echo "mem_kb=$(awk '/MemTotal/ {{print $2}}' /proc/meminfo 2>/dev/null || echo 0)"
-# Free space where the work actually lands: ~/.bitfun holds the downloaded
+# Free space where the work actually lands: ~/.halo-studio holds the downloaded
 # archive and the source checkout, Docker's data root holds images and layers.
 echo "home_free_kb=$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {{print $4}}' || echo 0)"
 DOCKER_ROOT=$(docker info -f '{{{{.DockerRootDir}}}}' 2>/dev/null \
@@ -262,18 +262,18 @@ CONTAINER=0
 RUNNING=0
 EXISTING_PORT=0
 if [ -n "$D" ]; then
-  if $D ps -a --format '{{{{.Names}}}}' 2>/dev/null | grep -qx bitfun-relay; then CONTAINER=1; fi
-  if $D ps --format '{{{{.Names}}}}' 2>/dev/null | grep -qx bitfun-relay; then RUNNING=1; fi
+  if $D ps -a --format '{{{{.Names}}}}' 2>/dev/null | grep -qx halo-relay; then CONTAINER=1; fi
+  if $D ps --format '{{{{.Names}}}}' 2>/dev/null | grep -qx halo-relay; then RUNNING=1; fi
   if [ "$CONTAINER" = "1" ]; then
     # First published host port on the container (compose maps RELAY_PORT:RELAY_PORT).
-    EXISTING_PORT=$($D inspect -f '{{{{range $p, $conf := .NetworkSettings.Ports}}}}{{{{range $conf}}}}{{{{if .HostPort}}}}{{{{.HostPort}}}}{{{{end}}}}{{{{end}}}}{{{{end}}}}' bitfun-relay 2>/dev/null | awk 'NF {{print $1; exit}}')
+    EXISTING_PORT=$($D inspect -f '{{{{range $p, $conf := .NetworkSettings.Ports}}}}{{{{range $conf}}}}{{{{if .HostPort}}}}{{{{.HostPort}}}}{{{{end}}}}{{{{end}}}}{{{{end}}}}' halo-relay 2>/dev/null | awk 'NF {{print $1; exit}}')
     EXISTING_PORT=$(printf '%s' "$EXISTING_PORT" | tr -cd '0-9')
   fi
 fi
-# Fallback: last deploy wrote ~/.bitfun/relay-deploy/relay.port
+# Fallback: last deploy wrote ~/.halo-studio/relay-deploy/relay.port
 if [ -z "$EXISTING_PORT" ] || [ "$EXISTING_PORT" = "0" ]; then
-  if [ -f "$HOME/.bitfun/relay-deploy/relay.port" ]; then
-    EXISTING_PORT=$(tr -cd '0-9' < "$HOME/.bitfun/relay-deploy/relay.port")
+  if [ -f "$HOME/.halo-studio/relay-deploy/relay.port" ]; then
+    EXISTING_PORT=$(tr -cd '0-9' < "$HOME/.halo-studio/relay-deploy/relay.port")
   fi
 fi
 [ -n "$EXISTING_PORT" ] || EXISTING_PORT=0
@@ -823,7 +823,7 @@ fn split_poll_stdout(stdout: &str) -> (&str, &str) {
 /// Import a locally-provisioned account into the running relay container.
 ///
 /// `account_json` is the serialized `ImportableAccount` produced client-side
-/// by `bitfun_relay_service::admin::provision` — it contains only derived
+/// by `halo_relay_service::admin::provision` — it contains only derived
 /// artifacts (salts, Argon2id hash, wrapped master key). The file is written
 /// with 0600 permissions and removed immediately after the import attempt.
 pub async fn import_account(
@@ -964,13 +964,13 @@ async fn exec_ok(manager: &SSHConnectionManager, connection_id: &str, command: &
 
 /// Shared interactive prepare helpers embedded in driver scripts.
 fn prepare_helpers_bash() -> String {
-    // Mirror helpers first so prepare/install/deploy can call bitfun_mirror_init
+    // Mirror helpers first so prepare/install/deploy can call halo_mirror_init
     // before apt/git/docker downloads.
     format!(
         r#"
-# --- begin BitFun relay mirror.sh (embedded) ---
+# --- begin Halo relay mirror.sh (embedded) ---
 {mirror}
-# --- end BitFun relay mirror.sh ---
+# --- end Halo relay mirror.sh ---
 "#,
         mirror = RELAY_MIRROR_SH
     ) + r#"
@@ -978,14 +978,14 @@ fn prepare_helpers_bash() -> String {
 # - Never use `sudo -v` when NOPASSWD is set — on many cloud images `sudo -v`
 #   still demands a password even though `sudo -n true` works.
 # - Prefer already-root → passwordless sudo → interactive sudo / sudo su -.
-# - When elevating via `su -`, keep the original HOME so ~/.bitfun paths stay valid.
+# - When elevating via `su -`, keep the original HOME so ~/.halo-studio paths stay valid.
 
-bitfun_have_passwordless_sudo() {
+halo_have_passwordless_sudo() {
   [ "$(id -u)" != "0" ] && sudo -n true >/dev/null 2>&1
 }
 
 # Run a command with the best available privilege (root / sudo -n / sudo).
-bitfun_priv() {
+halo_priv() {
   if [ "$(id -u)" = "0" ]; then
     "$@"
   elif sudo -n true >/dev/null 2>&1; then
@@ -997,25 +997,25 @@ bitfun_priv() {
 
 # For Docker install: if not root, re-exec this driver as root once.
 # Passwordless path uses `sudo su -` (no prompt). Interactive path prompts once.
-# Sets BITFUN_ELEVATED=1 to avoid loops. Preserves HOME for ~/.bitfun/*.
-bitfun_elevate_install_driver() {
+# Sets HALO_ELEVATED=1 to avoid loops. Preserves HOME for ~/.halo-studio/*.
+halo_elevate_install_driver() {
   local self="$1"
-  if [ "$(id -u)" = "0" ] || [ "${BITFUN_ELEVATED:-0}" = "1" ]; then
+  if [ "$(id -u)" = "0" ] || [ "${HALO_ELEVATED:-0}" = "1" ]; then
     return 0
   fi
-  local keep_home="${BITFUN_KEEP_HOME:-$HOME}"
+  local keep_home="${HALO_KEEP_HOME:-$HOME}"
   local q_self q_home
   q_self=$(printf '%q' "$self")
   q_home=$(printf '%q' "$keep_home")
-  if bitfun_have_passwordless_sudo; then
+  if halo_have_passwordless_sudo; then
     echo ">>> Root needed for Docker install; elevating via passwordless sudo su -..."
-    exec sudo -n su - -c "export BITFUN_ELEVATED=1 BITFUN_KEEP_HOME=$q_home HOME=$q_home; cd $q_home 2>/dev/null || cd /; bash $q_self"
+    exec sudo -n su - -c "export HALO_ELEVATED=1 HALO_KEEP_HOME=$q_home HOME=$q_home; cd $q_home 2>/dev/null || cd /; bash $q_self"
   fi
   echo ">>> Root needed for Docker install; elevating via sudo su - (password may be required)..."
-  exec sudo su - -c "export BITFUN_ELEVATED=1 BITFUN_KEEP_HOME=$q_home HOME=$q_home; cd $q_home 2>/dev/null || cd /; bash $q_self"
+  exec sudo su - -c "export HALO_ELEVATED=1 HALO_KEEP_HOME=$q_home HOME=$q_home; cd $q_home 2>/dev/null || cd /; bash $q_self"
 }
 
-bitfun_ensure_tools() {
+halo_ensure_tools() {
   local pkgs=()
   command -v git >/dev/null 2>&1 || pkgs+=(git)
   command -v curl >/dev/null 2>&1 || pkgs+=(curl)
@@ -1028,44 +1028,44 @@ bitfun_ensure_tools() {
     elif command -v yum >/dev/null 2>&1; then yum install -y "${pkgs[@]}"
     else echo "ERROR: missing tools (${pkgs[*]}) and no supported package manager" >&2; return 1; fi
   else
-    if command -v apt-get >/dev/null 2>&1; then bitfun_priv apt-get update -y && bitfun_priv apt-get install -y "${pkgs[@]}"
-    elif command -v dnf >/dev/null 2>&1; then bitfun_priv dnf install -y "${pkgs[@]}"
-    elif command -v yum >/dev/null 2>&1; then bitfun_priv yum install -y "${pkgs[@]}"
+    if command -v apt-get >/dev/null 2>&1; then halo_priv apt-get update -y && halo_priv apt-get install -y "${pkgs[@]}"
+    elif command -v dnf >/dev/null 2>&1; then halo_priv dnf install -y "${pkgs[@]}"
+    elif command -v yum >/dev/null 2>&1; then halo_priv yum install -y "${pkgs[@]}"
     else echo "ERROR: missing tools (${pkgs[*]}); install them then retry" >&2; return 1; fi
   fi
 }
 
 # Owner of $HOME — the SSH user even when this script runs elevated with their
-# HOME preserved (BITFUN_KEEP_HOME).
-bitfun_home_owner() {
+# HOME preserved (HALO_KEEP_HOME).
+halo_home_owner() {
   stat -c '%U:%G' "$HOME" 2>/dev/null || stat -f '%Su:%Sg' "$HOME" 2>/dev/null || true
 }
 
 # Make DOCKER_CONFIG usable by whoever is running now.
 #
 # The Docker-install task runs as root but keeps the SSH user's HOME, so it used
-# to leave ~/.bitfun/docker-config (and its config.json) owned by root:root 0700.
+# to leave ~/.halo-studio/docker-config (and its config.json) owned by root:root 0700.
 # Every later unprivileged deploy then hit
 #   WARNING: Error loading config file: .../config.json: permission denied
 # and the docker CLI misparsed the build that followed. Repair the ownership when
 # we have the rights, and otherwise move to a config dir we can actually read.
-bitfun_fix_docker_config() {
-  export DOCKER_CONFIG="${DOCKER_CONFIG:-$HOME/.bitfun/docker-config}"
+halo_fix_docker_config() {
+  export DOCKER_CONFIG="${DOCKER_CONFIG:-$HOME/.halo-studio/docker-config}"
   mkdir -p "$DOCKER_CONFIG" 2>/dev/null || true
   if [ "$(id -u)" = "0" ]; then
     # Hand the tree back to the SSH user; root reads it either way.
     local owner
-    owner="$(bitfun_home_owner)"
+    owner="$(halo_home_owner)"
     if [ -n "$owner" ] && [ "$owner" != "root:root" ]; then
       chown -R "$owner" "$DOCKER_CONFIG" 2>/dev/null || true
     fi
   elif [ ! -r "$DOCKER_CONFIG" ] || [ ! -w "$DOCKER_CONFIG" ] \
     || { [ -e "$DOCKER_CONFIG/config.json" ] && [ ! -r "$DOCKER_CONFIG/config.json" ]; }; then
     echo ">>> $DOCKER_CONFIG is not usable by $(id -un) (left root-owned by an earlier install)."
-    bitfun_priv chown -R "$(id -un):$(id -gn)" "$DOCKER_CONFIG" 2>/dev/null || true
+    halo_priv chown -R "$(id -un):$(id -gn)" "$DOCKER_CONFIG" 2>/dev/null || true
     if [ ! -r "$DOCKER_CONFIG" ] || [ ! -w "$DOCKER_CONFIG" ] \
       || { [ -e "$DOCKER_CONFIG/config.json" ] && [ ! -r "$DOCKER_CONFIG/config.json" ]; }; then
-      DOCKER_CONFIG="$HOME/.bitfun/docker-config-$(id -u)"
+      DOCKER_CONFIG="$HOME/.halo-studio/docker-config-$(id -u)"
       export DOCKER_CONFIG
       mkdir -p "$DOCKER_CONFIG"
       echo ">>> Could not repair it; using DOCKER_CONFIG=$DOCKER_CONFIG instead."
@@ -1074,8 +1074,8 @@ bitfun_fix_docker_config() {
   chmod 700 "$DOCKER_CONFIG" 2>/dev/null || true
 }
 
-bitfun_fix_docker_home() {
-  bitfun_fix_docker_config
+halo_fix_docker_home() {
+  halo_fix_docker_config
   if [ -e "$HOME/.docker" ] && [ ! -w "$HOME/.docker" ]; then
     echo ">>> $HOME/.docker is not writable (often root-owned buildx lock)."
     echo ">>> Fixing ownership..."
@@ -1086,7 +1086,7 @@ bitfun_fix_docker_home() {
       chown -R "$owner" "$HOME/.docker" 2>/dev/null \
         || chown -R "$(id -un):$(id -gn)" "$HOME/.docker"
     else
-      bitfun_priv chown -R "$(id -un):$(id -gn)" "$HOME/.docker"
+      halo_priv chown -R "$(id -un):$(id -gn)" "$HOME/.docker"
     fi
   fi
   if [ -e "$HOME/.docker" ] && [ ! -w "$HOME/.docker" ]; then
@@ -1094,7 +1094,7 @@ bitfun_fix_docker_home() {
   fi
 }
 
-bitfun_start_docker_daemon() {
+halo_start_docker_daemon() {
   if docker info >/dev/null 2>&1 || sudo -n docker info >/dev/null 2>&1; then return 0; fi
   echo ">>> Starting Docker daemon..."
   if [ "$(id -u)" = "0" ]; then
@@ -1108,34 +1108,34 @@ bitfun_start_docker_daemon() {
   sleep 1
 }
 
-# Sets BITFUN_DOCKER_MODE to: direct | sg | sudo
-bitfun_resolve_docker_mode() {
-  bitfun_fix_docker_home
-  bitfun_start_docker_daemon
+# Sets HALO_DOCKER_MODE to: direct | sg | sudo
+halo_resolve_docker_mode() {
+  halo_fix_docker_home
+  halo_start_docker_daemon
   if docker info >/dev/null 2>&1; then
-    BITFUN_DOCKER_MODE=direct
+    HALO_DOCKER_MODE=direct
     return 0
   fi
   if id -nG 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
     if sg docker -c 'docker info' >/dev/null 2>&1; then
-      BITFUN_DOCKER_MODE=sg
+      HALO_DOCKER_MODE=sg
       return 0
     fi
   elif getent group docker 2>/dev/null | grep -qE "(^|:|,)$(id -un)(,|$)"; then
     echo ">>> User is in docker group but session has not activated it; using sg docker."
     if sg docker -c 'docker info' >/dev/null 2>&1; then
-      BITFUN_DOCKER_MODE=sg
+      HALO_DOCKER_MODE=sg
       return 0
     fi
   fi
   if sudo -n docker info >/dev/null 2>&1; then
     echo ">>> Using passwordless sudo for Docker."
-    BITFUN_DOCKER_MODE=sudo
+    HALO_DOCKER_MODE=sudo
     return 0
   fi
   echo ">>> Docker needs interactive sudo (enter password if prompted)..."
   if sudo docker info >/dev/null 2>&1; then
-    BITFUN_DOCKER_MODE=sudo
+    HALO_DOCKER_MODE=sudo
     return 0
   fi
   echo "ERROR: cannot reach Docker daemon" >&2
@@ -1145,7 +1145,7 @@ bitfun_resolve_docker_mode() {
 # POSIX single-quote each argument so `sg -c` cannot re-split or glob them.
 # `sg docker -c "docker $*"` loses argument boundaries: a context path with a
 # space, or a `-f '{{.State.Running}}'` format string, arrives mangled.
-bitfun_shell_join() {
+halo_shell_join() {
   local out="" arg
   for arg in "$@"; do
     out="$out'$(printf '%s' "$arg" | sed "s/'/'\\\\''/g")' "
@@ -1153,9 +1153,9 @@ bitfun_shell_join() {
   printf '%s' "$out"
 }
 
-bitfun_docker() {
-  case "${BITFUN_DOCKER_MODE:-direct}" in
-    sg) sg docker -c "$(bitfun_shell_join docker "$@")" ;;
+halo_docker() {
+  case "${HALO_DOCKER_MODE:-direct}" in
+    sg) sg docker -c "$(halo_shell_join docker "$@")" ;;
     sudo)
       if sudo -n true >/dev/null 2>&1; then sudo -n docker "$@"; else sudo docker "$@"; fi
       ;;
@@ -1163,57 +1163,57 @@ bitfun_docker() {
   esac
 }
 
-bitfun_run_deploy_sh() {
+halo_run_deploy_sh() {
   local dir="$1"
   local port="${RELAY_PORT:-9700}"
   # Prefer already-resolved mirror mode so deploy.sh does not re-probe.
-  local mirror_mode="${BITFUN_MIRROR:-${BITFUN_MIRROR_MODE:-auto}}"
+  local mirror_mode="${HALO_MIRROR:-${HALO_MIRROR_MODE:-auto}}"
   # Always --build-from-source: this function is reached ONLY after
-  # bitfun_try_release_deploy already failed, and deploy.sh's own first step is
+  # halo_try_release_deploy already failed, and deploy.sh's own first step is
   # that same release-binary path. Without the flag it re-downloads, re-builds
   # and re-starts the published binary that just failed — the deploy visibly
   # runs twice before reaching the source build it was called for.
   # DOCKER_BUILDKIT is required for Dockerfile cargo registry/git/target mounts.
   # DOCKER_CONFIG is deliberately NOT forwarded to the sudo branches: root would
-  # write config.json into the SSH user's ~/.bitfun/docker-config and every later
+  # write config.json into the SSH user's ~/.halo-studio/docker-config and every later
   # unprivileged run would then fail to read its own Docker config. Root falls
   # back to /root/.docker, which it owns.
-  case "${BITFUN_DOCKER_MODE:-direct}" in
+  case "${HALO_DOCKER_MODE:-direct}" in
     sudo)
       if sudo -n true >/dev/null 2>&1; then
         sudo -n -E env RELAY_PORT="$port" RELAY_CARGO_BUILD_JOBS="${RELAY_CARGO_BUILD_JOBS:-}" \
           DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 BUILDKIT_PROGRESS=plain \
-          BITFUN_MIRROR="$mirror_mode" \
-          BITFUN_USE_CN_MIRROR="${BITFUN_USE_CN_MIRROR:-0}" \
-          BITFUN_APT_MIRROR="${BITFUN_APT_MIRROR:-}" \
-          BITFUN_CARGO_SPARSE_URL="${BITFUN_CARGO_SPARSE_URL:-}" \
-          BITFUN_DOCKER_REGISTRY_MIRRORS="${BITFUN_DOCKER_REGISTRY_MIRRORS:-}" \
-          BITFUN_GITHUB_PROXY="${BITFUN_GITHUB_PROXY:-}" \
+          HALO_MIRROR="$mirror_mode" \
+          HALO_USE_CN_MIRROR="${HALO_USE_CN_MIRROR:-0}" \
+          HALO_APT_MIRROR="${HALO_APT_MIRROR:-}" \
+          HALO_CARGO_SPARSE_URL="${HALO_CARGO_SPARSE_URL:-}" \
+          HALO_DOCKER_REGISTRY_MIRRORS="${HALO_DOCKER_REGISTRY_MIRRORS:-}" \
+          HALO_GITHUB_PROXY="${HALO_GITHUB_PROXY:-}" \
           bash "$dir/deploy.sh" --build-from-source
       else
         sudo -E env RELAY_PORT="$port" RELAY_CARGO_BUILD_JOBS="${RELAY_CARGO_BUILD_JOBS:-}" \
           DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 BUILDKIT_PROGRESS=plain \
-          BITFUN_MIRROR="$mirror_mode" \
-          BITFUN_USE_CN_MIRROR="${BITFUN_USE_CN_MIRROR:-0}" \
-          BITFUN_APT_MIRROR="${BITFUN_APT_MIRROR:-}" \
-          BITFUN_CARGO_SPARSE_URL="${BITFUN_CARGO_SPARSE_URL:-}" \
-          BITFUN_DOCKER_REGISTRY_MIRRORS="${BITFUN_DOCKER_REGISTRY_MIRRORS:-}" \
-          BITFUN_GITHUB_PROXY="${BITFUN_GITHUB_PROXY:-}" \
+          HALO_MIRROR="$mirror_mode" \
+          HALO_USE_CN_MIRROR="${HALO_USE_CN_MIRROR:-0}" \
+          HALO_APT_MIRROR="${HALO_APT_MIRROR:-}" \
+          HALO_CARGO_SPARSE_URL="${HALO_CARGO_SPARSE_URL:-}" \
+          HALO_DOCKER_REGISTRY_MIRRORS="${HALO_DOCKER_REGISTRY_MIRRORS:-}" \
+          HALO_GITHUB_PROXY="${HALO_GITHUB_PROXY:-}" \
           bash "$dir/deploy.sh" --build-from-source
       fi
       ;;
     sg)
-      sg docker -c "env RELAY_PORT='$port' RELAY_CARGO_BUILD_JOBS='${RELAY_CARGO_BUILD_JOBS:-}' DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 BUILDKIT_PROGRESS=plain DOCKER_CONFIG='${DOCKER_CONFIG:-}' BITFUN_MIRROR='$mirror_mode' BITFUN_USE_CN_MIRROR='${BITFUN_USE_CN_MIRROR:-0}' BITFUN_APT_MIRROR='${BITFUN_APT_MIRROR:-}' BITFUN_CARGO_SPARSE_URL='${BITFUN_CARGO_SPARSE_URL:-}' BITFUN_DOCKER_REGISTRY_MIRRORS='${BITFUN_DOCKER_REGISTRY_MIRRORS:-}' BITFUN_GITHUB_PROXY='${BITFUN_GITHUB_PROXY:-}' bash '$dir/deploy.sh' --build-from-source"
+      sg docker -c "env RELAY_PORT='$port' RELAY_CARGO_BUILD_JOBS='${RELAY_CARGO_BUILD_JOBS:-}' DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 BUILDKIT_PROGRESS=plain DOCKER_CONFIG='${DOCKER_CONFIG:-}' HALO_MIRROR='$mirror_mode' HALO_USE_CN_MIRROR='${HALO_USE_CN_MIRROR:-0}' HALO_APT_MIRROR='${HALO_APT_MIRROR:-}' HALO_CARGO_SPARSE_URL='${HALO_CARGO_SPARSE_URL:-}' HALO_DOCKER_REGISTRY_MIRRORS='${HALO_DOCKER_REGISTRY_MIRRORS:-}' HALO_GITHUB_PROXY='${HALO_GITHUB_PROXY:-}' bash '$dir/deploy.sh' --build-from-source"
       ;;
     *)
       env RELAY_PORT="$port" RELAY_CARGO_BUILD_JOBS="${RELAY_CARGO_BUILD_JOBS:-}" \
         DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 BUILDKIT_PROGRESS=plain \
-        BITFUN_MIRROR="$mirror_mode" \
-        BITFUN_USE_CN_MIRROR="${BITFUN_USE_CN_MIRROR:-0}" \
-        BITFUN_APT_MIRROR="${BITFUN_APT_MIRROR:-}" \
-        BITFUN_CARGO_SPARSE_URL="${BITFUN_CARGO_SPARSE_URL:-}" \
-        BITFUN_DOCKER_REGISTRY_MIRRORS="${BITFUN_DOCKER_REGISTRY_MIRRORS:-}" \
-        BITFUN_GITHUB_PROXY="${BITFUN_GITHUB_PROXY:-}" \
+        HALO_MIRROR="$mirror_mode" \
+        HALO_USE_CN_MIRROR="${HALO_USE_CN_MIRROR:-0}" \
+        HALO_APT_MIRROR="${HALO_APT_MIRROR:-}" \
+        HALO_CARGO_SPARSE_URL="${HALO_CARGO_SPARSE_URL:-}" \
+        HALO_DOCKER_REGISTRY_MIRRORS="${HALO_DOCKER_REGISTRY_MIRRORS:-}" \
+        HALO_GITHUB_PROXY="${HALO_GITHUB_PROXY:-}" \
         bash "$dir/deploy.sh" --build-from-source
       ;;
   esac
@@ -1240,17 +1240,17 @@ DRIVER_PIDF="$D/$STEM.driver.pid"
 echo $$ >"$DRIVER_PIDF"
 {helpers}
 
-echo ">>> BitFun relay {kind}: interactive prepare"
+echo ">>> Halo relay {kind}: interactive prepare"
 echo ">>> Closing the wizard stops this task."
 # Preserve the SSH user's home across root elevation (su - would otherwise use /root).
-export BITFUN_KEEP_HOME="${{BITFUN_KEEP_HOME:-$HOME}}"
+export HALO_KEEP_HOME="${{HALO_KEEP_HOME:-$HOME}}"
 # install: elevate to root first (passwordless sudo su - when available).
 if [ "{kind}" = "install" ]; then
-  bitfun_elevate_install_driver "$D/$STEM.sh"
+  halo_elevate_install_driver "$D/$STEM.sh"
 fi
-# After elevation HOME may need restoring from BITFUN_KEEP_HOME.
-if [ -n "${{BITFUN_KEEP_HOME:-}}" ]; then
-  export HOME="$BITFUN_KEEP_HOME"
+# After elevation HOME may need restoring from HALO_KEEP_HOME.
+if [ -n "${{HALO_KEEP_HOME:-}}" ]; then
+  export HOME="$HALO_KEEP_HOME"
   D="$HOME/{DEPLOY_STATE_DIR}"
   LOG="$D/$STEM.log"
   PIDF="$D/$STEM.pid"
@@ -1270,22 +1270,22 @@ echo ">>> prepare starting (uid=$(id -u) home=$HOME)" | tee -a "$LOG"
 cleanup_prepare() {{ rm -f "$PREPARE_FLAG" "$DRIVER_PIDF"; }}
 trap cleanup_prepare EXIT
 # Region/mirrors before apt tool install and Docker/GitHub downloads.
-export BITFUN_REPO_GIT_URL="{REPO_GIT_URL}"
-export BITFUN_REPO_TARBALL_URL="{REPO_TARBALL_URL}"
-bitfun_mirror_init
-bitfun_ensure_tools
-export DOCKER_CONFIG="${{DOCKER_CONFIG:-$HOME/.bitfun/docker-config}}"
+export HALO_REPO_GIT_URL="{REPO_GIT_URL}"
+export HALO_REPO_TARBALL_URL="{REPO_TARBALL_URL}"
+halo_mirror_init
+halo_ensure_tools
+export DOCKER_CONFIG="${{DOCKER_CONFIG:-$HOME/.halo-studio/docker-config}}"
 # May exist root-owned from an older Docker-install run; repair or relocate it
 # instead of letting an unwritable dir abort the run under `set -e`.
-bitfun_fix_docker_config
+halo_fix_docker_config
 
 # install: Docker is not present yet — do NOT resolve daemon access here.
 if [ "{kind}" = "install" ]; then
-  BITFUN_DOCKER_MODE=direct
+  HALO_DOCKER_MODE=direct
 else
-  bitfun_resolve_docker_mode
+  halo_resolve_docker_mode
 fi
-export BITFUN_DOCKER_MODE
+export HALO_DOCKER_MODE
 
 # Ensure compose plugin when deploying
 if [ "{kind}" = "deploy" ]; then
@@ -1298,8 +1298,8 @@ if [ "{kind}" = "deploy" ]; then
       apt-get update -y && apt-get install -y docker-compose-plugin 2>/dev/null \
         || yum install -y docker-compose-plugin 2>/dev/null || true
     else
-      bitfun_priv apt-get update -y && bitfun_priv apt-get install -y docker-compose-plugin 2>/dev/null \
-        || bitfun_priv yum install -y docker-compose-plugin 2>/dev/null || true
+      halo_priv apt-get update -y && halo_priv apt-get install -y docker-compose-plugin 2>/dev/null \
+        || halo_priv yum install -y docker-compose-plugin 2>/dev/null || true
     fi
   fi
 fi
@@ -1308,15 +1308,15 @@ fi
 # Long deploy builds still go through nohup so the wizard can follow the log.
 if [ "{kind}" = "install" ]; then
   echo ">>> Installing Docker..." | tee -a "$LOG"
-  export BITFUN_KEEP_HOME="${{BITFUN_KEEP_HOME:-$HOME}}"
+  export HALO_KEEP_HOME="${{HALO_KEEP_HOME:-$HOME}}"
   set +e
   if command -v stdbuf >/dev/null 2>&1; then
-    stdbuf -oL -eL env BITFUN_KEEP_HOME="$BITFUN_KEEP_HOME" \
-      BITFUN_MIRROR="${{BITFUN_MIRROR:-${{BITFUN_MIRROR_MODE:-auto}}}}" \
+    stdbuf -oL -eL env HALO_KEEP_HOME="$HALO_KEEP_HOME" \
+      HALO_MIRROR="${{HALO_MIRROR:-${{HALO_MIRROR_MODE:-auto}}}}" \
       bash "$BODY" 2>&1 | tee -a "$LOG"
   else
-    env BITFUN_KEEP_HOME="$BITFUN_KEEP_HOME" \
-      BITFUN_MIRROR="${{BITFUN_MIRROR:-${{BITFUN_MIRROR_MODE:-auto}}}}" \
+    env HALO_KEEP_HOME="$HALO_KEEP_HOME" \
+      HALO_MIRROR="${{HALO_MIRROR:-${{HALO_MIRROR_MODE:-auto}}}}" \
       bash "$BODY" 2>&1 | tee -a "$LOG"
   fi
   code=${{PIPESTATUS[0]}}
@@ -1333,17 +1333,17 @@ fi
 
 if command -v stdbuf >/dev/null 2>&1; then RUNNER=(stdbuf -oL -eL bash); else RUNNER=(bash); fi
 echo ">>> Starting background task (log: $LOG)" | tee -a "$LOG"
-nohup env BITFUN_DOCKER_MODE="$BITFUN_DOCKER_MODE" DOCKER_CONFIG="$DOCKER_CONFIG" \
+nohup env HALO_DOCKER_MODE="$HALO_DOCKER_MODE" DOCKER_CONFIG="$DOCKER_CONFIG" \
   RELAY_CARGO_BUILD_JOBS="${{RELAY_CARGO_BUILD_JOBS:-}}" \
   DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 BUILDKIT_PROGRESS=plain \
-  BITFUN_MIRROR="${{BITFUN_MIRROR:-${{BITFUN_MIRROR_MODE:-auto}}}}" \
-  BITFUN_USE_CN_MIRROR="${{BITFUN_USE_CN_MIRROR:-0}}" \
-  BITFUN_APT_MIRROR="${{BITFUN_APT_MIRROR:-}}" \
-  BITFUN_CARGO_SPARSE_URL="${{BITFUN_CARGO_SPARSE_URL:-}}" \
-  BITFUN_DOCKER_REGISTRY_MIRRORS="${{BITFUN_DOCKER_REGISTRY_MIRRORS:-}}" \
-  BITFUN_GITHUB_PROXY="${{BITFUN_GITHUB_PROXY:-}}" \
-  BITFUN_REPO_GIT_URL="${{BITFUN_REPO_GIT_URL:-}}" \
-  BITFUN_REPO_TARBALL_URL="${{BITFUN_REPO_TARBALL_URL:-}}" \
+  HALO_MIRROR="${{HALO_MIRROR:-${{HALO_MIRROR_MODE:-auto}}}}" \
+  HALO_USE_CN_MIRROR="${{HALO_USE_CN_MIRROR:-0}}" \
+  HALO_APT_MIRROR="${{HALO_APT_MIRROR:-}}" \
+  HALO_CARGO_SPARSE_URL="${{HALO_CARGO_SPARSE_URL:-}}" \
+  HALO_DOCKER_REGISTRY_MIRRORS="${{HALO_DOCKER_REGISTRY_MIRRORS:-}}" \
+  HALO_GITHUB_PROXY="${{HALO_GITHUB_PROXY:-}}" \
+  HALO_REPO_GIT_URL="${{HALO_REPO_GIT_URL:-}}" \
+  HALO_REPO_TARBALL_URL="${{HALO_REPO_TARBALL_URL:-}}" \
   "${{RUNNER[@]}}" "$BODY" >"$LOG" 2>&1 < /dev/null &
 echo $! >"$PIDF"
 # The body pid now drives liveness; `exec tail` below would leave a stale driver
@@ -1370,61 +1370,61 @@ fn install_docker_body_script() -> String {
 set -euo pipefail
 {helpers}
 # Prefer the original SSH user's home (set by elevated driver).
-if [ -n "${{BITFUN_KEEP_HOME:-}}" ]; then export HOME="$BITFUN_KEEP_HOME"; fi
-export DOCKER_CONFIG="${{DOCKER_CONFIG:-$HOME/.bitfun/docker-config}}"
+if [ -n "${{HALO_KEEP_HOME:-}}" ]; then export HOME="$HALO_KEEP_HOME"; fi
+export DOCKER_CONFIG="${{DOCKER_CONFIG:-$HOME/.halo-studio/docker-config}}"
 mkdir -p "$DOCKER_CONFIG" 2>/dev/null || true
 # When elevated as root, add the original login user to the docker group.
 DEPLOY_USER="${{SUDO_USER:-}}"
 if [ -z "$DEPLOY_USER" ] || [ "$DEPLOY_USER" = "root" ]; then
-  if [ -n "${{BITFUN_KEEP_HOME:-}}" ] && [ -d "${{BITFUN_KEEP_HOME}}" ]; then
-    DEPLOY_USER="$(stat -c '%U' "$BITFUN_KEEP_HOME" 2>/dev/null || true)"
+  if [ -n "${{HALO_KEEP_HOME:-}}" ] && [ -d "${{HALO_KEEP_HOME}}" ]; then
+    DEPLOY_USER="$(stat -c '%U' "$HALO_KEEP_HOME" 2>/dev/null || true)"
   fi
 fi
 if [ -z "$DEPLOY_USER" ] || [ "$DEPLOY_USER" = "root" ]; then
   DEPLOY_USER="$(id -un)"
 fi
-export BITFUN_REPO_GIT_URL="{REPO_GIT_URL}"
-export BITFUN_REPO_TARBALL_URL="{REPO_TARBALL_URL}"
-bitfun_mirror_init
-echo ">>> Installing Docker as uid=$(id -u) for user=$DEPLOY_USER (mirror_mode=${{BITFUN_MIRROR_MODE:-global}}) ..."
+export HALO_REPO_GIT_URL="{REPO_GIT_URL}"
+export HALO_REPO_TARBALL_URL="{REPO_TARBALL_URL}"
+halo_mirror_init
+echo ">>> Installing Docker as uid=$(id -u) for user=$DEPLOY_USER (mirror_mode=${{HALO_MIRROR_MODE:-global}}) ..."
 INSTALLED=0
-if [ "${{BITFUN_MIRROR_MODE:-}}" = "cn" ]; then
-  if bitfun_mirror_install_docker_aliyun; then
+if [ "${{HALO_MIRROR_MODE:-}}" = "cn" ]; then
+  if halo_mirror_install_docker_aliyun; then
     INSTALLED=1
   else
     echo ">>> Aliyun docker-ce install failed; falling back to get.docker.com mirror..."
   fi
 fi
 if [ "$INSTALLED" != "1" ]; then
-  bitfun_mirror_fetch_docker_install_script /tmp/bitfun-get-docker.sh \
-    || curl -fsSL --retry 3 https://get.docker.com -o /tmp/bitfun-get-docker.sh
+  halo_mirror_fetch_docker_install_script /tmp/halo-get-docker.sh \
+    || curl -fsSL --retry 3 https://get.docker.com -o /tmp/halo-get-docker.sh
   if [ "$(id -u)" = "0" ]; then
-    sh /tmp/bitfun-get-docker.sh
+    sh /tmp/halo-get-docker.sh
   else
-    bitfun_priv sh /tmp/bitfun-get-docker.sh
+    halo_priv sh /tmp/halo-get-docker.sh
   fi
-  rm -f /tmp/bitfun-get-docker.sh
+  rm -f /tmp/halo-get-docker.sh
 fi
 if [ "$(id -u)" = "0" ]; then
   systemctl enable --now docker
   usermod -aG docker "$DEPLOY_USER" || true
 else
-  bitfun_priv systemctl enable --now docker
-  bitfun_priv usermod -aG docker "$DEPLOY_USER"
+  halo_priv systemctl enable --now docker
+  halo_priv usermod -aG docker "$DEPLOY_USER"
 fi
 # Re-apply Docker registry mirrors after engine install (daemon.json may be new).
-if [ "${{BITFUN_MIRROR_MODE:-}}" = "cn" ]; then
-  bitfun_mirror_apply_docker_daemon || true
+if [ "${{HALO_MIRROR_MODE:-}}" = "cn" ]; then
+  halo_mirror_apply_docker_daemon || true
 fi
-bitfun_fix_docker_home
+halo_fix_docker_home
 # This body runs as root but with the SSH user's HOME, so anything it created
-# under ~/.bitfun (notably docker-config/config.json) is root-owned. Left that
+# under ~/.halo-studio (notably docker-config/config.json) is root-owned. Left that
 # way, the next unprivileged deploy cannot read its own Docker config and the
 # build that follows fails. Hand the tree back before finishing.
 if [ "$(id -u)" = "0" ] && [ -n "$DEPLOY_USER" ] && [ "$DEPLOY_USER" != "root" ] \
-   && [ -d "$HOME/.bitfun" ]; then
-  echo ">>> Restoring ownership of $HOME/.bitfun to $DEPLOY_USER..."
-  chown -R "$DEPLOY_USER" "$HOME/.bitfun" 2>/dev/null || true
+   && [ -d "$HOME/.halo-studio" ]; then
+  echo ">>> Restoring ownership of $HOME/.halo-studio to $DEPLOY_USER..."
+  chown -R "$DEPLOY_USER" "$HOME/.halo-studio" 2>/dev/null || true
 fi
 # Verify without relying on a new login session
 if docker info >/dev/null 2>&1 \
@@ -1445,53 +1445,53 @@ fi
     )
 }
 
-/// Sync BitFun source: prefer shallow git update, fall back to tarball.
+/// Sync Halo source: prefer shallow git update, fall back to tarball.
 ///
-/// `src` must be the BitFun-managed path (`~/.bitfun/relay-src`). Destructive
-/// replace is safe only there — never use `$HOME/bitfun` / `$HOME/BitFun`.
+/// `src` must be the Halo-managed path (`~/.halo-studio/relay-src`). Destructive
+/// replace is safe only there — never use `$HOME/halo` / `$HOME/Halo`.
 fn sync_source_bash() -> String {
     format!(
         r#"
-bitfun_sync_source() {{
-  # Destination is always ~/.bitfun/relay-src (repo ROOT), never $HOME/BitFun.
-  # `git clone <url>` without a path would create ./BitFun — we always pass "$src".
+halo_sync_source() {{
+  # Destination is always ~/.halo-studio/relay-src (repo ROOT), never $HOME/Halo.
+  # `git clone <url>` without a path would create ./Halo — we always pass "$src".
   # Tarball extracts BitFun-main/; we use --strip-components=1 into "$src".
   local src="$1"
   local git_upstream="{REPO_GIT_URL}"
   local tarball_upstream="{REPO_TARBALL_URL}"
-  local git_url="${{BITFUN_GITHUB_GIT_URL:-$git_upstream}}"
-  local tarball_url="${{BITFUN_GITHUB_TARBALL_URL:-$tarball_upstream}}"
+  local git_url="${{HALO_GITHUB_GIT_URL:-$git_upstream}}"
+  local tarball_url="${{HALO_GITHUB_TARBALL_URL:-$tarball_upstream}}"
   local branch="{REPO_GIT_BRANCH}"
-  local managed_prefix="$HOME/.bitfun/"
+  local managed_prefix="$HOME/.halo-studio/"
   local relay_deploy_sh="src/apps/relay-server/deploy.sh"
 
-  # Refuse to touch anything outside ~/.bitfun/ (protect user project dirs).
+  # Refuse to touch anything outside ~/.halo-studio/ (protect user project dirs).
   case "$src" in
     "$managed_prefix"*) ;;
     *)
-      echo "ERROR: refusing to sync source outside ~/.bitfun/: $src" >&2
+      echo "ERROR: refusing to sync source outside ~/.halo-studio/: $src" >&2
       return 1
       ;;
   esac
 
-  bitfun_replace_managed_src() {{
+  halo_replace_managed_src() {{
     rm -rf "$src"
     mkdir -p "$(dirname "$src")"
   }}
 
   # Ensure "$src" is the repo root (contains src/apps/relay-server), not a
-  # nested BitFun/ or BitFun-main/ from a mistaken clone/extract.
-  bitfun_assert_source_layout() {{
+  # nested Halo/ or BitFun-main/ from a mistaken clone/extract.
+  halo_assert_source_layout() {{
     if [ -f "$src/$relay_deploy_sh" ]; then
       return 0
     fi
     local nested=""
-    if [ -f "$src/BitFun/$relay_deploy_sh" ]; then
-      nested="$src/BitFun"
+    if [ -f "$src/Halo/$relay_deploy_sh" ]; then
+      nested="$src/Halo"
     elif [ -f "$src/BitFun-main/$relay_deploy_sh" ]; then
       nested="$src/BitFun-main"
-    elif [ -f "$src/bitfun/$relay_deploy_sh" ]; then
-      nested="$src/bitfun"
+    elif [ -f "$src/halo/$relay_deploy_sh" ]; then
+      nested="$src/halo"
     fi
     if [ -n "$nested" ]; then
       echo ">>> Flattening nested checkout ($(basename "$nested")) into $src..."
@@ -1509,30 +1509,30 @@ bitfun_sync_source() {{
     fi
   }}
 
-  bitfun_fetch_tarball() {{
+  halo_fetch_tarball() {{
     local url="$1"
-    echo ">>> Downloading BitFun source (tarball): $url"
-    command -v curl >/dev/null 2>&1 || bitfun_ensure_tools
-    command -v tar >/dev/null 2>&1 || bitfun_ensure_tools
-    bitfun_replace_managed_src
+    echo ">>> Downloading Halo source (tarball): $url"
+    command -v curl >/dev/null 2>&1 || halo_ensure_tools
+    command -v tar >/dev/null 2>&1 || halo_ensure_tools
+    halo_replace_managed_src
     mkdir -p "$src"
     # Archive root is BitFun-main/; strip so files land directly in "$src".
     curl -fsSL --retry 3 "$url" | tar xz -C "$src" --strip-components=1
-    bitfun_assert_source_layout
+    halo_assert_source_layout
   }}
 
   if ! command -v git >/dev/null 2>&1; then
-    bitfun_ensure_tools || true
+    halo_ensure_tools || true
   fi
 
   if command -v git >/dev/null 2>&1; then
     if [ -d "$src/.git" ]; then
-      echo ">>> Updating BitFun source (git fetch via $git_url)..."
+      echo ">>> Updating Halo source (git fetch via $git_url)..."
       git -C "$src" remote set-url origin "$git_url" 2>/dev/null || true
       if git -C "$src" fetch --depth 1 origin "$branch" \
         && git -C "$src" checkout -f -B "$branch" "origin/$branch" \
         && git -C "$src" clean -fd \
-        && bitfun_assert_source_layout; then
+        && halo_assert_source_layout; then
         echo ">>> Source updated to $(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo unknown)"
         return 0
       fi
@@ -1542,31 +1542,31 @@ bitfun_sync_source() {{
         if git -C "$src" fetch --depth 1 origin "$branch" \
           && git -C "$src" checkout -f -B "$branch" "origin/$branch" \
           && git -C "$src" clean -fd \
-          && bitfun_assert_source_layout; then
+          && halo_assert_source_layout; then
           echo ">>> Source updated to $(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo unknown)"
           return 0
         fi
       fi
       echo ">>> git update failed; recloning managed source..."
-      bitfun_replace_managed_src
+      halo_replace_managed_src
     elif [ -e "$src" ]; then
       echo ">>> Managed source exists but is not a git checkout; replacing..."
-      bitfun_replace_managed_src
+      halo_replace_managed_src
     fi
     echo ">>> Cloning into $src via $git_url ..."
     mkdir -p "$(dirname "$src")"
-    # Explicit destination avoids creating $PWD/BitFun from the repo name.
+    # Explicit destination avoids creating $PWD/Halo from the repo name.
     if git clone --depth 1 --branch "$branch" "$git_url" "$src" \
-      && bitfun_assert_source_layout; then
+      && halo_assert_source_layout; then
       echo ">>> Source cloned at $(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo unknown)"
       return 0
     fi
     if [ "$git_url" != "$git_upstream" ]; then
       echo ">>> git clone via mirror failed; retrying upstream $git_upstream ..."
-      bitfun_replace_managed_src
+      halo_replace_managed_src
       mkdir -p "$(dirname "$src")"
       if git clone --depth 1 --branch "$branch" "$git_upstream" "$src" \
-        && bitfun_assert_source_layout; then
+        && halo_assert_source_layout; then
         echo ">>> Source cloned at $(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo unknown)"
         return 0
       fi
@@ -1575,12 +1575,12 @@ bitfun_sync_source() {{
   else
     echo ">>> git unavailable; using tarball fallback"
   fi
-  if bitfun_fetch_tarball "$tarball_url"; then
+  if halo_fetch_tarball "$tarball_url"; then
     return 0
   fi
   if [ "$tarball_url" != "$tarball_upstream" ]; then
     echo ">>> tarball mirror failed; retrying upstream..."
-    bitfun_fetch_tarball "$tarball_upstream"
+    halo_fetch_tarball "$tarball_upstream"
   fi
 }}
 "#,
@@ -1601,21 +1601,21 @@ bitfun_sync_source() {{
 fn release_binary_deploy_bash() -> String {
     format!(
         r#"
-export BITFUN_RELEASE_TAG="{release_tag}"
-export BITFUN_GITHUB_RELEASE_BASE="{RELEASE_BASE}"
-export BITFUN_OPENBITFUN_RELEASE_BASE="{OPENBITFUN_RELEASE_BASE}"
-export BITFUN_PROBE_SECONDS="{probe_seconds}"
-export BITFUN_PROBE_BYTES="{probe_bytes}"
-export BITFUN_HEALTHY_BPS="{healthy_floor}"
-export BITFUN_STALL_BPS="{stall_floor}"
-export BITFUN_STALL_SECONDS="{stall_seconds}"
-# --- begin BitFun relay release-download.sh ---
+export HALO_RELEASE_TAG="{release_tag}"
+export HALO_GITHUB_RELEASE_BASE="{RELEASE_BASE}"
+export HALO_OPENHALO_RELEASE_BASE="{OPENHALO_RELEASE_BASE}"
+export HALO_PROBE_SECONDS="{probe_seconds}"
+export HALO_PROBE_BYTES="{probe_bytes}"
+export HALO_HEALTHY_BPS="{healthy_floor}"
+export HALO_STALL_BPS="{stall_floor}"
+export HALO_STALL_SECONDS="{stall_seconds}"
+# --- begin Halo relay release-download.sh ---
 {release_download}
-# --- end BitFun relay release-download.sh ---
+# --- end Halo relay release-download.sh ---
 "#,
         release_tag = release_tag_for_version(RELEASE_VERSION),
         RELEASE_BASE = RELEASE_BASE,
-        OPENBITFUN_RELEASE_BASE = OPENBITFUN_RELEASE_BASE,
+        OPENHALO_RELEASE_BASE = OPENHALO_RELEASE_BASE,
         probe_seconds = SOURCE_PROBE_SECONDS,
         probe_bytes = SOURCE_PROBE_BYTES,
         healthy_floor = HEALTHY_THROUGHPUT_BYTES_PER_SEC,
@@ -1653,7 +1653,7 @@ async fn verified_release_checksums(
 
     for target in RELEASE_TARGETS {
         let checksum_url = format!(
-            "{RELEASE_BASE}/download/{release_tag}/bitfun-relay-server-{target}.tar.gz.sha256"
+            "{RELEASE_BASE}/download/{release_tag}/halo-relay-server-{target}.tar.gz.sha256"
         );
         let Some(checksum) = fetch_text(&client, &checksum_url).await else {
             continue;
@@ -1665,7 +1665,7 @@ async fn verified_release_checksums(
             &checksum,
             &signature,
             pubkey,
-            &format!("bitfun-relay-server-{target}.tar.gz"),
+            &format!("halo-relay-server-{target}.tar.gz"),
         ) {
             Ok(hash) => hash,
             Err(error) => {
@@ -1697,7 +1697,7 @@ fn verified_checksum_exports(verified: &std::collections::HashMap<String, String
     for target in RELEASE_TARGETS {
         if let Some(hash) = verified.get(target) {
             exports.push_str(&format!(
-                "export BITFUN_EXPECTED_SHA256_{}=\"{hash}\"\n",
+                "export HALO_EXPECTED_SHA256_{}=\"{hash}\"\n",
                 target.replace(['-', '.'], "_").to_uppercase()
             ));
         }
@@ -1719,17 +1719,17 @@ set -euo pipefail
 {helpers}
 {sync}
 {verified_checksums}{release_binary_deploy}
-export DOCKER_CONFIG="${{DOCKER_CONFIG:-$HOME/.bitfun/docker-config}}"
+export DOCKER_CONFIG="${{DOCKER_CONFIG:-$HOME/.halo-studio/docker-config}}"
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
 export BUILDKIT_PROGRESS=plain
-BITFUN_DOCKER_MODE="${{BITFUN_DOCKER_MODE:-direct}}"
+HALO_DOCKER_MODE="${{HALO_DOCKER_MODE:-direct}}"
 # Repair DOCKER_CONFIG unconditionally: when the driver already resolved a
-# non-direct mode, bitfun_resolve_docker_mode (which normally does this) is
+# non-direct mode, halo_resolve_docker_mode (which normally does this) is
 # skipped below, and the docker CLI then fails on an unreadable config.json.
-bitfun_fix_docker_config
-if [ "$BITFUN_DOCKER_MODE" = "direct" ] && ! docker info >/dev/null 2>&1; then
-  bitfun_resolve_docker_mode
+halo_fix_docker_config
+if [ "$HALO_DOCKER_MODE" = "direct" ] && ! docker info >/dev/null 2>&1; then
+  halo_resolve_docker_mode
 fi
 # Prefer the port staged by the desktop wizard; fall back to embedded default.
 PORT_FILE="$HOME/{DEPLOY_STATE_DIR}/relay.port"
@@ -1739,10 +1739,10 @@ fi
 RELAY_PORT="${{RELAY_PORT:-{port}}}"
 export RELAY_PORT
 echo ">>> Using RELAY_PORT=$RELAY_PORT"
-export BITFUN_REPO_GIT_URL="{REPO_GIT_URL}"
-export BITFUN_REPO_TARBALL_URL="{REPO_TARBALL_URL}"
-bitfun_mirror_init
-if bitfun_try_release_deploy; then
+export HALO_REPO_GIT_URL="{REPO_GIT_URL}"
+export HALO_REPO_TARBALL_URL="{REPO_TARBALL_URL}"
+halo_mirror_init
+if halo_try_release_deploy; then
   echo {TASK_DONE_MARKER}
   exit 0
 fi
@@ -1758,7 +1758,7 @@ if [ "${{SRC_FREE_KB:-0}}" -lt {source_build_free_kb} ]; then
   exit 1
 fi
 SRC="$HOME/{SOURCE_DIR}"
-bitfun_sync_source "$SRC"
+halo_sync_source "$SRC"
 cd "$SRC/src/apps/relay-server"
 # Persist for compose interpolation (and subsequent start/restart scripts).
 printf 'RELAY_PORT=%s\n' "$RELAY_PORT" > .env
@@ -1777,7 +1777,7 @@ if [ "${{RELAY_CARGO_BUILD_JOBS:-}}" = "" ] && [ "$MEM_KB" -lt 2097152 ]; then
   echo ">>> Low memory detected; using RELAY_CARGO_BUILD_JOBS=1"
 fi
 echo ">>> Building and starting the relay container on port $RELAY_PORT (this can take a while)..."
-bitfun_run_deploy_sh "$(pwd)"
+halo_run_deploy_sh "$(pwd)"
 echo {TASK_DONE_MARKER}
 "#,
         helpers = helpers,
@@ -1809,8 +1809,8 @@ mod tests {
     #[test]
     fn embedded_mirror_script_exposes_init_and_cn_defaults() {
         assert!(
-            RELAY_MIRROR_SH.contains("bitfun_mirror_init"),
-            "mirror.sh must define bitfun_mirror_init"
+            RELAY_MIRROR_SH.contains("halo_mirror_init"),
+            "mirror.sh must define halo_mirror_init"
         );
         assert!(
             RELAY_MIRROR_SH.contains("rsproxy.cn"),
@@ -1821,28 +1821,28 @@ mod tests {
             "mirror.sh must default GitHub proxy"
         );
         assert!(
-            RELAY_MIRROR_SH.contains("bitfun_mirror_country_via_bash_tcp"),
+            RELAY_MIRROR_SH.contains("halo_mirror_country_via_bash_tcp"),
             "mirror.sh must keep a country fallback for minimal hosts without curl"
         );
         assert!(
-            RELAY_MIRROR_SH.contains("bitfun_mirror_restore_host"),
+            RELAY_MIRROR_SH.contains("halo_mirror_restore_host"),
             "mirror.sh must support switching a managed host back to global mode"
         );
         assert!(
-            !RELAY_MIRROR_SH.contains("data[\"bitfun-cn-mirror\"]"),
+            !RELAY_MIRROR_SH.contains("data[\"halo-cn-mirror\"]"),
             "daemon.json must contain only dockerd-supported directives"
         );
         assert!(
-            !RELAY_MIRROR_SH.contains("bitfun_mirror_apply_cargo_config"),
+            !RELAY_MIRROR_SH.contains("halo_mirror_apply_cargo_config"),
             "relay deploy must not rewrite the SSH user's global Cargo config"
         );
         let helpers = prepare_helpers_bash();
         assert!(
-            helpers.contains("bitfun_mirror_init"),
+            helpers.contains("halo_mirror_init"),
             "prepare helpers must embed mirror.sh"
         );
         assert!(
-            helpers.contains("bitfun_run_deploy_sh"),
+            helpers.contains("halo_run_deploy_sh"),
             "prepare helpers must keep deploy runner"
         );
     }
@@ -2005,32 +2005,32 @@ mod tests {
     }
 
     /// The Docker-install task runs as root with the SSH user's HOME, so it
-    /// creates ~/.bitfun/docker-config root-owned. Left that way, the next
+    /// creates ~/.halo-studio/docker-config root-owned. Left that way, the next
     /// unprivileged deploy hits `config.json: permission denied` and the docker
     /// CLI mis-dispatches the runtime image build.
     #[test]
     fn docker_config_ownership_is_repaired_across_privilege_levels() {
         let helpers = prepare_helpers_bash();
         assert!(
-            helpers.contains("bitfun_fix_docker_config"),
+            helpers.contains("halo_fix_docker_config"),
             "helpers must expose a DOCKER_CONFIG repair"
         );
 
         let install = install_docker_body_script();
         assert!(
-            install.contains(r#"chown -R "$DEPLOY_USER" "$HOME/.bitfun""#),
-            "root install must hand ~/.bitfun back to the SSH user"
+            install.contains(r#"chown -R "$DEPLOY_USER" "$HOME/.halo-studio""#),
+            "root install must hand ~/.halo-studio back to the SSH user"
         );
 
-        // The driver exports BITFUN_DOCKER_MODE, so the body skips
-        // bitfun_resolve_docker_mode (which is the other caller of the repair)
+        // The driver exports HALO_DOCKER_MODE, so the body skips
+        // halo_resolve_docker_mode (which is the other caller of the repair)
         // for every non-direct mode. It has to repair the config itself.
         let body = deploy_body_script_with_checksums(9700, "");
         let repair = body
-            .find("bitfun_fix_docker_config")
+            .find("halo_fix_docker_config")
             .expect("deploy body must repair DOCKER_CONFIG");
         let mode_check = body
-            .find(r#"if [ "$BITFUN_DOCKER_MODE" = "direct" ]"#)
+            .find(r#"if [ "$HALO_DOCKER_MODE" = "direct" ]"#)
             .expect("deploy body must keep the direct-mode probe");
         assert!(
             repair < mode_check,
@@ -2051,7 +2051,7 @@ mod tests {
             "sg path must not re-split arguments through an unquoted $*"
         );
         assert!(
-            helpers.contains("bitfun_shell_join"),
+            helpers.contains("halo_shell_join"),
             "sg path must quote each argument"
         );
     }
@@ -2062,7 +2062,7 @@ mod tests {
         let helpers = to_unix_script(&prepare_helpers_bash());
         let script = format!(
             r#"{helpers}
-sh -c "$(bitfun_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '*')"
+sh -c "$(halo_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '*')"
 "#
         );
         let output = std::process::Command::new("bash")
@@ -2082,7 +2082,7 @@ sh -c "$(bitfun_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '
         );
     }
 
-    /// `bitfun_run_deploy_sh` is reached only after `bitfun_try_release_deploy`
+    /// `halo_run_deploy_sh` is reached only after `halo_try_release_deploy`
     /// failed, and `deploy.sh`'s own first step is that same release path.
     /// Without `--build-from-source` the whole published-binary attempt —
     /// download, image build, container start — visibly ran a second time before
@@ -2091,8 +2091,8 @@ sh -c "$(bitfun_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '
     fn source_build_fallback_does_not_retry_the_release_path() {
         let helpers = prepare_helpers_bash();
         let runner = helpers
-            .split_once("bitfun_run_deploy_sh() {")
-            .expect("helpers must define bitfun_run_deploy_sh")
+            .split_once("halo_run_deploy_sh() {")
+            .expect("helpers must define halo_run_deploy_sh")
             .1;
         // Check invocation sites, not a substring count: the surrounding prose
         // mentions deploy.sh too.
@@ -2147,7 +2147,7 @@ sh -c "$(bitfun_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '
             .expect("health failure branch")
             .1;
         let logs = failure
-            .split_once("logs --tail 40 bitfun-relay")
+            .split_once("logs --tail 40 halo-relay")
             .expect("failure branch must dump container logs")
             .1;
         assert!(
@@ -2163,8 +2163,8 @@ sh -c "$(bitfun_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '
     #[test]
     fn sync_source_uses_mirror_url_env_with_upstream_fallback() {
         let sync = sync_source_bash();
-        assert!(sync.contains("BITFUN_GITHUB_GIT_URL"));
-        assert!(sync.contains("BITFUN_GITHUB_TARBALL_URL"));
+        assert!(sync.contains("HALO_GITHUB_GIT_URL"));
+        assert!(sync.contains("HALO_GITHUB_TARBALL_URL"));
         assert!(sync.contains("retrying upstream"));
     }
 
@@ -2180,18 +2180,18 @@ sh -c "$(bitfun_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '
     #[test]
     fn release_binary_deploy_verifies_assets_and_preserves_container_contract() {
         let script = release_binary_deploy_bash();
-        assert!(script.contains("bitfun-relay-server-${target}.tar.gz"));
+        assert!(script.contains("halo-relay-server-${target}.tar.gz"));
         assert!(script.contains("sha256sum -c"));
         assert!(script.contains("https://openbitfun.com/release"));
         assert!(script.contains("no Rust/Cargo compilation"));
-        assert!(script.contains("--name bitfun-relay"));
+        assert!(script.contains("--name halo-relay"));
         assert!(script.contains("relay-server_relay-db:/app/data"));
         assert!(script.contains("/app/relay-admin"));
         assert!(script.contains("falling back to source build"));
-        assert!(script.contains("bitfun_restore_previous_relay"));
+        assert!(script.contains("halo_restore_previous_relay"));
         // Wizard-close must not leave the relay stopped under its backup name.
-        assert!(script.contains("trap 'bitfun_restore_previous_relay"));
-        assert!(script.contains("name=^bitfun-relay-before-release-"));
+        assert!(script.contains("trap 'halo_restore_previous_relay"));
+        assert!(script.contains("name=^halo-relay-before-release-"));
         // Port publishing keeps compose's configurable bind address.
         assert!(script
             .contains("${RELAY_HOST_BIND_IP:-0.0.0.0}:${RELAY_PORT:-9700}:${RELAY_PORT:-9700}"));
@@ -2203,7 +2203,7 @@ sh -c "$(bitfun_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '
         assert!(script.contains("--speed-time"));
         assert!(script.contains("-C -"));
         assert!(script.contains("--retry-max-time"));
-        assert!(script.contains("bitfun_probe_source"));
+        assert!(script.contains("halo_probe_source"));
         assert!(script.contains("sort -rn -k1,1"));
         // The mirror URL must come from the mirror's manifest, never a pinned
         // /<version>/ path that 404s for older Desktop builds.
@@ -2211,10 +2211,10 @@ sh -c "$(bitfun_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '
         assert!(!script.contains("release/0.2"));
         // Checksums bind to a canonical GitHub URL, so a compromised mirror or
         // third-party proxy cannot serve matching bytes and checksum together.
-        assert!(script.contains("bitfun_canonical_checksum_url"));
+        assert!(script.contains("halo_canonical_checksum_url"));
         // The shared file backs both this path and deploy.sh.
         assert!(script.contains("release-download.sh"));
-        assert!(script.contains("export BITFUN_RELEASE_TAG=\"v0.2"));
+        assert!(script.contains("export HALO_RELEASE_TAG=\"v0.2"));
     }
 
     /// `bash -n` only proves the generated script parses. This runs its source
@@ -2225,7 +2225,7 @@ sh -c "$(bitfun_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '
     /// stands between a hostile mirror and the user's server.
     const FIXTURE_PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgRTNFMDg3NENFQzFDMjJDMwpSV1RESWh6c1RJZmc0MXcyR3dpZWkwek5ES2FMWW05ZFFWcEVXTlEvVWxweXQybWJTMkpFMVUyTQo=";
     const FIXTURE_SIGNATURE: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIG1pbmlzaWduIHNlY3JldCBrZXkKUlVUREloenNUSWZnNDBMTitwb25aT3RCVy9VYmJtNWhkR1poM0lCb3IwUDBKaVZmZmM1cFJaNlZSNUpaSzNUUm1yWWpYMXFLQ2svWTdZUDhHdkRZT3YvanVoZlpnZmhyWEFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0OTUxOTM1CWZpbGU6YXJjaGl2ZS50YXIuZ3oJaGFzaGVkCjhWL21EUVAwZGdlZXVNU1lxWlpsOWdFSGUwOTJQTk9yRG1BMUV6ZHNQOUlEYkcyT1dneTFsQ1puUDBJaFIwQnJpMFBCeENRcUdDR2dpb0l0UGtSMUN3PT0K";
-    const FIXTURE_DATA: &[u8] = b"hello-bitfun\n";
+    const FIXTURE_DATA: &[u8] = b"hello-halo\n";
 
     #[test]
     fn checksum_signature_verifies_and_rejects_tampering() {
@@ -2241,7 +2241,7 @@ sh -c "$(bitfun_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '
         verified.insert("x86_64-unknown-linux-gnu".to_string(), "a".repeat(64));
         let exports = verified_checksum_exports(&verified);
         assert!(exports.contains(&format!(
-            "export BITFUN_EXPECTED_SHA256_X86_64_UNKNOWN_LINUX_GNU=\"{}\"",
+            "export HALO_EXPECTED_SHA256_X86_64_UNKNOWN_LINUX_GNU=\"{}\"",
             "a".repeat(64)
         )));
         // No entry for a target we could not verify: the remote must fall back
@@ -2250,8 +2250,8 @@ sh -c "$(bitfun_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '
 
         // The generated script must consume exactly those names.
         let script = deploy_body_script_with_checksums(9700, &exports);
-        assert!(script.contains("BITFUN_EXPECTED_SHA256_X86_64_UNKNOWN_LINUX_GNU"));
-        assert!(script.contains("BITFUN_EXPECTED_SHA256_AARCH64_UNKNOWN_LINUX_GNU"));
+        assert!(script.contains("HALO_EXPECTED_SHA256_X86_64_UNKNOWN_LINUX_GNU"));
+        assert!(script.contains("HALO_EXPECTED_SHA256_AARCH64_UNKNOWN_LINUX_GNU"));
     }
 
     /// Without a trust root there is nothing to verify against, so no hash may
@@ -2326,15 +2326,15 @@ sh -c "$(bitfun_shell_join printf '%s\n' 'a b' "it's" '{{{{.State.Running}}}}' '
                 r#"
 set -euo pipefail
 export HOME="$2/home"
-export BITFUN_DOCKER_DAEMON_JSON="$2/etc/docker/daemon.json"
+export HALO_DOCKER_DAEMON_JSON="$2/etc/docker/daemon.json"
 mkdir -p "$HOME"
 source "$1"
-bitfun_mirror_priv() { "$@"; }
-bitfun_mirror_backup_file() { :; }
-bitfun_mirror_restart_docker_if_needed() { :; }
-bitfun_mirror_write_docker_daemon_json \
+halo_mirror_priv() { "$@"; }
+halo_mirror_backup_file() { :; }
+halo_mirror_restart_docker_if_needed() { :; }
+halo_mirror_write_docker_daemon_json \
   "https://docker.1ms.run https://dockerproxy.net"
-python3 - "$BITFUN_DOCKER_DAEMON_JSON" <<'PY'
+python3 - "$HALO_DOCKER_DAEMON_JSON" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as f:
     data = json.load(f)
@@ -2344,10 +2344,10 @@ assert data["registry-mirrors"] == [
     "https://docker.1ms.run",
     "https://dockerproxy.net",
 ]
-assert "bitfun-cn-mirror" not in data
+assert "halo-cn-mirror" not in data
 PY
-bitfun_mirror_remove_docker_daemon
-python3 - "$BITFUN_DOCKER_DAEMON_JSON" <<'PY'
+halo_mirror_remove_docker_daemon
+python3 - "$HALO_DOCKER_DAEMON_JSON" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as f:
     data = json.load(f)

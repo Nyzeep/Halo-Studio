@@ -17,10 +17,10 @@ use std::sync::{
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast::error::TryRecvError;
 
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     AgentLocalCommandTurnRecordRequest, AgentSessionUsageRequest, SessionUsageReport,
 };
-use bitfun_events::AgenticEvent;
+use halo_events::AgenticEvent;
 use resize::ResizeRedrawState;
 
 use crate::actions::{
@@ -52,10 +52,10 @@ use crate::ui::theme::{
 };
 use crate::ui::theme_selector::ThemeItem;
 use crate::ui::{init_terminal, restore_terminal, TerminalGuard};
-use bitfun_core::agentic::agents::{
+use halo_core::agentic::agents::{
     get_agent_registry, AgentInfo, SubAgentSource, SubagentListScope, SubagentQueryContext,
 };
-use bitfun_core::agentic::tools::implementations::skills::{
+use halo_core::agentic::tools::implementations::skills::{
     mode_overrides::{
         load_project_mode_skills_document_local, save_project_mode_skills_document_local,
         set_mode_skill_disabled_in_document, set_user_mode_skill_state,
@@ -63,11 +63,11 @@ use bitfun_core::agentic::tools::implementations::skills::{
     registry::SkillRegistry,
     ModeSkillInfo, SkillInfo,
 };
-use bitfun_core::external_hooks::{
+use halo_core::external_hooks::{
     ExternalHookCatalogSnapshotV1, ExternalHookMatcherSummary, ExternalHookNativeActivation,
     ExternalHookProjectionStatus,
 };
-use bitfun_core::external_sources::{
+use halo_core::external_sources::{
     apply_external_source_control_action, choose_external_subagent_conflict,
     expand_external_prompt_command, external_source_conflict_choices, external_source_snapshot,
     get_external_source_control_snapshot, native_prompt_command_conflict_key,
@@ -82,18 +82,18 @@ use bitfun_core::external_sources::{
     ExternalToolCatalogEntry, ExternalToolRuntimeKind, NativePromptCommandDescriptor,
     PromptCommandAvailability, EXTERNAL_SOURCE_CONTROL_SCHEMA_V1,
 };
-use bitfun_core::native_hooks::{
+use halo_core::native_hooks::{
     overview as native_hook_overview, NativeHookOverview, NativeHookRuleView,
 };
-use bitfun_core::product_runtime::CoreAgentRuntimeCompatibility;
-use bitfun_core::service::config::GlobalConfigManager;
-use bitfun_core::service::session_usage::render_usage_report_markdown;
-use bitfun_product_domains::external_hook_import::{
+use halo_core::product_runtime::CoreAgentRuntimeCompatibility;
+use halo_core::service::config::GlobalConfigManager;
+use halo_core::service::session_usage::render_usage_report_markdown;
+use halo_product_domains::external_hook_import::{
     ExternalHookImportApplyOutcomeV1, ExternalHookImportApplyRequestV1,
     ExternalHookImportMutationV1, ExternalHookImportPlanV1, ExternalHookImportSnapshotV1,
     EXTERNAL_HOOK_IMPORT_SCHEMA_V1,
 };
-use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_sources::{
     ExternalSourceHealth, ExternalSourceScope, SourceKey,
 };
 
@@ -150,15 +150,15 @@ enum PendingMcpOp {
 enum PendingMcpTask {
     Toggle {
         server_id: String,
-        handle: tokio::task::JoinHandle<bitfun_core::util::errors::BitFunResult<()>>,
+        handle: tokio::task::JoinHandle<halo_core::util::errors::HaloResult<()>>,
     },
     Add {
         name: String,
-        handle: tokio::task::JoinHandle<bitfun_core::util::errors::BitFunResult<()>>,
+        handle: tokio::task::JoinHandle<halo_core::util::errors::HaloResult<()>>,
     },
     Delete {
         server_id: String,
-        handle: tokio::task::JoinHandle<bitfun_core::util::errors::BitFunResult<()>>,
+        handle: tokio::task::JoinHandle<halo_core::util::errors::HaloResult<()>>,
     },
     External {
         item_id: String,
@@ -232,7 +232,7 @@ pub(crate) struct ChatMode {
         Receiver<
             std::result::Result<
                 HookManagementResult,
-                bitfun_core::external_sources::ExternalSourceOperationError,
+                halo_core::external_sources::ExternalSourceOperationError,
             >,
         >,
     >,

@@ -1,10 +1,10 @@
-use bitfun_external_sources::{ExternalSubagentCoordinator, ExternalSubagentDiscoveryResult};
-use bitfun_product_domains::external_sources::{
+use halo_external_sources::{ExternalSubagentCoordinator, ExternalSubagentDiscoveryResult};
+use halo_product_domains::external_sources::{
     EcosystemId, ExecutionDomainId, ExternalSourceContext, ExternalSourceHealth,
     ExternalSourceProviderError, ExternalSourceRecord, ExternalSourceScope, ExternalWatchRoot,
     SourceKey,
 };
-use bitfun_product_domains::external_subagents::{
+use halo_product_domains::external_subagents::{
     external_subagent_candidate_id, ExternalSubagentBehaviorVersion,
     ExternalSubagentCompatibilityState, ExternalSubagentContributionId,
     ExternalSubagentContributionRole, ExternalSubagentDefinition, ExternalSubagentDiscoveryInput,

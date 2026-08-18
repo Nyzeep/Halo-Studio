@@ -2,11 +2,11 @@ use std::path::{Path, PathBuf};
 
 pub const USER_SKILL_KEY_PREFIX: &str = "user";
 pub const PROJECT_SKILL_KEY_PREFIX: &str = "project";
-pub const BITFUN_USER_SKILL_SLOT: &str = "bitfun";
-pub const BITFUN_SYSTEM_SKILL_SLOT: &str = "bitfun-system";
-pub const BITFUN_SYSTEM_SKILL_DIR: &str = ".system";
-pub const BITFUN_SKILL_SOURCE_ID: &str = "bitfun";
-pub const BITFUN_SKILL_SOURCE_LABEL: &str = "BitFun";
+pub const HALO_USER_SKILL_SLOT: &str = "halo";
+pub const HALO_SYSTEM_SKILL_SLOT: &str = "halo-system";
+pub const HALO_SYSTEM_SKILL_DIR: &str = ".system";
+pub const HALO_SKILL_SOURCE_ID: &str = "halo";
+pub const HALO_SKILL_SOURCE_LABEL: &str = "Halo";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SkillRootSpec {
@@ -21,11 +21,11 @@ pub struct SkillRootSpec {
 
 pub const PROJECT_SKILL_ROOTS: &[SkillRootSpec] = &[
     SkillRootSpec {
-        parent: ".bitfun",
+        parent: ".halo-studio",
         subdir: "skills",
-        slot: "bitfun",
-        source_id: BITFUN_SKILL_SOURCE_ID,
-        source_label: BITFUN_SKILL_SOURCE_LABEL,
+        slot: "halo",
+        source_id: HALO_SKILL_SOURCE_ID,
+        source_label: HALO_SKILL_SOURCE_LABEL,
     },
     SkillRootSpec {
         parent: ".claude",

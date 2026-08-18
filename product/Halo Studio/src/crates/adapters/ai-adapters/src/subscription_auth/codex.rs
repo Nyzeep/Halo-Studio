@@ -200,7 +200,7 @@ pub(crate) async fn begin_login(
     Ok(StartedLogin {
         authorization_url,
         user_code: None,
-        instructions: "Complete authorization in your browser, then return to BitFun.".to_string(),
+        instructions: "Complete authorization in your browser, then return to Halo.".to_string(),
         runner: Box::pin(runner),
     })
 }
@@ -254,10 +254,10 @@ async fn ensure_fresh() -> Result<(String, Option<String>, i64)> {
 }
 
 async fn resolve_codex_cli_version() -> Option<String> {
-    let check = bitfun_services_core::system::check_command("codex");
+    let check = halo_services_core::system::check_command("codex");
     let command = check.path.as_deref()?;
     let args = vec!["--version".to_string()];
-    let output = bitfun_services_core::system::run_command(command, &args, None, None)
+    let output = halo_services_core::system::run_command(command, &args, None, None)
         .await
         .ok()?;
     if !output.success {

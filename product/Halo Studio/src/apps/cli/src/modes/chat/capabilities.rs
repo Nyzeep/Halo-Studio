@@ -59,7 +59,7 @@ impl ChatMode {
 
         if skills.is_empty() {
             chat_state.add_system_message(format!(
-                "No enabled skills found for agent mode '{}'. Add skills in .bitfun/skills/, .cursor/skills/, or ~/.cursor/skills/, or enable built-in skills for this mode.",
+                "No enabled skills found for agent mode '{}'. Add skills in .halo-studio/skills/, .cursor/skills/, or ~/.cursor/skills/, or enable built-in skills for this mode.",
                 self.agent_type
             ));
             return;

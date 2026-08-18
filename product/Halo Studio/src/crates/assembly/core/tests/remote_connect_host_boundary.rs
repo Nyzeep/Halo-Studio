@@ -1,5 +1,5 @@
-use bitfun_core::service::remote_connect::embedded_relay_host::EmbeddedRelayHost;
-use bitfun_core::service::remote_connect::{
+use halo_core::service::remote_connect::embedded_relay_host::EmbeddedRelayHost;
+use halo_core::service::remote_connect::{
     ConnectionMethod, RemoteConnectConfig, RemoteConnectService,
 };
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

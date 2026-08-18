@@ -731,873 +731,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bitfun-acp"
-version = "0.2.14"
-dependencies = [
- "agent-client-protocol",
- "async-trait",
- "bitfun-agent-runtime",
- "bitfun-agent-tools",
- "bitfun-core",
- "bitfun-core-types",
- "bitfun-events",
- "chrono",
- "dashmap",
- "futures",
- "log",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tokio-util",
- "uuid",
-]
-
-[[package]]
-name = "bitfun-agent-runtime"
-version = "0.2.14"
-dependencies = [
- "async-trait",
- "bitfun-agent-stream",
- "bitfun-agent-tools",
- "bitfun-core-types",
- "bitfun-events",
- "bitfun-harness",
- "bitfun-runtime-ports",
- "bitfun-runtime-services",
- "dashmap",
- "hex",
- "log",
- "regex",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "thiserror 2.0.19",
- "tokio",
- "tokio-util",
- "uuid",
-]
-
-[[package]]
-name = "bitfun-agent-runtime-ipc"
-version = "0.2.14"
-dependencies = [
- "async-trait",
- "bitfun-events",
- "bitfun-product-domains",
- "bitfun-runtime-ports",
- "dunce",
- "fs2",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror 2.0.19",
- "tokio",
- "uuid",
- "windows 0.61.3",
-]
-
-[[package]]
-name = "bitfun-agent-stream"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "async-trait",
- "bitfun-agent-tools",
- "bitfun-core-types",
- "bitfun-events",
- "bitfun-tool-call-jsonrepair",
- "futures",
- "log",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "uuid",
-]
-
-[[package]]
-name = "bitfun-agent-tools"
-version = "0.2.14"
-dependencies = [
- "async-trait",
- "bitfun-core-types",
- "bitfun-runtime-ports",
- "indexmap 2.14.0",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "bitfun-ai-adapters"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "apple-native-keyring-store",
- "async-trait",
- "axum",
- "base64 0.22.1",
- "bitfun-agent-stream",
- "bitfun-core-types",
- "bitfun-events",
- "bitfun-services-core",
- "chrono",
- "dirs 6.0.0",
- "eventsource-stream",
- "fs2",
- "futures",
- "keyring-core",
- "libc",
- "log",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "urlencoding",
- "uuid",
- "windows-native-keyring-store",
- "zbus-secret-service-keyring-store",
-]
-
-[[package]]
-name = "bitfun-claude-code-adapter"
-version = "0.2.14"
-dependencies = [
- "bitfun-product-domains",
- "bitfun-services-core",
- "bitfun-static-hook-support",
- "dirs 6.0.0",
- "dunce",
- "hex",
- "regex",
- "serde_json",
- "serde_yaml",
- "sha2",
- "tempfile",
- "url",
-]
-
-[[package]]
-name = "bitfun-cli"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "arboard",
- "async-trait",
- "base64 0.22.1",
- "bitfun-acp",
- "bitfun-agent-runtime",
- "bitfun-agent-runtime-ipc",
- "bitfun-agent-tools",
- "bitfun-core",
- "bitfun-events",
- "bitfun-product-domains",
- "bitfun-runtime-ports",
- "bitfun-runtime-services",
- "bitfun-services-core",
- "chrono",
- "clap",
- "crossterm",
- "dashmap",
- "dirs 6.0.0",
- "dunce",
- "flate2",
- "futures-util",
- "hex",
- "libc",
- "minisign-verify",
- "once_cell",
- "portable-pty 0.8.1",
- "portable-pty 0.9.0",
- "pulldown-cmark",
- "ratatui",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "similar",
- "syntect",
- "syntect-tui",
- "tar",
- "tempfile",
- "tokio",
- "toml 0.9.12+spec-1.1.0",
- "tracing",
- "tracing-subscriber",
- "unicode-width 0.2.0",
- "uuid",
- "windows 0.61.3",
-]
-
-[[package]]
-name = "bitfun-codex-adapter"
-version = "0.2.14"
-dependencies = [
- "bitfun-product-domains",
- "bitfun-static-hook-support",
- "dirs 6.0.0",
- "dunce",
- "hex",
- "serde_json",
- "sha2",
- "tempfile",
- "toml 0.9.12+spec-1.1.0",
- "url",
-]
-
-[[package]]
-name = "bitfun-core"
-version = "0.2.14"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "async-trait",
- "axum",
- "base64 0.22.1",
- "bitfun-agent-runtime",
- "bitfun-agent-stream",
- "bitfun-agent-tools",
- "bitfun-ai-adapters",
- "bitfun-claude-code-adapter",
- "bitfun-codex-adapter",
- "bitfun-core-types",
- "bitfun-events",
- "bitfun-external-sources",
- "bitfun-harness",
- "bitfun-opencode-adapter",
- "bitfun-pi-rpc-adapter",
- "bitfun-plugin-runtime-client",
- "bitfun-product-capabilities",
- "bitfun-product-domains",
- "bitfun-runtime-ports",
- "bitfun-runtime-services",
- "bitfun-services-core",
- "bitfun-services-integrations",
- "bitfun-tool-packs",
- "bitfun-transport",
- "chrono",
- "chrono-tz",
- "cron",
- "dashmap",
- "dirs 6.0.0",
- "dunce",
- "eventsource-stream",
- "filetime",
- "flate2",
- "fluent-bundle",
- "fs2",
- "futures",
- "git2",
- "glob",
- "globset",
- "hex",
- "image 0.25.10",
- "include_dir",
- "indexmap 2.14.0",
- "log",
- "md5",
- "notify",
- "rand 0.8.7",
- "regex",
- "reqwest",
- "rmcp",
- "rusqlite",
- "russh",
- "rustls",
- "rustls-native-certs",
- "schannel",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "similar",
- "sse-stream",
- "tauri",
- "tempfile",
- "terminal-core",
- "thiserror 2.0.19",
- "tokio",
- "tokio-stream",
- "tokio-tungstenite",
- "tokio-util",
- "tool-runtime",
- "tower-http",
- "unic-langid",
- "urlencoding",
- "uuid",
- "win32job",
-]
-
-[[package]]
-name = "bitfun-core-types"
-version = "0.2.14"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "bitfun-desktop"
-version = "0.2.14"
-dependencies = [
- "alloc-no-stdlib",
- "alloc-stdlib",
- "anyhow",
- "async-trait",
- "atspi",
- "axum",
- "base64 0.22.1",
- "bitflags 2.11.1",
- "bitfun-acp",
- "bitfun-agent-runtime",
- "bitfun-agent-tools",
- "bitfun-core",
- "bitfun-core-types",
- "bitfun-events",
- "bitfun-product-domains",
- "bitfun-relay-service",
- "bitfun-runtime-ports",
- "bitfun-services-integrations",
- "bitfun-transport",
- "bitfun-webdriver",
- "brotli-decompressor",
- "bzip2 0.5.2",
- "chrono",
- "core-foundation 0.9.4",
- "core-graphics 0.23.2",
- "dark-light",
- "dirs 6.0.0",
- "dispatch",
- "enigo",
- "flate2",
- "foreign-types 0.5.0",
- "futures",
- "ignore",
- "image 0.25.10",
- "keepawake",
- "leptess",
- "libc",
- "log",
- "objc2 0.6.4",
- "objc2-app-kit",
- "objc2-foundation",
- "objc2-vision",
- "regex",
- "reqwest",
- "resvg",
- "screenshots",
- "semver",
- "serde",
- "serde_json",
- "sha1",
- "similar",
- "tar",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-dialog",
- "tauri-plugin-fs",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-log",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "tauri-plugin-single-instance",
- "tauri-plugin-updater",
- "tauri-plugin-window-state",
- "tempfile",
- "thiserror 2.0.19",
- "time",
- "tokio",
- "tower-http",
- "urlencoding",
- "uuid",
- "win32job",
- "windows 0.61.3",
- "windows-core 0.61.2",
- "xz2",
- "zip",
- "zstd",
-]
-
-[[package]]
-name = "bitfun-events"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "async-trait",
- "bitfun-core-types",
- "chrono",
- "log",
- "serde",
- "serde_json",
- "uuid",
-]
-
-[[package]]
-name = "bitfun-external-sources"
-version = "0.2.14"
-dependencies = [
- "bitfun-product-domains",
- "futures",
- "log",
- "tokio",
-]
-
-[[package]]
-name = "bitfun-harness"
-version = "0.2.14"
-dependencies = [
- "async-trait",
- "thiserror 2.0.19",
- "tokio",
-]
-
-[[package]]
-name = "bitfun-miniapp-market-server"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "axum",
- "bitfun-miniapp-market-service",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "bitfun-miniapp-market-service"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "axum",
- "base64 0.22.1",
- "bitfun-product-domains",
- "chrono",
- "hex",
- "image 0.25.10",
- "rand 0.8.7",
- "reqwest",
- "semver",
- "serde",
- "serde_json",
- "sha2",
- "similar",
- "sqlx",
- "tempfile",
- "thiserror 2.0.19",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "url",
- "urlencoding",
- "uuid",
- "zip",
-]
-
-[[package]]
-name = "bitfun-opencode-adapter"
-version = "0.2.14"
-dependencies = [
- "async-trait",
- "bitfun-plugin-runtime-client",
- "bitfun-product-domains",
- "bitfun-runtime-ports",
- "bitfun-services-core",
- "bitfun-services-integrations",
- "bitfun-static-hook-support",
- "dirs 6.0.0",
- "dunce",
- "hex",
- "oxc",
- "regex",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "tempfile",
- "thiserror 2.0.19",
- "tokio",
- "url",
- "urlencoding",
-]
-
-[[package]]
-name = "bitfun-page-function-runtime"
-version = "0.2.14"
-dependencies = [
- "rquickjs",
- "serde",
- "serde_json",
- "thiserror 2.0.19",
- "tokio",
-]
-
-[[package]]
-name = "bitfun-pi-rpc-adapter"
-version = "0.2.14"
-dependencies = [
- "async-trait",
- "bitfun-runtime-ports",
- "bitfun-services-core",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "bitfun-plugin-runtime-client"
-version = "0.2.14"
-dependencies = [
- "async-trait",
- "bitfun-runtime-ports",
- "tokio",
-]
-
-[[package]]
-name = "bitfun-product-capabilities"
-version = "0.2.14"
-dependencies = [
- "async-trait",
- "bitfun-agent-runtime",
- "bitfun-harness",
- "bitfun-runtime-ports",
- "bitfun-runtime-services",
- "bitfun-tool-packs",
- "tokio",
-]
-
-[[package]]
-name = "bitfun-product-domains"
-version = "0.2.14"
-dependencies = [
- "dirs 6.0.0",
- "hex",
- "hmac",
- "log",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "which 8.0.5",
-]
-
-[[package]]
-name = "bitfun-relay-server"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "axum",
- "bitfun-relay-service",
- "chrono",
- "clap",
- "rpassword",
- "serde_json",
- "tokio",
- "tower-http",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "bitfun-relay-service"
-version = "0.2.14"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "argon2",
- "axum",
- "base64 0.22.1",
- "bitfun-page-function-runtime",
- "chrono",
- "dashmap",
- "futures-util",
- "libsqlite3-sys",
- "rand 0.8.7",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "subtle",
- "tempfile",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "bitfun-runtime-ports"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "async-trait",
- "bitfun-core-types",
- "bitfun-product-domains",
- "serde",
- "serde_json",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "bitfun-runtime-services"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "async-trait",
- "bitfun-events",
- "bitfun-runtime-ports",
- "log",
- "serde",
- "serde_json",
- "thiserror 2.0.19",
- "tokio",
-]
-
-[[package]]
-name = "bitfun-sdk-host"
-version = "0.2.14"
-dependencies = [
- "async-trait",
- "bitfun-agent-runtime",
- "bitfun-core-types",
- "bitfun-events",
- "bitfun-runtime-ports",
- "futures-util",
- "serde",
- "serde_json",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "bitfun-sdk-host-app"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "async-trait",
- "bitfun-agent-runtime",
- "bitfun-core",
- "bitfun-sdk-host",
- "futures-util",
- "rustls",
- "serde_json",
- "tempfile",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "bitfun-server"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "axum",
- "base64 0.22.1",
- "bitfun-core",
- "chrono",
- "clap",
- "dirs 6.0.0",
- "futures-util",
- "serde",
- "serde_json",
- "tokio",
- "tower-http",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "bitfun-services-core"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.22.1",
- "bitfun-core-types",
- "bitfun-events",
- "bitfun-runtime-ports",
- "chrono",
- "dunce",
- "filetime",
- "fs2",
- "git2",
- "ignore",
- "libc",
- "log",
- "notify",
- "regex",
- "rusqlite",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "similar",
- "tempfile",
- "thiserror 2.0.19",
- "tokio",
- "which 8.0.5",
- "win32job",
- "windows 0.61.3",
- "zip",
-]
-
-[[package]]
-name = "bitfun-services-integrations"
-version = "0.2.14"
-dependencies = [
- "aes",
- "aes-gcm",
- "anyhow",
- "apple-native-keyring-store",
- "argon2",
- "async-trait",
- "base64 0.22.1",
- "bitfun-agent-runtime",
- "bitfun-agent-tools",
- "bitfun-core-types",
- "bitfun-events",
- "bitfun-product-domains",
- "bitfun-runtime-ports",
- "bitfun-services-core",
- "bzip2 0.5.2",
- "chrono",
- "dirs 6.0.0",
- "dunce",
- "fs2",
- "futures",
- "futures-util",
- "git2",
- "hex",
- "hostname",
- "image 0.25.10",
- "keyring-core",
- "libc",
- "local-ip-address",
- "log",
- "mac_address",
- "md5",
- "minisign-verify",
- "notify",
- "oxc",
- "qrcode",
- "rand 0.8.7",
- "reqwest",
- "rmcp",
- "russh",
- "russh-keys",
- "russh-sftp",
- "rustls",
- "rustls-native-certs",
- "schannel",
- "semver",
- "serde",
- "serde_json",
- "sha2",
- "shellexpand",
- "sherpa-onnx",
- "sse-stream",
- "ssh_config",
- "tar",
- "tempfile",
- "terminal-core",
- "thiserror 2.0.19",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "url",
- "urlencoding",
- "uuid",
- "which 8.0.5",
- "windows 0.61.3",
- "windows-native-keyring-store",
- "x25519-dalek",
- "zbus-secret-service-keyring-store",
- "zip",
-]
-
-[[package]]
-name = "bitfun-static-hook-support"
-version = "0.2.14"
-dependencies = [
- "bitfun-product-domains",
- "hex",
- "serde_json",
- "sha2",
- "tempfile",
- "toml 0.9.12+spec-1.1.0",
-]
-
-[[package]]
-name = "bitfun-tool-call-jsonrepair"
-version = "0.2.14"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "bitfun-tool-packs"
-version = "0.2.14"
-
-[[package]]
-name = "bitfun-transport"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "async-trait",
- "bitfun-events",
- "log",
- "serde_json",
- "tauri",
-]
-
-[[package]]
-name = "bitfun-webdriver"
-version = "0.2.14"
-dependencies = [
- "anyhow",
- "axum",
- "base64 0.22.1",
- "block2 0.6.2",
- "glib",
- "gtk",
- "image 0.25.10",
- "log",
- "objc2 0.6.4",
- "objc2-app-kit",
- "objc2-foundation",
- "objc2-web-kit",
- "serde",
- "serde_json",
- "tauri",
- "tempfile",
- "tokio",
- "uuid",
- "webkit2gtk",
- "webview2-com",
- "windows 0.61.3",
- "windows-core 0.61.2",
-]
-
-[[package]]
 name = "blake2"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4109,10 +3242,825 @@ dependencies = [
 ]
 
 [[package]]
+name = "halo-acp"
+version = "0.2.14"
+dependencies = [
+ "agent-client-protocol",
+ "async-trait",
+ "chrono",
+ "dashmap",
+ "futures",
+ "halo-agent-runtime",
+ "halo-agent-tools",
+ "halo-core",
+ "halo-core-types",
+ "halo-events",
+ "log",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
+name = "halo-agent-runtime"
+version = "0.2.14"
+dependencies = [
+ "async-trait",
+ "dashmap",
+ "halo-agent-stream",
+ "halo-agent-tools",
+ "halo-core-types",
+ "halo-events",
+ "halo-harness",
+ "halo-runtime-ports",
+ "halo-runtime-services",
+ "hex",
+ "log",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "thiserror 2.0.19",
+ "tokio",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
+name = "halo-agent-runtime-ipc"
+version = "0.2.14"
+dependencies = [
+ "async-trait",
+ "dunce",
+ "fs2",
+ "halo-events",
+ "halo-product-domains",
+ "halo-runtime-ports",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+ "uuid",
+ "windows 0.61.3",
+]
+
+[[package]]
+name = "halo-agent-stream"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "futures",
+ "halo-agent-tools",
+ "halo-core-types",
+ "halo-events",
+ "halo-tool-call-jsonrepair",
+ "log",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
+name = "halo-agent-tools"
+version = "0.2.14"
+dependencies = [
+ "async-trait",
+ "halo-core-types",
+ "halo-runtime-ports",
+ "indexmap 2.14.0",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "halo-ai-adapters"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "apple-native-keyring-store",
+ "async-trait",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "dirs 6.0.0",
+ "eventsource-stream",
+ "fs2",
+ "futures",
+ "halo-agent-stream",
+ "halo-core-types",
+ "halo-events",
+ "halo-services-core",
+ "keyring-core",
+ "libc",
+ "log",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "urlencoding",
+ "uuid",
+ "windows-native-keyring-store",
+ "zbus-secret-service-keyring-store",
+]
+
+[[package]]
+name = "halo-claude-code-adapter"
+version = "0.2.14"
+dependencies = [
+ "dirs 6.0.0",
+ "dunce",
+ "halo-product-domains",
+ "halo-services-core",
+ "halo-static-hook-support",
+ "hex",
+ "regex",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+ "url",
+]
+
+[[package]]
+name = "halo-cli"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "clap",
+ "crossterm",
+ "dashmap",
+ "dirs 6.0.0",
+ "dunce",
+ "flate2",
+ "futures-util",
+ "halo-acp",
+ "halo-agent-runtime",
+ "halo-agent-runtime-ipc",
+ "halo-agent-tools",
+ "halo-core",
+ "halo-events",
+ "halo-product-domains",
+ "halo-runtime-ports",
+ "halo-runtime-services",
+ "halo-services-core",
+ "hex",
+ "libc",
+ "minisign-verify",
+ "once_cell",
+ "portable-pty 0.8.1",
+ "portable-pty 0.9.0",
+ "pulldown-cmark",
+ "ratatui",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "similar",
+ "syntect",
+ "syntect-tui",
+ "tar",
+ "tempfile",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+ "tracing",
+ "tracing-subscriber",
+ "unicode-width 0.2.0",
+ "uuid",
+ "windows 0.61.3",
+]
+
+[[package]]
+name = "halo-codex-adapter"
+version = "0.2.14"
+dependencies = [
+ "dirs 6.0.0",
+ "dunce",
+ "halo-product-domains",
+ "halo-static-hook-support",
+ "hex",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+ "url",
+]
+
+[[package]]
+name = "halo-core"
+version = "0.2.14"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "async-trait",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "chrono-tz",
+ "cron",
+ "dashmap",
+ "dirs 6.0.0",
+ "dunce",
+ "eventsource-stream",
+ "filetime",
+ "flate2",
+ "fluent-bundle",
+ "fs2",
+ "futures",
+ "git2",
+ "glob",
+ "globset",
+ "halo-agent-runtime",
+ "halo-agent-stream",
+ "halo-agent-tools",
+ "halo-ai-adapters",
+ "halo-claude-code-adapter",
+ "halo-codex-adapter",
+ "halo-core-types",
+ "halo-events",
+ "halo-external-sources",
+ "halo-harness",
+ "halo-opencode-adapter",
+ "halo-pi-rpc-adapter",
+ "halo-plugin-runtime-client",
+ "halo-product-capabilities",
+ "halo-product-domains",
+ "halo-runtime-ports",
+ "halo-runtime-services",
+ "halo-services-core",
+ "halo-services-integrations",
+ "halo-tool-packs",
+ "halo-transport",
+ "hex",
+ "image 0.25.10",
+ "include_dir",
+ "indexmap 2.14.0",
+ "log",
+ "md5",
+ "notify",
+ "rand 0.8.7",
+ "regex",
+ "reqwest",
+ "rmcp",
+ "rusqlite",
+ "russh",
+ "rustls",
+ "rustls-native-certs",
+ "schannel",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "similar",
+ "sse-stream",
+ "tauri",
+ "tempfile",
+ "terminal-core",
+ "thiserror 2.0.19",
+ "tokio",
+ "tokio-stream",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tool-runtime",
+ "tower-http",
+ "unic-langid",
+ "urlencoding",
+ "uuid",
+ "win32job",
+]
+
+[[package]]
+name = "halo-core-types"
+version = "0.2.14"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "halo-desktop"
+version = "0.2.14"
+dependencies = [
+ "alloc-no-stdlib",
+ "alloc-stdlib",
+ "anyhow",
+ "async-trait",
+ "atspi",
+ "axum",
+ "base64 0.22.1",
+ "bitflags 2.11.1",
+ "brotli-decompressor",
+ "bzip2 0.5.2",
+ "chrono",
+ "core-foundation 0.9.4",
+ "core-graphics 0.23.2",
+ "dark-light",
+ "dirs 6.0.0",
+ "dispatch",
+ "enigo",
+ "flate2",
+ "foreign-types 0.5.0",
+ "futures",
+ "halo-acp",
+ "halo-agent-runtime",
+ "halo-agent-tools",
+ "halo-core",
+ "halo-core-types",
+ "halo-events",
+ "halo-product-domains",
+ "halo-relay-service",
+ "halo-runtime-ports",
+ "halo-services-integrations",
+ "halo-transport",
+ "halo-webdriver",
+ "ignore",
+ "image 0.25.10",
+ "keepawake",
+ "leptess",
+ "libc",
+ "log",
+ "objc2 0.6.4",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "objc2-vision",
+ "regex",
+ "reqwest",
+ "resvg",
+ "screenshots",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha1",
+ "similar",
+ "tar",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-log",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "tauri-plugin-window-state",
+ "tempfile",
+ "thiserror 2.0.19",
+ "time",
+ "tokio",
+ "tower-http",
+ "urlencoding",
+ "uuid",
+ "win32job",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
+ "xz2",
+ "zip",
+ "zstd",
+]
+
+[[package]]
+name = "halo-events"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "halo-core-types",
+ "log",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
+name = "halo-external-sources"
+version = "0.2.14"
+dependencies = [
+ "futures",
+ "halo-product-domains",
+ "log",
+ "tokio",
+]
+
+[[package]]
+name = "halo-harness"
+version = "0.2.14"
+dependencies = [
+ "async-trait",
+ "thiserror 2.0.19",
+ "tokio",
+]
+
+[[package]]
+name = "halo-miniapp-market-server"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "axum",
+ "halo-miniapp-market-service",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "halo-miniapp-market-service"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "halo-product-domains",
+ "hex",
+ "image 0.25.10",
+ "rand 0.8.7",
+ "reqwest",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
+ "similar",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "url",
+ "urlencoding",
+ "uuid",
+ "zip",
+]
+
+[[package]]
+name = "halo-opencode-adapter"
+version = "0.2.14"
+dependencies = [
+ "async-trait",
+ "dirs 6.0.0",
+ "dunce",
+ "halo-plugin-runtime-client",
+ "halo-product-domains",
+ "halo-runtime-ports",
+ "halo-services-core",
+ "halo-services-integrations",
+ "halo-static-hook-support",
+ "hex",
+ "oxc",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+ "url",
+ "urlencoding",
+]
+
+[[package]]
+name = "halo-page-function-runtime"
+version = "0.2.14"
+dependencies = [
+ "rquickjs",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "tokio",
+]
+
+[[package]]
+name = "halo-pi-rpc-adapter"
+version = "0.2.14"
+dependencies = [
+ "async-trait",
+ "halo-runtime-ports",
+ "halo-services-core",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "halo-plugin-runtime-client"
+version = "0.2.14"
+dependencies = [
+ "async-trait",
+ "halo-runtime-ports",
+ "tokio",
+]
+
+[[package]]
+name = "halo-product-capabilities"
+version = "0.2.14"
+dependencies = [
+ "async-trait",
+ "halo-agent-runtime",
+ "halo-harness",
+ "halo-runtime-ports",
+ "halo-runtime-services",
+ "halo-tool-packs",
+ "tokio",
+]
+
+[[package]]
+name = "halo-product-domains"
+version = "0.2.14"
+dependencies = [
+ "dirs 6.0.0",
+ "hex",
+ "hmac",
+ "log",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "which 8.0.5",
+]
+
+[[package]]
+name = "halo-relay-server"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "axum",
+ "chrono",
+ "clap",
+ "halo-relay-service",
+ "rpassword",
+ "serde_json",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "halo-relay-service"
+version = "0.2.14"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "argon2",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "dashmap",
+ "futures-util",
+ "halo-page-function-runtime",
+ "libsqlite3-sys",
+ "rand 0.8.7",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "subtle",
+ "tempfile",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "halo-runtime-ports"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "halo-core-types",
+ "halo-product-domains",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "halo-runtime-services"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "halo-events",
+ "halo-runtime-ports",
+ "log",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "tokio",
+]
+
+[[package]]
+name = "halo-sdk-host"
+version = "0.2.14"
+dependencies = [
+ "async-trait",
+ "futures-util",
+ "halo-agent-runtime",
+ "halo-core-types",
+ "halo-events",
+ "halo-runtime-ports",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "halo-sdk-host-app"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "futures-util",
+ "halo-agent-runtime",
+ "halo-core",
+ "halo-sdk-host",
+ "rustls",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "halo-server"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "clap",
+ "dirs 6.0.0",
+ "futures-util",
+ "halo-core",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "halo-services-core"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "dunce",
+ "filetime",
+ "fs2",
+ "git2",
+ "halo-core-types",
+ "halo-events",
+ "halo-runtime-ports",
+ "ignore",
+ "libc",
+ "log",
+ "notify",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "similar",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+ "which 8.0.5",
+ "win32job",
+ "windows 0.61.3",
+ "zip",
+]
+
+[[package]]
+name = "halo-services-integrations"
+version = "0.2.14"
+dependencies = [
+ "aes",
+ "aes-gcm",
+ "anyhow",
+ "apple-native-keyring-store",
+ "argon2",
+ "async-trait",
+ "base64 0.22.1",
+ "bzip2 0.5.2",
+ "chrono",
+ "dirs 6.0.0",
+ "dunce",
+ "fs2",
+ "futures",
+ "futures-util",
+ "git2",
+ "halo-agent-runtime",
+ "halo-agent-tools",
+ "halo-core-types",
+ "halo-events",
+ "halo-product-domains",
+ "halo-runtime-ports",
+ "halo-services-core",
+ "hex",
+ "hostname",
+ "image 0.25.10",
+ "keyring-core",
+ "libc",
+ "local-ip-address",
+ "log",
+ "mac_address",
+ "md5",
+ "minisign-verify",
+ "notify",
+ "oxc",
+ "qrcode",
+ "rand 0.8.7",
+ "reqwest",
+ "rmcp",
+ "russh",
+ "russh-keys",
+ "russh-sftp",
+ "rustls",
+ "rustls-native-certs",
+ "schannel",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
+ "shellexpand",
+ "sherpa-onnx",
+ "sse-stream",
+ "ssh_config",
+ "tar",
+ "tempfile",
+ "terminal-core",
+ "thiserror 2.0.19",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "url",
+ "urlencoding",
+ "uuid",
+ "which 8.0.5",
+ "windows 0.61.3",
+ "windows-native-keyring-store",
+ "x25519-dalek",
+ "zbus-secret-service-keyring-store",
+ "zip",
+]
+
+[[package]]
+name = "halo-static-hook-support"
+version = "0.2.14"
+dependencies = [
+ "halo-product-domains",
+ "hex",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
 name = "halo-tauri-desktop"
 version = "0.2.14"
 dependencies = [
- "bitfun-desktop",
+ "halo-desktop",
  "serde_json",
  "tauri",
  "tauri-build",
@@ -4126,6 +4074,58 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "tokio",
+]
+
+[[package]]
+name = "halo-tool-call-jsonrepair"
+version = "0.2.14"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "halo-tool-packs"
+version = "0.2.14"
+
+[[package]]
+name = "halo-transport"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "halo-events",
+ "log",
+ "serde_json",
+ "tauri",
+]
+
+[[package]]
+name = "halo-webdriver"
+version = "0.2.14"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.22.1",
+ "block2 0.6.2",
+ "glib",
+ "gtk",
+ "image 0.25.10",
+ "log",
+ "objc2 0.6.4",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "objc2-web-kit",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tempfile",
+ "tokio",
+ "uuid",
+ "webkit2gtk",
+ "webview2-com",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -10238,13 +10238,13 @@ version = "0.2.14"
 dependencies = [
  "anyhow",
  "async-trait",
- "bitfun-runtime-ports",
  "chardetng",
  "chrono",
  "dashmap",
  "dirs 6.0.0",
  "encoding_rs",
  "futures",
+ "halo-runtime-ports",
  "libc",
  "log",
  "portable-pty 0.8.1",
@@ -10677,14 +10677,14 @@ checksum = "7d56353a2a665ad0f41a421187180aab746c8c325620617ad883a99a1cbe66d2"
 name = "tool-runtime"
 version = "0.2.14"
 dependencies = [
- "bitfun-agent-tools",
- "bitfun-events",
- "bitfun-runtime-ports",
  "dashmap",
  "dunce",
  "globset",
  "grep-regex",
  "grep-searcher",
+ "halo-agent-tools",
+ "halo-events",
+ "halo-runtime-ports",
  "htmd",
  "ignore",
  "legible",

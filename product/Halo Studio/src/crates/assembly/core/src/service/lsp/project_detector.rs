@@ -1,5 +1,5 @@
 //! Compatibility re-exports for LSP project detection.
 //!
-//! The reusable detector lives in `bitfun-services-core`.
+//! The reusable detector lives in `halo-services-core`.
 
-pub use bitfun_services_core::lsp::project_detector::{ProjectDetector, ProjectInfo};
+pub use halo_services_core::lsp::project_detector::{ProjectDetector, ProjectInfo};

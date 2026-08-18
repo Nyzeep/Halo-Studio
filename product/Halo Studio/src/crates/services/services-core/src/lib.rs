@@ -1,7 +1,7 @@
 //! Core service owner crate.
 //!
 //! This crate owns platform-agnostic service building blocks that can be
-//! tested without compiling the full BitFun product runtime.
+//! tested without compiling the full Halo product runtime.
 
 pub mod diagnostics;
 pub mod diff;

@@ -14,13 +14,13 @@ delivery form.
 |---|---|---|
 | `agent-runtime` | Agent registry, scheduler, session/config/context facts, prompt cache, hooks, goals, prompt facts, port-backed `AgentRuntime` facade, DeepReview provider-neutral state, DeepResearch citation renumbering, and runtime control / confirmation contracts | [AGENTS.md](agent-runtime/AGENTS.md) |
 | `agent-stream` | Provider-neutral stream DTOs, tool-call accumulation, and replay contracts | [AGENTS.md](agent-stream/AGENTS.md) |
-| `tool-contracts` | Tool contracts, execution gates, input validation, and result presentation contracts. Cargo package remains `bitfun-agent-tools`. | [AGENTS.md](tool-contracts/AGENTS.md) |
+| `tool-contracts` | Tool contracts, execution gates, input validation, and result presentation contracts. Cargo package remains `halo-agent-tools`. | [AGENTS.md](tool-contracts/AGENTS.md) |
 | `harness` | Harness workflow contracts and registry primitives | [AGENTS.md](harness/AGENTS.md) |
 | `plugin-runtime-client` | Default `PluginRuntimeClient` implementation for dispatch, duplicate-request results, and fault diagnostics; the JS/TS Plugin Host remains a child process managed through service ports | [AGENTS.md](plugin-runtime-client/AGENTS.md) |
 | `runtime-services` | Typed runtime service assembly and service availability facts | [AGENTS.md](runtime-services/AGENTS.md) |
-| `tool-provider-groups` | Tool provider group facts and product-full tool group composition. Cargo package remains `bitfun-tool-packs`. | [AGENTS.md](tool-provider-groups/AGENTS.md) |
+| `tool-provider-groups` | Tool provider group facts and product-full tool group composition. Cargo package remains `halo-tool-packs`. | [AGENTS.md](tool-provider-groups/AGENTS.md) |
 | `tool-execution` | Low-level file/search/tool IO helpers, ExecCommand presentation facts, Computer Use loop/retry policies, prompt-safe tool context facts, and provider-neutral tool runtime policies. Cargo package remains `tool-runtime`. | [AGENTS.md](tool-execution/AGENTS.md) |
-| `tool-call-jsonrepair` | Guarded JSON repair for streamed tool-call arguments (local fork of `jsonrepair-rs` with a tool-argument profile that does not treat `#`/`//`/`/* */` as comments). Cargo package remains `bitfun-tool-call-jsonrepair`. | [README.md](tool-call-jsonrepair/README.md) |
+| `tool-call-jsonrepair` | Guarded JSON repair for streamed tool-call arguments (local fork of `jsonrepair-rs` with a tool-argument profile that does not treat `#`/`//`/`/* */` as comments). Cargo package remains `halo-tool-call-jsonrepair`. | [README.md](tool-call-jsonrepair/README.md) |
 
 ## Placement Rules
 

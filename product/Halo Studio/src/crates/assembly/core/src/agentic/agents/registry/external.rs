@@ -1,8 +1,8 @@
 use super::types::{AgentCategory, AgentEntry, AgentInfo, AgentSource, SubAgentSource};
 use super::AgentRegistry;
 use crate::agentic::agents::{Agent, SubagentVisibilityPolicy};
-use bitfun_agent_runtime::prompt_cache::prompt_cache_scope_key;
-use bitfun_core_types::{SessionContinuationPolicy, SessionModelBindingPolicy};
+use halo_agent_runtime::prompt_cache::prompt_cache_scope_key;
+use halo_core_types::{SessionContinuationPolicy, SessionModelBindingPolicy};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock, Weak};

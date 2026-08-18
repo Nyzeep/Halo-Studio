@@ -1,6 +1,6 @@
 {
   "modelVersion": "6.1.1",
-  "description": "BitFun HarmonyOS remote client.",
+  "description": "Halo Studio HarmonyOS remote client.",
   "dependencies": {
   },
   "devDependencies": {

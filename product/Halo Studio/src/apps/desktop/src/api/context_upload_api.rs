@@ -1,11 +1,11 @@
 //! Temporary Image Storage API
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use bitfun_core::agentic::tools::image_context::{
+use halo_core::agentic::tools::image_context::{
     create_image_context_provider as create_core_image_context_provider, store_image_contexts,
     GlobalImageContextProvider, ImageContextData as CoreImageContextData,
 };
-use bitfun_core::infrastructure::try_get_path_manager_arc;
+use halo_core::infrastructure::try_get_path_manager_arc;
 use log::warn;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -134,7 +134,7 @@ async fn persist_uploaded_image(
 fn uploaded_image_dir() -> Result<PathBuf, String> {
     let root = try_get_path_manager_arc()
         .map(|manager| manager.temp_dir())
-        .unwrap_or_else(|_| std::env::temp_dir().join("bitfun"));
+        .unwrap_or_else(|_| std::env::temp_dir().join("halo-studio"));
     Ok(root.join("attachments").join("images"))
 }
 

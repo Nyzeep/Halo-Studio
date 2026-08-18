@@ -1,17 +1,17 @@
 [package]
-name = "bitfun-runtime-services"
+name = "halo-runtime-services"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Typed runtime service assembly for BitFun runtimes"
+description = "Typed runtime service assembly for Halo runtimes"
 
 [lib]
-name = "bitfun_runtime_services"
+name = "halo_runtime_services"
 crate-type = ["rlib"]
 
 [dependencies]
-bitfun-events = { path = "../../contracts/events" }
-bitfun-runtime-ports = { path = "../../contracts/runtime-ports" }
+halo-events = { path = "../../contracts/events" }
+halo-runtime-ports = { path = "../../contracts/runtime-ports" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 log = { workspace = true }

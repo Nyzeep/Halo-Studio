@@ -11,8 +11,8 @@ use crate::service::session_usage::{
     build_session_usage_report_from_turns, SessionUsageReportRequest,
 };
 use crate::service::snapshot::get_snapshot_manager_for_workspace;
-use crate::util::errors::BitFunResult;
-use bitfun_agent_tools::ResolvedToolInvocation;
+use crate::util::errors::HaloResult;
+use halo_agent_tools::ResolvedToolInvocation;
 use chrono::{DateTime, Local, Utc};
 use log::{debug, warn};
 use std::collections::{HashMap, HashSet};
@@ -43,7 +43,7 @@ pub struct InsightsCollector;
 
 impl InsightsCollector {
     /// Stage 1: Collect session data from PersistenceManager across all workspaces
-    pub async fn collect(days: u32) -> BitFunResult<(BaseStats, Vec<SessionTranscript>)> {
+    pub async fn collect(days: u32) -> HaloResult<(BaseStats, Vec<SessionTranscript>)> {
         let path_manager = get_path_manager_arc();
         let pm = PersistenceManager::new(path_manager)?;
         let now = SystemTime::now();

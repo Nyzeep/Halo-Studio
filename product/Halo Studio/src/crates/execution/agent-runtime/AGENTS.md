@@ -2,14 +2,14 @@
 
 Scope: this guide applies to `src/crates/execution/agent-runtime`.
 
-`bitfun-agent-runtime` owns portable agent runtime decisions,
+`halo-agent-runtime` owns portable agent runtime decisions,
 session/config/context facts, lifecycle helper state, and the narrow
 port-backed `sdk` / `AgentRuntime` facade that can be built and tested without
-`bitfun-core`.
+`halo-core`.
 
 ## Guardrails
 
-- Do not depend on `bitfun-core`, app crates, Tauri, ACP protocol, web UI,
+- Do not depend on `halo-core`, app crates, Tauri, ACP protocol, web UI,
   concrete service crates, or product-domain implementations.
 - The `sdk` module may re-export only stable runtime request/response types,
   runtime-port contracts, and the service/tool/harness registry types needed
@@ -23,11 +23,11 @@ port-backed `sdk` / `AgentRuntime` facade that can be built and tested without
   state, filesystem, terminal, MCP, remote, or AI clients.
 - The `runtime` module is internal / Product Assembly facing. Do not route
   client-facing SDK, Server/API, app, Web, mobile, or installer entrypoints
-  through `bitfun_agent_runtime::runtime`; those surfaces must use `sdk` or
+  through `halo_agent_runtime::runtime`; those surfaces must use `sdk` or
   projected Server/API DTOs.
 - Keep concrete scheduler/session lifecycle execution, session metadata IO,
   event emitter wiring, permission UI presentation, and product `Tool` adapter
-  execution in `bitfun-core` until a reviewed owner migration proves behavior
+  execution in `halo-core` until a reviewed owner migration proves behavior
   equivalence. Provider-neutral confirmation gate/wait-channel and user-question state
   may live here.
 - Reviewed Halo Workbench Runtime owner exception: `src/halo_workbench.rs` is the
@@ -75,7 +75,7 @@ port-backed `sdk` / `AgentRuntime` facade that can be built and tested without
 ## Verification
 
 ```bash
-cargo test -p bitfun-agent-runtime
+cargo test -p halo-agent-runtime
 node scripts/check-core-boundaries.mjs
-cargo check -p bitfun-core --features product-full
+cargo check -p halo-core --features product-full
 ```

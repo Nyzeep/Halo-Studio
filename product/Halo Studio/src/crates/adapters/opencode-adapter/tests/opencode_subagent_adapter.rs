@@ -1,8 +1,8 @@
-use bitfun_opencode_adapter::{OpenCodeSubagentProvider, OpenCodeSubagentProviderOptions};
-use bitfun_product_domains::external_sources::{
+use halo_opencode_adapter::{OpenCodeSubagentProvider, OpenCodeSubagentProviderOptions};
+use halo_product_domains::external_sources::{
     ExecutionDomainId, ExternalSourceContext, ExternalSourceScope,
 };
-use bitfun_product_domains::external_subagents::{
+use halo_product_domains::external_subagents::{
     ExternalSubagentCompatibilityState, ExternalSubagentDiscoveryInput, ExternalSubagentMode,
     ExternalSubagentModelRequest, ExternalSubagentSourceProvider,
 };
@@ -32,8 +32,8 @@ fn provider(temp: &TempDir, workspace: &std::path::Path) -> OpenCodeSubagentProv
 fn discover(
     provider: &OpenCodeSubagentProvider,
     workspace: PathBuf,
-    suppressed_sources: BTreeSet<bitfun_product_domains::external_sources::SourceKey>,
-) -> bitfun_product_domains::external_subagents::ExternalSubagentProviderSnapshot {
+    suppressed_sources: BTreeSet<halo_product_domains::external_sources::SourceKey>,
+) -> halo_product_domains::external_subagents::ExternalSubagentProviderSnapshot {
     provider
         .discover(&ExternalSubagentDiscoveryInput {
             context: context(workspace),

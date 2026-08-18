@@ -6,17 +6,17 @@
 use std::collections::HashSet;
 use std::fmt;
 
-use bitfun_harness::{
+use halo_harness::{
     build_descriptor_harness_registry, HarnessCapability, HarnessProviderDescriptor,
     HarnessRegistry, HarnessRegistryBuildError, HarnessWorkflow,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     PluginRuntimeAvailability, PluginRuntimeBinding, PluginRuntimeUnavailableReason,
     RuntimeServiceCapability,
 };
-use bitfun_runtime_services::RuntimeServices;
-pub use bitfun_tool_packs::ToolProviderGroupPlanSelectionError as ProductCapabilityBuildError;
-use bitfun_tool_packs::{
+use halo_runtime_services::RuntimeServices;
+pub use halo_tool_packs::ToolProviderGroupPlanSelectionError as ProductCapabilityBuildError;
+use halo_tool_packs::{
     try_product_tool_provider_group_plan_for_ids, ToolPackFeatureGroup, ToolProviderGroupPlan,
 };
 
@@ -995,21 +995,21 @@ const DEEP_REVIEW_HARNESS_PROVIDER: HarnessProviderDescriptor =
         CORE_DEEP_REVIEW_HARNESS_PROVIDER_ID,
         HarnessWorkflow::DeepReview,
         DEEP_REVIEW_HARNESS_CAPABILITIES,
-        "bitfun-core::agentic::deep_review",
+        "halo-core::agentic::deep_review",
     );
 const DEEP_RESEARCH_HARNESS_PROVIDER: HarnessProviderDescriptor =
     HarnessProviderDescriptor::legacy_facade(
         CORE_DEEP_RESEARCH_HARNESS_PROVIDER_ID,
         HarnessWorkflow::DeepResearch,
         DEEP_RESEARCH_HARNESS_CAPABILITIES,
-        "bitfun-core::agentic::agents::definitions::modes::deep_research",
+        "halo-core::agentic::agents::definitions::modes::deep_research",
     );
 const MINIAPP_HARNESS_PROVIDER: HarnessProviderDescriptor =
     HarnessProviderDescriptor::legacy_facade(
         CORE_MINIAPP_HARNESS_PROVIDER_ID,
         HarnessWorkflow::MiniApp,
         MINIAPP_HARNESS_CAPABILITIES,
-        "bitfun-core::miniapp",
+        "halo-core::miniapp",
     );
 
 const NO_HARNESS_PROVIDERS: &[HarnessProviderDescriptor] = &[];

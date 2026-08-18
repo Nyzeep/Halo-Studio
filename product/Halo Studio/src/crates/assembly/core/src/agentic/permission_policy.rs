@@ -1,5 +1,5 @@
 use crate::service::config::types::{AgentProfileConfig, GlobalConfig};
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     resolve_child_permission_policy, resolve_permission_policy, ChildPermissionPolicyLayers,
     PermissionEffect, PermissionPolicyLayers, PermissionRule, PermissionRuntimeCeiling,
 };
@@ -56,7 +56,7 @@ pub(crate) fn resolve_effective_permission_rules(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitfun_runtime_ports::{PermissionEvaluator, PermissionPolicyPreset};
+    use halo_runtime_ports::{PermissionEvaluator, PermissionPolicyPreset};
 
     fn rule(action: &str, resource: &str, effect: PermissionEffect) -> PermissionRule {
         PermissionRule::new(action, resource, effect)

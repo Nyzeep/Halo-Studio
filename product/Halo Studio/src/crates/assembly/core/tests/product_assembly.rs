@@ -1,11 +1,11 @@
-use bitfun_core::product_assembly;
-use bitfun_core::product_runtime::{CoreProductRuntimeAssembly, CoreRuntimeServicesProvider};
-use bitfun_product_capabilities::{
+use halo_core::product_assembly;
+use halo_core::product_runtime::{CoreProductRuntimeAssembly, CoreRuntimeServicesProvider};
+use halo_product_capabilities::{
     product_assembly_plan_for_profile, DeliveryProfile, ProductServiceCapabilityStatus,
 };
-use bitfun_runtime_ports::RuntimeServiceCapability;
-use bitfun_runtime_services::test_support::FakeRuntimeServicesProvider;
-use bitfun_runtime_services::{RuntimeServicesBuilder, RuntimeServicesRegistry};
+use halo_runtime_ports::RuntimeServiceCapability;
+use halo_runtime_services::test_support::FakeRuntimeServicesProvider;
+use halo_runtime_services::{RuntimeServicesBuilder, RuntimeServicesRegistry};
 
 #[test]
 fn core_runtime_services_provider_registers_existing_adapters_and_capability_markers() {

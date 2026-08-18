@@ -1,16 +1,16 @@
 [package]
-name = "bitfun-relay-server"
+name = "halo-relay-server"
 version = "0.2.14" # x-release-please-version
-authors = ["BitFun Team"]
+authors = ["Halo Studio Team"]
 edition = "2021"
-description = "BitFun standalone Remote Connect relay server"
+description = "Halo standalone Remote Connect relay server"
 
 [lib]
-name = "bitfun_relay_server"
+name = "halo_relay_server"
 path = "src/lib.rs"
 
 [[bin]]
-name = "bitfun-relay-server"
+name = "halo-relay-server"
 path = "src/main.rs"
 
 [[bin]]
@@ -20,7 +20,7 @@ path = "src/bin/relay_admin.rs"
 [dependencies]
 # Dependencies stay explicit so this application and relay-service can be
 # built from their reduced standalone Docker context.
-bitfun-relay-service = { path = "../../crates/services/relay-service" }
+halo-relay-service = { path = "../../crates/services/relay-service" }
 axum = "0.8"
 tower-http = { version = "0.6.11", features = ["fs"] }
 tokio = { version = "1.52", default-features = false, features = ["rt-multi-thread", "macros", "net", "time", "sync"] }

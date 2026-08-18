@@ -1,4 +1,4 @@
-use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_sources::{
     EcosystemId, ExternalMcpDiscoveryInput, ExternalMcpProviderIdentity,
     ExternalMcpProviderSnapshot, ExternalMcpRevisionKey, ExternalMcpServerDefinition,
     ExternalMcpSourceProvider, ExternalMcpStaticStatus, ExternalSourceAssetKind,

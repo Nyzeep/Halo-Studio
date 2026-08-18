@@ -1,10 +1,10 @@
 #![cfg(feature = "remote-connect")]
 
-use bitfun_events::{AgenticEvent, ToolEventData};
-use bitfun_runtime_ports::{
+use halo_events::{AgenticEvent, ToolEventData};
+use halo_runtime_ports::{
     AgentSubmissionSource, RemoteControlSessionState, RemoteControlStateSnapshot,
 };
-use bitfun_services_integrations::remote_connect::{
+use halo_services_integrations::remote_connect::{
     agent_input_attachment_from_remote_image_context, build_lan_relay_url_with_ip,
     build_remote_chat_messages, build_remote_image_attachment, build_remote_image_contexts,
     build_remote_image_submission_request, build_remote_model_catalog,
@@ -1402,7 +1402,7 @@ fn remote_connect_file_transfer_policy_preserves_name_fallback() {
 
 fn make_temp_remote_workspace() -> (PathBuf, PathBuf, PathBuf) {
     let base = std::env::temp_dir().join(format!(
-        "bitfun-remote-connect-contract-{}",
+        "halo-remote-connect-contract-{}",
         uuid::Uuid::new_v4()
     ));
     let workspace = base.join("workspace");
@@ -2348,9 +2348,9 @@ async fn remote_connect_tracker_broadcasts_tool_and_turn_events() {
         attempt_id: None,
         attempt_index: None,
         tool_event: ToolEventData::Started {
-            identity: bitfun_events::ToolEventIdentity::resolved(
+            identity: halo_events::ToolEventIdentity::resolved(
                 "tool-1",
-                bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME,
+                halo_agent_tools::CALL_DEFERRED_TOOL_NAME,
                 "AskUserQuestion",
             ),
             params: serde_json::json!({

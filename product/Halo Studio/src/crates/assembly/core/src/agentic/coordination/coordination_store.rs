@@ -1,4 +1,4 @@
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -35,7 +35,7 @@ impl BackgroundTaskStatus {
         self != Self::Running
     }
 
-    fn parse(value: &str) -> BitFunResult<Self> {
+    fn parse(value: &str) -> HaloResult<Self> {
         match value {
             "running" => Ok(Self::Running),
             "completed" => Ok(Self::Completed),
@@ -43,7 +43,7 @@ impl BackgroundTaskStatus {
             "failed" => Ok(Self::Failed),
             "cancelled" => Ok(Self::Cancelled),
             "interrupted" => Ok(Self::Interrupted),
-            _ => Err(BitFunError::service(format!(
+            _ => Err(HaloError::service(format!(
                 "Invalid background task status in coordination database: {value}"
             ))),
         }
@@ -99,14 +99,14 @@ impl CoordinationStore {
         }
     }
 
-    async fn connection(&self) -> BitFunResult<Arc<Mutex<Connection>>> {
+    async fn connection(&self) -> HaloResult<Arc<Mutex<Connection>>> {
         let db_path = self.db_path.clone();
         self.connection
             .get_or_try_init(|| async move {
                 task::spawn_blocking(move || open_connection(db_path))
                     .await
                     .map_err(|error| {
-                        BitFunError::service(format!(
+                        HaloError::service(format!(
                             "Agent coordination database initialization task failed: {error}"
                         ))
                     })?
@@ -115,21 +115,21 @@ impl CoordinationStore {
             .cloned()
     }
 
-    async fn with_connection<T, F>(&self, operation: F) -> BitFunResult<T>
+    async fn with_connection<T, F>(&self, operation: F) -> HaloResult<T>
     where
         T: Send + 'static,
-        F: FnOnce(&mut Connection) -> BitFunResult<T> + Send + 'static,
+        F: FnOnce(&mut Connection) -> HaloResult<T> + Send + 'static,
     {
         let connection = self.connection().await?;
         task::spawn_blocking(move || {
             let mut connection = connection.lock().map_err(|_| {
-                BitFunError::service("Agent coordination database lock was poisoned".to_string())
+                HaloError::service("Agent coordination database lock was poisoned".to_string())
             })?;
             operation(&mut connection)
         })
         .await
         .map_err(|error| {
-            BitFunError::service(format!("Agent coordination database task failed: {error}"))
+            HaloError::service(format!("Agent coordination database task failed: {error}"))
         })?
     }
 
@@ -137,7 +137,7 @@ impl CoordinationStore {
         &self,
         parent_session_id: &str,
         child_session_id: &str,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let parent_session_id = parent_session_id.to_string();
         let child_session_id = child_session_id.to_string();
         self.with_connection(move |connection| {
@@ -156,7 +156,7 @@ impl CoordinationStore {
         &self,
         parent_session_id: &str,
         agent_id: &str,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let parent_session_id = parent_session_id.to_string();
         let agent_id = agent_id.to_string();
         self.with_connection(move |connection| {
@@ -169,7 +169,7 @@ impl CoordinationStore {
                 .optional()
                 .map_err(db_error)?
                 .flatten()
-                .ok_or_else(|| BitFunError::tool(format!("Agent was not found: {agent_id}")))
+                .ok_or_else(|| HaloError::tool(format!("Agent was not found: {agent_id}")))
         })
         .await
     }
@@ -177,7 +177,7 @@ impl CoordinationStore {
     pub(crate) async fn register_background_task(
         &self,
         registration: BackgroundTaskRegistration,
-    ) -> BitFunResult<RegisteredBackgroundTask> {
+    ) -> HaloResult<RegisteredBackgroundTask> {
         let execution_owner_token = self.execution_owner_token.clone();
         self.with_connection(move |connection| {
             let transaction = connection
@@ -242,7 +242,7 @@ INSERT INTO background_tasks (
         status: BackgroundTaskStatus,
         error_code: Option<String>,
         error_message: Option<String>,
-    ) -> BitFunResult<bool> {
+    ) -> HaloResult<bool> {
         self.with_connection(move |connection| {
             let changed = connection
                 .execute(
@@ -265,7 +265,7 @@ WHERE task_pk = ?5 AND status = 'running'
         .await
     }
 
-    pub(crate) async fn delete_background_task(&self, task_pk: i64) -> BitFunResult<()> {
+    pub(crate) async fn delete_background_task(&self, task_pk: i64) -> HaloResult<()> {
         self.with_connection(move |connection| {
             connection
                 .execute(
@@ -282,7 +282,7 @@ WHERE task_pk = ?5 AND status = 'running'
         &self,
         parent_session_id: &str,
         requested_bg_task_ids: &[String],
-    ) -> BitFunResult<Vec<BackgroundTaskRecord>> {
+    ) -> HaloResult<Vec<BackgroundTaskRecord>> {
         let parent_session_id = parent_session_id.to_string();
         let requested_bg_task_ids = requested_bg_task_ids.to_vec();
         self.with_connection(move |connection| {
@@ -313,7 +313,7 @@ WHERE task_pk = ?5 AND status = 'running'
                     .optional()
                     .map_err(db_error)?
                     .ok_or_else(|| {
-                        BitFunError::tool(format!("Background task was not found: {bg_task_id}"))
+                        HaloError::tool(format!("Background task was not found: {bg_task_id}"))
                     })?;
                 if record.delivered_at_ms.is_none() {
                     records.push(record);
@@ -327,7 +327,7 @@ WHERE task_pk = ?5 AND status = 'running'
     pub(crate) async fn records_by_task_pks(
         &self,
         task_pks: &[i64],
-    ) -> BitFunResult<Vec<BackgroundTaskRecord>> {
+    ) -> HaloResult<Vec<BackgroundTaskRecord>> {
         let task_pks = task_pks.to_vec();
         self.with_connection(move |connection| {
             let mut records = Vec::with_capacity(task_pks.len());
@@ -354,7 +354,7 @@ WHERE task_pk = ?5 AND status = 'running'
         parent_session_id: &str,
         task_pks: &[i64],
         delivered_parent_dialog_turn_id: &str,
-    ) -> BitFunResult<Vec<BackgroundTaskRecord>> {
+    ) -> HaloResult<Vec<BackgroundTaskRecord>> {
         let parent_session_id = parent_session_id.to_string();
         let task_pks = task_pks.to_vec();
         let delivered_parent_dialog_turn_id = delivered_parent_dialog_turn_id.to_string();
@@ -404,7 +404,7 @@ WHERE task_pk = ?3
     pub(crate) async fn stale_running_tasks(
         &self,
         parent_session_id: &str,
-    ) -> BitFunResult<Vec<BackgroundTaskRecord>> {
+    ) -> HaloResult<Vec<BackgroundTaskRecord>> {
         let parent_session_id = parent_session_id.to_string();
         let execution_owner_token = self.execution_owner_token.clone();
         self.with_connection(move |connection| {
@@ -428,7 +428,7 @@ WHERE task_pk = ?3
     pub(crate) async fn delete_session_references(
         &self,
         session_id: &str,
-    ) -> BitFunResult<Vec<i64>> {
+    ) -> HaloResult<Vec<i64>> {
         let session_id = session_id.to_string();
         self.with_connection(move |connection| {
             let transaction = connection
@@ -475,7 +475,7 @@ WHERE task_pk = ?3
         &self,
         parent_session_id: &str,
         parent_dialog_turn_ids: &[String],
-    ) -> BitFunResult<Vec<i64>> {
+    ) -> HaloResult<Vec<i64>> {
         let parent_session_id = parent_session_id.to_string();
         let parent_dialog_turn_ids = parent_dialog_turn_ids.to_vec();
         self.with_connection(move |connection| {
@@ -523,7 +523,7 @@ WHERE task_pk = ?3
         &self,
         source_parent_session_id: &str,
         target_parent_session_id: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let source_parent_session_id = source_parent_session_id.to_string();
         let target_parent_session_id = target_parent_session_id.to_string();
         self.with_connection(move |connection| {
@@ -631,7 +631,7 @@ fn collect_rows(
         '_,
         impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<BackgroundTaskRecord>,
     >,
-) -> BitFunResult<Vec<BackgroundTaskRecord>> {
+) -> HaloResult<Vec<BackgroundTaskRecord>> {
     rows.collect::<rusqlite::Result<Vec<_>>>().map_err(db_error)
 }
 
@@ -640,7 +640,7 @@ fn get_or_create_agent(
     parent_session_id: &str,
     child_session_id: &str,
     requested_agent_id: Option<&str>,
-) -> BitFunResult<(i64, String)> {
+) -> HaloResult<(i64, String)> {
     if let Some(existing) = transaction
         .query_row(
             "SELECT agent_pk, agent_id FROM agents WHERE parent_session_id = ?1 AND child_session_id = ?2",
@@ -651,7 +651,7 @@ fn get_or_create_agent(
         .map_err(db_error)?
     {
         if requested_agent_id.is_some_and(|requested_agent_id| existing.1 != requested_agent_id) {
-            return Err(BitFunError::tool(format!(
+            return Err(HaloError::tool(format!(
                 "Subagent session is already registered as agent_id={}",
                 existing.1
             )));
@@ -707,14 +707,14 @@ fn get_or_create_agent(
             params![parent_session_id, agent_id, child_session_id, unix_time_ms() as i64],
         )
         .map_err(|error| {
-            BitFunError::tool(format!(
+            HaloError::tool(format!(
                 "Failed to register agent_id={agent_id} for the parent session: {error}"
             ))
         })?;
     Ok((transaction.last_insert_rowid(), agent_id))
 }
 
-fn validate_agent_id(agent_id: &str) -> BitFunResult<()> {
+fn validate_agent_id(agent_id: &str) -> HaloResult<()> {
     let valid = !agent_id.is_empty()
         && agent_id.len() <= 32
         && agent_id
@@ -728,23 +728,23 @@ fn validate_agent_id(agent_id: &str) -> BitFunResult<()> {
     if valid {
         Ok(())
     } else {
-        Err(BitFunError::tool(
+        Err(HaloError::tool(
             "agent_id must match [a-z][a-z0-9_-]{0,31}".to_string(),
         ))
     }
 }
 
-fn open_connection(db_path: PathBuf) -> BitFunResult<Arc<Mutex<Connection>>> {
+fn open_connection(db_path: PathBuf) -> HaloResult<Arc<Mutex<Connection>>> {
     if let Some(parent) = db_path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| {
-            BitFunError::io(format!(
+            HaloError::io(format!(
                 "Failed to create agent coordination database directory {}: {error}",
                 parent.display()
             ))
         })?;
     }
     let connection = Connection::open(&db_path).map_err(|error| {
-        BitFunError::io(format!(
+        HaloError::io(format!(
             "Failed to open agent coordination database {}: {error}",
             db_path.display()
         ))
@@ -765,12 +765,12 @@ PRAGMA synchronous = NORMAL;
     Ok(Arc::new(Mutex::new(connection)))
 }
 
-fn initialize_schema(connection: &Connection) -> BitFunResult<()> {
+fn initialize_schema(connection: &Connection) -> HaloResult<()> {
     let version = connection
         .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
         .map_err(db_error)?;
     if version > SCHEMA_VERSION {
-        return Err(BitFunError::service(format!(
+        return Err(HaloError::service(format!(
             "Agent coordination database schema {version} is newer than supported schema {SCHEMA_VERSION}"
         )));
     }
@@ -834,8 +834,8 @@ PRAGMA user_version = 1;
     Ok(())
 }
 
-fn db_error(error: rusqlite::Error) -> BitFunError {
-    BitFunError::io(format!("Agent coordination database error: {error}"))
+fn db_error(error: rusqlite::Error) -> HaloError {
+    HaloError::io(format!("Agent coordination database error: {error}"))
 }
 
 fn unix_time_ms() -> u64 {

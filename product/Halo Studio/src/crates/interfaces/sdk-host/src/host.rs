@@ -5,16 +5,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     AgentDialogTurnRequest, AgentRuntime, AgentSessionCreateRequest, AgentSessionCreateResult,
     AgentSubmissionSource, AgentTransientSessionDiscardRequest, AgentTurnCancellationRequest,
     AgentTurnSettlementRequest, DialogSubmissionPolicy, DialogSubmitOutcome, PermissionReply,
     PermissionReplySource, PermissionRequest, PermissionRequestEvent, PortErrorKind, RuntimeError,
     AUTO_APPROVE_ASK_CONTEXT_KEY,
 };
-use bitfun_agent_runtime::user_questions::USER_INPUT_AVAILABLE_CONTEXT_KEY;
-use bitfun_core_types::ErrorCategory;
-use bitfun_events::AgenticEvent;
+use halo_agent_runtime::user_questions::USER_INPUT_AVAILABLE_CONTEXT_KEY;
+use halo_core_types::ErrorCategory;
+use halo_events::AgenticEvent;
 use futures_util::{stream::FuturesUnordered, FutureExt, StreamExt};
 use tokio::sync::{mpsc, oneshot, Mutex, OwnedSemaphorePermit, Semaphore};
 use tokio::task::JoinHandle;
@@ -32,7 +32,7 @@ use crate::protocol::{
     METHOD_SHUTDOWN, NOTIFICATION_QUERY_EVENT, NOTIFICATION_QUERY_RESULT, PROTOCOL_VERSION,
 };
 
-const DEFAULT_SESSION_NAME: &str = "BitFun SDK query";
+const DEFAULT_SESSION_NAME: &str = "Halo SDK query";
 const DEFAULT_AGENT: &str = "agentic";
 const DEFAULT_TURN_SETTLEMENT_TIMEOUT_MS: u64 = 5_000;
 const PERMISSION_REJECTION_TIMEOUT_MS: u64 = 2_000;
@@ -648,7 +648,7 @@ impl SdkHostConnection {
         .await;
         match result {
             Ok(Ok(_))
-            | Ok(Err(RuntimeError::Port(bitfun_runtime_ports::PortError {
+            | Ok(Err(RuntimeError::Port(halo_runtime_ports::PortError {
                 kind: PortErrorKind::NotFound,
                 ..
             }))) => true,
@@ -1450,7 +1450,7 @@ impl SdkHostConnection {
             .get(session_id)
             .cloned()
             .ok_or_else(|| {
-                bitfun_runtime_ports::PortError::new(
+                halo_runtime_ports::PortError::new(
                     PortErrorKind::NotAvailable,
                     "sessionId must belong to the same SDK Host connection; durable Session resume is not available in this protocol version",
                 )
@@ -1463,7 +1463,7 @@ impl SdkHostConnection {
         request: AgentSessionCreateRequest,
         workspace_path: String,
         session_budget: OwnedSemaphorePermit,
-    ) -> Result<bitfun_agent_runtime::sdk::AgentSessionCreateResult, RuntimeError> {
+    ) -> Result<halo_agent_runtime::sdk::AgentSessionCreateResult, RuntimeError> {
         let session_id = uuid::Uuid::new_v4().to_string();
         let runtime = self.inner.runtime.clone();
         let state = self.inner.state.clone();
@@ -1471,7 +1471,7 @@ impl SdkHostConnection {
         let (result_tx, result_rx) = oneshot::channel();
         let mut connection_state = state.lock().await;
         if connection_state.shutting_down {
-            return Err(bitfun_runtime_ports::PortError::new(
+            return Err(halo_runtime_ports::PortError::new(
                 PortErrorKind::Cancelled,
                 "SDK Host connection is shutting down",
             )
@@ -1508,7 +1508,7 @@ impl SdkHostConnection {
             });
         drop(connection_state);
         result_rx.await.map_err(|_| {
-            RuntimeError::from(bitfun_runtime_ports::PortError::new(
+            RuntimeError::from(halo_runtime_ports::PortError::new(
                 PortErrorKind::Backend,
                 "SDK Host Session creation task ended without a result",
             ))
@@ -2215,7 +2215,7 @@ fn runtime_error_kind(error: &RuntimeError) -> &'static str {
 mod session_conflict_tests {
     use super::{runtime_error_facts, runtime_error_kind};
     use crate::protocol::{ErrorCode, RecoveryAction};
-    use bitfun_agent_runtime::sdk::{PortError, PortErrorKind, RuntimeError};
+    use halo_agent_runtime::sdk::{PortError, PortErrorKind, RuntimeError};
 
     #[test]
     fn session_writer_conflict_uses_existing_action_required_response() {

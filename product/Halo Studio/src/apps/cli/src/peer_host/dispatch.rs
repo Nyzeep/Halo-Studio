@@ -2,7 +2,7 @@
 
 use serde_json::{json, Value};
 
-use bitfun_core::service::remote_connect::remote_server::RemoteResponse;
+use halo_core::service::remote_connect::remote_server::RemoteResponse;
 
 use super::commands;
 use super::control::{

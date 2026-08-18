@@ -1,14 +1,14 @@
 use crate::service::remote_ssh::workspace_state::WorkspaceSessionIdentity;
 use crate::service::workspace_runtime::WorkspaceRuntimeService;
-use bitfun_core_types::SessionExecutionTarget;
-pub use bitfun_runtime_ports::{
+use halo_core_types::SessionExecutionTarget;
+pub use halo_runtime_ports::{
     WorkspaceCommandOptions, WorkspaceCommandResult, WorkspaceDirEntry, WorkspaceFileSystem,
     WorkspaceServices, WorkspaceShell,
 };
-pub use bitfun_services_core::workspace::{
+pub use halo_services_core::workspace::{
     local_workspace_services, LocalWorkspaceFs, LocalWorkspaceShell,
 };
-pub use bitfun_services_integrations::remote_ssh::{
+pub use halo_services_integrations::remote_ssh::{
     remote_workspace_services, RemoteWorkspaceFs, RemoteWorkspaceShell,
 };
 use std::path::{Path, PathBuf};
@@ -176,7 +176,7 @@ mod tests {
         remote_workspace_session_mirror_dir, workspace_session_identity,
     };
     use crate::service::workspace_runtime::WorkspaceRuntimeService;
-    use bitfun_core_types::{
+    use halo_core_types::{
         SessionExecutionTarget, SessionExecutionTargetKind, WorktreeLifecycle,
     };
     use std::path::PathBuf;
@@ -206,8 +206,8 @@ mod tests {
 
     #[test]
     fn worktree_binding_executes_in_worktree_but_persists_in_project() {
-        let project_root = PathBuf::from("/tmp/bitfun-project");
-        let worktree_root = PathBuf::from("/tmp/bitfun-worktrees/wt-1");
+        let project_root = PathBuf::from("/tmp/halo-project");
+        let worktree_root = PathBuf::from("/tmp/halo-worktrees/wt-1");
         let execution_target = SessionExecutionTarget {
             kind: SessionExecutionTargetKind::ManagedWorktree,
             worktree_id: Some("wt-1".to_string()),
@@ -234,5 +234,5 @@ mod tests {
     }
 }
 
-// Workspace-level I/O contracts are owned by bitfun-runtime-ports and the
+// Workspace-level I/O contracts are owned by halo-runtime-ports and the
 // concrete providers are re-exported from their service owner crates above.

@@ -29,7 +29,7 @@ impl LocalIpcEndpoint {
         {
             let _ = runtime_root;
             Ok(Self {
-                discovery_value: format!(r"\\.\pipe\bitfun-agent-runtime-{suffix}"),
+                discovery_value: format!(r"\\.\pipe\halo-agent-runtime-{suffix}"),
             })
         }
         #[cfg(unix)]

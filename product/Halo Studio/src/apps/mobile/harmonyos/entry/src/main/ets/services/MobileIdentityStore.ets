@@ -2,7 +2,7 @@ import { preferences } from '@kit.ArkData';
 import { Encoding } from './Encoding';
 import { RemoteModelPreferenceStore } from './RemoteModelController';
 
-const STORE_NAME = 'bitfun_remote_identity';
+const STORE_NAME = 'halo_remote_identity';
 const INSTALL_ID_KEY = 'mobile_install_id';
 const USER_ID_KEY = 'user_id';
 const REMOTE_URL_KEY = 'remote_url';

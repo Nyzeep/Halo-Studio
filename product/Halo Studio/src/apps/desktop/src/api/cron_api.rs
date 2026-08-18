@@ -1,6 +1,6 @@
 //! Scheduled jobs API.
 
-use bitfun_core::service::cron::{
+use halo_core::service::cron::{
     get_global_cron_service, CreateCronJobRequest, CronJob, CronJobTargetKind, UpdateCronJobRequest,
 };
 use log::{debug, error};
@@ -30,7 +30,7 @@ pub struct DeleteCronJobRequest {
     pub job_id: String,
 }
 
-fn cron_service() -> Result<std::sync::Arc<bitfun_core::service::cron::CronService>, String> {
+fn cron_service() -> Result<std::sync::Arc<halo_core::service::cron::CronService>, String> {
     get_global_cron_service().ok_or_else(|| "Cron service is not initialized".to_string())
 }
 

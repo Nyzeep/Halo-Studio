@@ -6,8 +6,8 @@
 
 use std::sync::Arc;
 
-use bitfun_core::infrastructure::PathManager;
-use bitfun_core::service::dispatch::{
+use halo_core::infrastructure::PathManager;
+use halo_core::service::dispatch::{
     cancel_dispatch, cancel_dispatch_cli_install, get_dispatch_status, list_dispatch_jobs,
     list_dispatch_targets, poll_dispatch_cli_install, probe_dispatch_target,
     start_dispatch_cli_install, submit_dispatch, DispatchConnectionRequest,
@@ -15,7 +15,7 @@ use bitfun_core::service::dispatch::{
     DispatchListJobsRequest, DispatchListTargetsRequest, DispatchProbeTargetRequest,
     DispatchStatusRequest, DispatchSubmitRequest, DispatchTargetOption, OutboundDispatchStore,
 };
-use bitfun_core::service::remote_ssh::dispatch_ssh::{
+use halo_core::service::remote_ssh::dispatch_ssh::{
     DispatchInstallPoll, DispatchInstallStart, DispatchSshProbe,
 };
 use serde_json::Value;

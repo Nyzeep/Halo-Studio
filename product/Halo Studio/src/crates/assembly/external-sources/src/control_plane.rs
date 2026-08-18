@@ -8,11 +8,11 @@ use crate::{
     ExternalSubagentDiscoveryRequest, ExternalSubagentDiscoveryResult, ExternalToolCoordinator,
     ExternalToolDiscoveryRequest, ExternalToolDiscoveryResult,
 };
-use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_sources::{
     ExternalMcpRevisionKey, ExternalMcpSourceProvider, ExternalSourceContext,
     ExternalToolSourceProvider, PromptCommandSourceProvider,
 };
-use bitfun_product_domains::external_subagents::ExternalSubagentSourceProvider;
+use halo_product_domains::external_subagents::ExternalSubagentSourceProvider;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard};

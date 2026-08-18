@@ -26,7 +26,7 @@ export struct AppSidebar {
   build() {
     Column() {
       Row() {
-        Text('BitFun')
+        Text('Halo Studio')
           .fontSize(23)
           .fontWeight(FontWeight.Bold)
           .fontColor(INK)

@@ -1,5 +1,5 @@
 use super::*;
-use bitfun_services_integrations::mcp::server::{detect_mcp_list_changed_kind, MCPListChangedKind};
+use halo_services_integrations::mcp::server::{detect_mcp_list_changed_kind, MCPListChangedKind};
 use std::collections::HashSet;
 
 impl MCPServerManager {
@@ -35,7 +35,7 @@ impl MCPServerManager {
                 .file_name()
                 .and_then(|v| v.to_str())
                 .filter(|v| !v.is_empty())
-                .unwrap_or("BitFun Workspace")
+                .unwrap_or("Halo Workspace")
                 .to_string();
             roots.push(json!({
                 "uri": uri,
@@ -222,14 +222,14 @@ impl MCPServerManager {
         error_message: Option<String>,
         error_code: Option<i32>,
         error_data: Option<Value>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let pending = {
             let mut interactions = self.pending_interactions.write().await;
             interactions.remove(interaction_id)
         };
 
         let Some(pending) = pending else {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "MCP interaction not found: {}",
                 interaction_id
             )));
@@ -251,7 +251,7 @@ impl MCPServerManager {
         };
 
         pending.sender.send(decision).map_err(|_| {
-            BitFunError::MCPError(format!(
+            HaloError::MCPError(format!(
                 "Failed to deliver MCP interaction response (receiver dropped): {}",
                 interaction_id
             ))

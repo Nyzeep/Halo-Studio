@@ -248,7 +248,7 @@ impl ChatMode {
                     if let Some(selected) = chat_view.mcp_selector_confirm() {
                         if selected.is_external() {
                             chat_state.add_system_message(
-                                "External MCP settings are read-only in BitFun. Disable the server here or edit it in the source application."
+                                "External MCP settings are read-only in Halo. Disable the server here or edit it in the source application."
                                     .to_string(),
                             );
                             return Ok(None);
@@ -268,7 +268,7 @@ impl ChatMode {
                         .is_some_and(|selected| selected.is_external())
                     {
                         chat_state.add_system_message(
-                            "External MCP settings are read-only in BitFun. Edit them in the source application."
+                            "External MCP settings are read-only in Halo. Edit them in the source application."
                                 .to_string(),
                         );
                     } else {

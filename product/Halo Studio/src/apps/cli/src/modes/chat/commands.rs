@@ -352,7 +352,7 @@ impl ChatMode {
                 let reason = if builtin_reconfirmation_required {
                     "the previous external candidate changed or was removed"
                 } else {
-                    "BitFun and an external source both provide it"
+                    "Halo and an external source both provide it"
                 };
                 chat_state.add_system_message(format!(
                     "Command /{command_name} needs a source choice because {reason}. Type /{command_name} and choose the source-labelled candidate from the slash-command picker; the choice is remembered until a participant changes."
@@ -361,7 +361,7 @@ impl ChatMode {
             }
             CommandRoute::WaitForDiscovery => {
                 chat_state.add_system_message(format!(
-                    "BitFun is still checking compatible external commands. Retry /{command_name} when discovery finishes."
+                    "Halo is still checking compatible external commands. Retry /{command_name} when discovery finishes."
                 ));
                 Ok(None)
             }
@@ -438,7 +438,7 @@ impl ChatMode {
     ) {
         if action_by_id(native_action_id, ActionContext::Chat).is_none() {
             chat_view.set_status(Some(
-                "The BitFun command changed; reopen the command picker and retry".to_string(),
+                "The Halo command changed; reopen the command picker and retry".to_string(),
             ));
             return;
         }
@@ -700,7 +700,7 @@ impl ChatMode {
                 self.handle_hook_management("", chat_view, chat_state, rt_handle);
             }
             ActionHandler::AcpHelp => {
-                chat_state.add_system_message(crate::acp_cli::acp_help_text("bitfun"));
+                chat_state.add_system_message(crate::acp_cli::acp_help_text("halo"));
                 chat_view.set_status(Some(
                     "ACP setup added to the conversation. You can keep typing.".to_string(),
                 ));

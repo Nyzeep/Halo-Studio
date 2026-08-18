@@ -450,14 +450,14 @@ impl Tool for WrappedTool {
         self.original_tool.name()
     }
 
-    async fn description(&self) -> crate::util::errors::BitFunResult<String> {
+    async fn description(&self) -> crate::util::errors::HaloResult<String> {
         Ok(self.original_tool.description().await?)
     }
 
     async fn description_with_context(
         &self,
         context: Option<&ToolUseContext>,
-    ) -> crate::util::errors::BitFunResult<String> {
+    ) -> crate::util::errors::HaloResult<String> {
         self.original_tool.description_with_context(context).await
     }
 
@@ -522,7 +522,7 @@ impl Tool for WrappedTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> crate::util::errors::BitFunResult<Vec<bitfun_agent_tools::PermissionIntent>> {
+    ) -> crate::util::errors::HaloResult<Vec<halo_agent_tools::PermissionIntent>> {
         self.original_tool.permission_intents(input, context)
     }
 
@@ -572,7 +572,7 @@ impl Tool for WrappedTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> crate::util::errors::BitFunResult<Vec<ToolResult>> {
+    ) -> crate::util::errors::HaloResult<Vec<ToolResult>> {
         if Self::is_file_modification_tool_name(self.name()) {
             debug!(
                 "Intercepting file modification tool: tool_name={}",
@@ -607,14 +607,14 @@ impl WrappedTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> crate::util::errors::BitFunResult<()> {
+    ) -> crate::util::errors::HaloResult<()> {
         if !matches!(self.name(), "Delete" | "delete_file") {
             return Ok(());
         }
 
         let raw_path = self
             .extract_file_path(input, context)
-            .map_err(|error| crate::util::errors::BitFunError::Tool(error.to_string()))?;
+            .map_err(|error| crate::util::errors::HaloError::Tool(error.to_string()))?;
         let resolved = context.resolve_tool_path(raw_path.to_string_lossy().as_ref())?;
         if resolved.uses_remote_workspace_backend() {
             return Ok(());
@@ -622,14 +622,14 @@ impl WrappedTool {
 
         match std::fs::symlink_metadata(&resolved.resolved_path) {
             Ok(metadata) if is_symlink_or_reparse_point(&metadata) => {
-                Err(crate::util::errors::BitFunError::Tool(format!(
+                Err(crate::util::errors::HaloError::Tool(format!(
                     "Snapshot-tracked Delete cannot remove a symbolic link or reparse point because rollback cannot restore the link object: {}. The delete was not performed",
                     resolved.logical_path
                 )))
             }
             Ok(_) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(crate::util::errors::BitFunError::Tool(format!(
+            Err(error) => Err(crate::util::errors::HaloError::Tool(format!(
                 "Failed to inspect Delete target for Snapshot safety: path={} error={}",
                 resolved.logical_path, error
             ))),
@@ -641,20 +641,20 @@ impl WrappedTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> crate::util::errors::BitFunResult<Vec<ToolResult>> {
+    ) -> crate::util::errors::HaloResult<Vec<ToolResult>> {
         let session_id = context.session_id.clone().ok_or_else(|| {
-            crate::util::errors::BitFunError::Tool(
+            crate::util::errors::HaloError::Tool(
                 "session_id is required in ToolUseContext".to_string(),
             )
         })?;
 
         let raw_path = match self.extract_file_path(input, context) {
             Ok(path) => path,
-            Err(e) => return Err(crate::util::errors::BitFunError::Tool(e.to_string())),
+            Err(e) => return Err(crate::util::errors::HaloError::Tool(e.to_string())),
         };
 
         let snapshot_workspace = context.workspace_root().map(PathBuf::from).ok_or_else(|| {
-            crate::util::errors::BitFunError::Tool(
+            crate::util::errors::HaloError::Tool(
                 "workspace is required in ToolUseContext for snapshot tracking".to_string(),
             )
         })?;
@@ -670,7 +670,7 @@ impl WrappedTool {
 
         let snapshot_manager = get_or_create_snapshot_manager(snapshot_workspace.clone(), None)
             .await
-            .map_err(|e| crate::util::errors::BitFunError::Tool(e.to_string()))?;
+            .map_err(|e| crate::util::errors::HaloError::Tool(e.to_string()))?;
 
         let file_path = if raw_path.is_absolute() {
             raw_path.clone()
@@ -692,7 +692,7 @@ impl WrappedTool {
                 snapshot_workspace.display()
             );
 
-            return Err(crate::util::errors::BitFunError::Tool(format!(
+            return Err(crate::util::errors::HaloError::Tool(format!(
                 "File not found: {} (Snapshot workspace: {})",
                 file_path.display(),
                 snapshot_workspace.display()
@@ -721,7 +721,7 @@ impl WrappedTool {
                 context.tool_call_id.clone(),
             )
             .await
-            .map_err(|e| crate::util::errors::BitFunError::Tool(e.to_string()))?;
+            .map_err(|e| crate::util::errors::HaloError::Tool(e.to_string()))?;
         let intercept_ms = crate::util::elapsed_ms_u64(intercept_started_at);
 
         debug!(
@@ -737,7 +737,7 @@ impl WrappedTool {
         snapshot_service
             .complete_file_modification(&session_id, &operation_id, tool_call_ms)
             .await
-            .map_err(|e| crate::util::errors::BitFunError::Tool(e.to_string()))?;
+            .map_err(|e| crate::util::errors::HaloError::Tool(e.to_string()))?;
         let complete_ms = crate::util::elapsed_ms_u64(complete_started_at);
         let total_ms = intercept_ms
             .saturating_add(tool_call_ms)
@@ -963,7 +963,7 @@ mod tests {
     impl TestWorkspace {
         fn new() -> Self {
             let path = std::env::temp_dir()
-                .join(format!("bitfun-snapshot-manager-test-{}", Uuid::new_v4()));
+                .join(format!("halo-snapshot-manager-test-{}", Uuid::new_v4()));
             std::fs::create_dir_all(&path).expect("test workspace should be created");
             Self { path }
         }
@@ -992,7 +992,7 @@ mod tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         }
     }
 

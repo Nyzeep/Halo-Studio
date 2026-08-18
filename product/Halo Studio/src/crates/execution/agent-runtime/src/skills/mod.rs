@@ -21,9 +21,9 @@ pub use resolver::{
 };
 pub use roots::{
     normalize_local_skill_dir_name, normalize_remote_skill_dir_name,
-    resolve_user_config_skill_root, SkillRootSpec, BITFUN_SKILL_SOURCE_ID,
-    BITFUN_SKILL_SOURCE_LABEL, BITFUN_SYSTEM_SKILL_DIR, BITFUN_SYSTEM_SKILL_SLOT,
-    BITFUN_USER_SKILL_SLOT, PROJECT_SKILL_KEY_PREFIX, PROJECT_SKILL_ROOTS, USER_CONFIG_SKILL_ROOTS,
+    resolve_user_config_skill_root, SkillRootSpec, HALO_SKILL_SOURCE_ID,
+    HALO_SKILL_SOURCE_LABEL, HALO_SYSTEM_SKILL_DIR, HALO_SYSTEM_SKILL_SLOT,
+    HALO_USER_SKILL_SLOT, PROJECT_SKILL_KEY_PREFIX, PROJECT_SKILL_ROOTS, USER_CONFIG_SKILL_ROOTS,
     USER_HOME_SKILL_ROOTS, USER_SKILL_KEY_PREFIX,
 };
 pub use selection::{

@@ -12,8 +12,8 @@ use crate::service::config::types::{
     AgentProfileConfig, AgentProfileView, ParentSubagentOverrideConfig,
 };
 use crate::util::errors::*;
-use bitfun_agent_runtime::skills::normalize_user_mode_skill_overrides;
-use bitfun_runtime_ports::PermissionRule;
+use halo_agent_runtime::skills::normalize_user_mode_skill_overrides;
+use halo_runtime_ports::PermissionRule;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
@@ -251,7 +251,7 @@ fn canonicalize_agent_profile(
     raw_mode: Option<&Value>,
     default_tools: &[String],
     valid_tools: &HashSet<String>,
-) -> BitFunResult<Option<AgentProfileConfig>> {
+) -> HaloResult<Option<AgentProfileConfig>> {
     let Some(raw_mode) = raw_mode else {
         return Ok(None);
     };
@@ -261,7 +261,7 @@ fn canonicalize_agent_profile(
 
     let mut stored: AgentProfileConfig =
         serde_json::from_value(raw_mode.clone()).map_err(|error| {
-            BitFunError::config(format!(
+            HaloError::config(format!(
                 "Failed to deserialize agent profile '{}': {}",
                 profile_id, error
             ))
@@ -312,7 +312,7 @@ async fn get_profile_defaults() -> HashMap<String, Vec<String>> {
     defaults
 }
 
-pub async fn get_agent_profile_configs() -> BitFunResult<HashMap<String, AgentProfileConfig>> {
+pub async fn get_agent_profile_configs() -> HaloResult<HashMap<String, AgentProfileConfig>> {
     let config_service = GlobalConfigManager::get_service().await?;
     Ok(config_service
         .get_config(Some("ai.agent_profiles"))
@@ -320,7 +320,7 @@ pub async fn get_agent_profile_configs() -> BitFunResult<HashMap<String, AgentPr
         .unwrap_or_default())
 }
 
-pub async fn get_agent_profile_views() -> BitFunResult<HashMap<String, AgentProfileView>> {
+pub async fn get_agent_profile_views() -> HaloResult<HashMap<String, AgentProfileView>> {
     let stored_configs = get_agent_profile_configs().await?;
     let mode_defaults = get_mode_defaults().await;
     let valid_tools = get_valid_tool_names().await;
@@ -340,28 +340,28 @@ pub async fn get_agent_profile_views() -> BitFunResult<HashMap<String, AgentProf
     Ok(views)
 }
 
-pub async fn get_agent_profile_view(agent_id: &str) -> BitFunResult<AgentProfileView> {
+pub async fn get_agent_profile_view(agent_id: &str) -> HaloResult<AgentProfileView> {
     let views = get_agent_profile_views().await?;
     views
         .get(agent_id)
         .cloned()
-        .ok_or_else(|| BitFunError::config(format!("Agent does not exist: {}", agent_id)))
+        .ok_or_else(|| HaloError::config(format!("Agent does not exist: {}", agent_id)))
 }
 
-pub async fn persist_agent_profile_from_value(agent_id: &str, config: Value) -> BitFunResult<()> {
+pub async fn persist_agent_profile_from_value(agent_id: &str, config: Value) -> HaloResult<()> {
     let config_service = GlobalConfigManager::get_service().await?;
     let mut stored_configs = get_agent_profile_configs().await?;
     let mode_defaults = get_mode_defaults().await;
     let default_tools = mode_defaults
         .get(agent_id)
-        .ok_or_else(|| BitFunError::config(format!("Agent does not exist: {}", agent_id)))?;
+        .ok_or_else(|| HaloError::config(format!("Agent does not exist: {}", agent_id)))?;
     let valid_tools = get_valid_tool_names().await;
     let profile_id = resolve_profile_id(agent_id);
     let current = stored_configs.get(&profile_id);
 
     let enabled_tools = if let Some(tools) = config.get("enabled_tools") {
         serde_json::from_value::<Vec<String>>(tools.clone()).map_err(|error| {
-            BitFunError::config(format!(
+            HaloError::config(format!(
                 "Invalid enabled_tools for mode '{}': {}",
                 agent_id, error
             ))
@@ -379,7 +379,7 @@ pub async fn persist_agent_profile_from_value(agent_id: &str, config: Value) -> 
             Some(Value::Null) | None => Vec::new(),
             Some(value) => {
                 serde_json::from_value::<Vec<String>>(value.clone()).map_err(|error| {
-                    BitFunError::config(format!(
+                    HaloError::config(format!(
                         "Invalid disabled_user_skills for mode '{}': {}",
                         agent_id, error
                     ))
@@ -401,7 +401,7 @@ pub async fn persist_agent_profile_from_value(agent_id: &str, config: Value) -> 
             Some(Value::Null) | None => Vec::new(),
             Some(value) => {
                 serde_json::from_value::<Vec<String>>(value.clone()).map_err(|error| {
-                    BitFunError::config(format!(
+                    HaloError::config(format!(
                         "Invalid enabled_user_skills for mode '{}': {}",
                         agent_id, error
                     ))
@@ -423,7 +423,7 @@ pub async fn persist_agent_profile_from_value(agent_id: &str, config: Value) -> 
             Some(Value::Null) | None => ParentSubagentOverrideConfig::new(),
             Some(value) => serde_json::from_value::<ParentSubagentOverrideConfig>(value.clone())
                 .map_err(|error| {
-                    BitFunError::config(format!(
+                    HaloError::config(format!(
                         "Invalid subagent_overrides for mode '{}': {}",
                         agent_id, error
                     ))
@@ -444,7 +444,7 @@ pub async fn persist_agent_profile_from_value(agent_id: &str, config: Value) -> 
             Some(Value::Null) | None => Vec::new(),
             Some(value) => {
                 serde_json::from_value::<Vec<PermissionRule>>(value.clone()).map_err(|error| {
-                    BitFunError::config(format!(
+                    HaloError::config(format!(
                         "Invalid tool_permission_rules for mode '{}': {}",
                         agent_id, error
                     ))
@@ -477,7 +477,7 @@ pub async fn persist_agent_profile_from_value(agent_id: &str, config: Value) -> 
         .await
 }
 
-pub async fn reset_agent_profile_to_default(agent_id: &str) -> BitFunResult<()> {
+pub async fn reset_agent_profile_to_default(agent_id: &str) -> HaloResult<()> {
     let config_service = GlobalConfigManager::get_service().await?;
     let mut stored_configs = get_agent_profile_configs().await?;
     let profile_id = resolve_profile_id(agent_id);
@@ -502,7 +502,7 @@ pub async fn reset_agent_profile_to_default(agent_id: &str) -> BitFunResult<()> 
 
 /// Canonicalizes stored mode profile overrides.
 pub async fn canonicalize_agent_profile_configs(
-) -> BitFunResult<AgentProfileConfigCanonicalizationReport> {
+) -> HaloResult<AgentProfileConfigCanonicalizationReport> {
     let config_service = GlobalConfigManager::get_service().await?;
     let valid_tools = get_valid_tool_names().await;
     let profile_defaults = get_profile_defaults().await;
@@ -510,7 +510,7 @@ pub async fn canonicalize_agent_profile_configs(
     let original_ai_value = ai_value.clone();
     let ai_object = ai_value
         .as_object_mut()
-        .ok_or_else(|| BitFunError::config("AI config must be a JSON object".to_string()))?;
+        .ok_or_else(|| HaloError::config("AI config must be a JSON object".to_string()))?;
 
     let raw_agent_profiles = ai_object
         .get("agent_profiles")
@@ -582,7 +582,7 @@ mod tests {
         StoredAgentProfileOverrides,
     };
     use crate::service::config::types::AgentSubagentOverrideState;
-    use bitfun_runtime_ports::{PermissionEffect, PermissionRule};
+    use halo_runtime_ports::{PermissionEffect, PermissionRule};
     use serde_json::Value;
     use std::collections::HashSet;
 
@@ -590,18 +590,18 @@ mod tests {
     fn normalize_skill_override_lists_removes_duplicates_and_conflicts() {
         let (disabled, enabled) = normalize_skill_override_lists(
             vec![
-                "user::bitfun-system::pdf".to_string(),
-                "user::bitfun-system::pdf".to_string(),
+                "user::halo-system::pdf".to_string(),
+                "user::halo-system::pdf".to_string(),
             ],
             vec![
-                "user::bitfun-system::pdf".to_string(),
-                "user::bitfun-system::docx".to_string(),
-                "user::bitfun-system::docx".to_string(),
+                "user::halo-system::pdf".to_string(),
+                "user::halo-system::docx".to_string(),
+                "user::halo-system::docx".to_string(),
             ],
         );
 
-        assert_eq!(disabled, vec!["user::bitfun-system::pdf".to_string()]);
-        assert_eq!(enabled, vec!["user::bitfun-system::docx".to_string()]);
+        assert_eq!(disabled, vec!["user::halo-system::pdf".to_string()]);
+        assert_eq!(enabled, vec!["user::halo-system::docx".to_string()]);
     }
 
     #[test]
@@ -612,7 +612,7 @@ mod tests {
             added_tools: Vec::new(),
             removed_tools: Vec::new(),
             disabled_user_skills: Vec::new(),
-            enabled_user_skills: vec!["user::bitfun-system::pdf".to_string()],
+            enabled_user_skills: vec!["user::halo-system::pdf".to_string()],
             subagent_overrides: Default::default(),
             tool_permission_rules: Vec::new(),
             default_tools: &[],
@@ -623,7 +623,7 @@ mod tests {
         assert_eq!(stored.profile_id, "coding_shared");
         assert_eq!(
             stored.enabled_user_skills,
-            vec!["user::bitfun-system::pdf".to_string()]
+            vec!["user::halo-system::pdf".to_string()]
         );
         assert!(stored.disabled_user_skills.is_empty());
     }

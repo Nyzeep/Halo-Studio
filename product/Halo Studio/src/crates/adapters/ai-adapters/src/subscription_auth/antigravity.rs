@@ -252,7 +252,7 @@ pub(crate) async fn begin_login(
     Ok(StartedLogin {
         authorization_url,
         user_code: None,
-        instructions: "Complete authorization in your browser, then return to BitFun.".to_string(),
+        instructions: "Complete authorization in your browser, then return to Halo.".to_string(),
         runner: Box::pin(runner),
     })
 }

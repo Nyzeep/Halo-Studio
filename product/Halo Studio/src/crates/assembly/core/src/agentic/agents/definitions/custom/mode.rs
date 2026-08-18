@@ -1,9 +1,9 @@
 use super::common::CustomAgentData;
 use crate::agentic::agents::Agent;
 use crate::agentic::agents::{PromptBuilderContext, UserContextPolicy};
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
-use bitfun_agent_runtime::custom_agent::{
+use halo_agent_runtime::custom_agent::{
     custom_agent_read_markdown_file, default_custom_agent_user_context_policy,
     CustomAgentDefinition, CustomAgentKind, CustomAgentLevel,
 };
@@ -48,15 +48,15 @@ impl CustomMode {
         )
     }
 
-    pub fn from_file(path: &str, level: CustomAgentLevel) -> BitFunResult<Self> {
-        let parsed = custom_agent_read_markdown_file(path, level).map_err(BitFunError::Agent)?;
+    pub fn from_file(path: &str, level: CustomAgentLevel) -> HaloResult<Self> {
+        let parsed = custom_agent_read_markdown_file(path, level).map_err(HaloError::Agent)?;
         if parsed.definition.kind != CustomAgentKind::Mode {
-            return Err(BitFunError::Agent("Expected custom mode file".to_string()));
+            return Err(HaloError::Agent("Expected custom mode file".to_string()));
         }
         Ok(Self::from_definition(path.to_string(), parsed.definition))
     }
 
-    pub fn save_to_file(&self, model: Option<&str>) -> BitFunResult<()> {
+    pub fn save_to_file(&self, model: Option<&str>) -> HaloResult<()> {
         self.data.save_to_file(model, None)
     }
 }
@@ -90,7 +90,7 @@ impl Agent for CustomMode {
         self.data.system_prompt_cache_identity()
     }
 
-    async fn build_prompt(&self, context: &PromptBuilderContext) -> BitFunResult<String> {
+    async fn build_prompt(&self, context: &PromptBuilderContext) -> HaloResult<String> {
         self.data.build_prompt(context).await
     }
 

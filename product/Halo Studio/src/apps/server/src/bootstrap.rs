@@ -2,10 +2,10 @@
 //!
 //! Mirrors the Desktop app's init sequence without any Tauri dependency.
 
-use bitfun_core::agentic::*;
-use bitfun_core::infrastructure::ai::AIClientFactory;
-use bitfun_core::infrastructure::try_get_path_manager_arc;
-use bitfun_core::service::{config, filesystem, mcp, token_usage, workspace};
+use halo_core::agentic::*;
+use halo_core::infrastructure::ai::AIClientFactory;
+use halo_core::infrastructure::try_get_path_manager_arc;
+use halo_core::service::{config, filesystem, mcp, token_usage, workspace};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -31,7 +31,7 @@ pub struct ServerAppState {
 ///
 /// The optional `workspace` path, when provided, is opened automatically.
 pub async fn initialize(workspace: Option<String>) -> anyhow::Result<Arc<ServerAppState>> {
-    log::info!("Initializing BitFun server core services");
+    log::info!("Initializing Halo server core services");
 
     // 1. Global config
     config::initialize_global_config().await?;
@@ -40,7 +40,7 @@ pub async fn initialize(workspace: Option<String>) -> anyhow::Result<Arc<ServerA
     // Initialize the global I18nService so server-mode bot/remote-connect
     // consumers observe the same runtime locale lifecycle as Desktop.
     if let Err(e) =
-        bitfun_core::service::i18n::initialize_global_i18n_service(Some(config_service.clone()))
+        halo_core::service::i18n::initialize_global_i18n_service(Some(config_service.clone()))
             .await
     {
         log::warn!(
@@ -56,7 +56,7 @@ pub async fn initialize(workspace: Option<String>) -> anyhow::Result<Arc<ServerA
     // 3. Agentic system
     let path_manager = try_get_path_manager_arc()?;
     let runtime_ownership = Arc::new(
-        bitfun_core::runtime_ownership::CoreRuntimeOwnership::embedded(
+        halo_core::runtime_ownership::CoreRuntimeOwnership::embedded(
             path_manager.as_ref(),
             "server",
         ),
@@ -109,10 +109,10 @@ pub async fn initialize(workspace: Option<String>) -> anyhow::Result<Arc<ServerA
         runtime_ownership,
     ));
     coordinator.set_terminal_port(
-        bitfun_core::product_runtime::CoreRuntimeServicesProvider::terminal_port(),
+        halo_core::product_runtime::CoreRuntimeServicesProvider::terminal_port(),
     );
     coordinator.set_remote_exec_port(
-        bitfun_core::product_runtime::CoreRuntimeServicesProvider::remote_exec_port(),
+        halo_core::product_runtime::CoreRuntimeServicesProvider::remote_exec_port(),
     );
 
     coordination::ConversationCoordinator::set_global(coordinator.clone());
@@ -126,7 +126,7 @@ pub async fn initialize(workspace: Option<String>) -> anyhow::Result<Arc<ServerA
     event_router.subscribe_internal("token_usage".to_string(), token_usage_subscriber);
     event_router.subscribe_internal(
         "thread_goal_tokens".to_string(),
-        Arc::new(bitfun_core::agentic::goal_mode::ThreadGoalTokenSubscriber),
+        Arc::new(halo_core::agentic::goal_mode::ThreadGoalTokenSubscriber),
     );
 
     // Dialog scheduler
@@ -138,20 +138,20 @@ pub async fn initialize(workspace: Option<String>) -> anyhow::Result<Arc<ServerA
 
     // Cron service
     let cron_service =
-        bitfun_core::service::cron::CronService::new(path_manager.clone(), scheduler.clone())
+        halo_core::service::cron::CronService::new(path_manager.clone(), scheduler.clone())
             .await?;
-    bitfun_core::service::cron::set_global_cron_service(cron_service.clone());
-    let cron_subscriber = Arc::new(bitfun_core::service::cron::CronEventSubscriber::new(
+    halo_core::service::cron::set_global_cron_service(cron_service.clone());
+    let cron_subscriber = Arc::new(halo_core::service::cron::CronEventSubscriber::new(
         cron_service.clone(),
     ));
     event_router.subscribe_internal("cron_jobs".to_string(), cron_subscriber);
     cron_service.start();
 
     // Function agents
-    let _ = bitfun_core::function_agents::git_func_agent::GitFunctionAgent::new(
+    let _ = halo_core::function_agents::git_func_agent::GitFunctionAgent::new(
         ai_client_factory.clone(),
     );
-    let _ = bitfun_core::function_agents::startchat_func_agent::StartchatFunctionAgent::new(
+    let _ = halo_core::function_agents::startchat_func_agent::StartchatFunctionAgent::new(
         ai_client_factory.clone(),
     );
 
@@ -211,7 +211,7 @@ pub async fn initialize(workspace: Option<String>) -> anyhow::Result<Arc<ServerA
     };
 
     // LSP
-    if let Err(e) = bitfun_core::service::lsp::initialize_global_lsp_manager().await {
+    if let Err(e) = halo_core::service::lsp::initialize_global_lsp_manager().await {
         log::error!("Failed to initialize LSP manager: {}", e);
     }
 
@@ -232,6 +232,6 @@ pub async fn initialize(workspace: Option<String>) -> anyhow::Result<Arc<ServerA
         start_time: std::time::Instant::now(),
     });
 
-    log::info!("BitFun server core services initialized");
+    log::info!("Halo server core services initialized");
     Ok(state)
 }

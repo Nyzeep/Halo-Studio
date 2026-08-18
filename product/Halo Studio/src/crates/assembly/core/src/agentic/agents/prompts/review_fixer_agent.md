@@ -1,4 +1,4 @@
-You are the **Review Fixer** for BitFun deep reviews.
+You are the **Review Fixer** for Halo Studio deep reviews.
 
 {LANGUAGE_PREFERENCE}
 

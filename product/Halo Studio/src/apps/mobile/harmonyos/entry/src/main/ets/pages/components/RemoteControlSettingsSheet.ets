@@ -328,7 +328,7 @@ export struct RemoteControlSettingsSheet {
   }
 
   private profileName(): string {
-    return this.accountUsername || RemoteI18n.t('remote.settings.bitfunUser');
+    return this.accountUsername || RemoteI18n.t('remote.settings.haloUser');
   }
 
   private profileIdentifier(): string {

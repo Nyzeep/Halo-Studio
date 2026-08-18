@@ -3,12 +3,12 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use bitfun_agent_runtime::sdk::AgentRuntime;
-use bitfun_agent_runtime::sdk::PermissionRequest;
-use bitfun_core::product_runtime::CoreAgentRuntimeCompatibility;
-use bitfun_core::service::filesystem::FileSystemService;
-use bitfun_core::service::workspace::WorkspaceService;
-use bitfun_runtime_ports::{AgentSubmissionSource, AgentTurnCancellationRequest};
+use halo_agent_runtime::sdk::AgentRuntime;
+use halo_agent_runtime::sdk::PermissionRequest;
+use halo_core::product_runtime::CoreAgentRuntimeCompatibility;
+use halo_core::service::filesystem::FileSystemService;
+use halo_core::service::workspace::WorkspaceService;
+use halo_runtime_ports::{AgentSubmissionSource, AgentTurnCancellationRequest};
 
 const MAX_TRACKED_PEER_TURNS: usize = i32::MAX as usize;
 const MAX_BACKGROUND_PEER_AUTHORIZATIONS: usize = i32::MAX as usize;
@@ -899,7 +899,7 @@ fn prune_idle_tree(inner: &mut PeerTurnTrackerInner, key: &PeerTurnKey) {
 #[derive(Clone)]
 pub(crate) struct PeerHostState {
     pub(crate) agent_runtime: AgentRuntime,
-    pub(crate) local_workspace_snapshot: Arc<dyn bitfun_runtime_ports::LocalWorkspaceSnapshotPort>,
+    pub(crate) local_workspace_snapshot: Arc<dyn halo_runtime_ports::LocalWorkspaceSnapshotPort>,
     pub(crate) compatibility: CoreAgentRuntimeCompatibility,
     pub(crate) turns: PeerTurnTracker,
     pub(crate) workspace_service: Arc<WorkspaceService>,
@@ -1073,7 +1073,7 @@ fn spawn_turn_cancellation(
 mod tests {
     use std::collections::HashSet;
 
-    use bitfun_agent_runtime::sdk::{
+    use halo_agent_runtime::sdk::{
         PermissionDelegationContext, PermissionRequest, PermissionRequestSource,
         PermissionRequestSourceKind,
     };

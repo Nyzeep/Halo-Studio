@@ -2,13 +2,13 @@
 
 Scope: this guide applies to `src/crates/execution/harness`.
 
-`bitfun-harness` owns provider-neutral workflow contracts, descriptors, plans,
+`halo-harness` owns provider-neutral workflow contracts, descriptors, plans,
 and registry wiring for multi-step workflows such as Deep Review,
 DeepResearch, MiniApp, and future SDD flows.
 
 ## Guardrails
 
-- Do not depend on `bitfun-core`, app crates, Tauri, concrete service crates,
+- Do not depend on `halo-core`, app crates, Tauri, concrete service crates,
   product-domain implementations, AI adapters, transport adapters, or concrete
   tool packs.
 - Keep concrete workflow execution on the legacy product path until a reviewed
@@ -18,14 +18,14 @@ DeepResearch, MiniApp, and future SDD flows.
   internals, filesystem/Git/terminal managers, or UI command behavior.
 - Product Assembly should register providers through typed registries; avoid
   global mutable registries or untyped service locators.
-- Product capability packs may select provider descriptors; `bitfun-harness`
+- Product capability packs may select provider descriptors; `halo-harness`
   owns the provider-neutral descriptor type, legacy-facade descriptor adapter,
   and registry wiring.
 
 ## Verification
 
 ```bash
-cargo test -p bitfun-harness
+cargo test -p halo-harness
 node scripts/check-core-boundaries.mjs
-cargo test -p bitfun-core --features product-full product_harness
+cargo test -p halo-core --features product-full product_harness
 ```

@@ -92,7 +92,7 @@ impl Agent for ClawMode {
 mod tests {
     use super::ClawMode;
     use crate::agentic::agents::{Agent, PromptBuilderContext};
-    use bitfun_agent_runtime::prompt::UserContextSection;
+    use halo_agent_runtime::prompt::UserContextSection;
 
     #[test]
     fn claw_mode_includes_init_miniapp_in_default_tools() {

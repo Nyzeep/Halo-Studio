@@ -34,7 +34,7 @@ fn make_temp_dir(name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards")
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!("bitfun-tool-io-{name}-{unique}"));
+    let dir = std::env::temp_dir().join(format!("halo-tool-io-{name}-{unique}"));
     fs::create_dir_all(&dir).expect("temp dir should be created");
     dir
 }
@@ -318,10 +318,10 @@ fn remote_glob_commands_preprocess_static_pattern_prefix() {
     assert!(!rg_command.contains("--hidden"));
     assert!(!rg_command.contains("--sort"));
 
-    let bitfun_rg_command = build_remote_rg_command("/home/user/repo", ".bitfun/**/*.json");
-    assert!(bitfun_rg_command.contains("--no-ignore"));
-    assert!(bitfun_rg_command.contains("--hidden"));
-    assert!(!bitfun_rg_command.contains("--sort"));
+    let halo_rg_command = build_remote_rg_command("/home/user/repo", ".halo-studio/**/*.json");
+    assert!(halo_rg_command.contains("--no-ignore"));
+    assert!(halo_rg_command.contains("--hidden"));
+    assert!(!halo_rg_command.contains("--sort"));
 
     let find_command = build_remote_find_command("/home/user/repo", "src/*.rs", 100);
     assert!(
@@ -347,7 +347,7 @@ fn bash_shell_owner_preserves_command_wrapping_and_env() {
 
     let env = bash_noninteractive_env();
     assert_eq!(
-        env.get("BITFUN_NONINTERACTIVE").map(String::as_str),
+        env.get("HALO_NONINTERACTIVE").map(String::as_str),
         Some("1")
     );
     assert_eq!(env.get("GIT_PAGER").map(String::as_str), Some("cat"));
@@ -470,13 +470,13 @@ fn remote_read_command_and_parser_preserve_existing_window_markers() {
     assert!(command.starts_with(
         "if [ ! -f 'C:/repo/a'\\''b.txt' ]; then exit 3; fi; awk -v start=2 -v end=4 -v max=120 -v budget=1000"
     ));
-    assert!(command.contains("__BITFUN_TOTAL_LINES__="));
-    assert!(command.contains("__BITFUN_HIT_TOTAL_CHAR_LIMIT__="));
+    assert!(command.contains("__HALO_TOTAL_LINES__="));
+    assert!(command.contains("__HALO_HIT_TOTAL_CHAR_LIMIT__="));
     assert!(command.ends_with("'C:/repo/a'\\''b.txt'"));
 
     let result = parse_remote_read_output(
         "     2\talpha\n",
-        "__BITFUN_TOTAL_LINES__=5\n__BITFUN_HIT_TOTAL_CHAR_LIMIT__=1\n",
+        "__HALO_TOTAL_LINES__=5\n__HALO_HIT_TOTAL_CHAR_LIMIT__=1\n",
         0,
         "C:/repo/a'b.txt",
         2,

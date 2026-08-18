@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use bitfun_core::util::elapsed_ms;
+use halo_core::util::elapsed_ms;
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]

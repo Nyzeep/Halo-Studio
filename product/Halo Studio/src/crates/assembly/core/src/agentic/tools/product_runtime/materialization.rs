@@ -4,10 +4,10 @@ use crate::agentic::tools::framework::Tool;
 use crate::agentic::tools::implementations::*;
 use crate::agentic::tools::product_runtime::CallDeferredTool;
 use crate::agentic::tools::registry::ProductToolDecoratorRef;
-use bitfun_agent_tools::{
+use halo_agent_tools::{
     StaticToolProviderFactory, ToolRegistry as AgentToolRegistry, ToolRuntimeAssembly,
 };
-use bitfun_tool_packs::ToolProviderGroupPlan;
+use halo_tool_packs::ToolProviderGroupPlan;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, Default)]

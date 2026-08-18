@@ -1,9 +1,9 @@
 //! Citation renumbering hook for finalized DeepResearch reports.
 //!
 //! This module owns the best-effort filesystem hook and sidecar persistence.
-//! The deterministic report rewrite stays in `bitfun-agent-runtime`.
+//! The deterministic report rewrite stays in `halo-agent-runtime`.
 
-use bitfun_agent_runtime::deep_research::{
+use halo_agent_runtime::deep_research::{
     renumber_research_report, ResearchCitationDisplayMapEntry,
 };
 use log::{debug, info, warn};
@@ -61,11 +61,11 @@ pub struct RenumberStats {
 /// fire-and-await without affecting the surrounding agent flow.
 ///
 /// Operates on the per-session WORK_DIR at
-/// `<workspace>/.bitfun/sessions/<session_id>/research/`, where both the
+/// `<workspace>/.halo-studio/sessions/<session_id>/research/`, where both the
 /// report and the audit files live.
 pub async fn run_for_session_workspace(workspace_root: &Path, session_id: &str) {
     let work_dir = workspace_root
-        .join(".bitfun")
+        .join(".halo-studio")
         .join("sessions")
         .join(session_id)
         .join("research");
@@ -217,7 +217,7 @@ mod tests {
                 .expect("system clock before unix epoch")
                 .as_nanos();
             let path =
-                env::temp_dir().join(format!("bitfun-citation-renumber-{}-{}", label, unique));
+                env::temp_dir().join(format!("halo-citation-renumber-{}-{}", label, unique));
             std::fs::create_dir_all(&path).unwrap();
             Self(path)
         }
@@ -311,7 +311,7 @@ cit_005 | claim c | url=u3 | authority=medium
 
         let work_dir = dir
             .path()
-            .join(".bitfun")
+            .join(".halo-studio")
             .join("sessions")
             .join("incomplete-session")
             .join("research");
@@ -327,7 +327,7 @@ cit_005 | claim c | url=u3 | authority=medium
 
         let work_dir = dir
             .path()
-            .join(".bitfun")
+            .join(".halo-studio")
             .join("sessions")
             .join(session_id)
             .join("research");

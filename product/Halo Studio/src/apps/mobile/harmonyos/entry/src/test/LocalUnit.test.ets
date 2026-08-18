@@ -1287,7 +1287,7 @@ export default function localUnitTest() {
         failedAssistant
       ]);
 
-      expect(markdown).assertEqual('# 发布计划\n\n## 用户\n\n帮我整理发布计划\n\n## BitFun\n\n先检查发布清单。\n');
+      expect(markdown).assertEqual('# 发布计划\n\n## 用户\n\n帮我整理发布计划\n\n## Halo\n\n先检查发布清单。\n');
       expect(markdown.indexOf('secret retry context')).assertEqual(-1);
     });
   });
@@ -1497,8 +1497,8 @@ export default function localUnitTest() {
       expect(openAiText).assertEqual('Hello');
     });
 
-    it('places the BitFun system prompt in both request formats', 0, () => {
-      const messages: ModelProviderMessage[] = [{ role: 'user', content: 'BitFun 是什么？' }];
+    it('places the Halo Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio system prompt in both request formats', 0, () => {
+      const messages: ModelProviderMessage[] = [{ role: 'user', content: 'Halo Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio 是什么？' }];
       const anthropicBody = ModelProviderGeneralChatAdapter.buildRequestBody(
         'model-a',
         messages,
@@ -2312,7 +2312,7 @@ export default function localUnitTest() {
       state.setConnectionState('connected');
       state.setConnectionFailureKind('');
       state.setBusy(true);
-      state.setWorkspace('BitFun', '/workspace/BitFun', 'default', 'main', 'normal');
+      state.setWorkspace('Halo Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio', '/workspace/Halo', 'default', 'main', 'normal');
       state.setSessions([
         remoteSession('session-1', '/canvas draw architecture'),
         remoteSession('session-2', 'Write release notes'),
@@ -2332,7 +2332,7 @@ export default function localUnitTest() {
       expect(state.connectionFailureKind).assertEqual('');
       expect(state.isBusy).assertTrue();
       expect(state.showRemoteUrlInput).assertTrue();
-      expect(state.workspacePath).assertEqual('/workspace/BitFun');
+      expect(state.workspacePath).assertEqual('/workspace/Halo');
       expect(state.workspaceBranch).assertEqual('main');
       expect(state.workspaceKind).assertEqual('normal');
       expect(state.assistantId).assertEqual('default');
@@ -2345,7 +2345,7 @@ export default function localUnitTest() {
     it('clears loading errors on success and clears only list state on reset', 0, () => {
       const state = new RemotePageState();
       state.setDesktopName('Developer Mac');
-      state.setWorkspace('BitFun', '/workspace/BitFun', 'default');
+      state.setWorkspace('Halo Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio', '/workspace/Halo', 'default');
       state.setQuery('canvas');
       state.setLoading(true);
       state.setError('network failed');
@@ -2362,7 +2362,7 @@ export default function localUnitTest() {
       expect(state.isLoadingSessions).assertFalse();
       expect(state.sessionQuery).assertEqual('canvas');
       expect(state.desktopName).assertEqual('Developer Mac');
-      expect(state.workspaceName).assertEqual('BitFun');
+      expect(state.workspaceName).assertEqual('Halo Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio');
     });
 
     it('owns active remote session, timeline projection, and model catalog', 0, () => {
@@ -2394,7 +2394,7 @@ export default function localUnitTest() {
       state.setActiveSession({
         sessionId: 'remote-1',
         title: 'Remote task',
-        workspacePath: '/workspace/BitFun',
+        workspacePath: '/workspace/Halo',
         agentType: 'code'
       });
       state.setTimelineProjection([userMessage], [], activeTurn, false, timelineItems);
@@ -2402,7 +2402,7 @@ export default function localUnitTest() {
       timelineItems.length = 0;
 
       expect(state.activeSession.sessionId).assertEqual('remote-1');
-      expect(state.activeSession.workspacePath).assertEqual('/workspace/BitFun');
+      expect(state.activeSession.workspacePath).assertEqual('/workspace/Halo');
       expect(state.timelineItems.length).assertEqual(1);
       expect(state.hasRunningActiveTurn()).assertTrue();
       expect(state.modelCatalog.version).assertEqual(2);
@@ -2414,7 +2414,7 @@ export default function localUnitTest() {
       const session: SessionSummary = {
         sessionId: 'remote-nested-1',
         title: 'Remote original',
-        workspacePath: '/workspace/BitFun',
+        workspacePath: '/workspace/Halo',
         agentType: 'code',
         initialTurnId: 'remote-turn-initial'
       };
@@ -2434,7 +2434,7 @@ export default function localUnitTest() {
       catalog.session_model_id = 'model-b';
 
       expect(state.activeSession.sessionId).assertEqual('remote-nested-1');
-      expect(state.activeSession.workspacePath).assertEqual('/workspace/BitFun');
+      expect(state.activeSession.workspacePath).assertEqual('/workspace/Halo');
       expect(state.activeSession.agentType).assertEqual('code');
       expect(state.activeTurnMessage.text).assertEqual('Run tests');
       expect(state.activeTurnMessage.renderVersion || 0).assertEqual(2);
@@ -2447,15 +2447,15 @@ export default function localUnitTest() {
     it('owns remote download status projection', 0, () => {
       const state = new RemotePageState();
 
-      state.setDownloadStatus('/workspace/BitFun/README.md', '', '10 B / 20 B');
-      expect(state.downloadingFilePath).assertEqual('/workspace/BitFun/README.md');
+      state.setDownloadStatus('/workspace/Halo/README.md', '', '10 B / 20 B');
+      expect(state.downloadingFilePath).assertEqual('/workspace/Halo/README.md');
       expect(state.downloadedFilePath).assertEqual('');
       expect(state.fileDownloadStatus).assertEqual('10 B / 20 B');
 
-      state.setDownloadStatus('/workspace/BitFun/README.md', '/workspace/BitFun/README.md', '下载完成 README.md · 20 B');
+      state.setDownloadStatus('/workspace/Halo/README.md', '/workspace/Halo/README.md', '下载完成 README.md · 20 B');
       state.clearDownloadingFilePath();
       expect(state.downloadingFilePath).assertEqual('');
-      expect(state.downloadedFilePath).assertEqual('/workspace/BitFun/README.md');
+      expect(state.downloadedFilePath).assertEqual('/workspace/Halo/README.md');
       expect(state.fileDownloadStatus).assertEqual('下载完成 README.md · 20 B');
 
       state.clearDownloadStatus();
@@ -2495,13 +2495,13 @@ export default function localUnitTest() {
     it('owns copied workspace and assistant picker projections', 0, () => {
       const state = new RemotePageState();
       const workspaces: RecentWorkspaceEntry[] = [{
-        path: '/workspace/BitFun',
-        name: 'BitFun',
+        path: '/workspace/Halo',
+        name: 'Halo Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio Studio',
         lastOpened: '2026-07-21T00:00:00.000Z',
         workspaceKind: 'normal'
       }];
       const assistants: AssistantEntry[] = [{
-        path: '/workspace/BitFun/.bitfun/assistants/default.md',
+        path: '/workspace/Halo/.halo-studio/assistants/default.md',
         name: 'Default',
         assistant_id: 'default'
       }];
@@ -2542,7 +2542,7 @@ export default function localUnitTest() {
       remote.setActiveSession({
         sessionId: 'remote-1',
         title: 'Remote chat',
-        workspacePath: '/workspace/BitFun',
+        workspacePath: '/workspace/Halo',
         agentType: 'code'
       });
       general.setTimelineProjection([generalMessage], [], RemoteUiState.emptyActiveTurn(), false, [{
@@ -2570,7 +2570,7 @@ export default function localUnitTest() {
       expect(general.activeSession.sessionId).assertEqual('');
       expect(general.persistedMessages.length).assertEqual(0);
       expect(remote.activeSession.sessionId).assertEqual('remote-1');
-      expect(remote.activeSession.workspacePath).assertEqual('/workspace/BitFun');
+      expect(remote.activeSession.workspacePath).assertEqual('/workspace/Halo');
       expect(remote.persistedMessages.length).assertEqual(1);
     });
 
@@ -3196,11 +3196,11 @@ export default function localUnitTest() {
         scheduler
       );
 
-      await controller.download('/workspace/BitFun/README.md', 'session-1', false, true);
+      await controller.download('/workspace/Halo/README.md', 'session-1', false, true);
 
-      expect(client.infoRequests[0]).assertEqual('/workspace/BitFun/README.md|session-1');
-      expect(client.readRequests[0]).assertEqual('/workspace/BitFun/README.md|session-1');
-      expect(status.downloadedFilePath).assertEqual('/workspace/BitFun/README.md');
+      expect(client.infoRequests[0]).assertEqual('/workspace/Halo/README.md|session-1');
+      expect(client.readRequests[0]).assertEqual('/workspace/Halo/README.md|session-1');
+      expect(status.downloadedFilePath).assertEqual('/workspace/Halo/README.md');
       expect(status.fileDownloadStatus.indexOf('README.md') >= 0).assertTrue();
       expect(statusText).assertEqual(status.fileDownloadStatus);
       expect(busyEvents[0]).assertTrue();
@@ -3210,7 +3210,7 @@ export default function localUnitTest() {
 
       scheduler.tick(1);
       expect(status.downloadingFilePath).assertEqual('');
-      expect(status.downloadedFilePath).assertEqual('/workspace/BitFun/README.md');
+      expect(status.downloadedFilePath).assertEqual('/workspace/Halo/README.md');
     });
 
     it('skips unavailable downloads before touching the client', 0, async () => {
@@ -3234,9 +3234,9 @@ export default function localUnitTest() {
       );
 
       await controller.download('', 'session-1', false, true);
-      await controller.download('/workspace/BitFun/README.md', '', false, true);
-      await controller.download('/workspace/BitFun/README.md', 'session-1', true, true);
-      await controller.download('/workspace/BitFun/README.md', 'session-1', false, false);
+      await controller.download('/workspace/Halo/README.md', '', false, true);
+      await controller.download('/workspace/Halo/README.md', 'session-1', true, true);
+      await controller.download('/workspace/Halo/README.md', 'session-1', false, false);
 
       expect(client.infoRequests.length).assertEqual(0);
       expect(client.readRequests.length).assertEqual(0);

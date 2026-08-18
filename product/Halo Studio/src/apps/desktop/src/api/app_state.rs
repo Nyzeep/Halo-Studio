@@ -1,19 +1,19 @@
 //! Application state management
 
 use crate::api::workspace_activation::spawn_workspace_background_warmup;
-use bitfun_core::agentic::side_question::SideQuestionRuntime;
-use bitfun_core::agentic::{agents, tools};
-use bitfun_core::infrastructure::ai::{AIClient, AIClientFactory};
-use bitfun_core::miniapp::{
+use halo_core::agentic::side_question::SideQuestionRuntime;
+use halo_core::agentic::{agents, tools};
+use halo_core::infrastructure::ai::{AIClient, AIClientFactory};
+use halo_core::miniapp::{
     initialize_global_miniapp_manager, seed_builtin_miniapps, JsWorkerPool, MiniAppManager,
 };
-use bitfun_core::service::remote_ssh::{
+use halo_core::service::remote_ssh::{
     init_remote_workspace_manager, RemoteFileService, RemoteTerminalManager, SSHConnectionManager,
 };
-use bitfun_core::service::{announcement, config, filesystem, mcp, search, token_usage, workspace};
-use bitfun_core::util::errors::*;
+use halo_core::service::{announcement, config, filesystem, mcp, search, token_usage, workspace};
+use halo_core::util::errors::*;
 #[cfg(feature = "speech")]
-use bitfun_services_integrations::speech::{SpeechService, SpeechStoragePaths};
+use halo_services_integrations::speech::{SpeechService, SpeechStoragePaths};
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -75,7 +75,7 @@ pub struct AppState {
     pub speech_service: Arc<SpeechService>,
     pub agent_registry: Arc<agents::AgentRegistry>,
     pub mcp_service: Option<Arc<mcp::MCPService>>,
-    pub acp_client_service: Option<Arc<bitfun_acp::AcpClientService>>,
+    pub acp_client_service: Option<Arc<halo_acp::AcpClientService>>,
     pub token_usage_service: Arc<token_usage::TokenUsageService>,
     pub miniapp_manager: Arc<MiniAppManager>,
     pub js_worker_pool: Option<Arc<JsWorkerPool>>,
@@ -96,16 +96,16 @@ pub struct AppState {
 impl AppState {
     pub async fn new_async(
         token_usage_service: Arc<token_usage::TokenUsageService>,
-    ) -> BitFunResult<Self> {
+    ) -> HaloResult<Self> {
         let start_time = std::time::Instant::now();
 
         let config_service = config::get_global_config_service().await.map_err(|e| {
-            BitFunError::config(format!("Failed to get global config service: {}", e))
+            HaloError::config(format!("Failed to get global config service: {}", e))
         })?;
 
         let ai_client = Arc::new(RwLock::new(None));
         let ai_client_factory = AIClientFactory::get_global().await.map_err(|e| {
-            BitFunError::service(format!("Failed to get global AIClientFactory: {}", e))
+            HaloError::service(format!("Failed to get global AIClientFactory: {}", e))
         })?;
         let side_question_runtime = Arc::new(SideQuestionRuntime::new());
 
@@ -144,9 +144,9 @@ impl AppState {
         let path_manager = workspace_service.path_manager().clone();
         #[cfg(not(feature = "halo-local-coding"))]
         let acp_client_service = Some(
-            bitfun_acp::AcpClientService::new(config_service.clone(), path_manager.clone())
+            halo_acp::AcpClientService::new(config_service.clone(), path_manager.clone())
                 .map_err(|e| {
-                    BitFunError::service(format!("Failed to initialize ACP client service: {}", e))
+                    HaloError::service(format!("Failed to initialize ACP client service: {}", e))
                 })?,
         );
         #[cfg(feature = "halo-local-coding")]
@@ -156,7 +156,7 @@ impl AppState {
             announcement::AnnouncementScheduler::new(&path_manager)
                 .await
                 .map_err(|e| {
-                    BitFunError::service(format!(
+                    HaloError::service(format!(
                         "Failed to initialize announcement scheduler: {}",
                         e
                     ))
@@ -226,7 +226,7 @@ impl AppState {
             // Initialize SSH Remote services synchronously so they're ready before app starts
             let ssh_data_dir = dirs::data_local_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join("BitFun")
+                .join("Halo")
                 .join("ssh");
             let ssh_manager = Arc::new(RwLock::new(None));
             let ssh_manager_clone = ssh_manager.clone();
@@ -436,7 +436,7 @@ impl AppState {
 
         // Persist to SSHConnectionManager for restoration on restart
         if let Ok(manager) = self.get_ssh_manager_async().await {
-            let core_workspace = bitfun_core::service::remote_ssh::RemoteWorkspace {
+            let core_workspace = halo_core::service::remote_ssh::RemoteWorkspace {
                 connection_id: workspace.connection_id.clone(),
                 remote_path: workspace.remote_path.clone(),
                 connection_name: workspace.connection_name.clone(),
@@ -492,14 +492,14 @@ impl AppState {
 
     /// Remove one remote workspace from persistence + registry (`connection_id` + `remote_path`).
     pub async fn unregister_remote_workspace_entry(&self, connection_id: &str, remote_path: &str) {
-        let rp = bitfun_core::service::remote_ssh::normalize_remote_workspace_path(remote_path);
+        let rp = halo_core::service::remote_ssh::normalize_remote_workspace_path(remote_path);
         if let Ok(manager) = self.get_ssh_manager_async().await {
             if let Err(e) = manager.remove_remote_workspace(connection_id, &rp).await {
                 log::warn!("Failed to remove persisted remote workspace: {}", e);
             }
         }
         if let Some(state_manager) =
-            bitfun_core::service::remote_ssh::get_remote_workspace_manager()
+            halo_core::service::remote_ssh::get_remote_workspace_manager()
         {
             state_manager
                 .unregister_remote_workspace(connection_id, &rp)
@@ -510,14 +510,14 @@ impl AppState {
             .as_ref()
             .map(|w| {
                 w.connection_id == connection_id
-                    && bitfun_core::service::remote_ssh::normalize_remote_workspace_path(
+                    && halo_core::service::remote_ssh::normalize_remote_workspace_path(
                         &w.remote_path,
                     ) == rp
             })
             .unwrap_or(false);
         if clear_slot {
             *slot = None;
-            if let Some(m) = bitfun_core::service::remote_ssh::get_remote_workspace_manager() {
+            if let Some(m) = halo_core::service::remote_ssh::get_remote_workspace_manager() {
                 m.set_active_connection_hint(None).await;
             }
         }

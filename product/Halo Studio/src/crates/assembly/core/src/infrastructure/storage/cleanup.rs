@@ -4,10 +4,10 @@ use crate::infrastructure::PathManager;
 use crate::util::errors::*;
 use std::path::PathBuf;
 
-pub use bitfun_services_core::storage_cleanup::{CleanupCategory, CleanupPolicy, CleanupResult};
+pub use halo_services_core::storage_cleanup::{CleanupCategory, CleanupPolicy, CleanupResult};
 
 pub struct CleanupService {
-    inner: bitfun_services_core::storage_cleanup::CleanupService,
+    inner: halo_services_core::storage_cleanup::CleanupService,
 }
 
 impl CleanupService {
@@ -20,17 +20,17 @@ impl CleanupService {
         policy: CleanupPolicy,
         logs_dir: PathBuf,
     ) -> Self {
-        let roots = bitfun_services_core::storage_cleanup::CleanupRoots {
+        let roots = halo_services_core::storage_cleanup::CleanupRoots {
             temp_dir: path_manager.temp_dir(),
             logs_dir,
             cache_dir: path_manager.cache_root(),
         };
         Self {
-            inner: bitfun_services_core::storage_cleanup::CleanupService::new(roots, policy),
+            inner: halo_services_core::storage_cleanup::CleanupService::new(roots, policy),
         }
     }
 
-    pub async fn cleanup_all(&self) -> BitFunResult<CleanupResult> {
-        self.inner.cleanup_all().await.map_err(BitFunError::service)
+    pub async fn cleanup_all(&self) -> HaloResult<CleanupResult> {
+        self.inner.cleanup_all().await.map_err(HaloError::service)
     }
 }
