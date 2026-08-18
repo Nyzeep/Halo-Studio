@@ -548,7 +548,7 @@ test("a valid rehearsal-only upstream scope records upstream candidate findings 
     schemaVersion: 1,
     upstreamCandidate: {
       scope: "rehearsal-only",
-      reason: "The BitFun upstream candidate stays a read-only rehearsal record for this release.",
+      reason: "The Halo upstream candidate stays a read-only rehearsal record for this release.",
       policySource: "docs/adr/0073-issue-13-release-gate-exclusions.md",
     },
   };

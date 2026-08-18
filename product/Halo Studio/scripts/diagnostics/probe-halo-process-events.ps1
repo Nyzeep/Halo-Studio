@@ -1,23 +1,23 @@
-# Event-based BitFun process-tree probe for Windows.
+# Event-based Halo process-tree probe for Windows.
 #
 # This probe subscribes to Win32 process start/stop events instead of polling a
 # fixed list of process names. It records every process event seen while it is
-# active, then attributes each process to the BitFun root using a parent table
+# active, then attributes each process to the Halo root using a parent table
 # that survives parent-process exit.
 #
 # Run from a separate PowerShell window. Run as Administrator when possible so
 # command lines and executable paths are available for all processes.
 #
 # Examples:
-#   .\probe-bitfun-process-events.ps1 -DurationSec 60 -OutputPath .\bitfun-process-events.log
-#   .\probe-bitfun-process-events.ps1 -BitFunPid 8352 -DurationSec 120
+#   .\probe-halo-process-events.ps1 -DurationSec 60 -OutputPath .\halo-process-events.log
+#   .\probe-halo-process-events.ps1 -HaloPid 8352 -DurationSec 120
 
 [CmdletBinding()]
 param(
     [ValidateRange(1, 3600)]
     [int]$DurationSec = 60,
 
-    [int[]]$BitFunPid = @(),
+    [int[]]$HaloPid = @(),
 
     [string]$OutputPath
 )
@@ -25,10 +25,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Get-BitFunProcessIds {
+function Get-HaloProcessIds {
     @(
         Get-CimInstance Win32_Process |
-            Where-Object { $_.Name -ieq 'bitfun-desktop.exe' } |
+            Where-Object { $_.Name -ieq 'halo-desktop.exe' } |
             ForEach-Object { [int]$_.ProcessId }
     )
 }
@@ -72,14 +72,14 @@ function Format-LogValue {
     '"' + $text + '"'
 }
 
-$rootProcessIds = if (@($BitFunPid).Count -gt 0) {
-    @($BitFunPid | ForEach-Object { [int]$_ } | Select-Object -Unique)
+$rootProcessIds = if (@($HaloPid).Count -gt 0) {
+    @($HaloPid | ForEach-Object { [int]$_ } | Select-Object -Unique)
 } else {
-    @(Get-BitFunProcessIds)
+    @(Get-HaloProcessIds)
 }
 
 if (@($rootProcessIds).Count -eq 0) {
-    throw 'No bitfun-desktop.exe process was found. Pass -BitFunPid explicitly or start BitFun first.'
+    throw 'No halo-desktop.exe process was found. Pass -HaloPid explicitly or start Halo first.'
 }
 
 $probeProcessId = $PID
@@ -156,11 +156,11 @@ try {
 
             $lineage = [System.Collections.Generic.List[string]]::new()
             $currentPid = [int]$snapshot.ParentProcessId
-            $isBitFunDescendant = $false
+            $isHaloDescendant = $false
             $isComplete = $true
             for ($depth = 0; $depth -lt 32 -and $currentPid -gt 0; $depth++) {
                 if ($state.RootProcessIds -contains $currentPid) {
-                    $isBitFunDescendant = $true
+                    $isHaloDescendant = $true
                     break
                 }
                 if (-not $state.KnownProcesses.Contains($currentPid)) {
@@ -183,10 +183,10 @@ try {
                 ParentProcessId = $snapshot.ParentProcessId
                 ExecutablePath = $snapshot.ExecutablePath
                 CommandLine = $snapshot.CommandLine
-                IsBitFunDescendant = $isBitFunDescendant
-                AttributionStatus = if ($isBitFunDescendant) {
+                IsHaloDescendant = $isHaloDescendant
+                AttributionStatus = if ($isHaloDescendant) {
                     if ($state.RootProcessIds -contains $snapshot.ParentProcessId) { 'direct' } else { 'descendant' }
-                } elseif ($isComplete) { 'not_bitfun' } else { 'unknown' }
+                } elseif ($isComplete) { 'not_halo' } else { 'unknown' }
                 LineageComplete = $isComplete
                 Lineage = $lineage.ToArray()
             })
@@ -228,11 +228,11 @@ try {
 
             $lineage = [System.Collections.Generic.List[string]]::new()
             $currentPid = $parentProcessId
-            $isBitFunDescendant = $false
+            $isHaloDescendant = $false
             $isComplete = $true
             for ($depth = 0; $depth -lt 32 -and $currentPid -gt 0; $depth++) {
                 if ($state.RootProcessIds -contains $currentPid) {
-                    $isBitFunDescendant = $true
+                    $isHaloDescendant = $true
                     break
                 }
                 if (-not $state.KnownProcesses.Contains($currentPid)) {
@@ -255,8 +255,8 @@ try {
                 ParentProcessId = $parentProcessId
                 ExecutablePath = if ($known) { $known.ExecutablePath } else { $null }
                 CommandLine = if ($known) { $known.CommandLine } else { $null }
-                IsBitFunDescendant = $isBitFunDescendant
-                AttributionStatus = if ($isBitFunDescendant) { 'descendant' } elseif ($isComplete) { 'not_bitfun' } else { 'unknown' }
+                IsHaloDescendant = $isHaloDescendant
+                AttributionStatus = if ($isHaloDescendant) { 'descendant' } elseif ($isComplete) { 'not_halo' } else { 'unknown' }
                 LineageComplete = $isComplete
                 Lineage = $lineage.ToArray()
             })
@@ -311,11 +311,11 @@ $callbackErrorsArray = @($callbackErrors.ToArray() | Sort-Object ObservedAt)
 $probeFinishedAt = (Get-Date).ToString('o')
 
 $lines = [System.Collections.Generic.List[string]]::new()
-$lines.Add('BitFun process event probe')
+$lines.Add('Halo process event probe')
 $lines.Add("probe_started_at=$(Format-LogValue $probeStartedAt)")
 $lines.Add("probe_finished_at=$(Format-LogValue $probeFinishedAt)")
 $lines.Add("probe_pid=$probeProcessId")
-$lines.Add("bitfun_pids=$(Format-LogValue (($rootProcessIds | ForEach-Object { [string]$_ }) -join ','))")
+$lines.Add("halo_pids=$(Format-LogValue (($rootProcessIds | ForEach-Object { [string]$_ }) -join ','))")
 $lines.Add("duration_sec=$DurationSec")
 $lines.Add("elevated=$isElevated")
 $lines.Add("powershell_version=$(Format-LogValue $PSVersionTable.PSVersion.ToString())")
@@ -353,7 +353,7 @@ if (@($recordsArray).Count -eq 0) {
             "pid=$($record.ProcessId) " +
             "ppid=$($record.ParentProcessId) " +
             "attribution=$($record.AttributionStatus) " +
-            "is_bitfun=$($record.IsBitFunDescendant) " +
+            "is_halo=$($record.IsHaloDescendant) " +
             "lineage_complete=$($record.LineageComplete) " +
             "path=$(Format-LogValue $record.ExecutablePath) " +
             "command_line=$(Format-LogValue $record.CommandLine) " +

@@ -2,7 +2,7 @@
 
 export const publicApiContractSlices = [
   'frontend-backend-capability-service',
-  'bitfun-plugin-extension-contract',
+  'halo-plugin-extension-contract',
   'plugin-runtime-internal-abi',
   'opencode-adapter-boundary',
   'halo-workbench-pi-rpc-execution-seam',
@@ -17,7 +17,7 @@ export const publicApiContractSlices = [
 
 const contractSlices = {
   frontendBackendCapabilityService: 'frontend-backend-capability-service',
-  bitfunPluginExtension: 'bitfun-plugin-extension-contract',
+  haloPluginExtension: 'halo-plugin-extension-contract',
   pluginRuntimeInternalAbi: 'plugin-runtime-internal-abi',
   opencodeAdapterBoundary: 'opencode-adapter-boundary',
   haloWorkbenchPiRpcExecutionSeam: 'halo-workbench-pi-rpc-execution-seam',
@@ -61,7 +61,7 @@ export const pluginRuntimePublicApiEntries = [
       'plugin discovery, status, and config-validation projection',
       'PluginRuntimeClient read model and product assembly plugin status projection',
       'runtime-ports read-model contract tests, OpenCode fixture projection tests, and plugin-runtime-client read-model tests',
-      contractSlices.bitfunPluginExtension,
+      contractSlices.haloPluginExtension,
     ),
   ),
   ...[
@@ -89,7 +89,7 @@ export const pluginRuntimePublicApiEntries = [
       'plugin permission, effect-preview, and provider handoff',
       'PluginRuntimeClient, tool ABI integration, and security-control candidate validation',
       'runtime-ports candidate-effect contract tests and plugin-runtime-client permission/effect validation tests',
-      contractSlices.bitfunPluginExtension,
+      contractSlices.haloPluginExtension,
     ),
   ),
   ...[
@@ -106,7 +106,7 @@ export const pluginRuntimePublicApiEntries = [
       'plugin diagnostics and quarantine read-model projection',
       'PluginRuntimeClient read model and capability-service diagnostics projection',
       'runtime-ports diagnostics tests and plugin-runtime-client quarantine/read-model owner tests',
-      contractSlices.bitfunPluginExtension,
+      contractSlices.haloPluginExtension,
     ),
   ),
   ...[
@@ -177,7 +177,7 @@ function opencodeAdapterEntry(symbol, consumer) {
     contractSlice: contractSlices.opencodeAdapterBoundary,
     wireImpact: false,
     rationale:
-      'P0-C needs one adapter factory that consumes fixed BitFun-managed package content and returns the existing PluginRuntimeAdapter boundary',
+      'P0-C needs one adapter factory that consumes fixed Halo-managed package content and returns the existing PluginRuntimeAdapter boundary',
     exit:
       'remove only if source discovery moves behind a reviewed product source registry with equivalent client tests',
   };
@@ -189,7 +189,7 @@ function opencodeHookAdapterEntry(symbol, consumer) {
     owner: 'opencode-adapter static Hook source owner',
     consumer,
     verification:
-      'OpenCode static Hook fixture tests, bitfun-core catalog composition tests, and core-boundary public API budget checks',
+      'OpenCode static Hook fixture tests, halo-core catalog composition tests, and core-boundary public API budget checks',
     p0: 'runtime-free OpenCode Hook discovery and catalog projection',
     contractSlice: contractSlices.opencodeAdapterBoundary,
     wireImpact: false,
@@ -203,11 +203,11 @@ function opencodeHookAdapterEntry(symbol, consumer) {
 export const opencodeAdapterPublicApiEntries = [
   opencodeAdapterEntry(
     'load_opencode_package_adapter',
-    'bitfun-core managed plugin composition root and DefaultPluginRuntimeClient integration tests',
+    'halo-core managed plugin composition root and DefaultPluginRuntimeClient integration tests',
   ),
   opencodeAdapterEntry(
     'OpenCodeCommandProvider',
-    'bitfun-core external source composition root and OpenCode command adapter tests',
+    'halo-core external source composition root and OpenCode command adapter tests',
   ),
   opencodeAdapterEntry(
     'OpenCodeCommandProviderOptions',
@@ -215,7 +215,7 @@ export const opencodeAdapterPublicApiEntries = [
   ),
   opencodeAdapterEntry(
     'OpenCodeToolProvider',
-    'bitfun-core external source composition root and OpenCode standalone-tool adapter tests',
+    'halo-core external source composition root and OpenCode standalone-tool adapter tests',
   ),
   opencodeAdapterEntry(
     'OpenCodeToolProviderOptions',
@@ -223,7 +223,7 @@ export const opencodeAdapterPublicApiEntries = [
   ),
   opencodeAdapterEntry(
     'OpenCodeSubagentProvider',
-    'bitfun-core external source composition root and OpenCode subagent adapter tests',
+    'halo-core external source composition root and OpenCode subagent adapter tests',
   ),
   opencodeAdapterEntry(
     'OpenCodeSubagentProviderOptions',
@@ -231,7 +231,7 @@ export const opencodeAdapterPublicApiEntries = [
   ),
   opencodeAdapterEntry(
     'OpenCodeMcpProvider',
-    'bitfun-core external source composition root and OpenCode MCP adapter tests',
+    'halo-core external source composition root and OpenCode MCP adapter tests',
   ),
   opencodeAdapterEntry(
     'OpenCodeMcpProviderOptions',
@@ -239,7 +239,7 @@ export const opencodeAdapterPublicApiEntries = [
   ),
   opencodeHookAdapterEntry(
     'OpenCodeHookProvider',
-    'bitfun-core external Hook catalog composition root and OpenCode static Hook fixtures',
+    'halo-core external Hook catalog composition root and OpenCode static Hook fixtures',
   ),
   opencodeHookAdapterEntry(
     'OpenCodeHookProviderOptions',
@@ -251,7 +251,7 @@ function piRpcAdapterEntry(symbol) {
   return {
     symbol,
     owner: 'pi-rpc-adapter Pi RPC projection owner',
-    consumer: 'bitfun-core Halo Workbench product assembly',
+    consumer: 'halo-core Halo Workbench product assembly',
     verification:
       'Pi RPC adapter framing, lifecycle, fail-closed extension tests, Workbench runtime contract tests, and core-boundary public API budget checks',
     p0: 'local pi --mode rpc execution projection for the Halo Workbench Runtime',
@@ -315,7 +315,7 @@ function declarativeSourceAdapterEntry(
     owner,
     consumer,
     verification:
-      `${capability} adapter fixtures, bitfun-core composition tests, and core-boundary public API budget checks`,
+      `${capability} adapter fixtures, halo-core composition tests, and core-boundary public API budget checks`,
     p0: `runtime-free ${capability} discovery and ecosystem-neutral catalog projection`,
     contractSlice,
     wireImpact: false,
@@ -332,7 +332,7 @@ export const claudeCodeAdapterPublicApiEntries = [
 ].map((symbol) => staticHookAdapterEntry(
   symbol,
   'claude-code-adapter static Hook owner',
-  'bitfun-core composition root and Claude Code Hook fixtures',
+  'halo-core composition root and Claude Code Hook fixtures',
 )).concat([
   ['ClaudeCodeCommandProvider', 'command', contractSlices.externalSourceCommandContract],
   ['ClaudeCodeCommandProviderOptions', 'command', contractSlices.externalSourceCommandContract],
@@ -343,7 +343,7 @@ export const claudeCodeAdapterPublicApiEntries = [
 ].map(([symbol, capability, contractSlice]) => declarativeSourceAdapterEntry(
   symbol,
   'claude-code-adapter declarative source owner',
-  `bitfun-core composition root and Claude Code ${capability} fixtures`,
+  `halo-core composition root and Claude Code ${capability} fixtures`,
   capability,
   contractSlice,
 )));
@@ -354,7 +354,7 @@ export const codexAdapterPublicApiEntries = [
 ].map((symbol) => staticHookAdapterEntry(
   symbol,
   'codex-adapter static Hook owner',
-  'bitfun-core composition root and Codex Hook fixtures',
+  'halo-core composition root and Codex Hook fixtures',
 )).concat([
   ['CodexSubagentProvider', 'subagent', contractSlices.externalSourceSubagentContract],
   ['CodexSubagentProviderOptions', 'subagent', contractSlices.externalSourceSubagentContract],
@@ -363,7 +363,7 @@ export const codexAdapterPublicApiEntries = [
 ].map(([symbol, capability, contractSlice]) => declarativeSourceAdapterEntry(
   symbol,
   'codex-adapter declarative source owner',
-  `bitfun-core composition root and Codex ${capability} fixtures`,
+  `halo-core composition root and Codex ${capability} fixtures`,
   capability,
   contractSlice,
 )));
@@ -461,7 +461,7 @@ export const externalHookCatalogPublicApiEntries = [
   externalHookContractEntry(
     symbol,
     'product-domains external Hook catalog contract owner',
-    'ecosystem Hook source adapters, external-sources catalog coordinator, bitfun-core, and read-only product surfaces',
+    'ecosystem Hook source adapters, external-sources catalog coordinator, halo-core, and read-only product surfaces',
     true,
   ),
 );
@@ -502,7 +502,7 @@ function externalSourceControlEntry(symbol, owner, consumer, wireImpact = true) 
 function externalIntegrationPolicyEntry(
   symbol,
   owner = 'product-domains external integration policy contract owner',
-  consumer = 'bitfun-core product composition and cross-host product surfaces',
+  consumer = 'halo-core product composition and cross-host product surfaces',
   wireImpact = true,
 ) {
   return {
@@ -736,7 +736,7 @@ export const externalSourceControlPublicApiEntries = [
   externalSourceControlEntry(
     symbol,
     'product-domains external source control contract owner',
-    'bitfun-core control composition and neutral Desktop, TUI, Peer Host, Server, and Web surfaces',
+    'halo-core control composition and neutral Desktop, TUI, Peer Host, Server, and Web surfaces',
   ),
 );
 
@@ -780,30 +780,30 @@ export const externalSourceCoordinatorPublicApiEntries = [
     externalSourceControlEntry(
       symbol,
       'external-sources assembly control-plane owner',
-      'bitfun-core bounded capability discovery and deferred-completion scheduler',
+      'halo-core bounded capability discovery and deferred-completion scheduler',
       false,
     ),
   ),
   externalSourceEntry(
     'ExternalSourceCoordinator',
     'external-sources assembly owner',
-    'bitfun-core product composition root',
+    'halo-core product composition root',
   ),
   externalHookContractEntry(
     'ExternalHookCatalogCoordinator',
     'external-sources Hook catalog coordinator owner',
-    'bitfun-core local-workspace Hook catalog service',
+    'halo-core local-workspace Hook catalog service',
   ),
   externalHookContractEntry(
     'ExternalHookDiscoveryResult',
     'external-sources Hook discovery scheduler owner',
-    'bitfun-core local-workspace Hook catalog service',
+    'halo-core local-workspace Hook catalog service',
   ),
   ...['ExternalSourceDiscoveryRequest', 'ExternalSourceDiscoveryResult'].map((symbol) =>
     externalSourceEntry(
       symbol,
       'external-sources assembly owner',
-      'bitfun-core bounded concurrent provider scheduler',
+      'halo-core bounded concurrent provider scheduler',
     ),
   ),
   ...[
@@ -815,7 +815,7 @@ export const externalSourceCoordinatorPublicApiEntries = [
     externalToolEntry(
       symbol,
       'external-sources assembly owner',
-      'bitfun-core bounded concurrent external-tool provider scheduler',
+      'halo-core bounded concurrent external-tool provider scheduler',
     ),
   ),
   ...[
@@ -827,7 +827,7 @@ export const externalSourceCoordinatorPublicApiEntries = [
     externalSubagentEntry(
       symbol,
       'external-sources assembly owner',
-      'bitfun-core bounded concurrent external-subagent provider scheduler',
+      'halo-core bounded concurrent external-subagent provider scheduler',
     ),
   ),
   ...[
@@ -839,7 +839,7 @@ export const externalSourceCoordinatorPublicApiEntries = [
     externalMcpEntry(
       symbol,
       'external-sources assembly owner',
-      'bitfun-core bounded concurrent external-MCP provider scheduler',
+      'halo-core bounded concurrent external-MCP provider scheduler',
     ),
   ),
 ];
@@ -858,8 +858,8 @@ export const externalSourceCorePublicApiEntries = [
   ].map((symbol) =>
     externalSourceControlEntry(
       symbol,
-      'bitfun-core external source control composition facade',
-      'BitFun CLI, Desktop, Server, Peer Host, and Web API adapters',
+      'halo-core external source control composition facade',
+      'Halo CLI, Desktop, Server, Peer Host, and Web API adapters',
     ),
   ),
   ...[
@@ -881,8 +881,8 @@ export const externalSourceCorePublicApiEntries = [
   ].map((symbol) =>
     externalIntegrationPolicyEntry(
       symbol,
-      'bitfun-core external integration policy composition facade',
-      'BitFun CLI, Desktop, Server, Peer Host, and Web API adapters',
+      'halo-core external integration policy composition facade',
+      'Halo CLI, Desktop, Server, Peer Host, and Web API adapters',
       true,
     ),
   ),
@@ -923,13 +923,13 @@ export const externalSourceCorePublicApiEntries = [
   ].map((symbol) =>
     externalSourceEntry(
       symbol,
-      'bitfun-core external source composition facade',
-      'BitFun CLI and desktop host APIs',
+      'halo-core external source composition facade',
+      'Halo CLI and desktop host APIs',
     ),
   ),
   externalSourceEntry(
     'external_source_location_for_host_action',
-    'bitfun-core external source composition owner',
+    'halo-core external source composition owner',
     'Desktop external-source configuration host adapter',
     true,
   ),
@@ -946,8 +946,8 @@ export const externalSourceCorePublicApiEntries = [
   ].map((symbol) =>
     externalToolEntry(
       symbol,
-      'bitfun-core external tool composition facade',
-      'BitFun CLI and desktop host APIs',
+      'halo-core external tool composition facade',
+      'Halo CLI and desktop host APIs',
     ),
   ),
   ...[
@@ -961,8 +961,8 @@ export const externalSourceCorePublicApiEntries = [
   ].map((symbol) =>
     externalSubagentEntry(
       symbol,
-      'bitfun-core external subagent composition facade',
-      'BitFun CLI and desktop host APIs',
+      'halo-core external subagent composition facade',
+      'Halo CLI and desktop host APIs',
     ),
   ),
   ...[
@@ -977,8 +977,8 @@ export const externalSourceCorePublicApiEntries = [
   ].map((symbol) =>
     externalMcpEntry(
       symbol,
-      'bitfun-core external MCP composition facade',
-      'BitFun CLI and desktop host APIs',
+      'halo-core external MCP composition facade',
+      'Halo CLI and desktop host APIs',
     ),
   ),
 ];
@@ -990,7 +990,7 @@ function pluginSourceEntry(symbol, owner, consumer, verification, wireImpact) {
     consumer,
     verification,
     p0: 'P0-C managed package discovery, workspace review state, fixed adapter input, and CLI diagnostics',
-    contractSlice: contractSlices.bitfunPluginExtension,
+    contractSlice: contractSlices.haloPluginExtension,
     wireImpact,
     rationale:
       'P0-C needs one ecosystem-neutral package identity, review, and fixed-content boundary without exposing adapter or plugin-internal ABI types',
@@ -1013,7 +1013,7 @@ export const pluginSourceContractPublicApiEntries = [
   pluginSourceEntry(
     symbol,
     'product-domains plugin-source contract owner',
-    'services-integrations managed package source owner, bitfun-core compatibility facade, and plugin-source contract tests',
+    'services-integrations managed package source owner, halo-core compatibility facade, and plugin-source contract tests',
     'product-domains plugin_source_contracts tests and services-integrations managed package discovery tests',
     true,
   ),
@@ -1031,9 +1031,9 @@ export const managedPluginSourcePublicApiEntries = [
 ].map((symbol) =>
   pluginSourceEntry(
     symbol,
-    'bitfun-core managed plugin source compatibility facade',
-    'BitFun CLI plugins and doctor commands',
-    'services-integrations plugin_source tests, core boundary checks, and BitFun CLI plugin command tests',
+    'halo-core managed plugin source compatibility facade',
+    'Halo CLI plugins and doctor commands',
+    'services-integrations plugin_source tests, core boundary checks, and Halo CLI plugin command tests',
     false,
   ),
 );
@@ -1048,9 +1048,9 @@ export const managedPluginActivationPublicApiEntries = [
 ].map((symbol) =>
   pluginSourceEntry(
     symbol,
-    'bitfun-core managed plugin composition root',
-    'BitFun CLI plugin activation commands',
-    'bitfun-core plugin_runtime tests, BitFun CLI plugin source tests, and core boundary checks',
+    'halo-core managed plugin composition root',
+    'Halo CLI plugin activation commands',
+    'halo-core plugin_runtime tests, Halo CLI plugin source tests, and core boundary checks',
     false,
   ),
 );
@@ -1067,7 +1067,7 @@ export const managedPluginSourceServicePublicApiEntries = [
   pluginSourceEntry(
     symbol,
     'services-integrations managed plugin source owner',
-    'bitfun-core managed plugin source compatibility facade',
+    'halo-core managed plugin source compatibility facade',
     'services-integrations plugin_source tests and core boundary checks',
     false,
   ),

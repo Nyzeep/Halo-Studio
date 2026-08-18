@@ -22,7 +22,10 @@ const NATIVE_UI_STATUS_ARTIFACT_PATH = [
 const NATIVE_UI_STATUS_ARTIFACT_LOCATOR = NATIVE_UI_STATUS_ARTIFACT_PATH.join('/');
 const NATIVE_UI_STATUS_ARTIFACT_TYPE = 'issue-14-real-native-ui-acceptance-status';
 const NATIVE_UI_STATUS_OWNER_ISSUE = '14';
+// 历史证据守卫：以下 locator 与命令保留更名前的路径/crate 名，以匹配
+// docs/verification/** 中不可篡改的历史证据；当前源码路径见 NATIVE_UI_STATUS_SOURCE_PATH。
 const NATIVE_UI_STATUS_SOURCE_LOCATOR = 'docs/requirements/bitfun-tauri-product-migration/issues/14-complete-real-pi-rpc-native-ui-acceptance.md';
+const NATIVE_UI_STATUS_SOURCE_PATH = 'docs/requirements/halo-tauri-product-migration/issues/14-complete-real-pi-rpc-native-ui-acceptance.md';
 const NATIVE_UI_STATUS_RECORDED_BY_ISSUE = '12';
 const EXPECTED_LEGACY_ISSUES = [9, 10, 11, 12, 13, 14];
 const EXPECTED_P0_ISSUES = ['04', '05', '06', '07', '08', '09', '10', '11'];
@@ -351,7 +354,7 @@ export function validateNativeUiStatusArtifact(
   }
   let source;
   try {
-    source = readFileSync(resolve(repositoryRoot, NATIVE_UI_STATUS_SOURCE_LOCATOR), 'utf8');
+    source = readFileSync(resolve(repositoryRoot, NATIVE_UI_STATUS_SOURCE_PATH), 'utf8');
   } catch (error) {
     fail(`native UI status artifact source cannot be read: ${error.message}`);
   }

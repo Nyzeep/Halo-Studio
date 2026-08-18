@@ -9,7 +9,7 @@
       "formFactors": ["desktop", "narrow"],
       "themes": ["dark", "light", "system"],
       "states": ["default", "hover", "focus", "selected", "disabled"],
-      "tokenFamilies": ["--color-bg-*", "--color-text-*", "--element-bg-*", "--border-*", "--bitfun-nav-*"],
+      "tokenFamilies": ["--color-bg-*", "--color-text-*", "--element-bg-*", "--border-*", "--halo-nav-*"],
       "evidence": [
         {
           "type": "theme-color-audit",
@@ -216,10 +216,10 @@
     },
     {
       "key": "installer-shell",
-      "owner": "BitFun-Installer/src/theme; BitFun-Installer/src/pages; BitFun-Installer/src/styles",
+      "owner": "Halo-Installer/src/theme; Halo-Installer/src/pages; Halo-Installer/src/styles",
       "platforms": ["installer"],
       "formFactors": ["desktop", "narrow"],
-      "themes": ["dark", "light", "system", "bitfun-dark", "bitfun-light", "bitfun-midnight", "bitfun-china-style", "bitfun-china-night", "bitfun-cyber", "bitfun-slate", "bitfun-tokyo-night"],
+      "themes": ["dark", "light", "system", "halo-dark", "halo-light", "halo-midnight", "halo-china-style", "halo-china-night", "halo-cyber", "halo-slate", "halo-tokyo-night"],
       "states": ["theme-setup", "language", "options", "loading", "progress", "error", "completed", "hover", "focus"],
       "tokenFamilies": ["--color-bg-*", "--color-text-*", "--element-bg-*", "--border-*", "--color-accent-*", "--color-success", "--color-warning", "--color-error"],
       "evidence": [

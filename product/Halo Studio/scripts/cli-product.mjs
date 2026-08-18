@@ -57,7 +57,7 @@ export function cliBuildPlan(resolution, mode, forwardArgs = [], platform = proc
   }
   const environment = { ...process.env, ...productBuildEnvironment(resolution) };
   const manifestPath = join(ROOT, 'src', 'apps', 'cli', 'Cargo.toml');
-  const cargoArgs = [mode === 'dev' ? 'run' : 'build', '--manifest-path', manifestPath, '--bin', 'bitfun'];
+  const cargoArgs = [mode === 'dev' ? 'run' : 'build', '--manifest-path', manifestPath, '--bin', 'halo'];
   const forwarded = stripDelimiter(forwardArgs);
   if (mode === 'build') cargoArgs.push('--release', ...forwarded);
   else if (forwarded.length) cargoArgs.push('--', ...forwarded);
@@ -74,7 +74,7 @@ export function cliBuildPlan(resolution, mode, forwardArgs = [], platform = proc
     mode,
     environment,
     cargoArgs,
-    internalBinaryPath: join(cargoTargetDir, ...(target ? [target] : []), profileDir, `bitfun${suffix}`),
+    internalBinaryPath: join(cargoTargetDir, ...(target ? [target] : []), profileDir, `halo${suffix}`),
     stagedBinaryPath: join(resolution.outputDir, 'package', `${resolution.assembly.binaryName}${suffix}`),
   };
 }

@@ -6,9 +6,9 @@
 # Usage: sign-release-assets.sh <file> [<file>...]
 #
 # Environment:
-#   BITFUN_SIGNING_KEY       minisign secret key, base64 (Tauri's wrapper format)
-#   BITFUN_SIGNING_PASSWORD  password for that key
-#   BITFUN_SIGNING_PUBKEY    minisign public key, base64; used to self-verify
+#   HALO_SIGNING_KEY       minisign secret key, base64 (Tauri's wrapper format)
+#   HALO_SIGNING_PASSWORD  password for that key
+#   HALO_SIGNING_PUBKEY    minisign public key, base64; used to self-verify
 #
 # With no signing key configured this is a no-op, so forks keep building.
 #
@@ -27,7 +27,7 @@ if [ "$#" -lt 1 ]; then
   exit 2
 fi
 
-if [ -z "${BITFUN_SIGNING_KEY:-}" ]; then
+if [ -z "${HALO_SIGNING_KEY:-}" ]; then
   echo "[sign] No signing key configured; assets ship with checksums only."
   exit 0
 fi
@@ -42,7 +42,7 @@ if ! command -v minisign >/dev/null 2>&1; then
       echo "[sign] ERROR: minisign is unavailable and cargo is not installed." >&2
       exit 1
     fi
-    MINISIGN_ROOT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/bitfun-minisign"
+    MINISIGN_ROOT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/halo-minisign"
     cargo install --registry crates-io --locked --root "$MINISIGN_ROOT" minisign >/dev/null
     export PATH="$MINISIGN_ROOT/bin:$PATH"
   fi
@@ -54,8 +54,8 @@ umask 077
 
 # Tauri stores the minisign secret key base64-wrapped; unwrap it to the on-disk
 # format minisign expects.
-printf '%s' "$BITFUN_SIGNING_KEY" | base64 -d >"$WORK/release.key"
-printf '%s' "${BITFUN_SIGNING_PUBKEY:-}" | base64 -d >"$WORK/release.pub" 2>/dev/null || true
+printf '%s' "$HALO_SIGNING_KEY" | base64 -d >"$WORK/release.key"
+printf '%s' "${HALO_SIGNING_PUBKEY:-}" | base64 -d >"$WORK/release.pub" 2>/dev/null || true
 
 signed=0
 skipped=0
@@ -74,7 +74,7 @@ for target in "$@"; do
     continue
   fi
 
-  printf '%s\n' "${BITFUN_SIGNING_PASSWORD:-}" |
+  printf '%s\n' "${HALO_SIGNING_PASSWORD:-}" |
     minisign -S -s "$WORK/release.key" -m "$target" -x "${target}.minisig" >/dev/null
 
   # Verify before publishing. A signature nobody checked is worse than none,
@@ -82,7 +82,7 @@ for target in "$@"; do
   if [ -s "$WORK/release.pub" ]; then
     minisign -Vm "$target" -p "$WORK/release.pub" -x "${target}.minisig" >/dev/null
   else
-    echo "[sign] ERROR: BITFUN_SIGNING_PUBKEY is required to self-verify signatures." >&2
+    echo "[sign] ERROR: HALO_SIGNING_PUBKEY is required to self-verify signatures." >&2
     exit 1
   fi
 

@@ -20,7 +20,7 @@ test('formal development and packaging entries resolve to the Halo Tauri wrapper
   assert.equal(packageJson.scripts['desktop:preview:debug'], 'node scripts/halo-web-ui-preview.mjs');
 });
 
-test('Halo scope exposes the local coding module set on the BitFun Web UI root', () => {
+test('Halo scope exposes the local coding module set on the Halo Web UI root', () => {
   const result = verifyHaloScope(ROOT);
   assert.equal(result.frontendRoot, join('src', 'web-ui', 'index.html'));
   assert.equal(result.frontendEntry, join('src', 'web-ui', 'src', 'main.tsx'));
@@ -45,7 +45,7 @@ test('Halo scope exposes the local coding module set on the BitFun Web UI root',
   ]);
 });
 
-test('BitFun Web UI entry carries Halo markers used by native smoke checks', () => {
+test('Halo Web UI entry carries Halo markers used by native smoke checks', () => {
   const html = read(join('src', 'web-ui', 'index.html'));
   assert.match(html, /<html lang="zh-CN" data-halo-scope="local-coding" data-product-id="halo-studio">/);
   assert.match(html, /<script type="module" src="\/src\/main\.tsx"><\/script>/);
@@ -54,7 +54,7 @@ test('BitFun Web UI entry carries Halo markers used by native smoke checks', () 
   assert.doesNotMatch(html, /src\/halo-workbench/);
 });
 
-test('Tauri hooks resolve to the BitFun Web UI dev server and dist output', () => {
+test('Tauri hooks resolve to the Halo Web UI dev server and dist output', () => {
   const scope = verifyHaloScope(ROOT);
   const config = JSON.parse(readFileSync(scope.configPath, 'utf8'));
   assert.equal(config.build.beforeDevCommand, 'node ../../scripts/halo-web-ui-dev-server.mjs');
@@ -115,14 +115,14 @@ test('Halo keeps runtime logging and storage cleanup on its own log root', () =>
     pathManager,
     /pub async fn initialize_user_directories[\s\S]*?self\.logs_dir\(\)/
   );
-  assert.doesNotMatch(haloMain, /BITFUN_LOG_DIR|BITFUN_E2E_LOG_DIR/);
+  assert.doesNotMatch(haloMain, /HALO_LOG_DIR|HALO_E2E_LOG_DIR/);
   assert.match(haloMain, /HALO_USER_ROOT/);
   assert.match(haloMain, /HALO_HOME/);
-  assert.match(haloMain, /std::env::set_var\("BITFUN_USER_ROOT", user_root\)/);
-  assert.match(haloMain, /std::env::set_var\("BITFUN_HOME", home_root\)/);
+  assert.match(haloMain, /std::env::set_var\("HALO_USER_ROOT", user_root\)/);
+  assert.match(haloMain, /std::env::set_var\("HALO_HOME", home_root\)/);
   assert.match(nativeSmoke, /HALO_USER_ROOT: e2eUserRoot/);
   assert.match(nativeSmoke, /HALO_HOME: e2eHomeRoot/);
-  assert.doesNotMatch(nativeSmoke, /BITFUN_USER_ROOT: e2eUserRoot|BITFUN_HOME: e2eHomeRoot/);
+  assert.doesNotMatch(nativeSmoke, /HALO_LOG_DIR:\s*[^,\n]+,\s*HALO_LOG_DIR/);
   for (const dependency of [
     'tauri-plugin-log.workspace = true',
     'tauri-plugin-window-state.workspace = true',
@@ -131,7 +131,7 @@ test('Halo keeps runtime logging and storage cleanup on its own log root', () =>
   }
 });
 
-test('Halo local coding startup does not initialize legacy BitFun SSH state', () => {
+test('Halo local coding startup does not initialize legacy Halo SSH state', () => {
   const appState = read('src/apps/desktop/src/api/app_state.rs');
 
   assert.match(
@@ -151,7 +151,7 @@ test('Halo uses its product identifier for the default WebView2 profile', () => 
   assert.doesNotMatch(theme, /\.data_directory\(|HALO_WEBVIEW_DATA_DIR|isolated WebView2 data directory/);
 });
 
-test('Vite desktop build uses the real BitFun Web UI entry and Halo dist path', () => {
+test('Vite desktop build uses the real Halo Web UI entry and Halo dist path', () => {
   const webPackageJson = JSON.parse(read(join('src', 'web-ui', 'package.json')));
   const viteConfig = read(join('src', 'web-ui', 'vite.config.ts'));
   assert.equal(webPackageJson.scripts.dev, 'vite');
@@ -178,7 +178,7 @@ test('Halo wrapper forwards Cargo profiles after the Tauri arguments', () => {
   assert.match(wrapper, /const cargoArgs = \[\];/);
   assert.match(wrapper, /cargoArgs\.push\('--profile', profile\)/);
   assert.match(wrapper, /\.\.\.\(cargoArgs\.length > 0 \? \['--', \.\.\.cargoArgs\] : \[\]\)/);
-  assert.match(haloMain, /bitfun_desktop_lib::run_with_context_and_options/);
+  assert.match(haloMain, /halo_desktop_lib::run_with_context_and_options/);
   assert.doesNotMatch(haloMain, /tauri::Builder::default\(\)\s*\.run/);
 });
 

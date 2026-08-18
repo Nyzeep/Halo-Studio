@@ -18,14 +18,14 @@ import {
 
 const root = process.cwd();
 const SOURCE_OWNER_ROOTS = [
-  'BitFun-Installer/src',
+  'Halo-Installer/src',
   'src/mobile-web/src',
   'src/web-ui/src',
 ];
 const NEAR_PAIR_DECISION_AUDIT_ROOTS = [
   { root: 'src/web-ui/src', args: ['--json', '--no-baseline', '--top', '0'] },
   { root: 'src/mobile-web/src', args: ['--root', 'src/mobile-web/src', '--json', '--no-baseline', '--top', '0'] },
-  { root: 'BitFun-Installer/src', args: ['--root', 'BitFun-Installer/src', '--json', '--no-baseline', '--top', '0'] },
+  { root: 'Halo-Installer/src', args: ['--root', 'Halo-Installer/src', '--json', '--no-baseline', '--top', '0'] },
 ];
 
 function contractOwnerHasKnownSource(owner) {
@@ -90,7 +90,7 @@ function formatNearPairDecisionKey(row) {
 }
 
 function createFixture(files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bitfun-theme-audit-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'halo-theme-audit-'));
   const sourceRoot = path.join(dir, 'src', 'web-ui', 'src');
   for (const [relativePath, content] of Object.entries(files)) {
     writeText(path.join(sourceRoot, relativePath), content);
@@ -812,7 +812,7 @@ test('theme color audit reports specialized color domains separately from app UI
     'component-library/styles/tokens.scss': ':root { --color-text-primary: #111111; }\n',
     'infrastructure/theme/presets/dark-theme.ts': "export const bg = '#222222';\n",
     'tools/mermaid-editor/theme/mermaidTheme.ts': "export const node = '#333333';\n",
-    'tools/editor/themes/bitfun-dark.theme.ts': "export const editorBg = '#444444';\n",
+    'tools/editor/themes/halo-dark.theme.ts': "export const editorBg = '#444444';\n",
     'shared/prism/prismTheme.ts': "export const prism = { keyword: '#555555' };\n",
     'tools/terminal/utils/xtermTheme.ts': "export const cursor = '#c0c0c0';\n",
     'tools/generative-widget/themePayload.ts': "export const fallback = { '--color-text-primary': '#666666' };\n",

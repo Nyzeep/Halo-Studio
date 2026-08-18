@@ -86,12 +86,12 @@ U
 
 chmod +x "$STUB/curl" "$STUB/tar" "$STUB/uname"
 
-RELAY_ASSET="bitfun-relay-server-x86_64-unknown-linux-gnu.tar.gz"
+RELAY_ASSET="halo-relay-server-x86_64-unknown-linux-gnu.tar.gz"
 MIRROR_ASSET_URL="https://openbitfun.com/release/0.2.13/${RELAY_ASSET}"
 cat >"$WORK/manifest.json" <<JSON
 {"schemaVersion":1,"version":"0.2.13","tag":"v0.2.13","platforms":{
 "linux-x86_64":{"target":"x86_64-unknown-linux-gnu",
-"cli":{"filename":"bitfun-cli-0.2.13-x86_64-unknown-linux-gnu.tar.gz","url":"https://openbitfun.com/release/0.2.13/bitfun-cli-0.2.13-x86_64-unknown-linux-gnu.tar.gz","sha256Url":"https://openbitfun.com/release/0.2.13/bitfun-cli-0.2.13-x86_64-unknown-linux-gnu.tar.gz.sha256"},
+"cli":{"filename":"halo-cli-0.2.13-x86_64-unknown-linux-gnu.tar.gz","url":"https://openbitfun.com/release/0.2.13/halo-cli-0.2.13-x86_64-unknown-linux-gnu.tar.gz","sha256Url":"https://openbitfun.com/release/0.2.13/halo-cli-0.2.13-x86_64-unknown-linux-gnu.tar.gz.sha256"},
 "relay":{"filename":"${RELAY_ASSET}","url":"${MIRROR_ASSET_URL}","sha256Url":"${MIRROR_ASSET_URL}.sha256"}}}}
 JSON
 
@@ -111,18 +111,18 @@ run_case() {
   printf '%s\n' "$@" >"$WORK/plan"
   : >"$WORK/trace"
   : >"$WORK/archive-flags"
-  rm -rf "$WORK/home/.bitfun"
+  rm -rf "$WORK/home/.halo-studio"
 
   local output got
   output="$(
     export PATH="$STUB:$PATH" HOME="$WORK/home" WORKDIR="$WORK" \
       PLAN="$WORK/plan" TRACE="$WORK/trace" RELAY_PORT=9700 \
-      BITFUN_MIRROR_MODE=cn BITFUN_GITHUB_PROXY=https://ghfast.top/
+      HALO_MIRROR_MODE=cn HALO_GITHUB_PROXY=https://ghfast.top/
     # Production calls this as an if-condition under `set -euo pipefail`.
     bash -c '
       set -euo pipefail
       source "$1"
-      if bitfun_try_release_deploy; then echo RESULT=deployed; else echo RESULT=fallback; fi
+      if halo_try_release_deploy; then echo RESULT=deployed; else echo RESULT=fallback; fi
     ' _ "$SCRIPT_UNDER_TEST" 2>&1
   )"
 
@@ -150,9 +150,9 @@ run_case() {
 }
 
 # Read the tag out of the script under test rather than hardcoding one: Desktop
-# pins BITFUN_RELEASE_TAG to its own crate version, so a literal here silently
+# pins HALO_RELEASE_TAG to its own crate version, so a literal here silently
 # rots at every release bump and every `EXPECT_SOURCE="$GITHUB_URL"` case fails.
-RELEASE_TAG="$(sed -n 's/^export BITFUN_RELEASE_TAG="\(.*\)"$/\1/p' "$SCRIPT_UNDER_TEST" | head -n1)"
+RELEASE_TAG="$(sed -n 's/^export HALO_RELEASE_TAG="\(.*\)"$/\1/p' "$SCRIPT_UNDER_TEST" | head -n1)"
 RELEASE_TAG="${RELEASE_TAG:-latest}"
 if [ "$RELEASE_TAG" = "latest" ]; then
   GITHUB_URL="https://github.com/GCWing/BitFun/releases/latest/download/${RELAY_ASSET}"

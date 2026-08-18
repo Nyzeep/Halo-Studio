@@ -14,21 +14,21 @@ export const optionalDependencyFeatureOwnerRules = [
     reason:
       'runtime-ports may expose product-domain permission ports only through the explicit permission contract slice',
     dependencies: [
-      { depName: 'bitfun-product-domains', ownerFeatures: ['permission'] },
+      { depName: 'halo-product-domains', ownerFeatures: ['permission'] },
     ],
   },
   {
     crateName: 'core',
     reason:
-      'bitfun-core product/runtime optional dependencies must stay owned by explicit feature gates',
+      'halo-core product/runtime optional dependencies must stay owned by explicit feature gates',
     dependencies: [
       { depName: 'aes-gcm', ownerFeatures: ['service-integrations'] },
       { depName: 'axum', ownerFeatures: ['service-integrations'] },
-      { depName: 'bitfun-ai-adapters', ownerFeatures: ['ai-adapter-runtime'] },
-      { depName: 'bitfun-pi-rpc-adapter', ownerFeatures: ['product-full'] },
-      { depName: 'bitfun-product-capabilities', ownerFeatures: ['product-capabilities'] },
-      { depName: 'bitfun-product-domains', ownerFeatures: ['product-domains'] },
-      { depName: 'bitfun-tool-packs', ownerFeatures: ['tool-packs'] },
+      { depName: 'halo-ai-adapters', ownerFeatures: ['ai-adapter-runtime'] },
+      { depName: 'halo-pi-rpc-adapter', ownerFeatures: ['product-full'] },
+      { depName: 'halo-product-capabilities', ownerFeatures: ['product-capabilities'] },
+      { depName: 'halo-product-domains', ownerFeatures: ['product-domains'] },
+      { depName: 'halo-tool-packs', ownerFeatures: ['tool-packs'] },
       { depName: 'chrono-tz', ownerFeatures: ['product-full'] },
       { depName: 'cron', ownerFeatures: ['product-full'] },
       { depName: 'dashmap', ownerFeatures: ['product-full'] },
@@ -70,12 +70,12 @@ export const optionalDependencyFeatureOwnerRules = [
         depName: 'base64',
         ownerFeatures: ['mcp', 'miniapp-runtime', 'remote-connect', 'remote-ssh-concrete', 'speech'],
       },
-      { depName: 'bitfun-agent-runtime', ownerFeatures: ['deep-research', 'hook-import'] },
-      { depName: 'bitfun-core-types', ownerFeatures: ['speech'] },
-      { depName: 'bitfun-product-domains', ownerFeatures: ['canvas-runtime', 'function-agents', 'hook-import', 'miniapp-runtime', 'plugin-source'] },
-      { depName: 'bitfun-runtime-ports', ownerFeatures: ['remote-connect', 'remote-ssh', 'remote-ssh-concrete', 'script-tool-runtime'] },
+      { depName: 'halo-agent-runtime', ownerFeatures: ['deep-research', 'hook-import'] },
+      { depName: 'halo-core-types', ownerFeatures: ['speech'] },
+      { depName: 'halo-product-domains', ownerFeatures: ['canvas-runtime', 'function-agents', 'hook-import', 'miniapp-runtime', 'plugin-source'] },
+      { depName: 'halo-runtime-ports', ownerFeatures: ['remote-connect', 'remote-ssh', 'remote-ssh-concrete', 'script-tool-runtime'] },
       {
-        depName: 'bitfun-services-core',
+        depName: 'halo-services-core',
         ownerFeatures: ['browser-control', 'git', 'hook-import', 'mcp', 'miniapp-runtime', 'process-tree', 'remote-connect', 'remote-ssh-concrete', 'review-platform', 'workspace-search'],
       },
       { depName: 'bzip2', ownerFeatures: ['speech'] },
@@ -142,33 +142,33 @@ export const optionalDependencyFeatureOwnerRules = [
 export const productCoreFeatureAssemblyRules = [
   {
     manifestPath: 'src/apps/desktop/Cargo.toml',
-    dependencyName: 'bitfun-core',
+    dependencyName: 'halo-core',
     requiredFeatures: ['product-full'],
-    reason: 'desktop must explicitly assemble the full bitfun-core product runtime',
+    reason: 'desktop must explicitly assemble the full halo-core product runtime',
   },
   {
     manifestPath: 'src/apps/cli/Cargo.toml',
-    dependencyName: 'bitfun-core',
+    dependencyName: 'halo-core',
     requiredFeatures: ['product-full'],
-    reason: 'CLI must explicitly assemble the full bitfun-core product runtime',
+    reason: 'CLI must explicitly assemble the full halo-core product runtime',
   },
   {
     manifestPath: 'src/apps/sdk-host/Cargo.toml',
-    dependencyName: 'bitfun-core',
+    dependencyName: 'halo-core',
     requiredFeatures: ['product-full'],
-    reason: 'SDK Host must explicitly assemble the full bitfun-core product runtime',
+    reason: 'SDK Host must explicitly assemble the full halo-core product runtime',
   },
   {
     manifestPath: 'src/apps/server/Cargo.toml',
-    dependencyName: 'bitfun-core',
+    dependencyName: 'halo-core',
     requiredFeatures: ['product-full'],
-    reason: 'Server must explicitly assemble the full bitfun-core product runtime',
+    reason: 'Server must explicitly assemble the full halo-core product runtime',
   },
   {
     manifestPath: 'src/crates/interfaces/acp/Cargo.toml',
-    dependencyName: 'bitfun-core',
+    dependencyName: 'halo-core',
     requiredFeatures: ['product-full'],
-    reason: 'ACP must explicitly assemble the full bitfun-core product runtime',
+    reason: 'ACP must explicitly assemble the full halo-core product runtime',
   },
 ];
 
@@ -187,7 +187,7 @@ export const coreProductFullFeatureAssemblyRule = {
     'service-integrations',
     'tool-packs',
   ],
-  reason: 'bitfun-core product-full must explicitly assemble current owner feature groups',
+  reason: 'halo-core product-full must explicitly assemble current owner feature groups',
 };
 
 export const ownerCrateFeatureAssemblyRules = [

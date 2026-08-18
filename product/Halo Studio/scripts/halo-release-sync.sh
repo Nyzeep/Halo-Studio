@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# sync-release.sh — Mirror BitFun release assets from GitHub to openbitfun.com.
+# sync-release.sh — Mirror Halo release assets from GitHub to openbitfun.com.
 #
 # Flow:
 #   1. Fetch latest.json from GitHub (follows /releases/latest/download/ redirect)
@@ -17,19 +17,19 @@
 # to https://openbitfun.com/release/latest.json and downloads from this mirror.
 #
 # Cron (every 10 minutes):
-#   */10 * * * * /root/repos/BitFun-AutoUpdate/openbitfun-release-sync.sh \
-#       >> /root/repos/BitFun-AutoUpdate/sync.log 2>&1
+#   */10 * * * * /root/repos/Halo-AutoUpdate/halo-release-sync.sh \
+#       >> /root/repos/Halo-AutoUpdate/sync.log 2>&1
 #
 # Optional immediate trigger. The release workflow POSTs to
-# ${OPENBITFUN_SYNC_WEBHOOK_URL} once assets are published (see the "Request
+# ${OPENHALO_SYNC_WEBHOOK_URL} once assets are published (see the "Request
 # openbitfun mirror sync" step in .github/workflows/desktop-package.yml) so a
 # new release reaches the mirror in a couple of minutes rather than up to ten.
 # Point that secret at any receiver that runs this script, for example:
 #
 #   while true; do
 #     nc -l -p 8787 -q 1 >/dev/null \
-#       && /root/repos/BitFun-AutoUpdate/openbitfun-release-sync.sh \
-#            >> /root/repos/BitFun-AutoUpdate/sync.log 2>&1
+#       && /root/repos/Halo-AutoUpdate/halo-release-sync.sh \
+#            >> /root/repos/Halo-AutoUpdate/sync.log 2>&1
 #   done
 #
 # Cron stays the source of truth: this script is idempotent and holds a flock,
@@ -41,9 +41,9 @@ set -euo pipefail
 # ── Configuration ──────────────────────────────────────────────
 GITHUB_LATEST_JSON_URL="https://github.com/GCWing/BitFun/releases/latest/download/latest.json"
 GITHUB_LINUX_BINARIES_URL="https://github.com/GCWing/BitFun/releases/latest/download/linux-binaries.json"
-OPENBITFUN_BASE_URL="https://openbitfun.com/release"
-WEBSITE_RELEASE_DIR="/root/repos/BitFun-Website/dist/release"
-LOCK_FILE="/root/repos/BitFun-AutoUpdate/sync.lock"
+OPENHALO_BASE_URL="https://openbitfun.com/release"
+WEBSITE_RELEASE_DIR="/root/repos/Halo-Website/dist/release"
+LOCK_FILE="/root/repos/Halo-AutoUpdate/sync.lock"
 # Keep enough releases that the mirror still serves a Desktop build a few
 # versions behind. One-click Relay deploy asks the mirror for the version baked
 # into the running Desktop binary, so retaining too few sends older installs
@@ -217,7 +217,7 @@ PY
     cut -f2 <<< "$LINUX_ASSET_LIST" | verify_mirrored_checksums || exit 1
 
     "$PYTHON" - "$LINUX_MANIFEST_TMP" "${VERSION_DIR}/linux-binaries.json" \
-      "$OPENBITFUN_BASE_URL" <<'PY'
+      "$OPENHALO_BASE_URL" <<'PY'
 import json, sys
 source, dest, base = sys.argv[1:]
 with open(source, encoding="utf-8") as f:
@@ -256,7 +256,7 @@ main() {
     exit 0
   fi
 
-  log "=== BitFun release sync started ==="
+  log "=== Halo release sync started ==="
 
   mkdir -p "$WEBSITE_RELEASE_DIR"
 
@@ -310,7 +310,7 @@ for p, info in data.get('platforms', {}).items():
 import sys, json
 data = json.load(sys.stdin)
 version = data['version']
-base = '${OPENBITFUN_BASE_URL}/' + version
+base = '${OPENHALO_BASE_URL}/' + version
 for p, info in data.get('platforms', {}).items():
     fname = info['url'].split('/')[-1]
     info['url'] = base + '/' + fname

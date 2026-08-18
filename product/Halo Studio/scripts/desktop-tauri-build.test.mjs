@@ -11,7 +11,7 @@ const DMG_ARGS = ['--target', 'x86_64-apple-darwin', '--bundles', 'app,dmg'];
 const ROOT = join(import.meta.dirname, '..');
 
 function retryFixture() {
-  const root = join(tmpdir(), `bitfun-dmg-retry-${process.pid}-${Date.now()}`);
+  const root = join(tmpdir(), `halo-dmg-retry-${process.pid}-${Date.now()}`);
   const desktopDir = join(root, 'src', 'apps', 'desktop');
   const targetDir = join(root, 'target');
   const appDir = join(
@@ -20,7 +20,7 @@ function retryFixture() {
     'release',
     'bundle',
     'macos',
-    'BitFun.app'
+    'Halo.app'
   );
   mkdirSync(desktopDir, { recursive: true });
   mkdirSync(appDir, { recursive: true });
@@ -96,12 +96,12 @@ test('does not retry failures outside the narrow DMG bundling boundary', () => {
 });
 
 test('Desktop Tauri projection consumes only the resolved member identity', () => {
-  const fixture = join(tmpdir(), `bitfun-tauri-product-${process.pid}-${Date.now()}`);
+  const fixture = join(tmpdir(), `halo-tauri-product-${process.pid}-${Date.now()}`);
   mkdirSync(fixture, { recursive: true });
   const baseConfig = join(fixture, 'tauri.conf.json');
   writeFileSync(baseConfig, JSON.stringify({
-    productName: 'BitFun',
-    identifier: 'com.bitfun.desktop',
+    productName: 'Halo',
+    identifier: 'com.halostudio.desktop',
     bundle: { resources: {} },
   }));
   try {

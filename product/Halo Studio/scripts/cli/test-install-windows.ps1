@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $installer = Join-Path $repoRoot 'src\apps\cli\install.ps1'
-$testRoot = Join-Path ([IO.Path]::GetTempPath()) "bitfun-cli-install-$([guid]::NewGuid().ToString('N'))"
+$testRoot = Join-Path ([IO.Path]::GetTempPath()) "halo-cli-install-$([guid]::NewGuid().ToString('N'))"
 $binDir = Join-Path $testRoot 'bin'
 
 try {
@@ -17,13 +17,13 @@ try {
     & $installer -BinDir $binDir -SkipPathUpdate
     & $installer -BinDir $binDir -SkipPathUpdate
 
-    & (Join-Path $binDir 'bitfun.exe') --version | Out-Null
+    & (Join-Path $binDir 'halo.exe') --version | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        throw 'Installed bitfun smoke check failed'
+        throw 'Installed halo smoke check failed'
     }
 
-    $primary = Join-Path $binDir 'bitfun.exe'
-    $legacy = Join-Path $binDir 'bitfun-cli.exe'
+    $primary = Join-Path $binDir 'halo.exe'
+    $legacy = Join-Path $binDir 'halo-cli.exe'
     [IO.File]::WriteAllText($primary, 'previous primary')
     [IO.File]::WriteAllText($legacy, 'previous legacy')
     $primaryHash = (Get-FileHash -LiteralPath $primary -Algorithm SHA256).Hash

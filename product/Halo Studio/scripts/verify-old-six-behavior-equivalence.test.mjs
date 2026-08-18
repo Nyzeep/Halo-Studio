@@ -251,7 +251,7 @@ test('the matrix requires every Issue 12 verification command', () => {
 test('the matrix rejects a zero exit code for blocked verification', () => {
   const inconsistentBlockedResult = readMatrix();
   const desktopResult = inconsistentBlockedResult.verification.find((result) => (
-    result.command.includes('bitfun-desktop')
+    result.command.includes('halo-desktop')
   ));
   desktopResult.exitCode = 0;
 

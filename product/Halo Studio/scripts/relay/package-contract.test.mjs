@@ -10,7 +10,7 @@ const read = (relativePath) =>
 
 test('relay archive contains the runtime and admin binaries plus static assets', () => {
   const packageScript = read('scripts/relay/package-unix.sh');
-  assert.match(packageScript, /bitfun-relay-server/);
+  assert.match(packageScript, /halo-relay-server/);
   assert.match(packageScript, /relay-admin/);
   assert.match(packageScript, /src\/apps\/relay-server\/static/);
   assert.match(packageScript, /\/health/);
@@ -25,8 +25,8 @@ test('formal and nightly releases gate publication on Linux binaries', () => {
   for (const workflow of [desktop, nightly]) {
     assert.match(workflow, /uses:\s+\.\/\.github\/workflows\/linux-binaries\.yml/);
     assert.match(workflow, /needs:\s*\[[^\]]*linux-binaries[^\]]*\]/);
-    assert.match(workflow, /bitfun-relay-server-\*\.tar\.gz/);
-    assert.match(workflow, /bitfun-cli-\*\.tar\.gz/);
+    assert.match(workflow, /halo-relay-server-\*\.tar\.gz/);
+    assert.match(workflow, /halo-cli-\*\.tar\.gz/);
     assert.match(workflow, /linux-release-assets\/\*\.tar\.gz\.sig/);
     assert.match(workflow, /linux-release-assets\/\*\.tar\.gz\.sha256\.sig/);
     assert.match(workflow, /\$\{cli_url\}\.sha256\.sig/);
@@ -75,7 +75,7 @@ test('nightly publishes signed macOS CLI archives for SSH dispatch', () => {
   assert.match(nightly, /Package macOS CLI for SSH dispatch/);
   assert.match(nightly, /scripts\/cli\/package-unix\.sh "\$ASSET_VERSION" "\$TARGET"/);
   assert.match(nightly, /steps\.macos-cli\.outputs\.archive/);
-  assert.match(nightly, /bitfun-cli-\*-apple-darwin\.tar\.gz\.sha256\.sig/);
+  assert.match(nightly, /halo-cli-\*-apple-darwin\.tar\.gz\.sha256\.sig/);
   assert.match(nightly, /for target in aarch64-apple-darwin x86_64-apple-darwin/);
   assert.match(nightly, /\$\{archive\}\.sha256\.sig/);
 });

@@ -6,6 +6,7 @@
 /out/
 /coverage/
 /target/
+/.pnpm-store/
 /.halo-runtime/
 /.halo-user-data/
 /runtime-cache/

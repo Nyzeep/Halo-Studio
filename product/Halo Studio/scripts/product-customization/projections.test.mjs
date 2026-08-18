@@ -27,6 +27,6 @@ test('build environment isolates custom Cargo output without overriding the defa
 
   assert.equal(defaultEnvironment.CARGO_TARGET_DIR, undefined);
   assert.match(customEnvironment.CARGO_TARGET_DIR, /target[\\/]\.product-cache[\\/]/);
-  assert.equal(customEnvironment.BITFUN_PRODUCT_BINARY_NAME, 'acme');
-  assert.equal(customEnvironment.BITFUN_PRODUCT_DISPLAY_NAME, 'Acme CLI');
+  assert.equal(customEnvironment.HALO_PRODUCT_BINARY_NAME, 'acme');
+  assert.equal(customEnvironment.HALO_PRODUCT_DISPLAY_NAME, 'Acme CLI');
 });

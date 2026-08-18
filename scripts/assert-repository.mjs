@@ -102,7 +102,7 @@ function isTestOrDocumentationPath(file) {
 function isRuntimeSource(file) {
   if (
     file === "scripts/assert-repository.mjs"
-    || file === "scripts/verify-bitfun-import.mjs"
+    || file === "scripts/verify-upstream-import.mjs"
     || isTestOrDocumentationPath(file)
   ) {
     return false;

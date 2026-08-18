@@ -8,8 +8,8 @@
  * - deps: delete only hashes with no remaining fingerprint directory
  *
  * Env:
- *   BITFUN_TARGET_GC=0          disable
- *   BITFUN_TARGET_GC_DRY_RUN=1  report only
+ *   HALO_TARGET_GC=0          disable
+ *   HALO_TARGET_GC_DRY_RUN=1  report only
  */
 import { execFileSync } from 'node:child_process';
 import {
@@ -268,10 +268,10 @@ export function runCargoTargetGc(options = {}) {
     profile = 'debug',
     triple = null,
     dryRun = ['1', 'true', 'yes'].includes(
-      String(process.env.BITFUN_TARGET_GC_DRY_RUN || options.dryRun || '').toLowerCase()
+      String(process.env.HALO_TARGET_GC_DRY_RUN || options.dryRun || '').toLowerCase()
     ),
     enabled = !['0', 'false', 'no'].includes(
-      String(process.env.BITFUN_TARGET_GC ?? '1').toLowerCase()
+      String(process.env.HALO_TARGET_GC ?? '1').toLowerCase()
     ),
     skipIfBusy = true,
     logger = console,
@@ -373,8 +373,8 @@ function printHelp() {
 Prune stale Cargo incremental / fingerprint / deps caches for one profile.
 
 Environment:
-  BITFUN_TARGET_GC=0           disable
-  BITFUN_TARGET_GC_DRY_RUN=1   dry-run
+  HALO_TARGET_GC=0           disable
+  HALO_TARGET_GC_DRY_RUN=1   dry-run
 `);
 }
 

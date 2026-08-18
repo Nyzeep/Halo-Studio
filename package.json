@@ -4,6 +4,6 @@
   "private": true,
   "description": "Halo Studio 原生可验证交付工作台的归档 Node 参考元数据；不提供可运行产品入口。",
   "scripts": {
-    "bitfun:verify-import": "node scripts/verify-bitfun-import.mjs"
+    "verify:upstream-import": "node scripts/verify-upstream-import.mjs"
   }
 }

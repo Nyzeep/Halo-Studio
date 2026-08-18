@@ -41,8 +41,8 @@ export function productBuildEnvironment(resolution) {
     resolution.productNames[resolution.assembly.fallbackLocale]
     ?? resolution.productNames[resolution.assembly.defaultLocale];
   const environment = {
-    BITFUN_PRODUCT_BINARY_NAME: resolution.assembly.binaryName,
-    BITFUN_PRODUCT_DISPLAY_NAME: fallbackName,
+    HALO_PRODUCT_BINARY_NAME: resolution.assembly.binaryName,
+    HALO_PRODUCT_DISPLAY_NAME: fallbackName,
   };
   if (!resolution.isDefaultProduct) {
     const cargoTargetRoot = process.env.CARGO_TARGET_DIR

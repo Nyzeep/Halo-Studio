@@ -24,9 +24,9 @@ if (-not $OutputDir) {
 $ReleaseDir = [IO.Path]::GetFullPath($ReleaseDir)
 $OutputDir = [IO.Path]::GetFullPath($OutputDir)
 
-$primary = Join-Path $ReleaseDir 'bitfun.exe'
-$legacy = Join-Path $ReleaseDir 'bitfun-cli.exe'
-$deprecation = 'Warning: `bitfun-cli` is deprecated; use `bitfun` instead.'
+$primary = Join-Path $ReleaseDir 'halo.exe'
+$legacy = Join-Path $ReleaseDir 'halo-cli.exe'
+$deprecation = 'Warning: `halo-cli` is deprecated; use `halo` instead.'
 
 function Assert-LastExitCode([string]$Description) {
     if ($LASTEXITCODE -ne 0) {
@@ -36,13 +36,13 @@ function Assert-LastExitCode([string]$Description) {
 
 function Assert-LegacyEntrypoint([string]$Executable) {
     $id = [guid]::NewGuid().ToString('N')
-    $stdout = Join-Path ([IO.Path]::GetTempPath()) "bitfun-cli-$id.out"
-    $stderr = Join-Path ([IO.Path]::GetTempPath()) "bitfun-cli-$id.err"
+    $stdout = Join-Path ([IO.Path]::GetTempPath()) "halo-cli-$id.out"
+    $stderr = Join-Path ([IO.Path]::GetTempPath()) "halo-cli-$id.err"
     try {
         $process = Start-Process -FilePath $Executable -ArgumentList '--version' -Wait -PassThru -NoNewWindow `
             -RedirectStandardOutput $stdout -RedirectStandardError $stderr
         if ($process.ExitCode -ne 0) {
-            throw "Deprecated bitfun-cli entrypoint failed with exit code $($process.ExitCode)"
+            throw "Deprecated halo-cli entrypoint failed with exit code $($process.ExitCode)"
         }
         $warning = (Get-Content -LiteralPath $stderr -Raw).TrimEnd("`r", "`n")
         if ($warning -cne $deprecation) {
@@ -77,14 +77,14 @@ function Assert-NoRedistributableRuntime([string]$Executable) {
 }
 
 & $primary --version
-Assert-LastExitCode 'bitfun --version'
+Assert-LastExitCode 'halo --version'
 & $primary --help | Out-Null
-Assert-LastExitCode 'bitfun --help'
+Assert-LastExitCode 'halo --help'
 Assert-LegacyEntrypoint $legacy
 Assert-NoRedistributableRuntime $primary
 Assert-NoRedistributableRuntime $legacy
 
-$stageName = "bitfun-cli-$Version-$Target"
+$stageName = "halo-cli-$Version-$Target"
 $stageDir = Join-Path (Join-Path $OutputDir 'dist-cli') $stageName
 New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
 Copy-Item -LiteralPath $primary -Destination $stageDir -Force
@@ -115,11 +115,11 @@ if ($recordedHash -cne $hash) {
     throw 'Packaged archive checksum mismatch'
 }
 
-$extractDir = Join-Path ([IO.Path]::GetTempPath()) "bitfun-cli-package-$([guid]::NewGuid().ToString('N'))"
+$extractDir = Join-Path ([IO.Path]::GetTempPath()) "halo-cli-package-$([guid]::NewGuid().ToString('N'))"
 try {
     Expand-Archive -LiteralPath $archive -DestinationPath $extractDir
-    $primaryCandidates = @(Get-ChildItem -LiteralPath $extractDir -Recurse -Filter 'bitfun.exe')
-    $legacyCandidates = @(Get-ChildItem -LiteralPath $extractDir -Recurse -Filter 'bitfun-cli.exe')
+    $primaryCandidates = @(Get-ChildItem -LiteralPath $extractDir -Recurse -Filter 'halo.exe')
+    $legacyCandidates = @(Get-ChildItem -LiteralPath $extractDir -Recurse -Filter 'halo-cli.exe')
     if ($primaryCandidates.Count -ne 1 -or $legacyCandidates.Count -ne 1) {
         throw 'Expected exactly one of each CLI entrypoint in the packaged archive'
     }
@@ -130,9 +130,9 @@ try {
     }
 
     & $primaryCandidates[0].FullName --version
-    Assert-LastExitCode 'packaged bitfun --version'
+    Assert-LastExitCode 'packaged halo --version'
     & $primaryCandidates[0].FullName --help | Out-Null
-    Assert-LastExitCode 'packaged bitfun --help'
+    Assert-LastExitCode 'packaged halo --help'
     Assert-LegacyEntrypoint $legacyCandidates[0].FullName
 }
 finally {

@@ -192,7 +192,7 @@ test('cargo layer checker rejects repository packages without a known layer', ()
 test('cargo metadata collection scans standalone manifests not covered by the workspace', () => {
   const workspaceManifest = join(TEST_ROOT, 'Cargo.toml');
   const memberManifest = join(TEST_ROOT, 'src', 'apps', 'example', 'Cargo.toml');
-  const installerManifest = join(TEST_ROOT, 'BitFun-Installer', 'src-tauri', 'Cargo.toml');
+  const installerManifest = join(TEST_ROOT, 'Halo-Installer', 'src-tauri', 'Cargo.toml');
   const calls = [];
 
   const packages = collectCargoMetadataPackages({
@@ -205,7 +205,7 @@ test('cargo metadata collection scans standalone manifests not covered by the wo
         return { packages: [entry], workspace_members: [entry.id] };
       }
       if (manifestPath === installerManifest) {
-        return { packages: [packageAt('installer', 'BitFun-Installer/src-tauri/Cargo.toml')] };
+        return { packages: [packageAt('installer', 'Halo-Installer/src-tauri/Cargo.toml')] };
       }
       throw new Error(`workspace member metadata should not be loaded twice: ${manifestPath}`);
     },
@@ -397,9 +397,9 @@ test('embedded relay concrete lifecycle stays desktop-owned', async () => {
     ),
   ]);
 
-  assert.doesNotMatch(coreManifest, /bitfun-relay-service/);
+  assert.doesNotMatch(coreManifest, /halo-relay-service/);
   assert.doesNotMatch(corePort, /\b(?:axum|TcpListener|ServeDir|build_relay_router)\b/);
-  assert.match(desktopManifest, /bitfun-relay-service/);
+  assert.match(desktopManifest, /halo-relay-service/);
   assert.match(desktopHost, /impl EmbeddedRelayHost for DesktopEmbeddedRelayHost/);
   assert.match(desktopHost, /TcpListener::bind/);
   assert.match(desktopHost, /ServeDir::new/);
@@ -424,7 +424,7 @@ test('split core boundary check keeps self-test and default execution behavior',
     ['scripts/check-core-boundaries.mjs'],
     {
       cwd: new URL('..', import.meta.url),
-      env: { ...process.env, BITFUN_BOUNDARY_CHECK_SELF_TEST: '1' },
+      env: { ...process.env, HALO_BOUNDARY_CHECK_SELF_TEST: '1' },
       encoding: 'utf8',
     },
   );

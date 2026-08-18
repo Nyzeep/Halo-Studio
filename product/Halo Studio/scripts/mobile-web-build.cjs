@@ -116,14 +116,14 @@ function getNewestInputMtime(entryPath) {
 
 // Marker lives outside dist/ so it never ships as a bundled Tauri resource.
 function getMobileWebBuildMarkerPath(mobileWebDir) {
-  return path.join(mobileWebDir, 'node_modules', '.cache', 'bitfun-mobile-web-build-marker');
+  return path.join(mobileWebDir, 'node_modules', '.cache', 'halo-mobile-web-build-marker');
 }
 
 /**
  * mtime-based short-circuit (same idea as dev.cjs getDesktopPreviewRebuildPlan):
  * when dist/ exists and the build marker is newer than every input, the whole
  * clean/install/build cycle can be skipped. Escape hatches:
- *   --force flag / BITFUN_MOBILE_WEB_FORCE_BUILD=1 env.
+ *   --force flag / HALO_MOBILE_WEB_FORCE_BUILD=1 env.
  */
 function getMobileWebRebuildPlan(mobileWebDir, force = false) {
   const fs = require('fs');
@@ -169,7 +169,7 @@ function getMobileWebRebuildPlan(mobileWebDir, force = false) {
 
   return {
     shouldBuild: false,
-    reason: 'mobile-web dist is up to date; skipping clean/install/build (use --force or BITFUN_MOBILE_WEB_FORCE_BUILD=1 to rebuild)',
+    reason: 'mobile-web dist is up to date; skipping clean/install/build (use --force or HALO_MOBILE_WEB_FORCE_BUILD=1 to rebuild)',
   };
 }
 
@@ -204,7 +204,7 @@ function cleanStaleMobileWebResources(logInfo = printInfo) {
 function buildMobileWeb(options = {}) {
   const {
     install = false,
-    force = process.env.BITFUN_MOBILE_WEB_FORCE_BUILD === '1',
+    force = process.env.HALO_MOBILE_WEB_FORCE_BUILD === '1',
     logInfo = printInfo,
     logSuccess = printSuccess,
     logError = printError,
@@ -254,7 +254,7 @@ if (require.main === module) {
   const args = process.argv.slice(2);
   const result = buildMobileWeb({
     install: args.includes('--install'),
-    force: args.includes('--force') || process.env.BITFUN_MOBILE_WEB_FORCE_BUILD === '1',
+    force: args.includes('--force') || process.env.HALO_MOBILE_WEB_FORCE_BUILD === '1',
   });
   process.exit(result.ok ? 0 : 1);
 }

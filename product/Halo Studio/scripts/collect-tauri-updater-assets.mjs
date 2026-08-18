@@ -129,19 +129,19 @@ function isUpdaterBundle(file) {
 function updaterOutputName(file, version, platform) {
   const lower = file.toLowerCase();
   if (lower.endsWith('.app.tar.gz')) {
-    return `BitFun_${version}_${platform}.app.tar.gz`;
+    return `Halo_${version}_${platform}.app.tar.gz`;
   }
   if (lower.endsWith('.appimage')) {
-    return `BitFun_${version}_${platform}.AppImage`;
+    return `Halo_${version}_${platform}.AppImage`;
   }
   if (lower.endsWith('.zip')) {
-    return `BitFun_${version}_${platform}.zip`;
+    return `Halo_${version}_${platform}.zip`;
   }
   if (lower.endsWith('.exe')) {
-    return `BitFun_${version}_${platform}-setup.exe`;
+    return `Halo_${version}_${platform}-setup.exe`;
   }
   if (lower.endsWith('.tar.gz')) {
-    return `BitFun_${version}_${platform}.tar.gz`;
+    return `Halo_${version}_${platform}.tar.gz`;
   }
   fail(`Unsupported updater artifact extension: ${file}`);
 }

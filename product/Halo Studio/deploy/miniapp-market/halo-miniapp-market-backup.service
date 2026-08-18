@@ -1,10 +1,10 @@
 [Unit]
-Description=Back up the BitFun MiniApp market
+Description=Back up the Halo MiniApp market
 After=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/bitfun-miniapp-market-backup
+ExecStart=/usr/local/sbin/halo-miniapp-market-backup
 User=root
 Group=root
 Nice=10

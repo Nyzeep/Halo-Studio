@@ -69,7 +69,7 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=6144
       # Nightly relay archives are signed too (linux-binaries.yml receives the
       # key), so nightly Desktop needs the same trust root to verify them.
-      BITFUN_RELEASE_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+      HALO_RELEASE_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
 
     strategy:
       fail-fast: false
@@ -82,7 +82,7 @@ jobs:
           - os: ubuntu-24.04-arm
             name: linux-arm64
             target: aarch64-unknown-linux-gnu
-            # Fat LTO exhausts the hosted ARM runner while linking bitfun-desktop.
+            # Fat LTO exhausts the hosted ARM runner while linking halo-desktop.
             build_command: CARGO_PROFILE_RELEASE_LTO=thin pnpm run desktop:build:linux -- --target aarch64-unknown-linux-gnu --bundles deb,rpm,appimage
           - os: macos-15
             name: macos-arm64
@@ -203,7 +203,7 @@ jobs:
           CARGO_PROFILE_TEST_DEBUG: "0"
         run: |
           cargo generate-lockfile
-          cargo test --locked -p bitfun-cli --test terminal_process_contracts
+          cargo test --locked -p halo-cli --test terminal_process_contracts
 
       - name: Build desktop app
         run: ${{ matrix.platform.build_command }}
@@ -218,16 +218,16 @@ jobs:
         run: |
           set -euo pipefail
           ASSET_VERSION="${NIGHTLY_VERSION%%+*}"
-          cargo build --release --target "$TARGET" -p bitfun-cli
+          cargo build --release --target "$TARGET" -p halo-cli
           bash scripts/cli/package-unix.sh "$ASSET_VERSION" "$TARGET"
 
       - name: Sign macOS CLI archive and checksum
         if: runner.os == 'macOS'
         shell: bash
         env:
-          BITFUN_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          BITFUN_SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          BITFUN_SIGNING_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+          HALO_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          HALO_SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          HALO_SIGNING_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
         run: |
           set -euo pipefail
           bash scripts/sign-release-assets.sh \
@@ -242,18 +242,18 @@ jobs:
       - name: Upload bundles
         uses: actions/upload-artifact@v6
         with:
-          name: bitfun-nightly-${{ matrix.platform.name }}-bundle
+          name: halo-nightly-${{ matrix.platform.name }}-bundle
           if-no-files-found: error
           retention-days: 7
           path: |
             target/*/release/bundle
             target/release/bundle
             src/apps/desktop/target/release/bundle
-            BitFun-Installer/src-tauri/target/release/bitfun-installer.exe
-            bitfun-cli-*-apple-darwin.tar.gz
-            bitfun-cli-*-apple-darwin.tar.gz.sha256
-            bitfun-cli-*-apple-darwin.tar.gz.sig
-            bitfun-cli-*-apple-darwin.tar.gz.sha256.sig
+            Halo-Installer/src-tauri/target/release/halo-installer.exe
+            halo-cli-*-apple-darwin.tar.gz
+            halo-cli-*-apple-darwin.tar.gz.sha256
+            halo-cli-*-apple-darwin.tar.gz.sig
+            halo-cli-*-apple-darwin.tar.gz.sha256.sig
 
   linux-binaries:
     name: Linux CLI and Relay Server
@@ -282,14 +282,14 @@ jobs:
       - name: Download bundled artifacts
         uses: actions/download-artifact@v7
         with:
-          pattern: bitfun-nightly-*-bundle
+          pattern: halo-nightly-*-bundle
           path: release-assets
           merge-multiple: true
 
       - name: Download Linux binary artifacts
         uses: actions/download-artifact@v7
         with:
-          pattern: bitfun-linux-nightly-*
+          pattern: halo-linux-nightly-*
           path: linux-release-assets
           merge-multiple: true
 
@@ -331,15 +331,15 @@ jobs:
       - name: Sign installer packages
         shell: bash
         env:
-          BITFUN_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          BITFUN_SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          BITFUN_SIGNING_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+          HALO_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          HALO_SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          HALO_SIGNING_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
         run: |
           set -euo pipefail
           mapfile -t assets < <(
             find release-assets -type f \
               \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \
-                 -o -name '*.dmg' -o -name '*bitfun-installer.exe' \) | sort
+                 -o -name '*.dmg' -o -name '*halo-installer.exe' \) | sort
           )
           if [[ "${#assets[@]}" -eq 0 ]]; then
             echo "No installer packages found to sign."
@@ -349,7 +349,7 @@ jobs:
 
           # Publish the public key alongside the signatures: a signature nobody
           # can fetch a key for is not verifiable.
-          printf '%s' "${BITFUN_SIGNING_PUBKEY}" | base64 -d >release-assets/minisign.pub
+          printf '%s' "${HALO_SIGNING_PUBKEY}" | base64 -d >release-assets/minisign.pub
 
       - name: Create nightly release
         uses: softprops/action-gh-release@v3
@@ -370,15 +370,15 @@ jobs:
             release-assets/**/*.deb
             release-assets/**/*.dmg
             release-assets/**/*.rpm
-            release-assets/**/*bitfun-installer.exe
+            release-assets/**/*halo-installer.exe
             release-assets/**/*.sig
             release-assets/minisign.pub
-            release-assets/**/bitfun-cli-*-apple-darwin.tar.gz
-            release-assets/**/bitfun-cli-*-apple-darwin.tar.gz.sha256
-            linux-release-assets/bitfun-cli-*.tar.gz
-            linux-release-assets/bitfun-cli-*.tar.gz.sha256
-            linux-release-assets/bitfun-relay-server-*.tar.gz
-            linux-release-assets/bitfun-relay-server-*.tar.gz.sha256
+            release-assets/**/halo-cli-*-apple-darwin.tar.gz
+            release-assets/**/halo-cli-*-apple-darwin.tar.gz.sha256
+            linux-release-assets/halo-cli-*.tar.gz
+            linux-release-assets/halo-cli-*.tar.gz.sha256
+            linux-release-assets/halo-relay-server-*.tar.gz
+            linux-release-assets/halo-relay-server-*.tar.gz.sha256
             linux-release-assets/*.tar.gz.sig
             linux-release-assets/*.tar.gz.sha256.sig
             linux-release-assets/linux-binaries.json
@@ -401,7 +401,7 @@ jobs:
           ASSET_VERSION="${NIGHTLY_VERSION%%+*}"
           RELEASE_ROOT="https://github.com/GCWing/BitFun/releases/download/${{ env.NIGHTLY_TAG }}"
           for target in aarch64-apple-darwin x86_64-apple-darwin; do
-            archive="${RELEASE_ROOT}/bitfun-cli-${ASSET_VERSION}-${target}.tar.gz"
+            archive="${RELEASE_ROOT}/halo-cli-${ASSET_VERSION}-${target}.tar.gz"
             curl -fsSL --retry 5 --retry-delay 3 "$archive" -o /dev/null
             curl -fsSL --retry 5 --retry-delay 3 "${archive}.sha256" -o /dev/null
             curl -fsSL --retry 5 --retry-delay 3 "${archive}.sig" -o /dev/null

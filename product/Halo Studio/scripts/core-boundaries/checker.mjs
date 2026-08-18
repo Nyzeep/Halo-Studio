@@ -218,7 +218,7 @@ function collectProductCoreDependencyManifestPaths(manifestEntries) {
   return manifestEntries
     .filter((entry) => {
       const deps = parseManifestDependencies(entry.text.split(/\r?\n/));
-      return deps.some((dep) => dep.name === 'bitfun-core');
+      return deps.some((dep) => dep.name === 'halo-core');
     })
     .map((entry) => entry.manifestPath)
     .sort();
@@ -420,8 +420,8 @@ function forbiddenRuleTextForPath(path) {
 }
 
 function checkCargoManifest(crateDir) {
-  checkForbiddenManifestDeps(crateDir, ['bitfun-core'], () => {
-    return 'extracted crate must not depend on bitfun-core';
+  checkForbiddenManifestDeps(crateDir, ['halo-core'], () => {
+    return 'extracted crate must not depend on halo-core';
   });
 }
 
@@ -641,7 +641,7 @@ function checkProductCoreFeatureAssemblyCoverage() {
         path: join(ROOT, ...manifestPath.split('/')),
         line: 1,
         message:
-          'product entry crate depends on bitfun-core but is not covered by product-full assembly rules',
+          'product entry crate depends on halo-core but is not covered by product-full assembly rules',
       });
     }
   }
@@ -655,7 +655,7 @@ function checkCoreDefaultProductFullFeature() {
       path: manifestPath,
       line: features.get('default')?.line ?? 1,
       message:
-        'bitfun-core default feature must remain product-full until a separate product matrix review changes it',
+        'halo-core default feature must remain product-full until a separate product matrix review changes it',
     });
   }
 }
@@ -748,11 +748,11 @@ function checkRustImports(crateDir) {
     }
     const lines = readText(path).split(/\r?\n/);
     lines.forEach((line, index) => {
-      if (/\bbitfun_core::/.test(line)) {
+      if (/\bhalo_core::/.test(line)) {
         failures.push({
           path,
           line: index + 1,
-          message: 'extracted crate must not import bitfun_core',
+          message: 'extracted crate must not import halo_core',
         });
       }
     });
@@ -1089,7 +1089,7 @@ function checkForbiddenContentUnder(repoDir, patterns, reason) {
 export function runCoreBoundaryCheck() {
   failures.length = 0;
 
-  if (process.env.BITFUN_BOUNDARY_CHECK_SELF_TEST === '1') {
+  if (process.env.HALO_BOUNDARY_CHECK_SELF_TEST === '1') {
     runManifestParserSelfTest({
       isManifestDependencyDeclaration,
       parseManifestDependencies,

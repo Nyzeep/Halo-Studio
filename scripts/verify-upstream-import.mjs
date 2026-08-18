@@ -8,10 +8,12 @@ const manifestPath = join(
   repoRoot,
   "docs",
   "requirements",
-  "bitfun-tauri-product-migration",
-  "bitfun-upstream-manifest.json",
+  "halo-tauri-product-migration",
+  "upstream-manifest.json",
 );
-const sourceRoot = join(repoRoot, "product", "bitfun");
+// 历史验证工具：manifest 记录的是去品牌化前导入快照的 blob 摘要；
+// 命名空间迁移后 product/Halo Studio 的内容已按 Halo 命名改写，本脚本仅用于核对未迁移前的历史基线。
+const sourceRoot = join(repoRoot, "product", "Halo Studio");
 const expectedUpstream = Object.freeze({
   repository: "https://github.com/GCWing/BitFun.git",
   ref: "refs/heads/main",
@@ -228,7 +230,7 @@ async function verify() {
   const formalFiles = await collectFormalFiles();
   const externalPathMatches = [];
   for (const file of formalFiles) {
-    if (file.relativePath === "scripts/verify-bitfun-import.mjs") {
+    if (file.relativePath === "scripts/verify-upstream-import.mjs") {
       continue;
     }
     const bytes = await readFile(file.absolutePath);

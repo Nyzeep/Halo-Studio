@@ -84,29 +84,29 @@
       "reevaluateWhen": "Only when the matching runtime overlay pair is also retired."
     },
     {
-      "root": "BitFun-Installer/src",
+      "root": "Halo-Installer/src",
       "domain": "themePreset",
       "key": "#0e0e10 <-> #121214",
       "decision": "keep",
-      "owner": "BitFun-Installer/src/theme/installerThemesData.ts",
+      "owner": "Halo-Installer/src/theme/installerThemesData.ts",
       "reason": "ThemeSetup renders dark theme cards side by side with primary and secondary preview backgrounds. Cyber needs its own darker primary preview seed so the named theme is not distinguishable only by label and accent.",
       "reevaluateWhen": "Only if installer theme selection adds a separate identity swatch or screenshots prove the primary preview no longer carries theme identity."
     },
     {
-      "root": "BitFun-Installer/src",
+      "root": "Halo-Installer/src",
       "domain": "themePreset",
       "key": "#1a1b26 <-> #1a1c1e",
       "decision": "keep",
-      "owner": "BitFun-Installer/src/theme/installerThemesData.ts",
+      "owner": "Halo-Installer/src/theme/installerThemesData.ts",
       "reason": "Tokyo Night appears as an adjacent installer preview card, and its primary background should preserve the Tokyo base hue while the shared installer card surface stays neutral.",
       "reevaluateWhen": "Only after installer preview cards are redesigned to use a dedicated non-background theme identity affordance."
     },
     {
-      "root": "BitFun-Installer/src",
+      "root": "Halo-Installer/src",
       "domain": "themePreset",
       "key": "#121214 <-> #1a1814",
       "decision": "keep",
-      "owner": "BitFun-Installer/src/theme/installerThemesData.ts",
+      "owner": "Halo-Installer/src/theme/installerThemesData.ts",
       "reason": "Ink Night uses a warmer dark primary background in adjacent installer preview cards. Collapsing it into the canonical dark seed makes multiple dark choices visually flatter before the app is installed.",
       "reevaluateWhen": "Only if visual review shows installer dark theme cards no longer rely on primary background identity."
     }
