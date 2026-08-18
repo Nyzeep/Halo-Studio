@@ -83,8 +83,8 @@ Get-FileHash -Algorithm SHA256 $extension
 git hash-object -- $extension
 git rev-parse e8c445d6a81d90851ac03d6aac7a4f11b6b749a3^{tree}
 rg -n 'HALO_PI_EXTENSION_ID|HALO_PI_EXTENSION_VERSION|HALO_PI_EXTENSION_PERMISSIONS|include_str!|--no-extensions|--extension' "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/src/lib.rs"
-cargo tree --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter
-cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter extension_decision_is_redacted_one_shot_and_duplicate_request_fails_closed
+cargo tree --manifest-path "product/Halo Studio/Cargo.toml" -p halo-pi-rpc-adapter
+cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p halo-pi-rpc-adapter extension_decision_is_redacted_one_shot_and_duplicate_request_fails_closed
 ```
 
 The expected SHA-256 is the value recorded above. A mismatch, missing source,
@@ -103,8 +103,8 @@ declared plus freshly derived `blockingReasons`. The CLI is the only
 machine-verifiable entry point: it emits this result as JSON and returns exit
 code `1` for `blocked` evidence.
 For a fresh check of the external candidate tree, set the local read-only
-checkout through `HALO_BITFUN_REFERENCE_ROOT`; the committed evidence stores
-only the `readonly-evidence://bitfun-latest` locator and never a machine path.
+checkout through `HALO_HALO_REFERENCE_ROOT`; the committed evidence stores
+only the `readonly-evidence://halo-latest` locator and never a machine path.
 
 The current inventory remains blocked because the read-only Pi host tree has no
 Git commit/tag, its package closure is not a Halo lockfile dependency or Halo
@@ -179,8 +179,8 @@ pnpm --dir "product/Halo Studio" run check:repo-hygiene
 pnpm --dir "product/Halo Studio" run product:check
 pnpm --dir "product/Halo Studio" run product:test
 pnpm --dir "product/Halo Studio" run type-check:web
-cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter
-cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-agent-runtime --test workbench_runtime_contracts
+cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p halo-pi-rpc-adapter
+cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p halo-agent-runtime --test workbench_runtime_contracts
 pnpm --dir "product/Halo Studio" run desktop:build:fast
 git diff --check
 ```
@@ -215,7 +215,7 @@ host, provider, and license provenance:
   canonical object identity is read via `git rev-parse main:<path>`, not `git show`.
 - `@earendil-works/pi-coding-agent` remains type-only (line 1 `import type`) and
   absent from package.json/pnpm-lock.yaml/package-lock.json/Cargo.toml/Cargo.lock.
-- `cargo tree -p bitfun-pi-rpc-adapter --offline` resolves cleanly with no
+- `cargo tree -p halo-pi-rpc-adapter --offline` resolves cleanly with no
   @earendil-works runtime entry.
 - Audit CLI/tests refreshed for the current adapter `create_session` load flow and the
   halo-scope.mjs allowlist hash; `node --test pi-extension-audit.test.mjs` passes 92/92.

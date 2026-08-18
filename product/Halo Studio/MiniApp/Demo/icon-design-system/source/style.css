@@ -1,27 +1,27 @@
 /* ── Theme token aliases ────────────────────────────────────────────────────── */
-/* Map --bitfun-* host variables to local names so every rule auto-adapts.    */
+/* Map --halo-* host variables to local names so every rule auto-adapts.    */
 :root {
-  --bg:           var(--bitfun-bg, #121214);
-  --bg2:          var(--bitfun-bg-secondary, #18181a);
-  --bg3:          var(--bitfun-bg-tertiary, #0e0e10);
-  --bg-el:        var(--bitfun-element-bg, #27272a);
-  --bg-hover:     var(--bitfun-element-hover, #3f3f46);
-  --text:         var(--bitfun-text, #e8e8e8);
-  --text2:        var(--bitfun-text-secondary, #b0b0b0);
-  --text3:        var(--bitfun-text-muted, #858585);
-  --accent:       var(--bitfun-accent, #60a5fa);
-  --accent2:      var(--bitfun-accent-hover, #3b82f6);
-  --success:      var(--bitfun-success, #34d399);
-  --warning:      var(--bitfun-warning, #f59e0b);
-  --danger:       var(--bitfun-error, #ef4444);
-  --info:         var(--bitfun-info, #60a5fa);
-  --border:       var(--bitfun-border, #2e2e32);
-  --border2:      var(--bitfun-border-subtle, #27272a);
-  --radius:       var(--bitfun-radius, 6px);
-  --radius-lg:    var(--bitfun-radius-lg, 10px);
-  --font:         var(--bitfun-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
-  --font-mono:    var(--bitfun-font-mono, ui-monospace, monospace);
-  --scrollbar:    var(--bitfun-scrollbar-thumb, rgba(128,128,128,0.25));
+  --bg:           var(--halo-bg, #121214);
+  --bg2:          var(--halo-bg-secondary, #18181a);
+  --bg3:          var(--halo-bg-tertiary, #0e0e10);
+  --bg-el:        var(--halo-element-bg, #27272a);
+  --bg-hover:     var(--halo-element-hover, #3f3f46);
+  --text:         var(--halo-text, #e8e8e8);
+  --text2:        var(--halo-text-secondary, #b0b0b0);
+  --text3:        var(--halo-text-muted, #858585);
+  --accent:       var(--halo-accent, #60a5fa);
+  --accent2:      var(--halo-accent-hover, #3b82f6);
+  --success:      var(--halo-success, #34d399);
+  --warning:      var(--halo-warning, #f59e0b);
+  --danger:       var(--halo-error, #ef4444);
+  --info:         var(--halo-info, #60a5fa);
+  --border:       var(--halo-border, #2e2e32);
+  --border2:      var(--halo-border-subtle, #27272a);
+  --radius:       var(--halo-radius, 6px);
+  --radius-lg:    var(--halo-radius-lg, 10px);
+  --font:         var(--halo-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  --font-mono:    var(--halo-font-mono, ui-monospace, monospace);
+  --scrollbar:    var(--halo-scrollbar-thumb, rgba(128,128,128,0.25));
 
   /* Derived semantic tokens */
   --on-accent:    #fff;          /* text on accent-coloured surface */
@@ -30,7 +30,7 @@
 }
 
 /* In light theme the on-accent/danger text must be white only if the accent is
-   dark enough; hosts should override via --bitfun-on-accent if needed. */
+   dark enough; hosts should override via --halo-on-accent if needed. */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 

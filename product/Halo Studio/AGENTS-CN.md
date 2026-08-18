@@ -2,7 +2,7 @@
 
 # AGENTS-CN.md
 
-BitFun 是一个由 Rust workspace 与 React 前端组成的项目。
+Halo Studio 是一个由 Rust workspace 与 React 前端组成的项目。
 
 仓库核心原则：**先保持产品逻辑平台无关，再通过平台适配层对外暴露能力**。
 
@@ -23,7 +23,7 @@ Stable Contracts and Security Control Plane 的边界以
 
 | # | 层级 | 路径 | 职责 | 模块 / 入口 | 层级文档 |
 |---|---|---|---|---|---|
-| 1 | 接口与入口层 | `src/apps/*`, `src/web-ui`, `src/mobile-web`, `BitFun-Installer`, `tests/e2e`, `src/crates/interfaces` | 产品宿主、命令、UI 入口、协议接口和跨形态测试 | desktop、CLI、server、relay、Web UI、mobile web、installer、E2E、`acp`、`sdk-host` | 最近的本地 `AGENTS.md`；[interfaces](src/crates/interfaces/AGENTS.md) |
+| 1 | 接口与入口层 | `src/apps/*`, `src/web-ui`, `src/mobile-web`, `Halo-Installer`, `tests/e2e`, `src/crates/interfaces` | 产品宿主、命令、UI 入口、协议接口和跨形态测试 | desktop、CLI、server、relay、Web UI、mobile web、installer、E2E、`acp`、`sdk-host` | 最近的本地 `AGENTS.md`；[interfaces](src/crates/interfaces/AGENTS.md) |
 | 2 | 产品组装层 | `src/crates/assembly` | 兼容导出、产品能力选择、product-full 接线、adapter/service 注册和生态无关的来源协调 | `core`, `external-sources`, `product-capabilities` | [AGENTS.md](src/crates/assembly/AGENTS.md) |
 | 3 | 适配层 | `src/crates/adapters` | AI/transport/WebDriver 协议 adapter、外部 AI work source adapter（OpenCode/Claude Code/Codex）和外部 provider 转换 | `agent-runtime-ipc`、`ai-adapters`, `opencode-adapter`, `claude-code-adapter`, `codex-adapter`, `static-hook-support`, `transport`, `webdriver` | [AGENTS.md](src/crates/adapters/AGENTS.md) |
 | 4 | 服务实现层 | `src/crates/services` | 可复用 OS、filesystem、terminal、MCP、remote、git、watch、process、LSP plugin registry、session persistence primitives、network 和 MiniApp runtime IO 实现 | `services-core`, `services-integrations`, `relay-service`, `page-function-runtime`, `terminal` | [AGENTS.md](src/crates/services/AGENTS.md) |
@@ -55,7 +55,7 @@ pnpm run desktop:dev               # 完整热更新：Vite HMR + Rust 自动重
 pnpm run desktop:preview:debug     # 复用预构建二进制 + Vite HMR；无 Rust 自动重编译
 pnpm run dev:web                   # 纯浏览器前端
 pnpm run cli:dev                   # CLI 运行时
-pnpm run cli:install               # release 编译并安装 bitfun（Windows/macOS/Linux；含废弃兼容入口 bitfun-cli）
+pnpm run cli:install               # release 编译并安装 halo（Windows/macOS/Linux；含废弃兼容入口 halo-cli）
 
 # 检查
 pnpm run fmt:rs                     # 只格式化已改动 / 已暂存的 Rust 文件
@@ -75,7 +75,7 @@ pnpm --dir src/web-ui run test:run      # 大范围测试；本地优先用精�
 cargo test --workspace                  # 大范围测试；CI 兜底
 
 # 构建（仅构建相关改动或复现 CI 时运行）
-cargo build -p bitfun-desktop           # 构建相关改动 / 复现 CI
+cargo build -p halo-desktop           # 构建相关改动 / 复现 CI
 pnpm run build:web                      # 构建相关改动 / 复现 CI
 pnpm run build:mobile-web               # 构建相关改动 / 复现 CI
 
@@ -94,7 +94,7 @@ pnpm run desktop:build:nsis:fast      # Windows 安装器，release-fast profile
 | 变量 / 参数 | 使用场景 |
 | --- | --- |
 | `CARGO_PROFILE_DEV_DEBUG=2` | 需要完整调试信息打断点。dev profile 默认 `line-tables-only`(panic 回溯仍带行号,PDB 体积大幅减小)。 |
-| `BITFUN_MOBILE_WEB_FORCE_BUILD=1` 或 `node scripts/mobile-web-build.cjs --force` | 源码看起来没变但需要强制重建 mobile-web。当 `src/mobile-web/dist` 新于所有输入时构建会被跳过。 |
+| `HALO_MOBILE_WEB_FORCE_BUILD=1` 或 `node scripts/mobile-web-build.cjs --force` | 源码看起来没变但需要强制重建 mobile-web。当 `src/mobile-web/dist` 新于所有输入时构建会被跳过。 |
 | `VITE_USE_POLLING=1` | Vite dev 监听不到文件变化——通常发生在网络盘或 WSL 挂载上。默认使用原生文件事件。 |
 
 `pnpm run build:web` 会并发执行类型检查与 Vite 构建,因此类型错误与打包错误出现的先后顺序不固定;两者的输出都带前缀(`[type-check]` / `[vite-build]`)。
@@ -109,7 +109,7 @@ pnpm run desktop:build:nsis:fast      # Windows 安装器，release-fast profile
 - 跨形态稳定标签放在
   `src/shared/i18n/resources/shared/<locale>/terms.json`；流程文案留在所属
   产品形态资源中。
-- 不要把 Web UI locale 资源导入 `src/mobile-web`、`BitFun-Installer` 等较小形态；
+- 不要把 Web UI locale 资源导入 `src/mobile-web`、`Halo-Installer` 等较小形态；
   完整规则见 `docs/architecture/i18n.md`。
 - 静态自包含页面只能使用生成的 page-scoped shared-term 文件，不得导入 Web UI locale catalog。
 - Web UI 只急切加载 bootstrap namespace；路由或功能文案使用
@@ -158,7 +158,7 @@ await api.invoke('your_command', { request: { ... } });
 
 - 不要在 UI 组件里直接调用 Tauri API；应通过 adapter / infrastructure 层访问。
 - 桌面端专属集成应放在 `src/apps/desktop`，再通过类型化能力接口回流；需要事件投递时，使用已有生产 transport adapter。
-- 在共享 core 中避免使用 `tauri::AppHandle` 等宿主 API；优先使用 `bitfun_events::EventEmitter` 等共享抽象。
+- 在共享 core 中避免使用 `tauri::AppHandle` 等宿主 API；优先使用 `halo_events::EventEmitter` 等共享抽象。
 
 ### 远程兼容
 
@@ -175,15 +175,15 @@ await api.invoke('your_command', { request: { ... } });
 
 ### Agent Hooks
 
-- BitFun 实现的是 Codex Hook 契约，因此 <https://learn.chatgpt.com/docs/hooks> 是事件、载荷字段与决策结构的参考来源，不要另起炉灶。[`docs/features/agent-hooks.zh-CN.md`](docs/features/agent-hooks.zh-CN.md)（[English](docs/features/agent-hooks.md)）只覆盖 BitFun 特有部分 —— 文件位置、`app.hooks` 开关和差异表 —— 新增或消除差异时必须同步更新。
-- 可移植引擎（配置解析、载荷构造、进程执行、决策合并）位于 `bitfun-agent-runtime::native_hooks`。`bitfun-core::native_hooks` 负责配置发现、开关门控和按事件的分发辅助函数；各分发点调用这些辅助函数，不要就地执行 Hook。
+- Halo Studio 实现的是 Codex Hook 契约，因此 <https://learn.chatgpt.com/docs/hooks> 是事件、载荷字段与决策结构的参考来源，不要另起炉灶。[`docs/features/agent-hooks.zh-CN.md`](docs/features/agent-hooks.zh-CN.md)（[English](docs/features/agent-hooks.md)）只覆盖 Halo Studio 特有部分 —— 文件位置、`app.hooks` 开关和差异表 —— 新增或消除差异时必须同步更新。
+- 可移植引擎（配置解析、载荷构造、进程执行、决策合并）位于 `halo-agent-runtime::native_hooks`。`halo-core::native_hooks` 负责配置发现、开关门控和按事件的分发辅助函数；各分发点调用这些辅助函数，不要就地执行 Hook。
 - 有三类不同的东西共用 "hook" 一词：本文所述的原生用户 Hooks、内部编译期 `post_call_hooks`，以及其他 AI 应用的只读外部 Hook 目录（`external_hooks`）。三者必须保持区分。
 
 ## 架构
 
 ### 产品架构护栏
 
-任何 `bitfun-core` 拆解、feature 边界、依赖边界或 Rust 构建提速重构，
+任何 `halo-core` 拆解、feature 边界、依赖边界或 Rust 构建提速重构，
 都必须先阅读
 [`docs/architecture/product-architecture.md`](docs/architecture/product-architecture.md)。
 顶层文档只作为入口；模块级 ownership 细节应放到离代码最近的模块 `AGENTS.md`。
@@ -237,7 +237,7 @@ OpenCode 兼容或目标项目治理的变更，先阅读
 [`docs/sdlc-harness/design.md`](docs/sdlc-harness/design.md)。如果变更影响模块边界或行为，
 继续参考 `docs/sdlc-harness/architecture/` 或 `docs/sdlc-harness/features/` 下的对应设计。
 
-不要把 BitFun 自身验证假设硬编码成目标项目通用规则；质量保护行为必须保持面向目标项目、
+不要把 Halo Studio 自身验证假设硬编码成目标项目通用规则；质量保护行为必须保持面向目标项目、
 基于证据、按风险分级、成本可控并可审计。
 
 ## 验证
@@ -254,11 +254,11 @@ OpenCode 兼容或目标项目治理的变更，先阅读
 | Mobile web UI、状态、配对、断开或重连行为 | `pnpm --dir src/mobile-web run type-check`；行为变化还需要在 PR 中说明手动配对 / 重连验证 |
 | 产品定义、schema、resolver 或 Desktop/CLI 产品构建 adapter | `pnpm run product:test`，并对默认定义运行 `pnpm run product:check` |
 | `core`、`transport`、adapter 或共享服务中的 Rust 逻辑 | `cargo check --workspace`；行为变化时再加最近的 focused `cargo test` |
-| 桌面端集成、Tauri API、browser/computer-use 或桌面专属行为 | `cargo check -p bitfun-desktop`；行为变化时再加 focused desktop tests |
+| 桌面端集成、Tauri API、browser/computer-use 或桌面专属行为 | `cargo check -p halo-desktop`；行为变化时再加 focused desktop tests |
 | 被桌面端 smoke/functional 流覆盖的行为 | 优先运行最近的 focused E2E/smoke check；除非改动影响构建，否则 broad build/test 交给 CI |
-| `src/crates/adapters/ai-adapters` | 运行上面相关 Rust 检查；只有 stream contract 改动时再加 `cargo test -p bitfun-agent-stream` |
-| 不涉及打包的安装器前端或 i18n runtime | `pnpm --dir BitFun-Installer run type-check` |
-| 安装器 Tauri/Rust 改动 | `cargo check --manifest-path BitFun-Installer/src-tauri/Cargo.toml` |
+| `src/crates/adapters/ai-adapters` | 运行上面相关 Rust 检查；只有 stream contract 改动时再加 `cargo test -p halo-agent-stream` |
+| 不涉及打包的安装器前端或 i18n runtime | `pnpm --dir Halo-Installer run type-check` |
+| 安装器 Tauri/Rust 改动 | `cargo check --manifest-path Halo-Installer/src-tauri/Cargo.toml` |
 | 安装器打包、payload、安装/卸载流程或 native bundling | `pnpm run installer:build` |
 
 ## Agent 文档优先级

@@ -5,7 +5,7 @@ Scope: `src/mobile-web`, `src/crates/services/services-integrations` (remote_con
 
 ## 背景与定位
 
-Mobile-web 是手机端的**有限接续平台**：扫码接续单台开启网络中继的 BitFun Desktop，
+Mobile-web 是手机端的**有限接续平台**：扫码接续单台开启网络中继的 Halo Studio Desktop，
 提供工作区/会话切换与新建、聊天等有限能力。桌面端登录账号后，配对应自动把账号身份
 （delegated identity）继承给 mobile-web，使其可以把控制目标切换到同账号下任意在线设备，
 切换后仍只提供原有的有限能力（数据面复用 `RemoteCommand`，不做桌面级 Peer Mode
@@ -105,7 +105,7 @@ transport 替换，不引入 `peer_control_attach/detach`）。
 
 ## 验证
 
-- `cargo check --workspace`；`cargo test -p bitfun-services-integrations remote_connect_contracts` 聚焦合同测试。
+- `cargo check --workspace`；`cargo test -p halo-services-integrations remote_connect_contracts` 聚焦合同测试。
 - `pnpm --dir src/mobile-web run type-check`；`pnpm run build:mobile-web`。
 - `pnpm run i18n:audit`（messages.ts 文案变更）。
 - 手动路径（PR 说明）：扫码配对 → 自动继承身份 → 设备页可见同账号设备 →

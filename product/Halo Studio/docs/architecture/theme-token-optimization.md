@@ -1,6 +1,6 @@
 # 主题与颜色 Token 治理
 
-本文定义 BitFun 各界面的主题所有权、Token 分层、生成边界和防回退规则。它只保留长期有效的架构约束，
+本文定义 Halo Studio 各界面的主题所有权、Token 分层、生成边界和防回退规则。它只保留长期有效的架构约束，
 不记录审计数量、迁移批次或阶段历史。当前事实以以下可执行契约及其输出为准：
 
 - `scripts/theme-color-governance-baseline*.json`
@@ -17,10 +17,10 @@
 
 - `src/web-ui` 的主题预设、`ThemeConfig`、CSS 变量、组件样式和专用渲染色板。
 - `src/mobile-web` 的移动端主题与运行时变量。
-- `BitFun-Installer/src` 的安装器主题、首屏静态变量和流程组件。
+- `Halo-Installer/src` 的安装器主题、首屏静态变量和流程组件。
 - `src/apps/cli` 的 TUI preset、终端颜色映射和降级行为。
 - Desktop 首屏 bootstrap、生成式 UI 主题提示等由主题源生成的只读产物。
-- BitFun GUI 插件的语义色投影，以及 OpenCode TUI 主题的独立兼容边界。
+- Halo Studio GUI 插件的语义色投影，以及 OpenCode TUI 主题的独立兼容边界。
 
 本治理不要求不同产品形态共享完整主题 schema，也不把 Monaco、终端 ANSI、Mermaid、语法高亮、diff、
 语言标识或数据可视化色板强行合并为普通应用 Token。
@@ -33,9 +33,9 @@
 | Desktop 首屏 | Web UI theme presets 与 `scripts/generate-startup-theme-bootstrap.mjs` | `src/apps/desktop/src/generated/startup_theme_bootstrap.json` | 只保存 JS 加载前必要字段；生成产物不能反向定义主题 |
 | 生成式 UI 提示 | Web UI theme presets 与 `scripts/generate-startup-theme-bootstrap.mjs` | `src/crates/assembly/core/src/agentic/tools/implementations/generated/theme_prompt_snapshots.json` | 只读生成产物；Rust 不手写第二套内置 palette |
 | Mobile Web | `src/mobile-web/src/theme` | Mobile 运行时变量与组件 | 不从 Desktop 或 Web UI 运行时偷读内部变量 |
-| Installer | `BitFun-Installer/src/theme` | `BitFun-Installer/src/styles/variables.css` 与流程组件 | Rust 壳不复制完整 palette |
+| Installer | `Halo-Installer/src/theme` | `Halo-Installer/src/styles/variables.css` 与流程组件 | Rust 壳不复制完整 palette |
 | CLI/TUI | `src/apps/cli/themes/presets` 与 `src/apps/cli/src/ui/theme.rs` | 终端样式 | 拥有 preset、ANSI/monochrome 降级；不实现 Web `ThemeConfig` |
-| BitFun GUI 插件 | Web UI theme owner | `src/web-ui/src/infrastructure/theme/pluginThemeProjection.ts` | 只投影七个语义色，不暴露全部 CSS 变量 |
+| Halo Studio GUI 插件 | Web UI theme owner | `src/web-ui/src/infrastructure/theme/pluginThemeProjection.ts` | 只投影七个语义色，不暴露全部 CSS 变量 |
 | OpenCode TUI 主题 | CLI/TUI 兼容适配器 | OpenCode 主题来源与终端投影 | 保留来源顺序、稳定字段、引用和 light/dark 变体；不由 GUI 七色投影替代 |
 | 专用渲染域 | 对应 editor、terminal、syntax、diff、Mermaid 等模块 | 各自 namespace | 不得泄漏为普通组件随手可用的色板 |
 
@@ -117,7 +117,7 @@ GUI、Mobile、Installer 和 CLI/TUI 可以选择不同主题集合，但共享�
 - 身份与品牌配置选择已注册 ID。
 - 每个 surface 的 owner 校验该 ID 和能力范围。
 - 未支持的组合在构建期或入口启动时失败，不静默回默认造成品牌错配。
-- OpenCode TUI 主题保持独立格式；BitFun GUI 插件七色投影不构成 OpenCode 兼容承诺。
+- OpenCode TUI 主题保持独立格式；Halo Studio GUI 插件七色投影不构成 OpenCode 兼容承诺。
 
 ## 变更流程
 

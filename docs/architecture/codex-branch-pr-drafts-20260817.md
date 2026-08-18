@@ -14,7 +14,7 @@
 
 **摘要**：收口工单 14 的实现部分：
 
-- Halo 启动不再初始化 BitFun SSH/远程工作区状态，状态槽 fail closed；
+- Halo 启动不再初始化 Halo Studio SSH/远程工作区状态，状态槽 fail closed；
 - write-only Base URL 未填写时保留既有 endpoint；update 前校验 credential_ref 的 provider 归属；
 - 一次性密钥改为非受控输入并即时清空；切换 Provider 必须重录凭据；
 - 工作台导航、旧静态入口退役与 smoke 对齐正式 Halo 产物；BitFun-latest 仅作只读 UI 布局参考；
@@ -37,7 +37,7 @@
 **摘要**：工单 15a 独立收缩：
 
 - 删除 `app/`、`sidecar/`、`apps/desktop/`、`protocol/v1/` 与 `packages/`（旧根 TS workspace），约 331 个跟踪文件、-72k 行；
-- 删除仅服务旧运行时的根脚本；修复 `assert-repository`（maxBuffer、测试 blob 源、互为排除）与 `verify-bitfun-import` 扫描根；
+- 删除仅服务旧运行时的根脚本；修复 `assert-repository`（maxBuffer、测试 blob 源、互为排除）与 `verify-halo-import` 扫描根；
 - README、.gitignore、目标产品架构、核心重建验证文档改为历史口径；Gemini 注释移除旧 packages/core 引用；根 package-lock 重生成；
 - 15b（产品树 OpenCode 全量移除）按 ADR-0074 延后至 DeepSeek Harness 基座迁移。
 

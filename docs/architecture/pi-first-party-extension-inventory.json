@@ -10,7 +10,7 @@
     "blockingReasons": []
   },
   "upstreamCandidateEvidence": {
-    "path": "docs/requirements/bitfun-tauri-product-migration/artifacts/issue-13-upstream-sync-candidate.json",
+    "path": "docs/requirements/halo-tauri-product-migration/artifacts/issue-13-upstream-sync-candidate.json",
     "baseCommit": "ca56631e38f36db675583288df2bd44c540d250a",
     "candidateCommit": "1616ccaf73c0dabc50783344e583d304dd77622b",
     "diffRecorded": true,
@@ -254,7 +254,7 @@
             "sha256": "43e2110c8be7ffd62263b6d7561f802855d07b440dd7308046d290e9c9cb9b2a",
             "size": 4819,
             "requiredText": [
-              "# BitFun third-party attribution index",
+              "# Halo Studio third-party attribution index",
               "MIT license and the upstream copyright notice",
               "halo-workbench-permission-gate",
               "A6F704110E56BE3C1C0754DADDE1BE2B27F65C76EE03F2C19A1E43CD06848C0B"
@@ -326,7 +326,7 @@
   "freshRehearsal20260815": {
     "schemaVersion": 1,
     "rehearsalDate": "2026-08-15",
-    "purpose": "Issue 13 gate-closure session: fresh read-only BitFun upstream verification of candidate 9b05dd0e via primary sources, plus first-party extension provenance refresh.",
+    "purpose": "Issue 13 gate-closure session: fresh read-only Halo Studio upstream verification of candidate 9b05dd0e via primary sources, plus first-party extension provenance refresh.",
     "source": {
       "command": "git ls-remote https://github.com/GCWing/BitFun.git HEAD refs/heads/main",
       "exitCode": 0,
@@ -385,7 +385,7 @@
       "added": 1136,
       "removed": 385,
       "changedEntries": 3348,
-      "artifactPath": "docs/requirements/bitfun-tauri-product-migration/artifacts/issue-13-upstream-sync-diff-9b05dd0e.json"
+      "artifactPath": "docs/requirements/halo-tauri-product-migration/artifacts/issue-13-upstream-sync-diff-9b05dd0e.json"
     },
     "localFetchStatus": {
       "gitFetch": "blocked/hanging: POST git-upload-pack to github.com did not complete in this environment (interrupted after several minutes).",
@@ -408,7 +408,7 @@
     "schemaVersion": 1,
     "upstreamCandidate": {
       "scope": "rehearsal-only",
-      "reason": "BitFun upstream candidate stays a read-only synchronization rehearsal record (candidate 9b05dd0e, base ca56631e ancestor, verified via GitHub REST API on 2026-08-15); Halo release proceeds on the current pinned base. No automatic merge or application.",
+      "reason": "Halo Studio upstream candidate stays a read-only synchronization rehearsal record (candidate 9b05dd0e, base ca56631e ancestor, verified via GitHub REST API on 2026-08-15); Halo release proceeds on the current pinned base. No automatic merge or application.",
       "policySource": "docs/adr/0073-issue-13-release-gate-exclusions.md"
     },
     "hostPackage": {

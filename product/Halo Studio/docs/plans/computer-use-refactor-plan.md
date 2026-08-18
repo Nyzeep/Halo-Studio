@@ -1,4 +1,4 @@
-# BitFun Computer Use / 浏览器控制能力重构方案
+# Halo Studio Computer Use / 浏览器控制能力重构方案
 
 > 范围：`src/crates/assembly/core` 的 ComputerUse / ControlHub / browser_control / web 工具族、`src/apps/desktop/src/computer_use/*` 执行层、`src/crates/execution` 契约层、web-ui 配置与模式面。
 > 依据：三份内部代码排查 + cua / Codex CLI / Anthropic computer-use-demo / browser-use / playwright-mcp & stagehand 五份标杆调研。所有文件路径均来自排查实证。
@@ -53,7 +53,7 @@
 | M2 | 桌面 host 会话状态进程级单例 + `APP_LOOP_TRACKER` 全局静态，跨 session 污染守卫/截图缓存/循环检测 | `desktop/src/lib.rs:1615`、`desktop_host/mod.rs`、`computer_use_actions.rs:30` |
 | M3 | 大量死代码：input/result shim、verification/RetryStrategy 未接线、`handle_system('open_app')` 不可达、`enabled_feature_groups()` 无消费者 | `computer_use_input.rs`、`computer_use_result.rs`、`computer_use_verification.rs`、`tool-execution/src/computer_use.rs`、`tool-provider-groups/src/lib.rs` |
 | M4 | tool ↔ actions 调用环 + ControlHub 错误封套泄漏，模型看到两种失败形状 | `computer_use_tool.rs`、`computer_use_actions.rs`、`control_hub/errors.rs` |
-| M5 | 每次截图无条件写入 `<workspace>/.bitfun/computer_use_debug/`，无门控、无轮转，隐私风险 | `computer_use_tool.rs`（try_save_screenshot_for_debug） |
+| M5 | 每次截图无条件写入 `<workspace>/.halo-studio/computer_use_debug/`，无门控、无轮转，隐私风险 | `computer_use_tool.rs`（try_save_screenshot_for_debug） |
 | M6 | 未对接任何 provider 原生 computer-use 形态（Anthropic computer_20250124/OpenAI computer-use-preview），模型无法复用训练先验；多模态回传仅限两类 converter | `computer_use_tool.rs`、`tool-execution/src/context.rs` |
 | M7 | text-only 门控不一致：schema 仍暴露 Set-of-Mark 纯视觉 action，`handle_desktop_ax` 附图不检查多模态能力 | `computer_use_tool.rs:249`、`computer_use_actions.rs:648-838` |
 | M8 | `frame`/`frame_main` 是死功能（active_frame 无读者）；同源 iframe 内点击坐标缺 offset 修正，点错位置 | `control_hub_tool.rs:1657-1698`、`browser_control/actions.rs:552-568` |
@@ -77,7 +77,7 @@
 
 ## 2. 标杆对比
 
-| 维度 | BitFun 现状 | cua | Codex CLI | Anthropic demo | browser-use | playwright-mcp / stagehand | 差距结论 |
+| 维度 | Halo Studio 现状 | cua | Codex CLI | Anthropic demo | browser-use | playwright-mcp / stagehand | 差距结论 |
 |------|------------|-----|-----------|----------------|-------------|---------------------------|---------|
 | **动作空间** | 40 action 自造方言，7 条点击路径 | OpenAI+Anthropic 动作并集，按 tag 分发 | 工具极少（shell/apply_patch/view_image），GUI 委托 MCP | 日期版本化 enum，10-17 个动作，服务端定义 schema | ~20 个结构化动作，index 为句柄 | 每域一文件的声明式小工具 | **决策面失控**：应收敛到标准动作集 + 版本化 enum |
 | **provider 原生形态** | 无，自造 5KB 描述现学 | 模型 regex 注册表，边缘转换到原生 computer_20251124 / computer-use-preview | — | 原生 Anthropic-defined tool，客户端零 schema | 能力门控换 schema | — | **放弃训练先验是执行质量差的直接原因** |
@@ -85,7 +85,7 @@
 | **浏览器交互范式** | CDP JS 注入 + `@eN` 属性写入，两套 ref 栈打架 | pixel + BrowserTool 页级动词 | 委托 MCP | — | **a11y 三树合并 + index 句柄**（成功率来源） | **aria snapshot + ref**，坐标隔离在 vision capability | **语义引用优先，坐标降级** 是业界共识 |
 | **观察闭环** | 动作后需另调 screenshot；augment_result 附零散字段 | 执行器烘焙 post-action 截图 | — | 动作后 2s settle + 自动截图 | 动作即回灌新状态 + diff `*` 标注 | Response 聚合器：快照+tab diff+事件一并回传 | **"动作即观察"缺失，回合数浪费** |
 | **工具契约/注册** | 手写双份 JSON schema + 测试防漂移 | Protocol + 注册表 | **spec 与 runtime 同 trait 对象**、ToolExposure 四态、每回合 spec_plan 组装 | ToolGroup{version,tools,beta_flag} 注册表 | 装饰器 + schema 自动派生 + 域名过滤 | Tool{capability,kind,zod,handle} + filteredTools | **schema/实现分离导致漂移；应 spec-runtime 同体** |
-| **分层** | 工具层直连 60+ 方法胖 trait，执行层在 Tauri 进程内 | Provider ⊥ Interface ⊥ Handler 三层正交 | 契约 crate ⊥ 编排 ⊥ 风险编排 ⊥ 沙箱 crate | UI/loop/dispatch/tool/executor 五层 | Agent/Registry/Session/DOM 四层 | tools/mcp/backend 三层 | **BitFun 缺清晰层界，横切关注点全内联** |
+| **分层** | 工具层直连 60+ 方法胖 trait，执行层在 Tauri 进程内 | Provider ⊥ Interface ⊥ Handler 三层正交 | 契约 crate ⊥ 编排 ⊥ 风险编排 ⊥ 沙箱 crate | UI/loop/dispatch/tool/executor 五层 | Agent/Registry/Session/DOM 四层 | tools/mcp/backend 三层 | **Halo Studio 缺清晰层界，横切关注点全内联** |
 | **会话状态** | 进程级单例 Mutex + 全局静态 | per-Computer 实例 | per-turn 组装 + 会话级审批缓存 | per-session 对象 | per-BrowserSession | per-context | **必须 per-session 键控** |
 | **错误模型** | 两套封套混用 + 字符串猜 ErrorCode | 结构化 tool-error item，永不 abort | 稳定 ErrorCode + 审批 key | ToolError→is_error tool_result 唯一转换点 | 一切异常→ActionResult(error) 回灌 | 可恢复错误 + 恢复指令（"Try new snapshot"） | **需要唯一异常边界 + 稳定 code** |
 | **安全/审批** | guard 死代码、ControlHub 恒开无 intent、9222 裸端口 hint | safety_checks 透传（含 TODO） | 审批 key 化缓存 + 沙箱升级阶梯 + 网络审批独立流 | Docker 沙箱 + prompt injection 分类器承接 | 敏感数据 `<secret>` 占位 + 域名白名单 | allowed/blockedOrigins 网络层强制 + element 描述供审批 UI | **安全边界应在 Rust 核心强制，不在 prompt** |
@@ -138,7 +138,7 @@
 - 理由：browser-use（69k stars）与 playwright-mcp 的一致结论——有可枚举语义树就用索引：确定性、可校验、不受截图缩放/DPI 影响；两家的成功率投资都在语义树提取（三树合并/paint-order 过滤），不在视觉 grounding。现有 ControlHub snapshot 已有 `@eN` ref 机制，方向正确，需修 iframe 坐标（M8）并把交互参数统一为 `{element: 人类可读描述, target: ref|selector}` 双通道（描述供审批 UI）。
 
 **决策 3：浏览器自动化栈二选一——保留 ControlHub Rust CDP 栈为唯一路径，agent-browser 技能降为默认关闭的 opt-in（对应 C1）。**
-- 理由：ControlHub 栈在自己进程内、可被权限系统/审批/deny 表统一管辖、与 web-ui 事件打通；agent-browser 是外部 npm CLI + 独立 Chromium + 独立 auth vault，无法纳入 BitFun 的权限与 Peer 策略，且两套 `@eN` ref 并存是模型出错最大源头。`skills/policy.rs` 的 `resolve_builtin_default_enabled` 全模式改 false。
+- 理由：ControlHub 栈在自己进程内、可被权限系统/审批/deny 表统一管辖、与 web-ui 事件打通；agent-browser 是外部 npm CLI + 独立 Chromium + 独立 auth vault，无法纳入 Halo Studio 的权限与 Peer 策略，且两套 `@eN` ref 并存是模型出错最大源头。`skills/policy.rs` 的 `resolve_builtin_default_enabled` 全模式改 false。
 
 **决策 4：浏览器/桌面边界 guard 真正执行，且区分 CDP 可控与不可控浏览器（对应 C2/C6）。**
 - 把 `desktop_action_targets_browser` 移到统一 dispatcher 的输入类动作入口前；前台是 **Chromium 系（CDP 可控）** 时拒绝并指向 browser 工具；前台是 **Firefox/Safari** 时放行桌面控制（走视觉坐标路径），消除双向锁死。
@@ -209,8 +209,8 @@
 ## 5. 速赢清单（一周内，高价值小改动）
 
 1. **清除幽灵工具名**（M1，半天）：`tool-contracts/src/computer_use.rs:1214,1584`、`framework.rs:2269-2279`、`computer_use_tool.rs:992`、`computer_use_host.rs` doc 中的 ComputerUseMouseStep/MousePrecise/MouseClick 全替换为现行 action 名。直接消除"模型调用不存在工具"的失败循环。
-2. **截图落盘加门控**（M5，半天）：`try_save_screenshot_for_debug` 改为 debug 配置开关（默认关）+ 数量/天数轮转，`.bitfun/computer_use_debug` 进默认 gitignore。
-3. **headless 误标止血**（C4，1 天）：在真 headless 实现前，`control_hub_tool.rs:539-603` 的 headless connect 至少校验 `/json/version` 是否含 Headless，否则报错而非标 "Headless test browser"；hint 改为引导 BitFun 托管 profile（`launch_with_cdp_opts` 已支持 `managed_profile_root`）而非教用户裸开 9222。
+2. **截图落盘加门控**（M5，半天）：`try_save_screenshot_for_debug` 改为 debug 配置开关（默认关）+ 数量/天数轮转，`.halo-studio/computer_use_debug` 进默认 gitignore。
+3. **headless 误标止血**（C4，1 天）：在真 headless 实现前，`control_hub_tool.rs:539-603` 的 headless connect 至少校验 `/json/version` 是否含 Headless，否则报错而非标 "Headless test browser"；hint 改为引导 Halo Studio 托管 profile（`launch_with_cdp_opts` 已支持 `managed_profile_root`）而非教用户裸开 9222。
 4. **边界 guard 最小落地**（C2/C6，1 天）：`desktop_action_targets_browser` 调用点移入 `call_impl` 的 click/type/key/scroll/drag 分发前；`is_probably_browser_app` 关键词表移除 firefox/safari。
 5. **slash 门禁补齐**（M15，半天）：`ChatInput.tsx` 的 `selectSlashCommandMode`（L4130-4137）与 SlashModeItem 列表复用 `modeDisabled` 检查。
 6. **文案矛盾统一**（C1 部分，半天）：`claw_mode.md`/`computer_use_mode.md`/agent-browser SKILL.md local_patch 三处路由指令统一为一个口径（过渡期先统一说 ControlHub）；修正 `computer_use_actions.rs:26` 的 `claw_mode.md` 错误引用。

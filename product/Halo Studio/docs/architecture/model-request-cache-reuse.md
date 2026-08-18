@@ -1,11 +1,11 @@
-# Model Request Cache Reuse In BitFun
+# Model Request Cache Reuse In Halo Studio
 
 This document owns session cache identity, persistence, cloning, invalidation,
 and cache-use observability. The exact model-visible request ordering is owned
 by [`cache-friendly-message-structure.md`](cache-friendly-message-structure.md);
 this document references that order but does not redefine it.
 
-This note summarizes the mechanisms BitFun uses to improve model-side prompt
+This note summarizes the mechanisms Halo Studio uses to improve model-side prompt
 cache reuse and to avoid unnecessary cache invalidation across long-running
 agent sessions.
 
@@ -14,7 +14,7 @@ The implementation is mostly in the shared Rust runtime under
 
 ## The Core Idea
 
-BitFun tries to keep the model-visible request prefix as stable as possible.
+Halo Studio tries to keep the model-visible request prefix as stable as possible.
 It does that in four complementary ways:
 
 1. Cache stable prompt fragments at the session level.
@@ -25,12 +25,12 @@ It does that in four complementary ways:
    of the cached base prompt and update them incrementally.
 
 There is also explicit observability for provider-reported cache reads versus
-cache writes so BitFun can measure whether these strategies are actually
+cache writes so Halo Studio can measure whether these strategies are actually
 working.
 
 ## 1. System Prompt And User Context Are Cached Separately
 
-BitFun does not treat the whole request prefix as one opaque string.
+Halo Studio does not treat the whole request prefix as one opaque string.
 Instead, it separates two relatively stable layers:
 
 - the system prompt
@@ -41,7 +41,7 @@ The cache model lives in
 
 Core still exposes `src/crates/assembly/core/src/agentic/session/prompt_cache.rs`, but
 that file is now a compatibility facade that re-exports the owner types from
-`bitfun-agent-runtime`.
+`halo-agent-runtime`.
 
 Key details:
 
@@ -64,7 +64,7 @@ The test coverage in that file also explicitly exercises:
 Persistence details:
 
 - prompt cache is persisted as `prompt_cache.json`
-- the file is stored under the session directory in `.bitfun/sessions/...`
+- the file is stored under the session directory in `.halo-studio/sessions/...`
 - restore-time TTL cleanup happens before the cache is accepted back into
   memory
 
@@ -78,7 +78,7 @@ Request assembly uses the cache in
 
 One important design choice is documented directly in
 `prompt_builder_impl.rs`: workspace context is intentionally injected outside
-the system prompt cache. That lets BitFun keep the global instruction template
+the system prompt cache. That lets Halo Studio keep the global instruction template
 stable while still handling workspace-dependent context separately.
 
 ## 2. Derived Sessions Reuse Existing Prefixes Instead Of Starting Cold
@@ -88,7 +88,7 @@ stable while still handling workspace-dependent context separately.
 Persisted session branching is implemented in
 `src/crates/assembly/core/src/agentic/persistence/session_branch.rs`.
 
-When BitFun branches a session from an existing turn, it copies more than turn
+When Halo Studio branches a session from an existing turn, it copies more than turn
 text:
 
 - the branched turns up to the selected turn
@@ -150,7 +150,7 @@ Relevant code:
 - execution and prompt-cache cloning:
   `src/crates/assembly/core/src/agentic/coordination/coordinator.rs`
 
-When `Task` is called with `fork_context=true`, BitFun:
+When `Task` is called with `fork_context=true`, Halo Studio:
 
 - captures the parent session's model-visible message context
 - creates an isolated child session with the parent session's agent type,
@@ -178,7 +178,7 @@ keeping the forked child aligned with the parent session shape.
 
 ## 3. The Shared Coding Modes Intentionally Reuse The Same Cache Identity
 
-BitFun's four shared coding modes are:
+Halo Studio's four shared coding modes are:
 
 - `agentic`
 - `Plan`
@@ -227,13 +227,13 @@ The frontend also knows about this compatibility:
 - `ChatInput.tsx` only shows a prompt-cache warning when the next mode's scope
   key differs from the last submitted mode's scope key
 
-In other words, BitFun aligns backend prompt identities and frontend mode-switch
+In other words, Halo Studio aligns backend prompt identities and frontend mode-switch
 UX around the same cache-compatibility contract.
 
 ## 4. Skill And Subagent Listings Are Hot-Updated Without Rebuilding The Base Prompt
 
 A major source of cache churn in agent systems is dynamic capability listing.
-BitFun explicitly avoids baking that surface into one permanently rebuilt prompt.
+Halo Studio explicitly avoids baking that surface into one permanently rebuilt prompt.
 
 Relevant code:
 
@@ -253,7 +253,7 @@ Relevant code:
 
 The strategy is:
 
-1. On the first turn, BitFun saves a full skill/subagent snapshot.
+1. On the first turn, Halo Studio saves a full skill/subagent snapshot.
 2. On later turns, it resolves the current snapshot again.
 3. It diffs the latest prior snapshot against the new one.
 4. Only the diff is injected as a reminder when something changed.
@@ -262,7 +262,7 @@ This keeps the base cached prefix stable while still letting the model see
 fresh capability changes.
 
 Forked child sessions add one extra wrinkle: prompt/listing reuse and later diff
-correctness do not always want the same baseline. In those cases BitFun can keep
+correctness do not always want the same baseline. In those cases Halo Studio can keep
 the child's turn-0 snapshot as the diff baseline while reading the separate
 baseline-override snapshot first when rebuilding the full skill/agent listing
 reminder.
@@ -289,7 +289,7 @@ and without rebuilding the main prompt template.
 
 This is not fully solved yet.
 
-BitFun does allow tool customization at the agent/profile level:
+Halo Studio does allow tool customization at the agent/profile level:
 
 - built-in modes resolve their effective tools from default tools plus user
   `added_tools` / `removed_tools`
@@ -327,7 +327,7 @@ Relevant code:
 This is why tool changes cannot currently be handled the same way as
 skill/subagent listing updates.
 
-Skill and subagent listings are prompt-visible descriptive surfaces, so BitFun
+Skill and subagent listings are prompt-visible descriptive surfaces, so Halo Studio
 can:
 
 - keep a baseline
@@ -357,7 +357,7 @@ One plausible future direction would be to expose only a single stable
 In that design, the provider-visible tool schema could stay nearly constant
 even when the product's actual tool catalog changes underneath it.
 
-However, BitFun does not currently plan to implement this.
+However, Halo Studio does not currently plan to implement this.
 
 Reasons:
 
@@ -374,7 +374,7 @@ enough relative to its implementation cost.
 ## 5. Compression Rebuilds A Smaller Stable Prefix
 
 Compression is not a pure cache-preserving operation, but it is still part of
-BitFun's cache-hit strategy.
+Halo Studio's cache-hit strategy.
 
 Relevant code:
 
@@ -391,7 +391,7 @@ There are two different cache-reuse stories around compression:
 
 ### Compression request path: reuses the existing prefix
 
-BitFun does not send compression as a detached, prompt-from-scratch request.
+Halo Studio does not send compression as a detached, prompt-from-scratch request.
 
 Instead:
 
@@ -412,7 +412,7 @@ For manual compaction, the code explicitly rebuilds `runtime_messages` as:
 - `system_prompt_message`
 - followed by the current session messages
 
-Only after that shared prefix is rebuilt does BitFun append the final
+Only after that shared prefix is rebuilt does Halo Studio append the final
 compression-specific instruction from
 `context_compressor.build_compact_prompt(...)`.
 
@@ -427,7 +427,7 @@ keeps that concern front and center.
 
 ### Compression completion path: invalidate, then rebuild against a shorter prefix
 
-When compression is applied, BitFun does three important things:
+When compression is applied, Halo Studio does three important things:
 
 1. Replaces the live context messages with the compressed result.
 2. Rebuilds the skill/subagent listing baseline to the latest snapshot.
@@ -442,7 +442,7 @@ reuse many times after" mechanism, not a permanent loss.
 
 ## 6. Cache Observability Is First-Class
 
-BitFun also normalizes provider-specific cache telemetry so cache reuse can be
+Halo Studio also normalizes provider-specific cache telemetry so cache reuse can be
 measured instead of guessed.
 
 Relevant code:
@@ -461,7 +461,7 @@ Two fields matter:
 - `cached_content_token_count`: cache reads / hits
 - `cache_creation_token_count`: cache writes / creation
 
-BitFun keeps them separate on purpose. That avoids overstating hit rate and
+Halo Studio keeps them separate on purpose. That avoids overstating hit rate and
 makes it possible to answer both of these questions correctly:
 
 - "How many input tokens were served from cache?"
@@ -469,7 +469,7 @@ makes it possible to answer both of these questions correctly:
 
 ## Summary
 
-BitFun improves request cache hit rate by combining prompt splitting, session
+Halo Studio improves request cache hit rate by combining prompt splitting, session
 reuse, compatible mode identities, incremental capability-list updates, and
 post-compression prefix rebuilding.
 

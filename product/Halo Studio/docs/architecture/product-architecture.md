@@ -1,6 +1,6 @@
-# BitFun 产品运行时架构
+# Halo Studio 产品运行时架构
 
-本文件定义 BitFun 产品运行时的稳定架构边界。详细执行计划见
+本文件定义 Halo Studio 产品运行时的稳定架构边界。详细执行计划见
 [`../plans/core-decomposition-plan.md`](../plans/core-decomposition-plan.md)；智能体内核、运行时服务和 crate
 约束见 [`agent-runtime-services-design.md`](agent-runtime-services-design.md)；插件运行时、Plugin Host 进程和生态适配细节见
 [`plugin-runtime-design.md`](extensions/plugin-runtime-design.md)；跨 GUI/TUI 的产品定制、布局选择和
@@ -13,9 +13,9 @@
 [`opencode-config-assets-adapter-design.md`](extensions/opencode-config-assets-adapter-design.md)、
 [`opencode-plugin-runtime-adapter-design.md`](extensions/opencode-plugin-runtime-adapter-design.md)、
 [`opencode-tui-plugin-adapter-design.md`](extensions/opencode-tui-plugin-adapter-design.md) 和
-[`opencode-external-integration-adapter-design.md`](extensions/opencode-external-integration-adapter-design.md)；BitFun 能力如何
+[`opencode-external-integration-adapter-design.md`](extensions/opencode-external-integration-adapter-design.md)；Halo Studio 能力如何
 可装配并双向接入 Claude Code、Codex、OpenCode、Trae 等宿主见
-[`capability-runtime-integration-design.md`](extensions/capability-runtime-integration-design.md)；公开 BitFun Agent SDK、SDK Host、
+[`capability-runtime-integration-design.md`](extensions/capability-runtime-integration-design.md)；公开 Halo Studio Agent SDK、SDK Host、
 Headless CLI 与各产品入口的统一心智见
 [`agent-sdk-product-architecture.md`](agent-sdk-product-architecture.md)；多个 GUI/TUI/Remote/CLI/SDK 实例共存时的 Agent Runtime 部署、
 状态共享、隔离、容量与 Plugin Host 关系见
@@ -25,16 +25,16 @@ Headless CLI 与各产品入口的统一心智见
 
 ## 1. 架构目标
 
-BitFun 同时面向桌面 GUI、TUI/CLI、Web、ACP、Server、Remote、SDK 和插件生态。架构目标是降低后端实现高频变更对稳定接口的影响，同时保持插件生态和 OpenCode-compatible 能力可以按受控路径扩展。
+Halo Studio 同时面向桌面 GUI、TUI/CLI、Web、ACP、Server、Remote、SDK 和插件生态。架构目标是降低后端实现高频变更对稳定接口的影响，同时保持插件生态和 OpenCode-compatible 能力可以按受控路径扩展。
 
 设计原则：
 
 1. **接口少而稳定**：每个接口边界只有一个主入口；不能因为新增生态适配或实现重构而新增平行接口。
 2. **实现不外溢**：运行时、平台服务、生态适配器、插件执行单元和传输实现只能通过稳定接口、只读视图或内部 ABI 被消费。
-3. **外部语义可变换，最终提交有归属**：OpenCode Hook 可以按其稳定语义修改输入、输出和权限决定；BitFun
+3. **外部语义可变换，最终提交有归属**：OpenCode Hook 可以按其稳定语义修改输入、输出和权限决定；Halo Studio
    归属模块负责顺序、结构、一致性和用户/组织策略校验并提交最终状态，不能把可写 Hook 一律降级成只读候选。
 4. **OpenCode 是兼容目标，不是内部模型**：适配层尽量保持 OpenCode plugin、hook、custom tool、TUI plugin、
-   Client、配置和加载顺序的外部可观察行为，但这些类型不能反向成为 BitFun 智能体、配置或界面的内部数据模型。
+   Client、配置和加载顺序的外部可观察行为，但这些类型不能反向成为 Halo Studio 智能体、配置或界面的内部数据模型。
 5. **公开接口有预算**：新增公开 DTO、trait、模块或入口必须同时具备归属模块、真实消费方、版本策略、验证方式和删除条件。
 6. **入口形态受宿主约束**：TUI、GUI、Web、Headless CLI 和公开 SDK adapter 共享 Agent Runtime API
    用例、能力服务接口和只读视图，不共享公开语言包、传输、渲染句柄、主题键、键位模型或界面状态；
@@ -45,14 +45,14 @@ BitFun 同时面向桌面 GUI、TUI/CLI、Web、ACP、Server、Remote、SDK 和�
 9. **发现无感，生效按风险分级**：外部用户/项目来源后台发现，不阻塞产品入口；无冲突的低风险声明式内容可自动应用并提供撤销；
    Command、Tool、Subagent 等可执行来源与产品本地能力或独立外部 provider 同名时必须由用户选择，且选择只在候选身份与内容版本不变时复用。现有 Skill 根继续按已发布顺序解析，并展示来源和默认覆盖项；带模式的管理界面展示应用模式开关后的实际采用项；
    可执行来源首次启用或能力扩大时形成非阻塞确认。激活后的本地 OpenCode 扩展默认按当前用户能力
-   运行；经 BitFun 能力接口的调用可细分限制，脚本直接文件/网络/进程能力只在真实操作系统或容器边界存在时可
+   运行；经 Halo Studio 能力接口的调用可细分限制，脚本直接文件/网络/进程能力只在真实操作系统或容器边界存在时可
    粗粒度收紧，否则停用相应插件。策略降级必须与待确认、解析错误和插件故障分开显示。
 10. **开放权限不降低可靠性**：第三方 JS/TS 始终位于受监督子进程；standalone Tool 使用现有 worker，完整 package plugin
     使用 Plugin Host。目标边界具备期限、取消、流量控制、崩溃回收、错误去重和结构校验；业务等待不得被单个插件无限阻塞。
     缺少平台硬资源限制时，内存、CPU 或进程风暴仍是明确残余风险，不能用“独立进程”宣称完全隔离。
 11. **来源发现与执行许可分离**：生态来源和加载顺序只决定候选输入，不自动授予执行权限。任何可执行来源在
    首次激活、启动或 import 前，以及来源身份、内容版本、执行域/用户、策略上限或凭据/环境可见范围
-    变化时，由既有归属模块重新检查是否允许执行。经 BitFun 接口发起的调用仍执行调用时权限判断；脚本运行时的
+    变化时，由既有归属模块重新检查是否允许执行。经 Halo Studio 接口发起的调用仍执行调用时权限判断；脚本运行时的
    直接文件、网络和进程副作用只能依靠真实 OS/容器边界限制。来源的首次选择由产品来源体验保存，
     不因此新增对内部准备阶段的重复激活、通用 trusted-folder 模型或独立信任服务。
 12. **一个能力核心，多种宿主适配**：Memory、Context、Workflow、Subagent、Tool 等能力只在已有 owner 中按真实
@@ -69,12 +69,12 @@ BitFun 同时面向桌面 GUI、TUI/CLI、Web、ACP、Server、Remote、SDK 和�
 
 ## 2. 接口边界
 
-BitFun 只保留四个稳定接口边界；工具、事件和权限作为归属子接口被复用，不在插件层重复定义。本文使用“接口”描述可被调用或依赖的能力面；只有描述跨进程消息封装、结构化 schema、序列化对象或强兼容约束时才使用“契约”；只读状态视图表示从权威状态派生出的查询结果。
+Halo Studio 只保留四个稳定接口边界；工具、事件和权限作为归属子接口被复用，不在插件层重复定义。本文使用“接口”描述可被调用或依赖的能力面；只有描述跨进程消息封装、结构化 schema、序列化对象或强兼容约束时才使用“契约”；只读状态视图表示从权威状态派生出的查询结果。
 
 | 接口边界 | 谁使用 | 提供 | 不包含 |
 |---|---|---|---|
 | Agent Runtime API | GUI、TUI/CLI、Web、ACP、Server、Remote、SDK adapter | Query、Session、Tool/MCP、Permission、Hook、Event、Usage | UI、协议和具体服务实现 |
-| BitFun 与插件接口 | `PluginRuntimeClient`、安全模块、产品组装、生态适配器 | 来源、能力、Hook 变换、界面贡献、诊断 | 最终权限、工具结果、审计和内核状态 |
+| Halo Studio 与插件接口 | `PluginRuntimeClient`、安全模块、产品组装、生态适配器 | 来源、能力、Hook 变换、界面贡献、诊断 | 最终权限、工具结果、审计和内核状态 |
 | 插件运行时接口 | Runtime、执行层、产品组装、`PluginRuntimeClient` | 请求身份、期限、响应校验和诊断 | SDK/UI 对象、生态原始对象和进程句柄 |
 | 外部生态兼容接口 | 来源管理、能力模块、`PluginRuntimeClient`、Plugin Host | 发现、顺序、参数、诊断和明确映射 | 跨生态任意数据、兄弟适配器依赖和外部 CLI 前置依赖 |
 
@@ -85,8 +85,8 @@ BitFun 只保留四个稳定接口边界；工具、事件和权限作为归属�
 | 子接口 | 归属 | 用法 |
 |---|---|---|
 | 工具 ABI | `tool-contracts` / 执行层 | 具备真实执行实现的插件 custom tool、MCP 工具和内置工具进入同一可调用工具集合、权限和陈旧调用保护路径；只有声明或候选项的插件工具不能进入该集合。 |
-| 事件清单 | `events` / 智能体内核事件 schema | 对固定生态版本维护各自事件清单；插件观察兼容事件，BitFun 内部私有字段在对应适配层转换或脱敏。 |
-| 权限与副作用 | 安全模块 / runtime ports | 插件启用后，默认兼容策略允许 OpenCode `permission.ask` 和直接脚本能力按当前用户权限运行；经 BitFun 接口的调用可细分收紧，直接脚本能力只能由真实 OS/容器环境粗粒度限制，否则停用插件。 |
+| 事件清单 | `events` / 智能体内核事件 schema | 对固定生态版本维护各自事件清单；插件观察兼容事件，Halo Studio 内部私有字段在对应适配层转换或脱敏。 |
+| 权限与副作用 | 安全模块 / runtime ports | 插件启用后，默认兼容策略允许 OpenCode `permission.ask` 和直接脚本能力按当前用户权限运行；经 Halo Studio 接口的调用可细分收紧，直接脚本能力只能由真实 OS/容器环境粗粒度限制，否则停用插件。 |
 
 ### 2.1 公开接口进入条件
 
@@ -95,7 +95,7 @@ BitFun 只保留四个稳定接口边界；工具、事件和权限作为归属�
 1. 属于上表一个明确接口边界，不能同时承担前后端协议、插件扩展、host ABI 和生态适配职责。
 2. 有当前消费方；仅为了未来兼容、完整矩阵或概念完整性保留的代码接口不进入稳定面。该规则不阻止需求、
    风险、完整能力矩阵和阶段计划记录未来工作，也不能用来把官方稳定能力从兼容审计中删除。
-3. 能映射到 OpenCode-compatible P0 关键场景，或属于 BitFun 已有关键路径的稳定子接口。
+3. 能映射到 OpenCode-compatible P0 关键场景，或属于 Halo Studio 已有关键路径的稳定子接口。
 4. 不能由既有工具 ABI、事件清单、权限模块或能力服务接口承接时，才允许新增。
 5. PR 必须说明版本影响、验证命令和删除条件。
 
@@ -103,7 +103,7 @@ BitFun 只保留四个稳定接口边界；工具、事件和权限作为归属�
 `pub` 符号扫描器。已登记接口必须声明 `contractSlice` 供机器校验归属；未登记接口仍须满足上述进入条件，并由
 PR 审查和最近的边界测试验证。边界脚本通过不能解释为全仓公开接口已经自动完成预算审计。
 
-没有 OpenCode 对应能力、没有当前消费方、不能归入关键 BitFun 场景的接口，处理方式只有三种：删除、降级为主机内部实现，或返回类型化 `unsupported` / 诊断。
+没有 OpenCode 对应能力、没有当前消费方、不能归入关键 Halo Studio 场景的接口，处理方式只有三种：删除、降级为主机内部实现，或返回类型化 `unsupported` / 诊断。
 
 已批准后续工作所需的短期前置接口不等于占位实现。确需预留时，必须在相邻设计中写明首个消费方、稳定语义、
 接入验证和未接入时的删除条件；在端到端调用链落地前保持内部可见或显式标为未接入，不能用空实现、测试替身或
@@ -136,7 +136,7 @@ Host adapter 只负责把各自协议映射到
 本文其他章节和历史设计中出现的“Runtime SDK”，如果指 `agent-runtime::sdk`，统一称为
 **Rust Runtime SDK（当前 preview）**；它是共享 **Agent Runtime API** 的当前 Rust 入口。只有
 [`agent-sdk-product-architecture.md`](agent-sdk-product-architecture.md) 定义的 Python/TypeScript package 才称为公开
-**BitFun Agent SDK**，其跨进程适配器称为 **SDK Host**。该术语区分不要求机械重命名现有 crate/module，但禁止用
+**Halo Studio Agent SDK**，其跨进程适配器称为 **SDK Host**。该术语区分不要求机械重命名现有 crate/module，但禁止用
 Rust preview 的存在证明公开 SDK 已交付。
 
 第一方多实例目标称为 **Shared Agent Runtime deployment**。承载它的 Rust 进程与 SDK Host、Plugin Host、Server/Relay 和 Remote
@@ -231,7 +231,7 @@ flowchart LR
 - 外部来源的 Command、Tool、Subagent、MCP 仍保留能力专属 DTO 和 owner，但它们的发现调度统一由
   `ExternalSourceControlPlane` 持有；跨 Desktop/TUI/Peer/Server 的控制事实只通过版本化的 product-domain 只读视图共享，
   不复制生态 payload、界面状态机或远端专用 DTO。
-- 每个生态适配层独立保留该生态的外部格式、来源顺序和调用语义，并映射到 BitFun 归属模块；它本身不成为新的
+- 每个生态适配层独立保留该生态的外部格式、来源顺序和调用语义，并映射到 Halo Studio 归属模块；它本身不成为新的
   业务归属模块，也不能依赖或修改兄弟生态 adapter。通用目录、`ExternalSourceControlPlane` 和能力归属模块只依赖开放生态 ID、
   来源限定身份与能力专属 provider 契约，不按 OpenCode、Codex 或 Claude Code 分支行为。
 - 产品组装是组装根，只在组装期选择能力、服务实现、插件运行时绑定和降级策略。
@@ -255,7 +255,7 @@ flowchart LR
 - workspace 只在具体归属模块确有独立配置、状态、版本或并发单例时作为该状态的限定键；它不是通用
   runtime、Plugin Host 或 session 的别名。
 - `Product Assembly` 是唯一组装名称。当前 Rust 内部入口称为
-  Rust Runtime SDK（preview），只有公开 Python/TypeScript 产品称为 BitFun Agent SDK。
+  Rust Runtime SDK（preview），只有公开 Python/TypeScript 产品称为 Halo Studio Agent SDK。
 - 生态 adapter 必须按方向说明是来源导入还是外部宿主输出。插件兼容接口、组合规则、脚本执行后端和当前能力版本都是
   已有归属模块的具体职责，不建立同义的第二层架构名词。
 
@@ -264,7 +264,7 @@ flowchart LR
 
 ## 4. OpenCode-compatible 当前基线与目标
 
-Plugin Runtime P0 只验证了 BitFun 专用插件目录中的来源校验、工作区审核、启停记录、CLI 诊断和 custom tool 名称预览。
+Plugin Runtime P0 只验证了 Halo Studio 专用插件目录中的来源校验、工作区审核、启停记录、CLI 诊断和 custom tool 名称预览。
 它不执行 JS/TS，不注册真实工具，也不运行 OpenCode 钩子、Client 或终端插件。现有能力只能称为“静态预览”，
 不能称为“OpenCode 插件运行时”。详细代码事实集中在
 [`plugin-runtime-design.md#7-当前实现`](extensions/plugin-runtime-design.md#7-当前实现)。
@@ -278,7 +278,7 @@ package plugin、OpenCode/通用动态 Hook Runtime、primary agent、外部 age
 配置兼容已经可用。独立目录可以发现并脱敏展示 OpenCode、Claude Code 与 Codex 的本地 Hook 声明；其中只有明确审阅的
 Claude Code/Codex 命令子集可复制为既有 `AgentHookEngine` 的原生层，OpenCode 和其余声明仍不加载 handler 或授予权限。
 
-目标路线不要求 OpenCode 插件作者维护 `bitfun.plugin.json` 或复制到 `.bitfun/plugins`。BitFun 直接发现用户和
+目标路线不要求 OpenCode 插件作者维护 `halo.plugin.json` 或复制到 `.halo-studio/plugins`。Halo Studio 直接发现用户和
 项目的 OpenCode 配置、插件目录、工具目录和软件包来源；低风险内容按用户偏好自动应用或先询问，可执行来源在
 首次启用或能力扩大时非阻塞确认。用户允许执行的候选自动记录当前版本，在自有脚本进程中真实加载插件，再通过兼容
 适配层把工具、稳定钩子、Client 和 TUI 插件入口接入现有归属模块。
@@ -299,10 +299,10 @@ flowchart LR
 
 稳定决策如下：
 
-- 不启动完整 OpenCode Runtime，也不依赖用户安装 OpenCode CLI；BitFun 实现自己的监督、适配和 Rust 转发层。
+- 不启动完整 OpenCode Runtime，也不依赖用户安装 OpenCode CLI；Halo Studio 实现自己的监督、适配和 Rust 转发层。
   当前 standalone Tool 子集通过受监督的 Node.js worker 执行且不安装依赖；未来只有固定的 package plugin 样例证明
   确有需要时，才单独裁决 Bun、依赖准备和版本兼容方案。OpenCode v2 当前同时维护 Bun 编译产物与 Node SEA 并行
-  产物，因此 BitFun 不把外部项目尚未稳定的运行时选择提升为插件内部 ABI 或核心架构约束。
+  产物，因此 Halo Studio 不把外部项目尚未稳定的运行时选择提升为插件内部 ABI 或核心架构约束。
 - 用户全局和项目来源自动发现；低风险内容默认无感应用并显示可撤销摘要，可执行来源首次启用或能力扩大时等待
   非阻塞确认。确认前不得 import module、启动 worker、读取凭据或产生直接脚本副作用。
 - 激活后的本地插件默认按 OpenCode 语义运行，允许当前用户通常拥有的文件、网络、进程和环境能力；用户、
@@ -326,7 +326,7 @@ flowchart LR
 - GUI、TUI、Web 和 Remote 只消费能力服务、稳定状态和操作接口，不直接依赖 `PluginRuntimeClient`、Plugin Host
   进程或 OpenCode 原始类型。
 
-最明显的首期降级是 OpenCode TUI 的原始 `CliRenderer`、Solid/OpenTUI 组件树。BitFun CLI 使用 Ratatui，无法直接
+最明显的首期降级是 OpenCode TUI 的原始 `CliRenderer`、Solid/OpenTUI 组件树。Halo Studio CLI 使用 Ratatui，无法直接
 执行这些组件；宿主操作和结构化贡献可以适配，原始组件必须返回明确降级且不能打开空白或无法退出的页面。
 其他暂不承诺项、原因和风险统一在
 [`opencode-extension-compatibility.md#6-明确限制与延期决策`](extensions/opencode-extension-compatibility.md#6-明确限制与延期决策)
@@ -363,8 +363,8 @@ flowchart LR
 - GUI 与 TUI 布局由对应宿主独立校验，只共享产品身份、Capability ID、品牌资源索引和策略引用，不共享布局、
   组件、主题键、键位或渲染状态。
 - 布局选择只能引用宿主已注册的稳定 ID；品牌生成和校验继续使用仓库现有构建流程，不新增通用脚本运行时。
-- 产品内置扩展、BitFun 原生包和 OpenCode 标准来源不共享来源根、信任/启用记录、安装状态、更新通道或卸载
-  生命周期；三者只复用适用的包校验、插件内部 ABI、Plugin Host 进程边界和经 BitFun 能力接口的权限/审计路径。
+- 产品内置扩展、Halo Studio 原生包和 OpenCode 标准来源不共享来源根、信任/启用记录、安装状态、更新通道或卸载
+  生命周期；三者只复用适用的包校验、插件内部 ABI、Plugin Host 进程边界和经 Halo Studio 能力接口的权限/审计路径。
 
 产品定制和品牌资源的详细边界见
 [`product-customization-blueprint.md`](product-customization-blueprint.md)；CLI/TUI 的消费方式和配置导入见
@@ -433,7 +433,7 @@ Shared Agent Runtime 是第一方多实例的目标部署，不是上表新增�
 架构或实现 PR 必须满足：
 
 - 未新增无消费方的公开接口、空注册表、泛描述符或多生态稳定接口。
-- 没有把 OpenCode 类型或 CLI 可用性提升为 BitFun 内部数据模型；适配器仍应保持 OpenCode 配置、加载顺序和
+- 没有把 OpenCode 类型或 CLI 可用性提升为 Halo Studio 内部数据模型；适配器仍应保持 OpenCode 配置、加载顺序和
   冲突的外部可观察语义。
 - 插件可按 OpenCode Hook 语义提出并链式应用变换，最终结构、策略、审计和状态提交仍由对应模块完成。
 - 只有名称或静态声明、没有真实执行实现的插件工具不能进入最终可调用工具集合。
@@ -443,8 +443,8 @@ Shared Agent Runtime 是第一方多实例的目标部署，不是上表新增�
   事件因果和审计；单选、顺序执行、名称并存、失败回退或结果汇总规则必须由能力归属模块明确。
 - TUI 与 GUI 不共享内部主题键、键位模型或界面状态；OpenCode TUI 原始键和组件只存在于适配层，转换后由
   TUI 宿主消费，不能用构建期布局选择冒充运行时插件兼容。
-- 只有产品身份、安全恢复和法律要求等明确保护项不能被用户扩展覆盖；普通内置工具、命令和主题作为 BitFun
-  来源候选保留，跨生态同名时由用户选择，不能按注册顺序静默决胜。冲突界面固定先展示 BitFun 候选，但展示顺序
+- 只有产品身份、安全恢复和法律要求等明确保护项不能被用户扩展覆盖；普通内置工具、命令和主题作为 Halo Studio
+  来源候选保留，跨生态同名时由用户选择，不能按注册顺序静默决胜。冲突界面固定先展示 Halo Studio 候选，但展示顺序
   不等于自动选择。产品内置扩展不能复用用户来源批准或启用记录，产品签名也不能绕过运行时
   权限、审计和故障隔离。
 - GUI/TUI 布局选择不复制主题 schema，不固化动态能力状态，也不携带可执行 UI 或任意构建脚本。

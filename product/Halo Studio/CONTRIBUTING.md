@@ -2,7 +2,7 @@
 
 [中文版](./CONTRIBUTING_CN.md)
 
-Thanks for your interest in BitFun! BitFun is a multi-platform AI programming environment powered by Rust and TypeScript, with shared core logic across Desktop/CLI/Server. This guide explains how to contribute effectively.
+Thanks for your interest in Halo Studio! Halo Studio is a multi-platform AI programming environment powered by Rust and TypeScript, with shared core logic across Desktop/CLI/Server. This guide explains how to contribute effectively.
 
 ## Code of Conduct
 
@@ -17,7 +17,7 @@ Be respectful, kind, and constructive. We welcome contributors of all background
 - Rust toolchain (install via [rustup](https://rustup.rs/))
 - [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for desktop development
 
-BitFun standardizes local JavaScript builds and CI on Node.js 22.12+. The GitHub
+Halo Studio standardizes local JavaScript builds and CI on Node.js 22.12+. The GitHub
 Actions upgrades in this repository use Node.js 24-compatible action runtimes,
 but project scripts should run on Node.js 22.12+ unless a narrower local guide
 says otherwise. After switching from an older Node.js version, rerun
@@ -63,7 +63,7 @@ pnpm run e2e:test
 ### Desktop debugging tools
 
 Desktop dev builds enable the `devtools` Cargo feature. Use `F12` for native
-webview DevTools. `Cmd/Ctrl + Shift + I` toggles the BitFun element inspector,
+webview DevTools. `Cmd/Ctrl + Shift + I` toggles the Halo Studio element inspector,
 and `Cmd/Ctrl + Shift + J` also opens native DevTools. These tools are disabled
 in end-user `release` builds.
 
@@ -153,7 +153,7 @@ Common local checks:
 | Frontend runtime or UI | `pnpm run type-check:web`, plus the nearest focused test when behavior changed |
 | Mobile web | `pnpm --dir src/mobile-web run type-check` |
 | Rust shared runtime or services | `cargo check --workspace`, plus a focused `cargo test` when behavior changed |
-| Desktop/Tauri integration | `cargo check -p bitfun-desktop` |
+| Desktop/Tauri integration | `cargo check -p halo-desktop` |
 | i18n resources or contract | use the matching i18n row in `AGENTS.md` |
 
 For UI changes, include screenshots or a short recording when helpful. If you

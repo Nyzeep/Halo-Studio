@@ -1,7 +1,7 @@
 # OpenCode 配置与声明式资产适配设计
 
 本文定义 OpenCode 配置、规则、Agent、Skill、Command、MCP、LSP、Formatter、Theme、Keybind 和模型配置
-进入 BitFun 的兼容路径。可执行工具与服务插件见
+进入 Halo Studio 的兼容路径。可执行工具与服务插件见
 [`opencode-plugin-runtime-adapter-design.md`](opencode-plugin-runtime-adapter-design.md)，终端界面插件见
 [`opencode-tui-plugin-adapter-design.md`](opencode-tui-plugin-adapter-design.md)，完整状态以
 [`opencode-extension-compatibility.md`](opencode-extension-compatibility.md) 的能力矩阵为准。
@@ -10,7 +10,7 @@
 
 配置字段与来源以 [OpenCode 配置文档](https://opencode.ai/docs/config/)和稳定提交中的主/TUI 配置实现为准。
 
-本文同时记录当前可用切片与后续目标。BitFun 已实现本地用户全局/项目 Prompt Command 的来源发现、
+本文同时记录当前可用切片与后续目标。Halo Studio 已实现本地用户全局/项目 Prompt Command 的来源发现、
 JSON/JSONC/Markdown 解析、参数展开、运行时刷新和冲突选择，也已接入全局/项目 Subagent 声明的安全子集；
 但尚未实现本文定义的完整 OpenCode 配置来源图、全部合并语义和其他资产映射。
 
@@ -20,14 +20,14 @@ JSON/JSONC/Markdown 解析、参数展开、运行时刷新和冲突选择，也
 
 1. OpenCode 用户可以直接打开已有项目，常用配置和声明式资产无需手工转换即可生效。
 2. 保留 OpenCode 的来源使用范围、合并顺序、冲突和相对路径语义，并能解释最终值来自哪里。
-3. 尽量复用 BitFun 已有配置、Agent、Skill、MCP、LSP、主题等归属模块，不复制第二套产品内核。
+3. 尽量复用 Halo Studio 已有配置、Agent、Skill、MCP、LSP、主题等归属模块，不复制第二套产品内核。
 4. 未知字段和未支持资产局部降级，不导致整个配置、项目启动或界面卡死。
 5. 低风险内容默认无感应用并可撤销；可执行、联网、凭据或外部进程能力在首次启用和能力扩大时等待非阻塞确认。
 6. 本地激活后的运行语义以兼容优先；用户或组织可以收紧权限，策略差异必须与解析或插件错误分开显示。
 
 非目标：
 
-- 不把 OpenCode 配置对象提升为 BitFun 内部通用配置模型。
+- 不把 OpenCode 配置对象提升为 Halo Studio 内部通用配置模型。
 - 不要求用户先执行一次性导入才能使用已有 `.opencode` 项目。
 - 不对 OpenCode 配置进行双向写回或自动改写原文件。
 - 不把运行时主题、快捷键、命令或终端界面插件错归为构建期产品与终端界面布局。
@@ -39,25 +39,25 @@ JSON/JSONC/Markdown 解析、参数展开、运行时刷新和冲突选择，也
 
 | 方式 | 写入位置 | 是否立即生效 / 是否执行代码 | 停用或撤销 | 来源变化后 |
 |---|---|---|---|---|
-| 兼容来源 | 不写 BitFun 配置，也不写回源文件 | OC-R1 的 L1 内容按用户偏好自动应用或先询问；L2/L3 内容只发现，首次启用、更新策略要求或能力扩大时确认 | 按当前项目或执行域抑制来源/资产，或分别停用 server/tui 入口；watcher 更新不得绕过该偏好重新应用 | 重新解析候选；低风险变化自动切换，能力/权限扩大等待确认，失败时保留仍合规的上一结果 |
-| 显式导入（目标） | 用户选择的 BitFun 用户层、项目层或更窄工作区层 | 写入成功后由目标层正常生效；Plugin/Tool 不经导入执行 | 按字段撤销；冲突字段先预览，不自动覆盖后续修改 | 只提示重新导入，不双向写回，也不自动覆盖 BitFun 值 |
+| 兼容来源 | 不写 Halo Studio 配置，也不写回源文件 | OC-R1 的 L1 内容按用户偏好自动应用或先询问；L2/L3 内容只发现，首次启用、更新策略要求或能力扩大时确认 | 按当前项目或执行域抑制来源/资产，或分别停用 server/tui 入口；watcher 更新不得绕过该偏好重新应用 | 重新解析候选；低风险变化自动切换，能力/权限扩大等待确认，失败时保留仍合规的上一结果 |
+| 显式导入（目标） | 用户选择的 Halo Studio 用户层、项目层或更窄工作区层 | 写入成功后由目标层正常生效；Plugin/Tool 不经导入执行 | 按字段撤销；冲突字段先预览，不自动覆盖后续修改 | 只提示重新导入，不双向写回，也不自动覆盖 Halo Studio 值 |
 
-当前显式导入仅落地 MCP C0a 窄切片：复用现有来源解析，在 Desktop 与 `bitfun mcp import` 中预览
+当前显式导入仅落地 MCP C0a 窄切片：复用现有来源解析，在 Desktop 与 `halo mcp import` 中预览
 OpenCode / Claude Code 的等价安全声明；显式 apply 只向现有用户级 MCP 配置原子写入 disabled 条目。它不复制
 header、env、cwd 或凭据，不支持 Codex 投影、通用目标层选择、逐字段导入记录或 undo。下述通用导入与撤销语义
 仍是目标设计，不能由 MCP C0a 推导为已实现。
 
-“只读”只表示源文件不被 BitFun 改写，不表示结果仅供预览。兼容来源不是 BitFun 内部权威模型，但它是合法
+“只读”只表示源文件不被 Halo Studio 改写，不表示结果仅供预览。兼容来源不是 Halo Studio 内部权威模型，但它是合法
 运行输入；达到对应阶段后，适配器把有效值映射到归属模块，归属模块仍负责最终持久化、运行时状态和错误语义。
 R1 的“自动应用”仅包含不启动外部进程、不 import 第三方 module、不读取凭据且不主动联网的 L1 字段；用户可
 切换为“低风险内容也先询问”。其他合法配置必须显示“已发现，当前阶段未激活”或“需确认”，不能因解析成功
 提前执行。自动应用不绕过已有工作区来源校验、组织上限或归属模块校验，也不能扩大工具和权限。当前只能静态
 预览的插件/工具名称属于 L0 清单，进入来源视图不等于配置或能力已经应用。
 
-导入成功后，已选字段以 BitFun 原生配置为准，不再同时应用原 OpenCode 值；原来源继续被观察，变化时提示“来源
+导入成功后，已选字段以 Halo Studio 原生配置为准，不再同时应用原 OpenCode 值；原来源继续被观察，变化时提示“来源
 已变化，是否重新导入”。未选择字段仍按兼容来源生效。导入记录按字段保存目标层、导入前值及其版本/摘要、导入
-值和来源摘要。撤销只自动恢复“当前值仍等于导入值”的字段；若用户后来修改 BitFun 值、来源也发生变化或只重新
-导入部分字段，则进入冲突预览，并逐字段选择“保留 BitFun 值 / 重新导入外部值 / 手工处理”，不得整批覆盖。
+值和来源摘要。撤销只自动恢复“当前值仍等于导入值”的字段；若用户后来修改 Halo Studio 值、来源也发生变化或只重新
+导入部分字段，则进入冲突预览，并逐字段选择“保留 Halo Studio 值 / 重新导入外部值 / 手工处理”，不得整批覆盖。
 
 ## 3. 配置层级与来源
 
@@ -78,7 +78,7 @@ R1 的“自动应用”仅包含不启动外部进程、不 import 第三方 mo
 ```
 
 适配器必须记录每个值的来源、使用范围、文件或远程标识、覆盖关系和策略限制。数组、对象和插件列表使用
-OpenCode 当前版本的真实合并/去重语义，不用 BitFun 常规配置合并规则猜测。
+OpenCode 当前版本的真实合并/去重语义，不用 Halo Studio 常规配置合并规则猜测。
 
 来源发现包括：
 
@@ -117,9 +117,9 @@ OpenCode 当前版本的真实合并/去重语义，不用 BitFun 常规配置�
 
 TUI 适配器必须单独记录顺序、插件来源和解析错误；不能把主配置的内联、组织或系统管理员来源套用到 TUI 配置。
 
-### 3.3 BitFun 策略关系
+### 3.3 Halo Studio 策略关系
 
-OpenCode 来源顺序决定兼容输入如何合并；BitFun 产品能力上限和组织策略决定合并结果能否执行。二者不能混写：
+OpenCode 来源顺序决定兼容输入如何合并；Halo Studio 产品能力上限和组织策略决定合并结果能否执行。二者不能混写：
 
 - 来源发现默认无感；L1 内容默认应用，L2/L3 内容首次启用或能力扩大时确认。确认后的本地兼容策略不额外
   收紧 OpenCode 行为，但每次实际启动前仍重新计算当前策略。
@@ -146,14 +146,14 @@ OpenCode 来源顺序决定兼容输入如何合并；BitFun 产品能力上限�
 |---|---|---|
 | 外部来源目录 | 聚合来源身份、使用范围、资产清单、用户加载偏好和可读状态 | 解析 OpenCode 格式、保存凭据、决定字段语义或执行插件 |
 | OpenCode 来源发现器 | 在本地或 Remote 执行域寻找主配置、独立 TUI 配置、目录资产、环境指定来源和组织默认 | 合并配置、执行插件、保存最终产品状态 |
-| OpenCode 配置解析器 | JSON/JSONC、变量引用、字段版本、来源位置和未知字段保留 | 使用 BitFun 默认值猜测 OpenCode 语义 |
-| 来源合并器 | 按固定 OpenCode 版本合并并记录每个最终值的来源和覆盖关系 | 应用 BitFun 产品或组织策略 |
+| OpenCode 配置解析器 | JSON/JSONC、变量引用、字段版本、来源位置和未知字段保留 | 使用 Halo Studio 默认值猜测 OpenCode 语义 |
+| 来源合并器 | 按固定 OpenCode 版本合并并记录每个最终值的来源和覆盖关系 | 应用 Halo Studio 产品或组织策略 |
 | 资产适配器 | 把 Rule、Agent、Skill、Command、MCP、LSP、Formatter、Theme、Keybind、Reference 和模型配置分别交给已存在或阶段内补齐的真实消费接口 | 因“看起来已有”而跳过基础能力或边界整理，或创建第二套 Agent、MCP、LSP、Formatter 或主题运行时 |
 | 策略检查 | 在 OpenCode 合并结果上应用用户、产品和组织上限，生成可解释差异 | 改写原始 OpenCode 文件或伪装成解析错误 |
 | 状态与诊断服务 | 原子发布新结果、保留上一有效结果、聚合错误并区分已发现/已应用/需确认/暂时过期/已移除 | 在界面线程同步解析远程来源或安装依赖 |
 
 来源目录、解析、合并、资产映射和策略检查必须能分别测试。不要建立一个同时扫描目录、修改环境、执行命令、加载插件
-并写入 BitFun 配置的“大导入器”。插件和 tool 入口在本流程中只形成有序来源清单，真实代码加载交给插件执行
+并写入 Halo Studio 配置的“大导入器”。插件和 tool 入口在本流程中只形成有序来源清单，真实代码加载交给插件执行
 服务。
 
 ## 4. 解析与鲁棒性
@@ -163,11 +163,11 @@ OpenCode 来源顺序决定兼容输入如何合并；BitFun 产品能力上限�
 - 同时支持 JSON 和 JSONC，不要求 `$schema` 字段存在或等于固定字符串。
 - 支持 OpenCode 文档化的环境变量和文件变量替换；解析报告只显示引用，不泄漏替换后的凭据值。
 
-以下是 BitFun 的局部恢复增强，不标为 OpenCode 完整等价：
+以下是 Halo Studio 的局部恢复增强，不标为 OpenCode 完整等价：
 
 - 原始未知字段保存在来源记录中，并按“来源 + 字段路径 + 版本”聚合诊断，供版本升级后重新解释。
 - 非安全、非执行控制的独立顶层字段发生类型错误时，可以只停用对应映射并继续使用已验证字段；状态页必须显示
-  “BitFun 局部恢复”，不能标为 OpenCode 等价解析。
+  “Halo Studio 局部恢复”，不能标为 OpenCode 等价解析。
 - permission、来源启停、插件/工具执行、凭据或组织上限等安全/执行字段无效时，不激活受影响的整项执行结果；
   重载场景保留上一份仍符合当前策略的有效结果，首次加载则明确不可用，不能用宽松默认值替代。
 
@@ -187,7 +187,7 @@ OpenCode adapter 在来源发现、解析和审批前不 import module、不读�
 使用仍由对应归属模块按用户已经确认的运行条件控制。除已完整流程的 standalone Tool 外，其余尚未完整流程的远程或可执行资产仍只
 解析、展示来源与诊断。
 
-| 资产 | OpenCode 输入 | BitFun 归属模块 / 适配方式 | 默认行为 | 降级条件 |
+| 资产 | OpenCode 输入 | Halo Studio 归属模块 / 适配方式 | 默认行为 | 降级条件 |
 |---|---|---|---|---|
 | Rules / Instructions | 项目/全局 `AGENTS.md`、Claude fallback、`instructions` glob、本地文件、远程 URL | Workspace Instructions 归属模块保存有序来源引用 | 本地内容按 L1 合并并保留来源；主动获取远程 URL 前确认 | 远程或单文件失败只排除该来源。 |
 | Agents / Modes | JSON、Markdown、description、mode、prompt、model、variant、temperature、top_p、steps、deprecated `maxSteps`、deprecated `tools`、permission、disable、options、hidden、color | Agent 归属模块创建兼容定义和使用范围视图 | 当前支持 Subagent 安全子集；首次按行为、来源、模型和工具范围确认，fresh single-run 调用 | primary/mode、permission、variant/options、采样、steps 与续接保持诊断或阻断，不影响其他 Agent。 |
@@ -200,12 +200,12 @@ OpenCode adapter 在来源发现、解析和审批前不 import module、不读�
 | Themes | builtin/user/project/cwd JSON | **部分已有**：GUI Theme 已有；TUI 主题消费边界在终端阶段补齐 | 保留覆盖顺序和语义角色 | 颜色能力不支持时做可见降级。 |
 | Keybinds | `tui.json` 的 leader、组合键、禁用和命令标识 | **已有行为、边界未抽取**：从现有 TUI 输入/命令路径提取最小接口 | 保留用户和项目覆盖 | 平台冲突时显示最终绑定与原因。 |
 | Models / Providers | `model`、`small_model`、`default_agent`、provider options/variants，以及 `enabled_providers` / `disabled_providers` | Model/Provider 与 Agent 归属模块 | 静态选择按 L1 映射；新增 Provider 连接、网络、凭据或动态适配器按 L2/L3 确认 | 动态软件包适配器交给插件运行时，未知 Provider 只禁用对应选择。 |
-| Permissions / Policies | 工具、Skill、Agent 等 allow/deny/ask pattern | Permission 归属模块建立 OpenCode 兼容策略层 | 收紧可以自动应用；扩大权限进入确认，激活后保持 OpenCode 决策 | BitFun 用户/组织策略可进一步收紧并明确标记。 |
+| Permissions / Policies | 工具、Skill、Agent 等 allow/deny/ask pattern | Permission 归属模块建立 OpenCode 兼容策略层 | 收紧可以自动应用；扩大权限进入确认，激活后保持 OpenCode 决策 | Halo Studio 用户/组织策略可进一步收紧并明确标记。 |
 | Plugins / Tools | config plugin 列表、`plugins/`、`tools/` | 只生成执行来源和顺序，交给 OpenCode adapter 与 `PluginRuntimeClient` | 自动发现；首次确认后才准备和 import 当前执行版本 | 不在配置解析线程加载代码。 |
 
 ### 5.1 Rules 与 Instructions
 
-规则内容尽量原地引用，不复制成第二份文件。组合结果保留原始段落来源和顺序。OpenCode 与 BitFun 原生规则
+规则内容尽量原地引用，不复制成第二份文件。组合结果保留原始段落来源和顺序。OpenCode 与 Halo Studio 原生规则
 同时存在时，配置视图展示实际进入模型的顺序；不能把冲突文本自动改写成“合并后的真相”。
 
 ### 5.2 Agents、Modes 与 Skills
@@ -213,7 +213,7 @@ OpenCode adapter 在来源发现、解析和审批前不 import module、不读�
 兼容定义进入现有 Agent 归属模块，而不是新建 OpenCode Agent Runtime。当前已实现范围按是否能保持行为等价划分：
 
 - 可等价映射并激活：名称、description、prompt、`subagent|all`、隐藏/停用状态、可精确解析的 model，以及能映射到
-  当前有效 Tool route 的明确工具选择；缺省工具使用 BitFun 保守 Subagent 默认集并展示在确认摘要中。
+  当前有效 Tool route 的明确工具选择；缺省工具使用 Halo Studio 保守 Subagent 默认集并展示在确认摘要中。
 - 可识别但不激活：`primary`/legacy mode、`permission` pattern、variant/options、temperature/top_p、steps/
   deprecated maxSteps，以及不能精确解析的模型或工具。当前不能把这些字段静默忽略后宣称兼容。
 - 展示映射：color 等只影响来源 Surface，不进入运行时权威事实。
@@ -225,7 +225,7 @@ OpenCode adapter 在来源发现、解析和审批前不 import module、不读�
 变化后不静默回退。
 
 OpenCode adapter 负责把 `provider/model` 语法解析成来源无关的 provider 提示与模型名；Core 不解释 OpenCode 字符串
-格式。进入审批前，Subagent 归属模块必须把该请求或 BitFun 的固定 Subagent 默认项解析成唯一、已启用的具体模型，并把
+格式。进入审批前，Subagent 归属模块必须把该请求或 Halo Studio 的固定 Subagent 默认项解析成唯一、已启用的具体模型，并把
 具体模型的配置 ID 与运行配置内容摘要写入决策和版本内容摘要。`inherit`、`primary`、`fast`、`auto`、`default` 在已经固定的
 绑定中只可能是普通配置 ID，不得再次解释成继承或默认选择；未配置的默认项、歧义匹配或已停用模型保持不可用并
 给出诊断，不能用运行时回退绕过审批。同一 ID 下的 provider、模型名、endpoint 或其他运行身份变化也会异步重建后续
@@ -241,7 +241,7 @@ Subagent 归属模块仍通过现有 Task 执行链完成调用。新的调用�
 `runtime_agent_key` 与模型绑定，并由前台或后台任务持有到结束；当前不支持外部 session follow-up、primary agent 替换、
 OpenCode 会话内核、permission DSL 或 package plugin。Desktop/TUI 摘要不包含 prompt
 正文，静态 system prompt 也不因该适配而改写。来源 `description` 只进入审批和管理界面；已批准 Agent
-进入现有 `<available_agents>` 动态视图时使用 BitFun 生成的稳定摘要，避免只改目录文案就绕过行为重批并改变模型上下文。
+进入现有 `<available_agents>` 动态视图时使用 Halo Studio 生成的稳定摘要，避免只改目录文案就绕过行为重批并改变模型上下文。
 
 ### 5.3 Commands
 
@@ -262,7 +262,7 @@ stale selection 并等待重新选择，不能直接执行刚刷新的新内容�
 后续阶段接通文件引用和 shell 输出时仍按 OpenCode 顺序展开。`!shell` 必须进入脚本执行域，不另建绕过可靠性控制
 的同步 shell 路径；展开有期限、取消和输出大小限制，大输出保存后只把引用交给命令模板。
 
-OpenCode 生态内部仍按其规则覆盖同名内置命令，但跨独立 provider 或与 BitFun 本地命令同名时不得静默覆盖。
+OpenCode 生态内部仍按其规则覆盖同名内置命令，但跨独立 provider 或与 Halo Studio 本地命令同名时不得静默覆盖。
 发生冲突后，兼容视图和 slash picker 保留普通 `/name` 心智，以来源标签展示全部候选；不公开
 `/builtin:<name>`、`/external:<name>` 或任何生态前缀命令。直接输入未解决的同名 `/name` 时拒绝执行，并引导用户从候选菜单选择；选择按候选身份和
 `content_version` 形成的冲突内容摘要持久化，同一内容摘要只询问一次；任一外部候选更新、删除或参与集合变化后内容摘要变化并
@@ -271,20 +271,20 @@ OpenCode 生态内部仍按其规则覆盖同名内置命令，但跨独立 prov
 
 ### 5.4 MCP、LSP 与 Formatter
 
-这些能力使用 BitFun 原生归属模块，但“原生已有”不自动等于兼容：
+这些能力使用 Halo Studio 原生归属模块，但“原生已有”不自动等于兼容：
 
 - MCP 当前覆盖 local 的 `command/environment/cwd/enabled` 与 remote 的 HTTPS URL、Headers、动态 OAuth 开关和
   `enabled`，并在批准后按 workspace 交给现有 MCP 归属模块；工具在调用前复核 workspace route，Remote 不回退到本机实例。
   远端静态摘要只展示 HTTPS origin，环境引用只展示变量名；为避免审批后通过环境变量改变已经确认的运行条件，`{env:NAME}` 仅
   支持 environment/Header 值，展开后重新校验大小和协议。未配置 `cwd` 时遵循 OpenCode，使用当前 workspace。
-  外部本地进程默认不继承 BitFun 的完整父进程环境。SSE、OpenCode
+  外部本地进程默认不继承 Halo Studio 的完整父进程环境。SSE、OpenCode
   `clientId/clientSecret/scope/callbackPort/redirectUri`、完整超时和 Agent 范围仍需后续接入，不能静默忽略。
 - LSP 必须覆盖 initialization、扩展名匹配、环境变量和工作区生命周期。
 - Formatter 必须覆盖写入后时机、`$FILE` 替换、`environment`、多个 Formatter 顺序和失败行为。
 
 ### 5.5 其他稳定配置项
 
-OpenCode 配置文档还包含下列不属于声明式目录资产、但会改变运行行为的稳定字段。它们不能因“BitFun 已有
+OpenCode 配置文档还包含下列不属于声明式目录资产、但会改变运行行为的稳定字段。它们不能因“Halo Studio 已有
 类似功能”而被遗漏：
 
 | 配置项 | 适配方式 | 明确边界 |
@@ -294,16 +294,16 @@ OpenCode 配置文档还包含下列不属于声明式目录资产、但会改�
 | `logLevel`、`username` | 分别进入日志配置和会话展示身份 | 不改变插件权限或系统账户。 |
 | `tools` | 映射到 Tool 归属模块的模型可见性和启用状态 | 不能用“隐藏工具”代替真实权限控制，也不能启用产品未提供的工具。 |
 | `attachment.image` | 映射到 Message/Model 输入处理的自动缩放和大小上限 | 模型或入口不支持图像时明确降级，不发送被静默修改的无效附件。 |
-| `share` | `manual/auto/disabled` 映射到 BitFun 会话分享归属模块 | BitFun 没有等价分享后端的产品形态只能显示不支持，不能伪造分享 URL。 |
+| `share` | `manual/auto/disabled` 映射到 Halo Studio 会话分享归属模块 | Halo Studio 没有等价分享后端的产品形态只能显示不支持，不能伪造分享 URL。 |
 | `snapshot` | 映射到 Workspace snapshot/checkpoint provider，并保持关闭后不可通过 UI 回滚的提示 | 只有行为等价测试通过的 provider 才能标记兼容；不要求复制 OpenCode 内部 Git 实现。 |
 | `tool_output` | `max_lines/max_bytes` 映射到工具结果截断和完整内容保存 | 必须返回可访问的完整结果引用，不能只丢弃超限内容。 |
-| `compaction` | `auto/prune/tail_turns/preserve_recent_tokens/reserved` 映射到 Agent Runtime 的压缩和工具输出裁剪策略 | BitFun 的会话持久化事实不变；无法等价的字段单独降级。 |
+| `compaction` | `auto/prune/tail_turns/preserve_recent_tokens/reserved` 映射到 Agent Runtime 的压缩和工具输出裁剪策略 | Halo Studio 的会话持久化事实不变；无法等价的字段单独降级。 |
 | `watcher.ignore` | 映射到实际工作区执行域的文件观察器 glob | Remote 在远端应用，不能只过滤本机观察器。 |
 | `enterprise.url` | 作为企业配置与身份服务入口交给对应归属模块 | 没有等价企业服务时保留并显示未支持，不能当作普通 Provider URL。 |
-| `server` | 仅在显式 OpenCode 外部协议兼容服务中映射 port/hostname/mDNS/CORS | 插件 worker 的回环 `serverUrl` 由 Runtime 管理；普通 BitFun 启动不读取该字段改变自身监听地址。 |
-| `autoupdate` | 保留来源并显示“不适用于 BitFun 产品更新” | 它控制 OpenCode 自身更新，不能让项目配置改变 BitFun 安装器或更新通道。 |
-| 旧 `autoshare`、`layout`、`mode`、`reference` | 按稳定版迁移到 `share`、固定布局、`agent`、`references` | 诊断显示迁移结果，不把旧字段静默解释成 BitFun 自有语义。 |
-| `experimental` | 分别记录 `disable_paste_summary/batch_tool/openTelemetry/primary_tools/continue_loop_on_deny/mcp_timeout/policies` | 未知实验字段保留并告警，不自动发布为稳定 BitFun 接口。 |
+| `server` | 仅在显式 OpenCode 外部协议兼容服务中映射 port/hostname/mDNS/CORS | 插件 worker 的回环 `serverUrl` 由 Runtime 管理；普通 Halo Studio 启动不读取该字段改变自身监听地址。 |
+| `autoupdate` | 保留来源并显示“不适用于 Halo Studio 产品更新” | 它控制 OpenCode 自身更新，不能让项目配置改变 Halo Studio 安装器或更新通道。 |
+| 旧 `autoshare`、`layout`、`mode`、`reference` | 按稳定版迁移到 `share`、固定布局、`agent`、`references` | 诊断显示迁移结果，不把旧字段静默解释成 Halo Studio 自有语义。 |
+| `experimental` | 分别记录 `disable_paste_summary/batch_tool/openTelemetry/primary_tools/continue_loop_on_deny/mcp_timeout/policies` | 未知实验字段保留并告警，不自动发布为稳定 Halo Studio 接口。 |
 
 `server` 和 `autoupdate` 的降级是产品归属不同，不是解析失败。兼容报告必须显示原值、未生效范围和可选替代
 入口；其他可独立生效的配置继续使用。
@@ -325,7 +325,7 @@ OpenCode 配置文档还包含下列不属于声明式目录资产、但会改�
 - OC-R3 先补本地“执行域凭据访问”窄接口：请求只携带执行域、领域（Provider/MCP/plugin auth）、来源引用和
   用途，再路由到现有 AI adapter credential resolver、MCP OAuth vault 或对应插件 auth 流程。值只在同一执行域
   的实际调用中提供，不写入兼容结果、普通状态或诊断。
-- 显式导入不复制 OpenCode 私有凭据文件到 BitFun 配置。
+- 显式导入不复制 OpenCode 私有凭据文件到 Halo Studio 配置。
 - `auth` 插件、Provider Headers 和 MCP OAuth 的运行期调用见插件执行设计；配置文档只保存引用和来源。
 
 ## 8. Remote 与多执行域

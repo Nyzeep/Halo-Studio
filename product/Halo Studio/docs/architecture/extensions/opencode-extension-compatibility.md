@@ -1,6 +1,6 @@
 # OpenCode 扩展兼容总览
 
-本文是 BitFun 适配 OpenCode 扩展生态的总入口。它只回答三件事：BitFun 与每类 OpenCode 能力差在哪里、能否适配、需要补什么。实现细节分别放在配置、服务插件、终端插件和插件运行时/Plugin Host 设计中。
+本文是 Halo Studio 适配 OpenCode 扩展生态的总入口。它只回答三件事：Halo Studio 与每类 OpenCode 能力差在哪里、能否适配、需要补什么。实现细节分别放在配置、服务插件、终端插件和插件运行时/Plugin Host 设计中。
 
 本文描述目标设计与当前差距，不代表矩阵中的目标能力已经实现。只有通过固定版本样例和端到端验证的能力才能标记为已实现。
 矩阵是兼容审计库存，不是默认开发路线图；`OC-R*` 只表示该能力依赖的成熟度分区，近期执行顺序以
@@ -13,8 +13,8 @@
 | JS/TS 工具、软件包插件、稳定 Hook、`client`、`serverUrl`、`$` | [服务插件运行时适配](opencode-plugin-runtime-adapter-design.md) |
 | TUI 插件入口、Route、Command、Keymap、Dialog、Slot、Theme、State、KV | [终端界面插件适配](opencode-tui-plugin-adapter-design.md) |
 | SDK、Server、ACP、IDE、Web、GitHub、GitLab、Slack | [外部集成适配](opencode-external-integration-adapter-design.md) |
-| 进程、调用、超时、恢复、状态与 BitFun 归属模块边界 | [插件运行时与 Plugin Host](plugin-runtime-design.md) |
-| BitFun 能力输出到外部宿主、能力组合、通用状态/事件/并发/冲突边界 | [能力装配与宿主集成](capability-runtime-integration-design.md) |
+| 进程、调用、超时、恢复、状态与 Halo Studio 归属模块边界 | [插件运行时与 Plugin Host](plugin-runtime-design.md) |
+| Halo Studio 能力输出到外部宿主、能力组合、通用状态/事件/并发/冲突边界 | [能力装配与宿主集成](capability-runtime-integration-design.md) |
 | 交付顺序和阶段退出条件 | [粗粒度计划](../../plans/opencode-extension-compatibility-plan.md) |
 
 ## 1. 基线与判断方法
@@ -35,18 +35,18 @@
 
 ### 1.1 差异类型
 
-矩阵用以下六种类型说明 BitFun 真正要做的工作。一个扩展项可以同时包含两种类型。
+矩阵用以下六种类型说明 Halo Studio 真正要做的工作。一个扩展项可以同时包含两种类型。
 
 | 差异类型 | 含义 |
 |---|---|
-| 补基础能力 | BitFun 还没有可承接该行为的真实产品能力，必须先补归属模块和消费方。 |
-| 补扩展接口 | BitFun 有基础能力，但没有供插件调用的稳定接口或 Hook。 |
+| 补基础能力 | Halo Studio 还没有可承接该行为的真实产品能力，必须先补归属模块和消费方。 |
+| 补扩展接口 | Halo Studio 有基础能力，但没有供插件调用的稳定接口或 Hook。 |
 | 融合现有能力 | 两边都有相近能力，但加载顺序、状态、权限或最终归属不同，需要统一语义。 |
 | 转换参数 | 基础行为一致，只需转换格式、字段、使用范围、错误或生命周期。 |
-| 直接桥接 | BitFun 已有窄接口，增加少量兼容接口即可。 |
+| 直接桥接 | Halo Studio 已有窄接口，增加少量兼容接口即可。 |
 | 明确降级 | 组件运行时、产品边界或接口稳定性使完整等价不合理；必须给出替代行为。 |
 
-“BitFun 有类似模块”不等于“OpenCode 已兼容”。可实现性只使用以下结论：
+“Halo Studio 有类似模块”不等于“OpenCode 已兼容”。可实现性只使用以下结论：
 
 | 结论 | 含义 |
 |---|---|
@@ -57,16 +57,16 @@
 
 ## 2. 总体方案
 
-本文件只定义 OpenCode 特有来源、顺序、参数和兼容承诺。跨宿主共用的是 BitFun 能力归属模块、类型明确的贡献、权限/
-副作用事实、当前能力版本和对外能力接口，不是 OpenCode 原始对象。BitFun 能力作为 MCP、Plugin 或 SDK 能力进入
-OpenCode，和 OpenCode 配置/插件进入 BitFun 是两个独立验收方向，不能用任一方向完成证明另一方向已经兼容。
+本文件只定义 OpenCode 特有来源、顺序、参数和兼容承诺。跨宿主共用的是 Halo Studio 能力归属模块、类型明确的贡献、权限/
+副作用事实、当前能力版本和对外能力接口，不是 OpenCode 原始对象。Halo Studio 能力作为 MCP、Plugin 或 SDK 能力进入
+OpenCode，和 OpenCode 配置/插件进入 Halo Studio 是两个独立验收方向，不能用任一方向完成证明另一方向已经兼容。
 
-- BitFun 实现自己的插件兼容链路、脚本执行、OpenCode 兼容接口和 Rust 能力转发；不启动完整
+- Halo Studio 实现自己的插件兼容链路、脚本执行、OpenCode 兼容接口和 Rust 能力转发；不启动完整
   OpenCode Agent Runtime，也不把 Bun 或物理进程拓扑固化进插件内部 ABI。
 - 用户和项目 OpenCode 内容默认作为持续兼容来源被后台发现。低风险声明式内容可以无感应用并给出可撤销的
   非阻塞摘要；可执行内容在首次启用或能力扩大时等待来源、插件身份和执行域确认，但不阻塞项目和无关会话。
 - 设置中的统一外部来源视图负责解释全局/项目使用范围、当前支持范围、待处理项和变更结果；显式导入只是把
-  非执行内容转为 BitFun 原生配置的可选快照，不是 OpenCode 项目可用或插件执行的前置条件。
+  非执行内容转为 Halo Studio 原生配置的可选快照，不是 OpenCode 项目可用或插件执行的前置条件。
 - Desktop、TUI、Peer Host 与只读 Server 使用同一组版本化控制 DTO。这组 DTO 只包含彼此独立的生命周期、Host 能力、恢复动作、
   `Refresh/SetSourceEnabled/SetSafeMode`，不携带 OpenCode 私有数据；审批和冲突仍归 Tool/Subagent/MCP 等能力归属模块。
 - 第一条执行完整流程已覆盖官方复数目录和源码验证过的单数目录中的受支持单文件 `.js` standalone tool；`.ts`、模块依赖、
@@ -74,11 +74,11 @@ OpenCode，和 OpenCode 配置/插件进入 BitFun 是两个独立验收方向�
   一个 JS fixture 宣称 OpenCode runtime 完整兼容。
 - 当前 standalone Tool 使用本机 Node.js 验证受限 JS 子集，并在 Desktop 与交互式 TUI（ChatMode）显示运行时和无 OS 沙箱边界；
   脚本 worker 与 local stdio MCP 已共享跨平台进程树回收。OpenCode v2 的 Node SEA 前瞻证明 Node 是可行执行路线，但其
-  Bun 编译路径仍存在；BitFun 后续 TypeScript/Zod、`$` 与包依赖必须按固定样例选择脚本执行后端，不能提前把 Bun 或 Node 固化进插件内部 ABI。HarmonyOS PC 原生 CLI/TUI 必须按
+  Bun 编译路径仍存在；Halo Studio 后续 TypeScript/Zod、`$` 与包依赖必须按固定样例选择脚本执行后端，不能提前把 Bun 或 Node 固化进插件内部 ABI。HarmonyOS PC 原生 CLI/TUI 必须按
   [平台专题](../platform-portability-design.md)独立取证，不包含 HarmonyOS 手机 Remote App。
 - 扩展调用必须有期限、取消、有界队列、大小检查和可观察的崩溃降级；更细的权限、沙箱和组织策略沿用现有控制点并延期
   单独设计，不在首条完整流程扩大接口。
-- BitFun 归属模块负责最终业务状态；适配器只保留 OpenCode 的格式、顺序、参数和错误语义。
+- Halo Studio 归属模块负责最终业务状态；适配器只保留 OpenCode 的格式、顺序、参数和错误语义。
 
 近期优先级：
 
@@ -91,20 +91,20 @@ OpenCode，和 OpenCode 配置/插件进入 BitFun 是两个独立验收方向�
 
 ## 3. 能力矩阵
 
-`当前状态`只表示 OpenCode 兼容行为是否已经进入 BitFun 生产路径，不把“BitFun 有相似基础模块”算成已兼容。
+`当前状态`只表示 OpenCode 兼容行为是否已经进入 Halo Studio 生产路径，不把“Halo Studio 有相似基础模块”算成已兼容。
 `成熟度依赖（非执行顺序）`表示该能力在完整兼容成熟度中的依赖位置，不代表近期执行顺序、承诺版本或必须实现。实际立项还必须有
 真实样例/消费方，并满足 OC-E 阶段与产品架构总计划的退出条件。
 
 这些表是差异审计库存，不是实施说明。快速阅读只需关注“扩展项、当前状态、目标可实现性、成熟度依赖、细节”；
-“BitFun 差异”和“需要完成的工作”用于解释为何不能直接桥接。实际实现范围以链接的专题设计和 OC-E 计划为准，
+“Halo Studio 差异”和“需要完成的工作”用于解释为何不能直接桥接。实际实现范围以链接的专题设计和 OC-E 计划为准，
 不能把一整张表放进同一阶段。
 
 ### 3.1 配置与声明式资产
 
-| OpenCode 扩展项 | BitFun 差异 | 当前状态 | 目标可实现性 | 成熟度依赖（非执行顺序） | BitFun 需要完成的工作 | 细节 |
+| OpenCode 扩展项 | Halo Studio 差异 | 当前状态 | 目标可实现性 | 成熟度依赖（非执行顺序） | Halo Studio 需要完成的工作 | 细节 |
 |---|---|---|---|---|---|---|
 | 配置层级与合并 | 融合现有能力 | 未实现 | 可完整适配 | OC-R1 | 按 remote、global、自定义文件、project、`.opencode`、内联和组织配置构造来源图并保留最终来源 | [来源与合并](opencode-config-assets-adapter-design.md#3-配置层级与来源) |
-| JSON、JSONC、环境变量、文件引用 | 转换参数 + 明确降级 | 未实现 | 可主要适配 | OC-R1 | 有效配置保持 OpenCode 解码语义；未知字段保留和非安全字段局部恢复属于 BitFun 鲁棒性增强，安全/执行字段无效时不激活受影响结果 | [解析与鲁棒性](opencode-config-assets-adapter-design.md#4-解析与鲁棒性) |
+| JSON、JSONC、环境变量、文件引用 | 转换参数 + 明确降级 | 未实现 | 可主要适配 | OC-R1 | 有效配置保持 OpenCode 解码语义；未知字段保留和非安全字段局部恢复属于 Halo Studio 鲁棒性增强，安全/执行字段无效时不激活受影响结果 | [解析与鲁棒性](opencode-config-assets-adapter-design.md#4-解析与鲁棒性) |
 | 独立 `tui.json/jsonc` | 融合现有能力 + 转换参数 | 未实现 | 可完整适配 | OC-R1 | 按 global、`OPENCODE_TUI_CONFIG`、project、`.opencode` 独立顺序加载，不能复用主配置优先级 | [TUI 来源](opencode-config-assets-adapter-design.md#32-tui-独立来源顺序) |
 | Rules / Instructions | 转换参数 | 未实现 | 可完整适配 | OC-R1 | R1 映射本地/已缓存内容；需要主动联网的远程 instruction 在 R2 通过归属模块保护后获取 | [声明式资产](opencode-config-assets-adapter-design.md#5-声明式资产映射) |
 | Agents / Modes | 融合现有能力 + 转换参数 | 部分实现：Subagent 安全子集 | 可主要适配 | OC-R1 | 已支持全局/项目 Markdown、JSON/JSONC 的 subagent/all、prompt、description、disable/hidden、精确模型与工具映射，并接入审批、冲突、更新、撤下和 fresh single-run Task；primary/mode、permission、variant/options、采样与续接明确降级 | [Agents 与 Skills](opencode-config-assets-adapter-design.md#52-agentsmodes-与-skills) |
@@ -119,25 +119,25 @@ OpenCode，和 OpenCode 配置/插件进入 BitFun 是两个独立验收方向�
 | Keybinds | 补扩展接口 + 转换参数 | 未实现 | 可主要适配 | OC-R1 | 为运行时 TUI 输入增加 `tui.json` 兼容入口，处理 leader、组合键、禁用和冲突 | [声明式资产](opencode-config-assets-adapter-design.md#5-声明式资产映射) |
 | Shell / Tools / Attachments / Share / Snapshot / Compaction / Watcher | 融合现有能力 + 转换参数 | 未实现 | 可主要适配 | OC-R2 | R1 解析非执行字段；R2 才把可能启动进程、联网或调用工具的字段接到各归属模块 | [其他稳定配置](opencode-config-assets-adapter-design.md#55-其他稳定配置项) |
 | Log / Username / Enterprise / Tool output / 旧字段迁移 | 转换参数或补基础能力 | 未实现 | 可主要适配 | OC-R1 | 覆盖 `logLevel`、`username`、`enterprise`、`tool_output` 及 `reference/autoshare/layout/mode` 迁移 | [其他稳定配置](opencode-config-assets-adapter-design.md#55-其他稳定配置项) |
-| `server` | 明确降级 | 未实现 | 明确降级 | OC-R4-P | 只供显式外部协议兼容服务使用，不改变普通 BitFun 启动方式 | [其他稳定配置](opencode-config-assets-adapter-design.md#55-其他稳定配置项) |
-| `autoupdate` | 明确降级 | 不适用 | 明确降级 | 不安排 | 不控制 BitFun 产品更新；保留来源并显示“不适用于 BitFun 更新” | [其他稳定配置](opencode-config-assets-adapter-design.md#55-其他稳定配置项) |
+| `server` | 明确降级 | 未实现 | 明确降级 | OC-R4-P | 只供显式外部协议兼容服务使用，不改变普通 Halo Studio 启动方式 | [其他稳定配置](opencode-config-assets-adapter-design.md#55-其他稳定配置项) |
+| `autoupdate` | 明确降级 | 不适用 | 明确降级 | 不安排 | 不控制 Halo Studio 产品更新；保留来源并显示“不适用于 Halo Studio 更新” | [其他稳定配置](opencode-config-assets-adapter-design.md#55-其他稳定配置项) |
 
 本类整体风险是来源优先级错误、相似能力语义不一致和远程执行域错配。控制点集中在来源图、字段级诊断、归属模块校验和官方配置样例，不在每个配置项内重复设计。
 
 ### 3.2 工具与服务插件
 
-| OpenCode 扩展项 | BitFun 差异 | 当前状态 | 目标可实现性 | 成熟度依赖（非执行顺序） | BitFun 需要完成的工作 | 细节 |
+| OpenCode 扩展项 | Halo Studio 差异 | 当前状态 | 目标可实现性 | 成熟度依赖（非执行顺序） | Halo Studio 需要完成的工作 | 细节 |
 |---|---|---|---|---|---|---|
 | `.opencode/tools/*.js` | 补基础能力 | 受支持单文件子集已接入 Tool Runtime | 可完整适配 | OC-R2 | 当前 Node worker 支持基础 schema、默认值、字符串结果、取消/超时/撤下；完整 Zod、模块依赖、`metadata`/`ask` 和附件结果继续走类型化进程通信扩展 | [工具加载](opencode-plugin-runtime-adapter-design.md#5-工具与插件加载) |
 | `.opencode/tools/*.ts` | 补基础能力 | 已识别，执行不支持 | 可完整适配 | OC-R2 | 当前静态显示不 import；后续由固定样例选择 Node 转译或 Bun/TypeScript worker，保留真实 schema 与 execute，不在 Rust 猜测 TS 语义 | [工具加载](opencode-plugin-runtime-adapter-design.md#5-工具与插件加载) |
 | 插件 `tool` map | 补基础能力 + 补扩展接口 | 未实现 | 可完整适配 | OC-R2 | 运行插件工厂，按同一双表示注册真实工具，并接到 Tool 归属模块 | [工具加载](opencode-plugin-runtime-adapter-design.md#5-工具与插件加载) |
-| 项目与用户目录插件 | 补基础能力 | 未实现 | 可完整适配 | OC-R2 | 直接发现本地 JS/TS 模块，不要求 BitFun 专用清单；来源、插件身份和执行域确认后，在旧 Host 停止后由新 Host 加载 | [服务插件](opencode-plugin-runtime-adapter-design.md#52-服务插件) |
+| 项目与用户目录插件 | 补基础能力 | 未实现 | 可完整适配 | OC-R2 | 直接发现本地 JS/TS 模块，不要求 Halo Studio 专用清单；来源、插件身份和执行域确认后，在旧 Host 停止后由新 Host 加载 | [服务插件](opencode-plugin-runtime-adapter-design.md#52-服务插件) |
 | 配置中的软件包插件 | 补基础能力 | 未实现 | 可完整适配 | OC-R2 | 确认来源、插件身份和执行域后，用 npm 配置、Arborist、package-lock 和 `ignoreScripts: true` 准备依赖，再由与固定插件样例匹配的 Node/Bun 脚本执行后端加载 | [服务插件](opencode-plugin-runtime-adapter-design.md#52-服务插件) |
 | 全局插件加载 | 补基础能力 | 未实现 | 可完整适配 | OC-R2 | 自动发现全局配置和 ConfigPaths 全局目录，并按完整来源图生成 `plugin_origins`；首次可执行启用按来源、插件身份和执行域确认，决定只提示一次且可按项目覆盖 | [服务插件](opencode-plugin-runtime-adapter-design.md#52-服务插件) |
 | `package.json`、入口与依赖 | 补基础能力 | 未实现 | 可主要适配 | OC-R2 | 复现 server 入口、入口回退、`engines.opencode`、npm 配置和锁文件；原生模块失败只影响对应插件 | [来源与执行版本](opencode-plugin-runtime-adapter-design.md#4-来源与执行版本) |
 | 内置/MCP/外部同名工具；后续 pure/重复插件顺序 | 融合现有能力 | standalone Tool 显式选择已实现 | 可完整适配 | OC-R2 | 当前按候选身份与内容版本记忆选择且不静默覆盖；package plugin 阶段再复现 internal-first、pure、来源顺序和去重 | [注册与覆盖](opencode-plugin-runtime-adapter-design.md#53-注册与覆盖) |
 | `project` / `directory` / `worktree` | 直接桥接 | standalone Tool 已传 `directory/worktree/sessionID`；完整 `project` 未实现 | 可完整适配 | OC-R2 | 当前 `directory` 为打开的 workspace、`worktree` 为 Git 根并传递真实 session；完整插件 `project` 和 Remote 在 OC-R5 前保持 `unsupported` | [插件兼容接口](opencode-plugin-runtime-adapter-design.md#7-opencode-插件兼容接口) |
-| `client` | 补扩展接口 | 未实现 | 可主要适配 | OC-R2 | 提供版本化插件客户端接口，按方法转发到现有 BitFun 归属模块 | [插件兼容接口](opencode-plugin-runtime-adapter-design.md#7-opencode-插件兼容接口) |
+| `client` | 补扩展接口 | 未实现 | 可主要适配 | OC-R2 | 提供版本化插件客户端接口，按方法转发到现有 Halo Studio 归属模块 | [插件兼容接口](opencode-plugin-runtime-adapter-design.md#7-opencode-插件兼容接口) |
 | `serverUrl` | 补扩展接口 | 未实现 | 可主要适配 | OC-R2 | 在 Plugin Host 执行域提供真实回环服务，只实现插件所需的版本化路由 | [插件兼容接口](opencode-plugin-runtime-adapter-design.md#7-opencode-插件兼容接口) |
 | `$` 与脚本环境 | 补基础能力 | 未实现 | 可完整适配 | OC-R2 | 只有需要 OpenCode/Bun `$` 的固定样例才启用 Bun-compatible adapter；Node 路径不能伪造等价语义。受限模式依赖真实 OS/容器边界，无法落实时停用插件 | [默认策略](opencode-plugin-runtime-adapter-design.md#3-默认策略与可调权限) |
 | 加载、停用、更新与崩溃恢复 | 补基础能力 | standalone Tool 加载失败即撤下脚本 | 可主要适配 | OC-R2 | 已有来源限定身份、后台重载、删除撤下与 worker 终止；package plugin 还需共享 Plugin Host、安全重启和进程级恢复 | [生命周期](opencode-plugin-runtime-adapter-design.md#9-生命周期) |
@@ -147,13 +147,13 @@ OpenCode，和 OpenCode 配置/插件进入 BitFun 是两个独立验收方向�
 
 ### 3.3 稳定服务 Hook
 
-本节的“实现”指进入真实 OpenCode 插件运行时。BitFun 当前按插件声明与具名导出顺序，从本地插件文件静态展示
+本节的“实现”指进入真实 OpenCode 插件运行时。Halo Studio 当前按插件声明与具名导出顺序，从本地插件文件静态展示
 下列 Hook 属性，并把 `tool.execute.before/after` 映射到已有 Tool Hook 点；未知或动态注册保持 `opaque`。映射仅表示
-BitFun 已识别等价契约覆盖，不表示外部 handler 已加载、激活或执行。目录不会 import 或执行插件，内容版本也只
+Halo Studio 已识别等价契约覆盖，不表示外部 handler 已加载、激活或执行。目录不会 import 或执行插件，内容版本也只
 内容摘要化脱敏后的目录事实，因此不改变任何 Hook Runtime 的“未实现”结论。`tool` 是工具注册能力，不作为 Hook
 事件猜测或静态显示。
 
-| Hook | BitFun 差异 | 当前状态 | 目标可实现性 | 成熟度依赖（非执行顺序） | BitFun 需要完成的工作 |
+| Hook | Halo Studio 差异 | 当前状态 | 目标可实现性 | 成熟度依赖（非执行顺序） | Halo Studio 需要完成的工作 |
 |---|---|---|---|---|---|
 | `dispose` | 直接桥接 | 静态目录可见，运行未实现 | 可完整适配 | OC-R3 | 调用清理并设置期限；超时回收 worker。 |
 | `event` | 补扩展接口 | 静态目录可见，运行未实现 | 可完整适配 | OC-R3 | 提供版本化事件代理并隔离插件异常。 |
@@ -175,12 +175,12 @@ Hook 的共同风险是把变换误做成通知、并行调用破坏顺序或插
 
 ### 3.4 终端界面插件
 
-| OpenCode 扩展项 | BitFun 差异 | 当前状态 | 目标可实现性 | 成熟度依赖（非执行顺序） | BitFun 需要完成的工作 | 细节 |
+| OpenCode 扩展项 | Halo Studio 差异 | 当前状态 | 目标可实现性 | 成熟度依赖（非执行顺序） | Halo Studio 需要完成的工作 | 细节 |
 |---|---|---|---|---|---|---|
 | 独立 TUI 插件入口、options、meta、lifecycle | 补基础能力 | 未实现 | 可完整适配 | OC-R4-T | 独立解析 `tui.json`，加载只导出 `tui` 的模块并维护启停、取消和清理 | [发现与生命周期](opencode-tui-plugin-adapter-design.md#4-发现加载和生命周期) |
 | `app`、`tuiConfig`、`keys`、`mode` | 补扩展接口 + 转换参数 | 未实现 | 可主要适配 | OC-R4-T | 提供版本、实时配置、按键格式化和模式栈兼容接口 | [能力映射](opencode-tui-plugin-adapter-design.md#5-能力映射) |
 | Command 与 slash alias | 补扩展接口 | 未实现 | 可完整适配 | OC-R4-T | 声明注册到 CLI action registry，保持来源顺序，并由既有 controller 执行 | [Command](opencode-tui-plugin-adapter-design.md#54-command-与-slash-alias) |
-| Route 身份与导航 | 融合现有能力 | 未实现 | 可主要适配 | OC-R4-T | 保留 route id、覆盖顺序和 navigate/current；渲染降级页由 BitFun 提供退出动作 | [Route](opencode-tui-plugin-adapter-design.md#53-route-与导航) |
+| Route 身份与导航 | 融合现有能力 | 未实现 | 可主要适配 | OC-R4-T | 保留 route id、覆盖顺序和 navigate/current；渲染降级页由 Halo Studio 提供退出动作 | [Route](opencode-tui-plugin-adapter-design.md#53-route-与导航) |
 | Keys、Keymap、Layer、Binding、Mode | 转换参数 + 明确降级 | 未实现 | 可主要适配 | OC-R4-T | 转换公开键位和分发语义；依赖 OpenTUI Renderable 的方法明确不支持 | [Keymap](opencode-tui-plugin-adapter-design.md#55-keyskeymaplayerbinding-与-mode) |
 | Alert / Confirm / Prompt / Select / Toast | 转换参数 | 未实现 | 可主要适配 | OC-R4-T | 把已知属性和返回值映射到 Ratatui 宿主交互 | [Dialog](opencode-tui-plugin-adapter-design.md#56-dialogtoast-与-prompt) |
 | Theme、Attention、通知、声音 | 转换参数 | 未实现 | 可主要适配 | OC-R4-T | 接到主题与平台通知能力，无系统能力时降级到文本 | [Theme 与通知](opencode-tui-plugin-adapter-design.md#58-theme) |
@@ -194,16 +194,16 @@ Hook 的共同风险是把变换误做成通知、并行调用破坏顺序或插
 
 ### 3.5 外部接口与实验能力
 
-| 扩展项 | BitFun 差异 | 当前状态 | 目标可实现性 | 成熟度依赖（非执行顺序） | BitFun 需要完成的工作 | 细节 |
+| 扩展项 | Halo Studio 差异 | 当前状态 | 目标可实现性 | 成熟度依赖（非执行顺序） | Halo Studio 需要完成的工作 | 细节 |
 |---|---|---|---|---|---|---|
 | OpenCode 开发工具包客户端 | 补扩展接口 | 未实现 | 可主要适配 | OC-R4-P | 先实现真实消费的方法；未知读接口稳定失败，未知写接口绝不伪造成功 | [外部集成设计](opencode-external-integration-adapter-design.md) |
 | HTTP / OpenAPI / SSE | 融合现有能力 + 明确降级 | 未实现 | 可主要适配 | OC-R4-P | 插件回环服务复用处理器；完整外部协议独立验收 | [显式兼容服务](opencode-external-integration-adapter-design.md#41-显式兼容服务) |
 | ACP | 转换参数 | 未实现 | 可主要适配 | OC-R4-P | 映射工具、命令、MCP、规则、Formatter、Agent 和权限 | [能力结论](opencode-external-integration-adapter-design.md#2-能力与产品结论) |
-| IDE 扩展（VS Code/Cursor/Windsurf/VSCodium） | 补基础能力 + 融合现有能力 | 未实现 | 可主要适配 | OC-R4-P | BitFun 扩展实现启动/聚焦与上下文；原扩展直连须另装 `opencode` 兼容启动器并精确覆盖环境变量、`GET /app` 和 `POST /tui/append-prompt` | [IDE](opencode-external-integration-adapter-design.md#42-ide) |
-| Web 与 attach 客户端 | 补基础能力 + 明确降级 | 未实现 | 明确降级 | OC-R5 | 优先使用 BitFun Web/Remote；原始客户端直连另行实现 Server 协议 | [能力结论](opencode-external-integration-adapter-design.md#2-能力与产品结论) |
-| GitHub Action / App | 融合现有能力 + 明确降级 | 未实现 | 明确降级 | OC-R4-C | 提供 BitFun GitHub 工作流，不冒充 `opencode` 二进制 | [代码托管与 Slack](opencode-external-integration-adapter-design.md#43-githubgitlab-与-slack) |
-| GitLab CI / Duo | 融合现有能力 + 明确降级 | 未实现 | 明确降级 | OC-R4-C | 提供 BitFun CI/触发器，不把 runner/CLI 计入插件兼容 | [代码托管与 Slack](opencode-external-integration-adapter-design.md#43-githubgitlab-与-slack) |
-| Slack | 补基础能力 + 转换参数 | 未实现 | 可主要适配 | OC-R4-C | 实现 BitFun Slack 连接器；原 `@opencode-ai/slack` 直连取决于 SDK/Server 覆盖 | [代码托管与 Slack](opencode-external-integration-adapter-design.md#43-githubgitlab-与-slack) |
+| IDE 扩展（VS Code/Cursor/Windsurf/VSCodium） | 补基础能力 + 融合现有能力 | 未实现 | 可主要适配 | OC-R4-P | Halo Studio 扩展实现启动/聚焦与上下文；原扩展直连须另装 `opencode` 兼容启动器并精确覆盖环境变量、`GET /app` 和 `POST /tui/append-prompt` | [IDE](opencode-external-integration-adapter-design.md#42-ide) |
+| Web 与 attach 客户端 | 补基础能力 + 明确降级 | 未实现 | 明确降级 | OC-R5 | 优先使用 Halo Studio Web/Remote；原始客户端直连另行实现 Server 协议 | [能力结论](opencode-external-integration-adapter-design.md#2-能力与产品结论) |
+| GitHub Action / App | 融合现有能力 + 明确降级 | 未实现 | 明确降级 | OC-R4-C | 提供 Halo Studio GitHub 工作流，不冒充 `opencode` 二进制 | [代码托管与 Slack](opencode-external-integration-adapter-design.md#43-githubgitlab-与-slack) |
+| GitLab CI / Duo | 融合现有能力 + 明确降级 | 未实现 | 明确降级 | OC-R4-C | 提供 Halo Studio CI/触发器，不把 runner/CLI 计入插件兼容 | [代码托管与 Slack](opencode-external-integration-adapter-design.md#43-githubgitlab-与-slack) |
+| Slack | 补基础能力 + 转换参数 | 未实现 | 可主要适配 | OC-R4-C | 实现 Halo Studio Slack 连接器；原 `@opencode-ai/slack` 直连取决于 SDK/Server 覆盖 | [代码托管与 Slack](opencode-external-integration-adapter-design.md#43-githubgitlab-与-slack) |
 | `experimental.chat.messages.transform` | 补扩展接口 | 未实现 | 暂不承诺 | OC-R5 | 保留前瞻样例，稳定后复用消息变换路径 | 本节 |
 | `experimental.chat.system.transform` | 补扩展接口 + 融合现有能力 | 未实现 | 暂不承诺 | OC-R5 | 稳定后接入系统提示归属模块 | 本节 |
 | `experimental.provider.small_model` | 转换参数 | 未实现 | 暂不承诺 | OC-R5 | 只做版本差异监控 | 本节 |
@@ -224,7 +224,7 @@ OpenCode 发布新稳定版时按以下顺序升级：
 
 1. 比较稳定版的配置 schema、服务 Hook、TUI API、事件和加载规则。
 2. 用第 1.1 节的差异类型标记新增或变化项，先判断是参数转换还是语义变化。
-3. 优先只更新版本化适配层；只有 OpenCode 增加了 BitFun 完全没有的产品行为时才补基础能力。
+3. 优先只更新版本化适配层；只有 OpenCode 增加了 Halo Studio 完全没有的产品行为时才补基础能力。
 4. 旧兼容版本继续可用，直到新版本的官方样例、顺序、失败和恢复测试通过。
 5. 测试通过后再推进默认兼容版本；开发分支变化只产生前瞻告警。
 
@@ -258,7 +258,7 @@ OpenCode 发布新稳定版时按以下顺序升级：
 
 ### 4.3 插件变化、旧进程保留与恢复
 
-来源变化后，BitFun 先检查来源更新策略和 import 前可见的运行条件，再进入安全重启：
+来源变化后，Halo Studio 先检查来源更新策略和 import 前可见的运行条件，再进入安全重启：
 
 ```mermaid
 flowchart LR
@@ -298,7 +298,7 @@ Node 进程永久累积；这不是 package-plugin 的 workspace-scoped runtime 
 |---|---|
 | 已激活项目中的同一本地文件变化，更新策略允许且运行条件未扩大 | 后台完成静态检查，再短暂停止插件并安全重启；一级状态显示“更新中”。 |
 | 软件包版本/完整性、远程内容或更新策略未覆盖的来源变化 | 不加载新代码；显示差异并等待确认。 |
-| bare `latest` 软件包可能有新版本 | 固定源码的缓存命中不会主动刷新；BitFun 以“检查更新/更新”增强显示候选版本和影响范围，不静默换包。 |
+| bare `latest` 软件包可能有新版本 | 固定源码的缓存命中不会主动刷新；Halo Studio 以“检查更新/更新”增强显示候选版本和影响范围，不静默换包。 |
 | import 前可判断的文件/网络/进程权限、凭据、环境变量、依赖安装行为或执行位置扩大 | 不加载新代码并显示差异；确认前健康且仍合规的旧版本可继续服务。 |
 | 新 Host import 后发现新增工具、Hook 或其他受管贡献 | 停止新 Host，不注册贡献，显示真实差异并等待确认；已经产生的直接副作用不能宣称已撤销。 |
 | 仅删除部分贡献且来源仍存在 | 按安全重启替换完整 Host 插件组；能力范围收窄不额外要求确认，但保留一次变更摘要。 |
@@ -328,14 +328,14 @@ Node 进程永久累积；这不是 package-plugin 的 workspace-scoped runtime 
 
 | 能力 | 结论 | 原因 | 替代行为 |
 |---|---|---|---|
-| 原始 `CliRenderer` 和 Solid/OpenTUI 组件树 | 暂不承诺完整兼容 | BitFun Ratatui 与 OpenCode 组件树、布局和生命周期不共用运行时 | 适配导航、命令、公开键位、已知对话、主题和通知；原始组件显示明确不支持。 |
-| `api.app.version` 无法表达 renderer 降级 | 协议限制 | 插件只能读取兼容版本，没有能力协商字段，可能在懒路径选择 BitFun 不支持的组件能力 | 初始化依赖 renderer 时拒绝整个插件入口；懒路径返回 `unsupported(renderer-required)`，不能宣称仅凭版本检查即可兼容。 |
+| 原始 `CliRenderer` 和 Solid/OpenTUI 组件树 | 暂不承诺完整兼容 | Halo Studio Ratatui 与 OpenCode 组件树、布局和生命周期不共用运行时 | 适配导航、命令、公开键位、已知对话、主题和通知；原始组件显示明确不支持。 |
+| `api.app.version` 无法表达 renderer 降级 | 协议限制 | 插件只能读取兼容版本，没有能力协商字段，可能在懒路径选择 Halo Studio 不支持的组件能力 | 初始化依赖 renderer 时拒绝整个插件入口；懒路径返回 `unsupported(renderer-required)`，不能宣称仅凭版本检查即可兼容。 |
 | 完整 OpenCode HTTP Server 协议 | 不作为插件兼容前置目标 | 会形成第二套产品协议、会话和错误模型 | 为插件实现所需 Client/回环路由；外部协议按独立产品需求扩展。 |
-| 原始 IDE/Web/attach/GitHub/GitLab 客户端或流程直接连接 BitFun | 不承诺直接替换 | 这些入口依赖 OpenCode CLI、Server、会话和产品流程，不是插件接口 | 提供 BitFun 原生集成；IDE `/tui` 子集和外部协议按真实需求单独兼容。 |
+| 原始 IDE/Web/attach/GitHub/GitLab 客户端或流程直接连接 Halo Studio | 不承诺直接替换 | 这些入口依赖 OpenCode CLI、Server、会话和产品流程，不是插件接口 | 提供 Halo Studio 原生集成；IDE `/tui` 子集和外部协议按真实需求单独兼容。 |
 | 插件间 `globalThis`、进程环境和模块单例共享 | 不作为稳定承诺 | package plugin 默认共享 Plugin Host，但必要的后端/安全拆分、安全重启和崩溃恢复都会重建进程状态 | 保留官方 PluginInput、Hook 顺序和显式接口；未文档化全局副作用可能可见，但不作为兼容契约。 |
-| `server` / `autoupdate` 在普通 BitFun 启动中的行为 | 明确降级 | 两者分别属于 OpenCode 服务进程和 OpenCode 自身更新 | 显式兼容服务可映射 `server`；`autoupdate` 只保留来源并说明不适用。 |
+| `server` / `autoupdate` 在普通 Halo Studio 启动中的行为 | 明确降级 | 两者分别属于 OpenCode 服务进程和 OpenCode 自身更新 | 显式兼容服务可映射 `server`；`autoupdate` 只保留来源并说明不适用。 |
 | 未文档化内部接口 | 不承诺 | 没有稳定版本和契约 | 返回稳定不支持并进入版本前瞻报告。 |
-| `experimental_workspace.register` | 暂不承诺 | 接口未稳定且会改变工作区与远程连接归属 | 继续使用 BitFun Workspace/Remote 归属模块，稳定后重评。 |
+| `experimental_workspace.register` | 暂不承诺 | 接口未稳定且会改变工作区与远程连接归属 | 继续使用 Halo Studio Workspace/Remote 归属模块，稳定后重评。 |
 | 受限策略下拦截任意脚本副作用 | 只能部分控制 | 插件可以直接调用脚本运行时，绕过细粒度能力代理 | 来源激活后默认兼容策略放开；用户收紧时明确列出被禁用或无法拦截的能力。 |
 | 无硬资源限制平台上的系统资源耗尽 | 不能保证完全隔离 | 已有进程树可回收受管后代，但仍不能阻止内存、CPU、网络或逃逸进程拖慢整机 | 在真实需求下增加 cgroup/rlimit/容器等平台额度；缺少硬限制时显示残余风险。 |
 

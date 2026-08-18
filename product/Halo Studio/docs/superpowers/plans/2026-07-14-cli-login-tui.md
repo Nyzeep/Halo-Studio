@@ -31,5 +31,5 @@
 
 ### Task 4: Verify
 
-- [ ] `cargo check -p bitfun-cli`
-- [ ] Rebuild Ubuntu `~/bitfun-build/target/debug/bitfun-cli`
+- [ ] `cargo check -p halo-cli`
+- [ ] Rebuild Ubuntu `~/halo-build/target/debug/halo-cli`

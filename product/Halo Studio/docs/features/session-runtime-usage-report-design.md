@@ -6,7 +6,7 @@
 
 ## Background
 
-Long BitFun sessions can include model streaming, tool execution, Git operations, file writes, Skills, MCP calls, context compression, subagents, retries, user confirmation waits, and file diffs. The chat transcript shows what happened, but it does not yet answer the user's operational questions:
+Long Halo Studio sessions can include model streaming, tool execution, Git operations, file writes, Skills, MCP calls, context compression, subagents, retries, user confirmation waits, and file diffs. The chat transcript shows what happened, but it does not yet answer the user's operational questions:
 
 - What recorded runtime spans are available for the session, and where are they approximate?
 - Which models contributed token usage when a session used multiple models?
@@ -23,11 +23,11 @@ References:
 - [OpenAI Agents SDK usage](https://openai.github.io/openai-agents-python/usage/)
 - [OpenAI Agents SDK tracing](https://openai.github.io/openai-agents-python/tracing/)
 
-External reference check: as of 2026-05-11, these sources support a narrow usage-report scope. Claude Code frames `/usage` around understanding session usage and managing context; GitHub Copilot exposes session progress, token usage, session count, session length, and logs; OpenAI Agents SDK separates per-run/request token usage from deeper span tracing. Treat these as product references, not compatibility requirements. BitFun's boundary is intentionally narrower than a full tracing dashboard: it reports the current session's recorded runtime facts, their coverage, and safe navigation points back to the transcript or existing diff surfaces.
+External reference check: as of 2026-05-11, these sources support a narrow usage-report scope. Claude Code frames `/usage` around understanding session usage and managing context; GitHub Copilot exposes session progress, token usage, session count, session length, and logs; OpenAI Agents SDK separates per-run/request token usage from deeper span tracing. Treat these as product references, not compatibility requirements. Halo Studio's boundary is intentionally narrower than a full tracing dashboard: it reports the current session's recorded runtime facts, their coverage, and safe navigation points back to the transcript or existing diff surfaces.
 
 ## Product Direction
 
-BitFun should support a Claude-like `/usage` command and a richer Desktop runtime report using the same underlying data.
+Halo Studio should support a Claude-like `/usage` command and a richer Desktop runtime report using the same underlying data.
 
 The key product decision is:
 
@@ -166,7 +166,7 @@ The Chat-bottom entry should never compete with the title/header row. It must pr
 
 ## Current Reusable Capabilities
 
-BitFun can reuse several existing surfaces.
+Halo Studio can reuse several existing surfaces.
 
 ### Current code anchors
 
@@ -236,7 +236,7 @@ considered complete.
 | --- | --- | --- | --- |
 | Shared report service | Done | `src/crates/assembly/core/src/service/session_usage/{service.rs,types.rs,render.rs}` and `SessionAPI.getSessionUsageReport` | Keep the API contract stable while adding future report fields. |
 | Durable local report message | Done | `DialogTurnKind::LocalCommand`, `localCommandKind: 'usage_report'`, `modelVisible: false` | Keep usage report snapshots model-invisible through future history, export, and transcript changes. |
-| CLI `/usage` coverage | Done for interactive CLI | CLI `usage_*` coverage and the shared renderer | Top-level `bitfun usage --session` is outside the closed product scope. |
+| CLI `/usage` coverage | Done for interactive CLI | CLI `usage_*` coverage and the shared renderer | Top-level `halo usage --session` is outside the closed product scope. |
 | Model timing | Mostly done | Optional event and persisted fields for duration, provider/model identity, first chunk, visible output, stream duration, attempts, failure category, and token details | Throughput/TPS and provider-latency claims are outside the closed product scope. |
 | Tool phase timing/classification | Mostly done | Optional terminal tool duration fields and `session_usage::classifier` coverage | Scheduler, budget, and backoff facts still depend on owning modules emitting typed facts. |
 | File correlation and diff links | Mostly done | Snapshot summaries, `UsageFileRow.operationIds`, representative model/tool/error anchors, `SessionUsagePanel` diff actions, file-row turn jumps, tool-input-only file-row tool anchors, and panel-local long-session row caps | Exact per-call deep anchors for every aggregate row are outside the closed product scope. |
@@ -687,8 +687,8 @@ Risk and drift controls:
 
 Required verification before merging P0:
 
-- `cargo check -p bitfun-core`
-- `cargo test -p bitfun-core session_usage -- --nocapture`
+- `cargo check -p halo-core`
+- `cargo test -p halo-core session_usage -- --nocapture`
 - Focused CLI command tests or manual CLI smoke if no existing helper test harness exists.
 - `pnpm run lint:web`
 - `pnpm run type-check:web`
@@ -1036,8 +1036,8 @@ Risks and mitigations:
 
 Verification:
 
-- `cargo test -p bitfun-core session_usage -- --nocapture` once tests exist.
-- `cargo check -p bitfun-core`.
+- `cargo test -p halo-core session_usage -- --nocapture` once tests exist.
+- `cargo check -p halo-core`.
 - DTO tests for workspace identity, report scope, in-progress reports, cache-unavailable coverage, and redaction metadata.
 
 ### Task 2: Non-model-visible local report item
@@ -1217,7 +1217,7 @@ Risks and mitigations:
 | --- | --- |
 | CLI lacks enough persisted data | Use coverage metadata and report available basics |
 | Command blocks TUI | Keep aggregation bounded and avoid scanning full workspaces |
-| `/usage` conflicts with future top-level `bitfun usage` | Keep interactive command implementation isolated behind a reusable service |
+| `/usage` conflicts with future top-level `halo usage` | Keep interactive command implementation isolated behind a reusable service |
 | Sync command path grows ad hoc async blocking | Add a small command dispatcher/helper rather than embedding runtime/blocking logic in the match arm |
 
 Verification:
@@ -1559,7 +1559,7 @@ Steps:
 1. Keep the DTO limited to current-session runtime facts: tokens, timing, models, tools, files, errors, coverage, privacy, and navigation metadata.
 2. Separate cache read, cache write, input, output, and reasoning token categories only when providers expose them reliably.
 3. Keep cross-session aggregation, live footer metrics, and automated recommendations out of the closed product scope.
-4. Keep top-level `bitfun usage --session <id>` out of scope until workspace-scoped persisted session lookup is designed.
+4. Keep top-level `halo usage --session <id>` out of scope until workspace-scoped persisted session lookup is designed.
 
 Functional guardrails:
 
@@ -1639,7 +1639,7 @@ cargo test --workspace
 No remaining product decision blocks closure. The current implementation and this document define the closed scope as:
 
 - Desktop renders `/usage` as a dedicated local report card backed by structured metadata and Markdown fallback.
-- CLI supports interactive chat `/usage`; top-level `bitfun usage --session <id>` is outside the closed product scope.
+- CLI supports interactive chat `/usage`; top-level `halo usage --session <id>` is outside the closed product scope.
 - The compact usage entry lives in the Chat input footer as a lightweight `/usage` trigger; it does not display live model/tool percentages and no longer appears in the title/header area.
 - Unavailable cache, tool timing, and file metrics include user-facing reasons in hover/help text.
 - Model timing is labeled as recorded model-round time; per-model duration columns appear only when at least one model row has recorded duration facts.

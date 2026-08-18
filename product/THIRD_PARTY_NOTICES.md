@@ -8,7 +8,7 @@ upstream source files.
 
 - MIT license and the upstream copyright notice: `product/Halo Studio/LICENSE`
 - Upstream repository: `https://github.com/GCWing/BitFun.git`
-- Pinned source commit: recorded in `docs/requirements/bitfun-tauri-product-migration/bitfun-upstream-manifest.json`
+- Pinned source commit: recorded in `docs/requirements/halo-tauri-product-migration/upstream-manifest.json`（历史清单，记录去品牌化前导入快照）
 
 ## Retained license files
 

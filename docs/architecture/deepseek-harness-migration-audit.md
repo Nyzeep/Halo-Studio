@@ -17,7 +17,7 @@
 
 - 唯一生产受管执行器：本机 Pi RPC（`pi --mode rpc`，LF JSONL，`prompt`/`follow_up`/`abort`/`get_state`/`get_entries`）。
 - Halo Workbench Runtime 位于 Tauri 接缝，持有工作区信任、任务状态、一次性决议、脱敏、交付证据与生命周期权威。
-- 两种模式：标准编码模式（BitFun 原生会话/工具/历史/Git）与受管交付模式（信任工作区、任务基线、运行轨迹、只读审查、接受/拒绝）。
+- 两种模式：标准编码模式（Halo Studio 原生会话/工具/历史/Git）与受管交付模式（信任工作区、任务基线、运行轨迹、只读审查、接受/拒绝）。
 - 安全边界：系统凭据引用、统一脱敏、中断不重放、接受/拒绝不自动改 Git、第一方 extension 一次性门控。
 
 ## 映射表
@@ -29,7 +29,7 @@
 | 会话持久化与中断不重放 | `core/session` 追加式 `SessionEvent` 日志 + `agent/*` 事件 | 直接 | `packages/core/session`、`packages/session` | 中断状态由 session 日志推导；Halo 的 interruption-history 作为投影插件 |
 | 运行轨迹（结构化过程视图） | `session/event` 派生投影 | 直接 | `packages/session`、`packages/session-query` | 保留 Halo 脱敏轨迹投影 |
 | 一次性 allow/deny 与工具执行前门控 | `interaction`（approval/permission/commands/ask-user）+ `tools/*` pre-execute 瀑布 | 直接 | `packages/interaction`、`packages/core/tools` | Halo 第一方 extension gate 实现为 interaction provider + tools 事件监听 |
-| 标准编码模式工具集 | shell/subprocess/terminal/fs/lsp/skill/web/workflow/todo/plan/subagent/mcp/code-runtime | 直接 | 对应 `packages/*` | 用 dsh profile 组合；BitFun 旧 UI 行为改为 dsh consumer |
+| 标准编码模式工具集 | shell/subprocess/terminal/fs/lsp/skill/web/workflow/todo/plan/subagent/mcp/code-runtime | 直接 | 对应 `packages/*` | 用 dsh profile 组合；Halo Studio 旧 UI 行为改为 dsh consumer |
 | 标准/受管双模式隔离 | `preset`（每会话 agent 组合）+ `core/scope`（按 agent 作用域注册） | 直接 | `packages/preset`、`packages/core/scope` | managed/standard 各一个 preset；受管策略不扩散 |
 | 系统凭据引用（Windows Credential Manager、一次性录入） | `credentials`（credential-reference + env/.env provider） | 部分 | `packages/credentials` | 新增 OS Credential Manager provider，沿用 Halo 的 `credential_ref` 与 one-shot 语义 |
 | Provider/model/baseUrl/thinking 配置权威 | `settings` + `llm` 配置 + `preset` | 部分 | `packages/settings`、`packages/llm`、`packages/preset` | Halo 配置服务映射为插件 config；保留 write-only Base URL 与 provider 绑定校验 |

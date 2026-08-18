@@ -1,7 +1,7 @@
 # Peer Device Mode
 
 Peer Device Mode switches the desktop (and mobile control target) data plane
-onto another same-account online BitFun device. The React shell stays local;
+onto another same-account online Halo Studio device. The React shell stays local;
 product invokes and agentic events come from the peer. The peer may be Desktop
 or CLI: both speak the same HostInvoke / DeviceEvent protocol.
 
@@ -9,7 +9,7 @@ or CLI: both speak the same HostInvoke / DeviceEvent protocol.
 
 After login, clicking an online peer device **B** from controller **A** must make
 A's workspace list, sessions, assistants, chat, and tools behave like using
-BitFun on B's machine. The authority is **B's live local BitFun state** via
+Halo Studio on B's machine. The authority is **B's live local Halo Studio state** via
 HostInvoke / DeviceEvent fan-out — not a merged cloud session history.
 
 ## Cloud account sync vs Peer Remote

@@ -1,13 +1,13 @@
 # 外部 AI 工作内容发现、导入与持续兼容设计
 
-本文定义 BitFun 如何发现、展示和消费 OpenCode、Codex、Claude Code 等外部 AI 应用留下的工作内容。OpenCode
+本文定义 Halo Studio 如何发现、展示和消费 OpenCode、Codex、Claude Code 等外部 AI 应用留下的工作内容。OpenCode
 是第一条完整兼容来源；其他生态只在有稳定格式和真实消费方时接入。各生态的解析、加载顺序和运行语义仍由对应
-适配器负责，本文不建立跨生态通用配置格式或脚本 SDK。BitFun 自身能力如何通过 MCP、Skill、Plugin、Hook、
+适配器负责，本文不建立跨生态通用配置格式或脚本 SDK。Halo Studio 自身能力如何通过 MCP、Skill、Plugin、Hook、
 SDK 或 Server 输出到外部宿主，以及内部能力组合、状态、事件和并发边界，见
 [`capability-runtime-integration-design.md`](capability-runtime-integration-design.md)；两条方向共用适用的身份事实和能力归属模块，
 但不共用一个大一统 adapter 或状态模型。
 
-本文同时记录当前可用端到端能力与目标架构。当前 BitFun 已具备通用外部来源目录、四条能力专属发现通道和单一
+本文同时记录当前可用端到端能力与目标架构。当前 Halo Studio 已具备通用外部来源目录、四条能力专属发现通道和单一
 `ExternalSourceControlPlane` 负责生命周期；`contracts/product-domains` 提供版本化控制事实、固定动作与错误语义，
 Desktop、交互式 TUI、Peer Host 和只读 Server 只显示宿主所需状态，不再各自派生另一套状态机。OpenCode Prompt Command
 适配器已接入本地用户全局/项目来源；Desktop 可查看、刷新、抑制和处理跨来源冲突，交互式 TUI（ChatMode）可列出并执行
@@ -21,7 +21,7 @@ prompt-only Command。第二条端到端能力已让受支持的单文件 OpenCo
 MCP 安全子集，以及 Codex Subagent、MCP 安全子集；三种生态使用同一个来源管理模块，并共享审批、冲突、刷新和故障隔离规则，
 但各自在 sibling adapter 内保留原生来源与覆盖语义。完整 TypeScript/Bun、包依赖、package plugin 执行、
 Codex/Claude Code 运行时适配、primary agent 替换和外部 Subagent 续接仍属于后续阶段，不能因来源被识别就宣称已经可用。OpenCode、Claude Code 与 Codex 的本地 Hook 脱敏目录
-已作为独立只读切片接入；在此之上，Claude Code 与 Codex 的同步 command 子集可经精确命令审阅复制为 BitFun 管理的
+已作为独立只读切片接入；在此之上，Claude Code 与 Codex 的同步 command 子集可经精确命令审阅复制为 Halo Studio 管理的
 原生 Hook 层，仍由唯一 `AgentHookEngine` 执行。OpenCode handler、非 command/异步 handler 和未审阅声明仍不可执行。
 独立的 MCP C0a 快照导入复用上述来源与现有 MCP 配置 owner：Desktop 和根 CLI 可预览 OpenCode / Claude Code
 中语义等价的安全声明，并在用户显式确认后原子写入 disabled 原生条目。Codex 导入投影、凭据/header/env/cwd
@@ -51,19 +51,19 @@ native ID 优先使用外部 logical name，再使用稳定生态后缀和最小
 永不覆盖。plan fingerprint 同时绑定脱敏 plan、私有投影和当前原生 MCP 配置摘要。apply 会重新发现并重建 plan；来源或
 目标内容变化时返回刷新后的脱敏 plan，且不写入；fingerprint 不绑定 coordinator refresh generation，因此内容未变的刷新
 不会让 plan stale。配置 service 通过同一 JSON key 的 compare-and-set mutation lane
-一次提交全部选中条目或全部不提交，并在 `_bitfunImport` 中只保留 source-qualified candidate ID 与 behavior version。
+一次提交全部选中条目或全部不提交，并在 `_haloImport` 中只保留 source-qualified candidate ID 与 behavior version。
 普通 MCP 编辑保留这段 provenance，删除条目时随条目一并移除。
 
-根 CLI 的 `bitfun mcp import` 默认只预览，`--apply` 导入全部 eligible 项；重复 `--candidate` 可缩小集合，单一选择可用
+根 CLI 的 `halo mcp import` 默认只预览，`--apply` 导入全部 eligible 项；重复 `--candidate` 可缩小集合，单一选择可用
 `--native-id` 指定目标 ID，`--format json` 输出 versioned plan/result。当前没有 TUI/Mobile/Server/Peer/Remote/ACP/SDK
 写入口、导入 journal、tombstone、undo、外部应用回写或插件安装/激活策略；导入后仍由既有 MCP manager 完成复核、编辑、
 启用和删除。
 
 ## 1. 产品判断与竞品启示
 
-竞品事实与 BitFun 的产品判断分开记录：
+竞品事实与 Halo Studio 的产品判断分开记录：
 
-| 产品 | 已验证的交互 | 对 BitFun 的启示 |
+| 产品 | 已验证的交互 | 对 Halo Studio 的启示 |
 |---|---|---|
 | [Codex 从其他智能体导入](https://learn.chatgpt.com/docs/import.md) | 设置中同时检测用户级与所选项目级内容，支持全部导入或自定义选择；插件和连接需要后续设置时显示状态卡 | 先给用户完整资产清单和使用范围，再把需要授权的内容留在非阻塞的后续任务中。 |
 | [Cursor 从 VS Code 迁移](https://docs.cursor.com/get-started/migrate-from-vs-code) | 一键迁移扩展、主题、设置和快捷键 | 对来源高度相似、风险可控的内容提供低摩擦默认路径，不要求逐项理解内部格式。 |
@@ -71,8 +71,8 @@ native ID 优先使用外部 logical name，再使用稳定生态后缀和最小
 | [Claude Code 导入 Claude Desktop MCP](https://docs.anthropic.com/en/docs/claude-code/mcp) | 命令启动后交互选择 MCP Server，并可在导入后通过列表验证 | 高副作用连接适合选择性启用和可验证完成状态，不能因为识别成功就宣称可用。 |
 | [OpenCode 配置](https://opencode.ai/docs/config/) | 用户级、项目级、环境指定和目录资产按固定顺序实时成为运行输入 | 对已有 OpenCode 项目应保留持续关联，不把一次性复制作为可用前提。 |
 
-因此 BitFun 不照搬单一竞品。默认路径采用“持续兼容来源”，吸收 OpenCode 的实时性和 Skills 的低摩擦发现；
-设置中同时提供类似 Codex 的统一来源清单、选择和完成状态；“显式导入”只作为用户希望把外部内容转成 BitFun
+因此 Halo Studio 不照搬单一竞品。默认路径采用“持续兼容来源”，吸收 OpenCode 的实时性和 Skills 的低摩擦发现；
+设置中同时提供类似 Codex 的统一来源清单、选择和完成状态；“显式导入”只作为用户希望把外部内容转成 Halo Studio
 原生配置时的可选快照操作。
 
 ## 2. 目标与非目标
@@ -139,7 +139,7 @@ native ID 优先使用外部 logical name，再使用稳定生态后缀和最小
 | 内容 | 配置、Rules、Agents、Skills、Commands、MCP、Hooks、插件、工具等类别与数量。 |
 | 状态 | 已发现、已应用、可用、需确认、更新中、沿用上一版本、部分受限、暂时过期、已移除/已停用或不可用。 |
 | 变化 | 最近成功读取时间、候选摘要、已应用摘要、权限或能力变化。 |
-| 操作 | 查看详情、应用/启用、按项目或执行域抑制/恢复兼容来源、进入/退出 Safe Mode、停用插件执行、撤销显式导入、重新加载、低风险/代码更新改为先询问、显式导入为 BitFun 配置。 |
+| 操作 | 查看详情、应用/启用、按项目或执行域抑制/恢复兼容来源、进入/退出 Safe Mode、停用插件执行、撤销显式导入、重新加载、低风险/代码更新改为先询问、显式导入为 Halo Studio 配置。 |
 
 默认视图只展示用户需要处理的事项和聚合结果；文件级诊断、字段来源、依赖和执行身份进入详情。来源删除或更新
 失败不要求用户阅读日志才能理解结果。
@@ -155,18 +155,18 @@ GUI 和 TUI 都通过同一个 `SetSafeMode` 动作请求该变化，Peer Host �
 
 | 方式 | 适用场景 | 来源变化后 | 写入边界 |
 |---|---|---|---|
-| 持续兼容来源（默认） | 继续使用外部应用维护的用户/项目内容 | 重新解析候选，按风险和用户策略自动切换或等待确认 | 不写 BitFun 配置，不写回外部文件。 |
-| 通用配置显式导入（可选） | 用户希望把受支持的非执行配置交给 BitFun 独立维护 | 只提示外部来源有变化，用户选择是否重新导入 | 只写用户选定的 BitFun 配置层，支持字段级预览和撤销。 |
+| 持续兼容来源（默认） | 继续使用外部应用维护的用户/项目内容 | 重新解析候选，按风险和用户策略自动切换或等待确认 | 不写 Halo Studio 配置，不写回外部文件。 |
+| 通用配置显式导入（可选） | 用户希望把受支持的非执行配置交给 Halo Studio 独立维护 | 只提示外部来源有变化，用户选择是否重新导入 | 只写用户选定的 Halo Studio 配置层，支持字段级预览和撤销。 |
 | 命令 Hook 审阅导入（C0） | 用户希望让受支持的 Claude Code/Codex 命令 Hook 由现有原生 Hook owner 执行 | 只标记可更新，用户重新审阅并应用后才改变执行 | 只写产品私有托管快照；按来源整体更新、启停、移除或损坏重置，不提供字段级撤销。 |
 
-显式导入完成后，已选字段由 BitFun 原生配置拥有，不再同时叠加外部值；未导入内容仍可继续作为兼容来源。
+显式导入完成后，已选字段由 Halo Studio 原生配置拥有，不再同时叠加外部值；未导入内容仍可继续作为兼容来源。
 插件和 Tool 不通过配置复制获得执行资格。Claude Code/Codex command Hook 只通过下节的独立审阅快照路径进入既有
 原生 Hook owner，不复用通用配置导入或插件 Runtime。
 
 ### 3.4 Hook 脱敏目录与审阅导入
 
 Hook 首先以独立、只读的 `ExternalHookCatalogSnapshotV1` 脱敏展示。Desktop 的 **Agent Hooks** 设置页和交互式 TUI
-统一 `/hooks` 同时展示 BitFun 原生层、外部来源和已导入快照；旧 `/hooks_external`、`/hooks-external` 仅保留为别名，
+统一 `/hooks` 同时展示 Halo Studio 原生层、外部来源和已导入快照；旧 `/hooks_external`、`/hooks-external` 仅保留为别名，
 不再形成第二套产品心智或状态 owner。Claude Code/Codex 的受支持同步 command handler 只有在用户查看精确命令、
 依赖和跳过原因并确认计划指纹后，才复制到用户或工作区私有快照；导入、更新、启停和删除都不修改来源文件。
 OpenCode 与不受支持的 handler 仍停留在脱敏目录。
@@ -180,7 +180,7 @@ OpenCode 与不受支持的 handler 仍停留在脱敏目录。
 | Codex | 用户与按持久 `project_root_markers` 有界的项目祖先 `hooks.json`、`config.toml`；linked worktree 映射到主 checkout 对应目录 | 目录展示固定 schema 的事件与 handler 类型；受支持的同步 command、Windows override、timeout、status 和安全文件依赖可进入精确审阅计划 | 不猜测插件、托管层、会话注入、state/feature 合并或 trust-gated 项目激活；依赖这些未观察语义的声明不导入。 |
 
 只有语义完全一致的 `PreToolUse`/`PostToolUse` 和 OpenCode `tool.execute.before`/`tool.execute.after` 分别映射到
-BitFun 已有 `ToolBefore`/`ToolAfter` 契约。其他原生事件仍可见，但标为 `native_only`；静态分析不能安全确定的注册
+Halo Studio 已有 `ToolBefore`/`ToolAfter` 契约。其他原生事件仍可见，但标为 `native_only`；静态分析不能安全确定的注册
 标为 `opaque`，不得猜测映射。目录 DTO 只包含 provider 身份与稳定 adapter 顺序、来源、使用范围、脱敏位置、matcher 摘要、
 handler 类型、原生激活状态、覆盖后的显示状态和固定诊断，不包含 handler body、命令、prompt、URL、环境变量、凭据
 或任意执行 payload。`content_version` 仅内容摘要化这些已脱敏语义事实，原始文件字节和敏感正文不进入版本值。
@@ -244,15 +244,15 @@ OpenCode Subagent 属于 L2：adapter 只读取声明，不执行外部代码；
 先询问，除非用户或组织明确允许该来源自动更新。用户始终可以改为“每次代码更新先询问”。
 
 动态工具和 Hook 可能只有在 module import 后才可知。新 Host 必须在旧进程树确认退出后加载，并先返回真实贡献差异；
-新增受 BitFun 归属模块管理的工具、Hook 或界面贡献需要确认时，停止新 Host、显示差异并等待处理。由于 import 已可能
+新增受 Halo Studio 归属模块管理的工具、Hook 或界面贡献需要确认时，停止新 Host、显示差异并等待处理。由于 import 已可能
 在用户确认的运行条件内产生文件、网络或进程副作用，产品不能把后置确认描述成能够撤销这些副作用。只有保存了完整、
 校验通过的旧版本文件时，才可以按同一停机顺序重新启动旧版本。
 
 ### 4.3 当前声明式适配范围
 
 本节只记录已经进入产品链路的能力，不把目标设计当成完成状态。OpenCode 是跨生态交互的首要基线：自定义命令继续
-使用普通 `/name`，候选列表显示来源；跨 provider 或与 BitFun 原生命令同名时由共享来源管理模块保存版本化选择，不增加
-`/builtin:`、`/external:` 或生态前缀。管理入口使用 OpenCode 当前的单数 `/agent` 和 `/mcp`，分别保留 BitFun 既有
+使用普通 `/name`，候选列表显示来源；跨 provider 或与 Halo Studio 原生命令同名时由共享来源管理模块保存版本化选择，不增加
+`/builtin:`、`/external:` 或生态前缀。管理入口使用 OpenCode 当前的单数 `/agent` 和 `/mcp`，分别保留 Halo Studio 既有
 `/agents`、`/mcps` 作为兼容别名，不为 Claude Code 或 Codex 增加平行命令。Claude Code 与 Codex 的原生覆盖只在各自 adapter 内计算，不能提升为跨生态
 数值优先级。上游语义以 OpenCode [Commands](https://opencode.ai/docs/commands/)、[Agents](https://opencode.ai/docs/agents/)
 和 [MCP](https://opencode.ai/docs/mcp-servers/)，Claude Code [Commands](https://code.claude.com/docs/en/commands)、
@@ -266,7 +266,7 @@ OpenCode Subagent 属于 L2：adapter 只读取声明，不执行外部代码；
 |---|---|---|---|---|
 | Prompt Command | JSON/JSONC、Markdown 的 prompt-only 安全子集 | legacy `commands/**/*.md` 的 prompt-only 安全子集；Skills 仍由 Skill 归属模块处理 | 没有稳定、独立于 Skills 的声明式 Command 来源，因此不伪造 provider | `$ARGUMENTS`/位置参数可展开；shell、文件动态引用、指定 Agent/模型等未接通语义整体受限，不做部分执行。 |
 | Subagent | 用户/项目声明的安全子集 | 用户/项目 `agents/**/*.md` 的安全子集 | 用户/项目 `[agents]`、角色文件与安全配置层子集 | prompt、描述、精确模型和可表达工具请求进入既有归属模块；权限、私有 MCP/Hook、推理/并发等没有对应实现的字段会阻止激活。 |
-| MCP | 用户/显式目录/项目配置的安全子集 | user/project/local 原生层的安全子集 | 用户与项目 `config.toml` 原生层的安全子集 | 支持可表达的 stdio 与 HTTPS Streamable HTTP；发现不启动 Server，首次激活继续经 BitFun MCP 审批。OAuth、remote executor、per-tool policy 等不完整语义明确降级。 |
+| MCP | 用户/显式目录/项目配置的安全子集 | user/project/local 原生层的安全子集 | 用户与项目 `config.toml` 原生层的安全子集 | 支持可表达的 stdio 与 HTTPS Streamable HTTP；发现不启动 Server，首次激活继续经 Halo Studio MCP 审批。OAuth、remote executor、per-tool policy 等不完整语义明确降级。 |
 | Standalone Tool | 已有单文件 JavaScript 子集 | 无稳定的 runtime-free standalone Tool 来源 | 无稳定的 runtime-free standalone Tool 来源 | TypeScript、package/plugin Tool 与动态工具注册依赖独立 Plugin Host，不在声明式 adapter 中猜测。 |
 | Skill | 由现有 Skill 加载模块发现 `.opencode` 等标准根 | 由现有 Skill 加载模块发现 `.claude` 标准根 | 由现有 Skill 加载模块发现 `.codex`、`.agents` 标准根 | Skill 的加载、覆盖、模式开关与执行仍由同一个 Skill 模块负责，不复制进外部来源管理模块。 |
 | Hook | 静态目录 | 脱敏目录；同步 command 子集可审阅导入 | 脱敏目录；同步 command 子集可审阅导入 | 仅复制到私有原生快照并由 `AgentHookEngine` 执行；OpenCode、非 command、异步、未知或依赖未观察激活语义的 handler 不导入。 |
@@ -282,8 +282,8 @@ OpenCode Subagent 属于 L2：adapter 只读取声明，不执行外部代码；
 - Codex Subagent 从用户与逐层项目 `[agents]`、角色文件合并，缺失字段按 Codex 层级继承；`enabled`、默认模型等已支持
   控制字段进入行为版本，推理、权限、私有 MCP/Hook、并发等没有对应实现的字段阻止激活。Codex MCP 按原生层级逐字段
   覆盖；任一未被用户显式停用的必需 `config.toml` 层读取或解析失败时，本次 MCP/Subagent provider 发现整体失败并交由
-  coordinator 的规则处理：保留上一有效结果，并阻止继续激活后续项目层；`required` 只诊断，不能使 BitFun 启动或聊天失败。
-- 同一 provider 先完成原生覆盖，再把一个 effective candidate 交给产品管理模块；跨 provider 或 BitFun-native 同名才生成
+  coordinator 的规则处理：保留上一有效结果，并阻止继续激活后续项目层；`required` 只诊断，不能使 Halo Studio 启动或聊天失败。
+- 同一 provider 先完成原生覆盖，再把一个 effective candidate 交给产品管理模块；跨 provider 或 Halo Studio-native 同名才生成
   用户冲突。选择绑定参与者与行为版本，仅展示变化不重问，候选删除或不可用不静默回退。
 
 该矩阵不是“除 Runtime 外全部兼容”的声明。Rules/Instructions、References、模型/Provider 配置、LSP、Formatter、
@@ -386,7 +386,7 @@ flowchart LR
 | 部分 | 负责 | 不能承担 |
 |---|---|---|
 | 外部来源目录 | 聚合来源身份、使用范围、资产清单、用户处理偏好和可读状态 | 解释所有生态格式、保存凭据、授予脚本权限或管理 worker。 |
-| 生态发现与解析适配器 | 发现本生态标准来源，保留真实优先级、格式、参数展开和诊断，并通过能力专属 provider 输出 | 写 BitFun 配置、依赖兄弟生态 adapter、执行其他生态语义或创建跨生态最低公分母。 |
+| 生态发现与解析适配器 | 发现本生态标准来源，保留真实优先级、格式、参数展开和诊断，并通过能力专属 provider 输出 | 写 Halo Studio 配置、依赖兄弟生态 adapter、执行其他生态语义或创建跨生态最低公分母。 |
 | 能力专属 provider 契约 | 用来源限定身份交付 Command、Tool、Subagent 等类型明确的定义与调用/展开结果 | 携带任意数据的通用资产对象，或让一种能力的新增字段污染其他能力。 |
 | Hook provider 与目录协调器 | 聚合三个生态的脱敏声明并隔离 provider 失败；对 Claude Code/Codex 所选来源执行版本守卫的私有 command 准备 | 执行 handler、选择脚本运行时、授予 OpenCode 执行权限，或把未导入的静态映射宣称为运行时兼容。 |
 | 文件观察服务 | 提供可订阅、去抖的文件变化事实 | 解释生态路径、决定优先级、提交业务状态。 |
@@ -459,7 +459,7 @@ Command；明确缺失且未被标记失败的 Command 是稳定删除。产品�
 1. 建立共享来源目录、`ExternalSourceControlPlane`、开放生态 ID 和 Prompt Command 专属契约；用第二个 fake adapter 证明
    provider 更新、失败和删除彼此隔离。
 2. 发现 OpenCode 当前支持的用户全局和项目 Command 来源，建立来源限定身份、生态内覆盖关系和聚合清单；
-   OpenCode 自身定义的项目/用户优先级仍由 adapter 解释，跨 provider 或与 BitFun 本地 Command 的同名冲突进入待选择状态。
+   OpenCode 自身定义的项目/用户优先级仍由 adapter 解释，跨 provider 或与 Halo Studio 本地 Command 的同名冲突进入待选择状态。
 3. 支持 `$ARGUMENTS` 与位置参数的 prompt-only 命令在用户显式选择或输入时展开并提交；发现本身不向会话发送内容。
 4. 含 `!shell`、`@file`、`{env:...}`、`{file:...}`、`agent`、`model`、`variant` 或 `subtask` 等未接通语义的命令标记为“部分受限”，不做
    静默忽略后的部分执行。
@@ -510,29 +510,29 @@ Command；明确缺失且未被标记失败的 Command 是稳定删除。产品�
    改写可执行文件、参数、工作目录或网络目标，本阶段只允许 `{env:NAME}` 出现在显式 environment 或 Header 值中；其他
    位置明确标记不支持。展开后再次执行大小、HTTPS 与契约校验。
 2. MCP coordinator 与 Command、Tool、Subagent 平行，负责 provider 隔离、last-success、稳定删除和 watcher roots；
-   审批、同名冲突和 BitFun 原生优先级由产品组装层决定，具体进程、连接、工具注册和回收仍由 MCP 归属模块负责。
+   审批、同名冲突和 Halo Studio 原生优先级由产品组装层决定，具体进程、连接、工具注册和回收仍由 MCP 归属模块负责。
 3. 首次启用或命令、参数、工作目录、环境声明、URL origin、Header 名、认证方式等行为变化后重新确认；拒绝在行为变化前不重复
    提示。MCP 的公开 `content_version`/`behavior_version` 使用 host 私有且本机持久化的 key 生成 HMAC-SHA256
    不透明版本：敏感配置变化仍使旧审批失效，但公开 DTO 不能成为低熵凭据的离线枚举 oracle；key 不进入日志、IPC 或
    public snapshot。首次升级到该版本或 key 丢失后，已有 MCP 审批需要一次重新确认；正常重启不改变版本。同名候选未选择时
-   保留 BitFun 当前实现，不把显示顺序当成用户决定，也不在外部失效时静默切换。
+   保留 Halo Studio 当前实现，不把显示顺序当成用户决定，也不在外部失效时静默切换。
 4. Desktop 在“外部 AI 应用”设置页显示安全摘要、状态、审批和冲突；交互式 TUI 以行业通用的 `/mcp` 为主要入口并保留 `/mcps` 兼容别名，在同一列表中用来源
-   标签区分 BitFun 与外部候选，不新增 `external-*` 命令。两端使用同一 MCP 当前版本、偏好版本和操作接口。
+   标签区分 Halo Studio 与外部候选，不新增 `external-*` 命令。两端使用同一 MCP 当前版本、偏好版本和操作接口。
 5. 已确认候选按规范化 workspace 建立独立运行实例；工具包装器同时校验当前 workspace route。Remote 归属模块未实现前，
-   返回“不支持”且不回退本机。同名冲突选择外部候选时，只在当前 workspace 隐藏对应 BitFun 原生工具，不停止其他 workspace 的原生实例。
+   返回“不支持”且不回退本机。同名冲突选择外部候选时，只在当前 workspace 隐藏对应 Halo Studio 原生工具，不停止其他 workspace 的原生实例。
 6. 更新、停用、空闲回收或稳定删除先撤下 workspace route 和新工具入口，再有界等待在途连接释放；慢启动在发布连接、
    工具和目录前再次检查撤销标记，不能在撤销后重新发布。第三方启动、握手和回收在后台有界执行，不要求全量重启
-   MCP 或 BitFun，也不中断无关 session。
+   MCP 或 Halo Studio，也不中断无关 session。
 7. 产品快照区分“正在启动”“已启用”“暂时不可用”。后台启动失败会触发快照更新；暂时不可用的候选仍可由用户停用，
    当前恢复入口是先停用该服务器，修复来源配置或认证后再启用；普通刷新不会自动重试失败进程，避免持续拉起故障或恶意
    扩展。删除项的一次性用户通知/有界墓碑尚未实现，当前行会在稳定重扫后消失；该展示增强
    留待后续 PR，不能改变“先撤 route、禁止新调用”的运行语义。
-8. 外部本地进程不继承 BitFun 的完整父进程环境，只保留启动所需的系统基线和配置显式声明的变量；这仍不是 OS
+8. 外部本地进程不继承 Halo Studio 的完整父进程环境，只保留启动所需的系统基线和配置显式声明的变量；这仍不是 OS
    沙箱，进程继续拥有当前用户的文件、网络和子进程权限。Remote 执行域、OpenCode OAuth client 配置、SSE、完整
    `timeout`/Agent 范围和通用凭据归属模块明确延后。
 9. 本阶段只把外部 MCP 的 Tool 目录接入 Agent Tool 归属模块。通用 Resource/Prompt/MCP App Desktop 接口不接受无工作区
    上下文的外部 runtime id；外部服务器发起的 roots、sampling 和 elicitation 请求也一律拒绝，防止跨工作区读取或借用
-   BitFun 宿主能力。后续若接入这些能力，必须先补独立契约、工作区路由与权限交互，不能复用全局连接绕过当前边界。
+   Halo Studio 宿主能力。后续若接入这些能力，必须先补独立契约、工作区路由与权限交互，不能复用全局连接绕过当前边界。
 
 独立 Hook 切片不依赖 Plugin Runtime 阶段：
 

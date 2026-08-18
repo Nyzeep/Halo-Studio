@@ -1,6 +1,6 @@
 # Pi RPC 核心架构
 
-本文描述 Halo Studio P0 的实际架构边界。它与[迁移规格](../requirements/bitfun-tauri-product-migration/00-bitfun-tauri-product-migration-spec.md)、[ADR-0072](../adr/0072-use-pi-rpc-as-the-p0-managed-execution-adapter.md)和根目录 `CONTEXT.md` 一起构成活动设计来源。实现状态以代码与测试为准；本文不把计划中的界面或协议描述为可用功能。旧 OpenCode 方案只在 ADR-0071 和历史需求中作为比较材料保留。
+本文描述 Halo Studio P0 的实际架构边界。它与[迁移规格](../requirements/halo-tauri-product-migration/00-halo-tauri-product-migration-spec.md)、[ADR-0072](../adr/0072-use-pi-rpc-as-the-p0-managed-execution-adapter.md)和根目录 `CONTEXT.md` 一起构成活动设计来源。实现状态以代码与测试为准；本文不把计划中的界面或协议描述为可用功能。旧 OpenCode 方案只在 ADR-0071 和历史需求中作为比较材料保留。
 
 第一方 extension 的固定版本、来源、SHA-256、依赖、宿主权限、更新责任和许可证边界见[审计记录](pi-first-party-extension-audit.md)；缺失审计字段时不得把显式 extension 加载视为 P0 放行。
 
@@ -17,7 +17,7 @@ Halo Studio P0 只受管本机 Pi RPC。它是安全的配置/运行时工作台
 | Tauri WebView | React 工作台、工作区/运行时状态展示、经 Tauri command/event 发送的固定请求 | Node API、文件系统、凭据、子进程、直接访问 Pi stdin/stdout |
 | Tauri command/event bridge | 固定业务 command/event API；请求与响应的 schema 校验 | 任意 invoke、凭据读取、运行时控制以外的宿主能力 |
 | Tauri host / Rust Main | 工作区、信任、进程生命周期、用户数据、凭据库、Main-only 启动解析、command/event 注册 | 将敏感值或底层进程句柄暴露给 WebView |
-| `pi-rpc-adapter` (`bitfun-pi-rpc-adapter`) | Pi 可执行文件探测、RPC 子进程、LF JSONL transport、`get_state` readiness、停止与故障语义 | 从 WebView 取得模型或 Provider 凭据；加载未审计 extension |
+| `pi-rpc-adapter` (`halo-pi-rpc-adapter`) | Pi 可执行文件探测、RPC 子进程、LF JSONL transport、`get_state` readiness、停止与故障语义 | 从 WebView 取得模型或 Provider 凭据；加载未审计 extension |
 | `core` / `storage` / `config` | 路径与信任、环境白名单、迁移与凭据保护、配置事务基础 | 绕过 Tauri host 的安全边界 |
 
 Tauri WebView 使用生产配置的隔离、导航和权限策略，只加载正式 Halo Web UI；开发态 WebView/调试入口不得被当作生产路径。桌面烟测必须在交互式、非受限 Windows 宿主运行，不能用弱化宿主安全边界的参数伪造通过。

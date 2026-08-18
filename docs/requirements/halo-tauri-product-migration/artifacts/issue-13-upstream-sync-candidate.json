@@ -1,0 +1,293 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Read-only Halo Studio upstream candidate synchronization evidence for Halo Studio issue 13",
+  "operation": "incremental_sync",
+  "base": {
+    "upstreamRepository": "https://github.com/GCWing/BitFun.git",
+    "ref": "refs/heads/main",
+    "commit": "ca56631e38f36db675583288df2bd44c540d250a",
+    "haloInitialImportCommit": "58dd8fcdcf0fe97ee7b367751326000e95bb068d",
+    "haloDownstreamReviewBase": "416dbddb8b2a7f98cbbbb9f676075d8f33746039",
+    "initialImportManifest": "docs/requirements/halo-tauri-product-migration/upstream-manifest.json",
+    "initialImportTree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
+    "manifestDerivedTree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
+    "treeBindingStatus": "matched",
+    "initialImportScope": "product/halo (renamed to product/Halo Studio by Halo brand adaptation)",
+    "resolution": {
+      "status": "unresolved",
+      "resolvedCommit": null,
+      "objectType": null,
+      "exitCode": 128,
+      "reason": "The shallow/grafted candidate reference checkout does not contain the pinned base object; this is not treated as ancestry evidence.",
+      "primarySourceVerification": {
+        "status": "resolved-via-primary-source",
+        "commit": "ca56631e38f36db675583288df2bd44c540d250a",
+        "tree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
+        "source": "https://api.github.com/repos/GCWing/BitFun/git/commits/ca56631e38f36db675583288df2bd44c540d250a",
+        "verifiedAt": "2026-08-15"
+      }
+    },
+    "treeReconciliation": {
+      "reconciledOn": "2026-08-15",
+      "previousDeclaredTree": "fba189b8b3db23c45a4bfed18c0250018b251387",
+      "verifiedTree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
+      "method": "Initial-import manifest entries re-derived with the audit gitTreeOidFromEntries algorithm produce f6a559f4; the GitHub REST API (GET /repos/GCWing/BitFun/git/commits/ca56631e38f36db675583288df2bd44c540d250a) returns tree f6a559f4 for the pinned base commit. The previous declared value fba189b8 is recorded as a superseded declared tree, not a verified upstream tree.",
+      "adjudication": "C2 accepted by maintainer on 2026-08-15: initialImportTree updated to the primary-source-verified tree f6a559f4; previous declared tree fba189b8 retained in treeReconciliation.previousDeclaredTree."
+    }
+  },
+  "candidate": {
+    "referenceRoot": "readonly-evidence://halo-latest",
+    "referenceRootRole": "read-only-evidence",
+    "referenceRootEnvironmentVariable": "HALO_HALO_REFERENCE_ROOT",
+    "branch": "main",
+    "commit": "1616ccaf73c0dabc50783344e583d304dd77622b",
+    "tree": "396a5fcd7423aa81e2f28610211f435599c94343",
+    "remote": "git@github.com:GCWing/BitFun.git",
+    "status": "clean; branch main is synchronized with origin/main",
+    "gitMetadata": "available locally; candidate checkout is shallow/grafted and its parent is unavailable",
+    "parentEvidence": {
+      "command": "git -c safe.directory=<HALO_HALO_REFERENCE_ROOT> -C <HALO_HALO_REFERENCE_ROOT> rev-parse HEAD^",
+      "exitCode": 128,
+      "result": "candidate parent is unavailable locally; no ancestry claim is made"
+    },
+    "statusEvidence": {
+      "command": "git -c safe.directory=<HALO_HALO_REFERENCE_ROOT> -C <HALO_HALO_REFERENCE_ROOT> status --porcelain=v2 --branch",
+      "exitCode": 0,
+      "clean": true,
+      "result": "clean; branch main is synchronized with origin/main"
+    },
+    "resolution": {
+      "status": "resolved",
+      "resolvedCommit": "1616ccaf73c0dabc50783344e583d304dd77622b",
+      "objectType": "commit",
+      "exitCode": 0
+    },
+    "repositoryState": {
+      "isShallow": true,
+      "shallowFilePresent": true,
+      "graftsFilePresent": false,
+      "replaceRefs": []
+    }
+  },
+  "ancestry": {
+    "status": "unproven",
+    "exitCode": 128,
+    "command": "git -c safe.directory=<HALO_HALO_REFERENCE_ROOT> -C <HALO_HALO_REFERENCE_ROOT> merge-base --is-ancestor ca56631e38f36db675583288df2bd44c540d250a 1616ccaf73c0dabc50783344e583d304dd77622b",
+    "reason": "The base object is unavailable in the shallow/grafted candidate checkout; no ancestry claim is made."
+  },
+  "comparison": {
+    "method": "Compare the initial import manifest's path/mode/blob SHA entries with raw UTF-8 records from git ls-tree -r -l --full-tree -z HEAD from the read-only candidate; no checkout, merge, fetch, or push.",
+    "pathEncoding": "raw UTF-8 Git paths; the legacy non-NUL Git output is retained only as an encoding anomaly record",
+    "commands": [
+      "git -c safe.directory=<HALO_HALO_REFERENCE_ROOT> -C <HALO_HALO_REFERENCE_ROOT> status --porcelain=v2 --branch",
+      "git -c safe.directory=<HALO_HALO_REFERENCE_ROOT> -C <HALO_HALO_REFERENCE_ROOT> rev-parse HEAD",
+      "git -c safe.directory=<HALO_HALO_REFERENCE_ROOT> -C <HALO_HALO_REFERENCE_ROOT> rev-parse HEAD^{tree}",
+      "git -c safe.directory=<HALO_HALO_REFERENCE_ROOT> -C <HALO_HALO_REFERENCE_ROOT> ls-tree -r -l --full-tree HEAD",
+      "node product/Halo Studio/scripts/pi-extension-audit.mjs --manifest docs/architecture/pi-first-party-extension-inventory.json --json"
+    ],
+    "baseEntries": 5254,
+    "candidateEntries": 5362,
+    "identicalBlobOrModeEntries": 4641,
+    "modifiedEntries": 608,
+    "addedEntries": 113,
+    "removedEntries": 5,
+    "changedEntries": 726,
+    "legacyCQuotedCounts": {
+      "identical": 4641,
+      "modified": 608,
+      "added": 113,
+      "removed": 5,
+      "changedEntries": 726,
+      "anomaly": "The default C-quoted output splits one non-ASCII path into a delete/add pair; these are not canonical UTF-8 path changes."
+    },
+    "canonicalUtf8Counts": {
+      "identical": 4642,
+      "modified": 608,
+      "added": 112,
+      "removed": 4,
+      "changedEntries": 724
+    },
+    "recordsPath": "docs/requirements/halo-tauri-product-migration/artifacts/issue-13-upstream-sync-diff.json",
+    "topLevelChangedEntries": {
+      "src": 695,
+      "AGENTS.md": 1,
+      "AGENTS-CN.md": 1,
+      "Halo-Installer": 4,
+      "Cargo.lock": 1,
+      "Cargo.toml": 1,
+      "deploy": 3,
+      "docs": 10,
+      "MiniApp": 1,
+      "package.json": 1,
+      "package-lock.json": 1,
+      "pnpm-lock.yaml": 1,
+      "scripts": 4
+    },
+    "representativeChangedPaths": {
+      "brandAndDesktopSurfaces": [
+        "src/apps/desktop/src/lib.rs",
+        "src/apps/desktop/src/runtime/mod.rs",
+        "src/apps/desktop/src/runtime/session_application.rs",
+        "src/apps/desktop/src/api/mod.rs"
+      ],
+      "workbenchRuntimeOverlap": [
+        "src/apps/desktop/src/lib.rs",
+        "src/apps/desktop/src/runtime/mod.rs",
+        "src/apps/desktop/src/runtime/session_application.rs",
+        "src/crates/contracts/runtime-ports/src/lib.rs",
+        "src/crates/assembly/core/src/runtime_ownership.rs",
+        "src/crates/assembly/core/src/service_agent_runtime.rs"
+      ],
+      "dependencyAndLicenseSurfaces": [
+        "Cargo.toml",
+        "Cargo.lock",
+        "package.json",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "Halo-Installer/package.json",
+        "Halo-Installer/package-lock.json"
+      ],
+      "sourcePolicySurfaces": [
+        "scripts/core-boundaries/rules/source/forbidden-rules.mjs",
+        "scripts/core-boundaries/rules/source/public-api-rules.mjs",
+        "scripts/core-boundaries/rules/source/required-rules.mjs",
+        "scripts/core-boundaries/self-test.mjs"
+      ]
+    },
+    "ancestryLimitation": "The candidate tree is not an ancestry diff from ca56631e in the local reference checkout because the candidate parent/base object is unavailable. The counts above are an exact manifest/blob comparison against the pinned initial-import evidence, not a fabricated git ancestry claim."
+  },
+  "conflictsAndDecisions": {
+    "mergeAttempted": false,
+    "automaticMerge": false,
+    "conflictMarkers": "not applicable: no merge was attempted",
+    "manualReviewRequired": [
+      "All 695 canonical changed src entries remain candidate-only evidence; none are applied to product/Halo Studio.",
+      "Candidate changes touching desktop/runtime and runtime-ports surfaces require a Halo-specific three-way review against the 416dbddb8 downstream base.",
+      "Candidate dependency/lockfile changes require a separate license and dependency closure review; Cargo.lock and package lockfiles are not changed by this task.",
+      "The candidate is not allowed to replace Halo's first-party extension, brand scope, Workbench Runtime owner, PiRpcPort, Pi RPC transport, or fail-closed permission boundary."
+    ],
+    "retainedHaloBrand": [
+      "product/Halo Studio/",
+      "product/Halo Studio/package.json",
+      "product/Halo Studio/LICENSE",
+      "product/THIRD_PARTY_NOTICES.md"
+    ],
+    "retainedWorkbenchRuntime": [
+      "product/Halo Studio/src/crates/contracts/runtime-ports/src/halo_workbench.rs",
+      "product/Halo Studio/src/crates/execution/agent-runtime/src/halo_workbench.rs",
+      "product/Halo Studio/src/crates/assembly/core/src/halo_workbench.rs",
+      "product/Halo Studio/src/apps/desktop/src/api/workbench_runtime_api.rs",
+      "product/Halo Studio/src/web-ui/src/infrastructure/workbench-runtime/"
+    ],
+    "retainedPiRpcPort": [
+      "product/Halo Studio/src/crates/adapters/pi-rpc-adapter/",
+      "pi-rpc-p0 as the only P0 production identity",
+      "strict LF JSONL framing",
+      "--no-extensions --extension with the adapter-owned, hash-verified extension copy",
+      "fail-closed extension UI decisions and existing contract tests"
+    ],
+    "prohibitedActions": [
+      "No automatic merge or cherry-pick was performed.",
+      "No commit, push, fetch, or file write was performed in the Halo Studio reference tree.",
+      "The Pi read-only reference locator, any Halo Studio legacy path, and historical OpenCode paths were not used as build or runtime inputs.",
+      "No Pi Provider/Core/Session source was copied and no npm/Git dependency was added."
+    ]
+  },
+  "releaseGate": {
+    "status": "blocked",
+    "reason": "A candidate with exact tree/blob evidence is not a release candidate until manual conflict decisions, product/runtime verification, dependency closure, license evidence, and distribution-file checks are fresh and complete.",
+    "evidenceGaps": [
+      "The pinned base commit cannot be resolved in the shallow/grafted reference checkout; incremental-sync ancestry is unproven.",
+      "Candidate parent ancestry is unavailable in the shallow reference checkout.",
+      "The candidate has not been applied or built in the Halo downstream tree.",
+      "The Pi host reference tree has no Git commit/tag evidence."
+    ]
+  },
+  "freshRehearsal": {
+    "schemaVersion": 1,
+    "rehearsalDate": "2026-08-13",
+    "purpose": "Issue 13 part A: fresh read-only Halo Studio upstream synchronization rehearsal against the current upstream main HEAD, recorded independently of the previously derived 1616ccaf candidate diff.",
+    "source": {
+      "command": "git ls-remote https://github.com/GCWing/BitFun.git HEAD refs/heads/main",
+      "exitCode": 0,
+      "head": "9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6",
+      "refsHeadsMain": "9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6"
+    },
+    "base": {
+      "upstreamRepository": "https://github.com/GCWing/BitFun.git",
+      "ref": "refs/heads/main",
+      "commit": "ca56631e38f36db675583288df2bd44c540d250a",
+      "role": "initial import pinned in upstream-manifest.json"
+    },
+    "freshCandidate": {
+      "commit": "9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6",
+      "parent": "59e06a0 (7-char prefix; full SHA not captured because GitHub API is rate-limited and the commit page truncates the parent link)",
+      "message": "perf(cargo): centralize default feature ownership",
+      "changedFiles": 41,
+      "additions": 326,
+      "deletions": 258,
+      "distinctFromInitialImport": true,
+      "distinctFromPriorCandidate": "9b05dd0e is newer than the previously recorded 1616ccaf candidate"
+    },
+    "treeDiff": {
+      "derived": false,
+      "reason": "The fresh commit tree could not be re-derived locally: git fetch (POST git-upload-pack) and codeload tarball download (large GET) are blocked in this environment, and the GitHub REST API is rate-limited (403, core remaining 0). Only git ls-remote metadata and the commit HTML page were reachable.",
+      "priorDerivedDiff": "The last fully derived path-level diff remains 1616ccaf in issue-13-upstream-sync-diff.json; it is not overwritten."
+    },
+    "changedSurfacesRepresentative": [
+      "AGENTS.md / AGENTS-CN.md (repository Rust dependency-feature rules)",
+      "Cargo.toml ([workspace.dependencies] default-features policy)",
+      "docs (workspace dependency policy guidance)",
+      "Multiple crate Cargo.toml manifests (default-features=false consolidation)"
+    ],
+    "conflictDecisions": {
+      "automatedMerge": false,
+      "upstreamWrite": false,
+      "appliedToHalo": false,
+      "retainHaloBrand": true,
+      "retainWorkbenchRuntimeInterface": true,
+      "retainPiRpcAdapterSeam": true,
+      "manualReviewRequired": "The fresh commit changes Cargo workspace dependency/feature policy; because Halo product/Halo Studio owns its own workspace and the Cargo workspace lists src/crates/adapters/pi-rpc-adapter twice (boundary defect reported but not modified), these changes require a Halo-specific three-way review and must not be auto-applied."
+    },
+    "status": "blocked"
+  },
+  "rehearsal20260815": {
+    "rehearsalDate": "2026-08-15",
+    "purpose": "Gate-closure session: primary-source verification of Halo Studio upstream candidate 9b05dd0e and base ca56631e.",
+    "lsRemote": {
+      "head": "142d7e38729b3d646ae305c162e6848d0d44fff9",
+      "refsHeadsMain": "142d7e38729b3d646ae305c162e6848d0d44fff9"
+    },
+    "baseCommit": {
+      "sha": "ca56631e38f36db675583288df2bd44c540d250a",
+      "tree": "f6a559f45e266945921913f9752eb0e5b4609bdb",
+      "message": "fix(session): surface cross-process writer conflicts"
+    },
+    "candidateCommit": {
+      "sha": "9b05dd0e0e751c9e6e83fae3e9a0307bcd79b6b6",
+      "tree": "74c1ff43695ee7273383df113759cce66365b280",
+      "parent": "59e06a0e544f55b8152e62440be1a476e7633572",
+      "message": "perf(cargo): centralize default feature ownership",
+      "changedFiles": 41,
+      "additions": 326,
+      "deletions": 258
+    },
+    "ancestry": {
+      "status": "proven-via-primary-source",
+      "behindBy": 0,
+      "aheadBy": 584,
+      "totalCommits": 584
+    },
+    "pathLevelDiff": {
+      "baseEntries": 5254,
+      "candidateBlobEntries": 6005,
+      "identical": 3042,
+      "modified": 1827,
+      "added": 1136,
+      "removed": 385,
+      "changedEntries": 3348,
+      "artifactPath": "docs/requirements/halo-tauri-product-migration/artifacts/issue-13-upstream-sync-diff-9b05dd0e.json"
+    },
+    "note": "The recorded candidate evidence (1616ccaf) remains the locally derivable candidate because the shallow reference tree cannot resolve 9b05dd0e; this section records the fresh primary-source verification separately, without overwriting the historical 1616ccaf diff."
+  }
+}

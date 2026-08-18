@@ -2,7 +2,7 @@
 
 # UI Test IDs
 
-本文档记录 BitFun UI 自动化使用的稳定 `data-testid` 值。
+本文档记录 Halo Studio UI 自动化使用的稳定 `data-testid` 值。
 测试 ID 按产品区域分组，只应在自动化流程确实需要稳定定位点时添加。
 
 规则：

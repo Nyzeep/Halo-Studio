@@ -1,6 +1,6 @@
 # Remote workspace transport
 
-This document defines how BitFun turns SSH hosts and Docker containers into one
+This document defines how Halo Studio turns SSH hosts and Docker containers into one
 workspace runtime without leaking transport-specific behavior into Agent,
 search, terminal, or file-service callers.
 
@@ -159,7 +159,7 @@ config hosts, discover local or remote Docker containers, choose `auto` or
 `docker-exec`, and test the resolved jump/target/container stages before
 connecting.
 
-BitFun intentionally does not expose an arbitrary “run on Docker host” action
+Halo Studio intentionally does not expose an arbitrary “run on Docker host” action
 from a container workspace. That would bypass the selected workspace and its
 security boundary. Host diagnosis, if added later, must be a typed, read-only
 capability with a distinct confirmation and audit surface.
@@ -182,4 +182,4 @@ temporarily offline. Destructive removal remains an explicit user action.
 Contract tests cover legacy Agent/profile deserialization, defaulted connection
 options, remote-workspace retention, stdio round trips, cancellation, and
 delimiter-safe Docker metadata parsing. A Docker-backed ignored integration test
-is available through `BITFUN_TEST_DOCKER_CONTAINER`.
+is available through `HALO_TEST_DOCKER_CONTAINER`.

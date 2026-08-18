@@ -1,6 +1,6 @@
 # HarmonyOS PC 原生 CLI/TUI 平台规约
 
-本文只定义 BitFun 面向 HarmonyOS PC 的产品边界、已知问题、后续工作域、风险与证据口径。稳定产品和运行时边界以
+本文只定义 Halo Studio 面向 HarmonyOS PC 的产品边界、已知问题、后续工作域、风险与证据口径。稳定产品和运行时边界以
 [产品运行时架构](product-architecture.md)为准，CLI 产品语义以
 [CLI 产品线设计](cli-product-line-design.md)为准。
 
@@ -9,8 +9,8 @@
 
 ## 1. 产品裁决
 
-HarmonyOS PC 是 BitFun CLI/TUI 的目标平台之一，TUI 优先于 HarmonyOS PC GUI。目标产品是用户在
-HarmonyOS PC 真实系统终端中安装并本地执行的原生 `bitfun`（`bitfun-cli` 仅为废弃兼容入口）：
+HarmonyOS PC 是 Halo Studio CLI/TUI 的目标平台之一，TUI 优先于 HarmonyOS PC GUI。目标产品是用户在
+HarmonyOS PC 真实系统终端中安装并本地执行的原生 `halo`（`halo-cli` 仅为废弃兼容入口）：
 
 - TUI 直接使用真实 TTY；
 - Agent Runtime、模型访问、工作区文件和命令执行均在该 PC 本机运行；
@@ -88,12 +88,12 @@ HarmonyOS PC 真实系统终端中安装并本地执行的原生 `bitfun`（`bit
 ## 5. 当前问题清单
 
 本清单基于上游 `ecad4f843`（2026-07-16）与
-Cargo package `bitfun-cli` 的 `aarch64-unknown-linux-ohos` 目标依赖解析。依赖解析成功只表示问题已经可见，不表示可以编译、
+Cargo package `halo-cli` 的 `aarch64-unknown-linux-ohos` 目标依赖解析。依赖解析成功只表示问题已经可见，不表示可以编译、
 运行或交付。
 
 | 问题域 | 当前识别结果 | 主要风险 | 后续专题需要回答 |
 |---|---|---|---|
-| 产品依赖闭包 | CLI 仍通过 `bitfun-core/product-full` 拉入 remote、browser、canvas、plugin、watch、Git、SQLite、PTY 等能力 | 无关平台依赖阻塞构建；为过编译而破坏共享 owner | CLI 真正需要哪些能力，哪些依赖应保留、隔离或移出目标闭包 |
+| 产品依赖闭包 | CLI 仍通过 `halo-core/product-full` 拉入 remote、browser、canvas、plugin、watch、Git、SQLite、PTY 等能力 | 无关平台依赖阻塞构建；为过编译而破坏共享 owner | CLI 真正需要哪些能力，哪些依赖应保留、隔离或移出目标闭包 |
 | Rust 与依赖解析 | 仓库无根 `Cargo.lock`；Rust 1.94.1 探针先被要求 Rust 1.95 的 `oxc-browserslist`、`oxc_sourcemap` 阻塞 | 把通用 MSRV/解析问题误判为 OHOS 问题；构建不可复现 | 仓库认可的 Rust、依赖解析和构建基线 |
 | TUI/TTY | `ratatui/crossterm` 依赖 `mio`、rustix、signal-hook 和终端系统调用 | 能编译但 raw mode、输入、resize、信号或恢复不可用 | 真实系统终端支持范围与 TUI 退化边界 |
 | 剪贴板与语法高亮 | `arboard -> x11rb` 带入 X11；`syntect-tui` 重新带入 `onig_sys` | 桌面 Linux/C 原生依赖进入 OHOS 产物 | 这些能力是否必需，以及各自可维护的鸿蒙化路线 |
