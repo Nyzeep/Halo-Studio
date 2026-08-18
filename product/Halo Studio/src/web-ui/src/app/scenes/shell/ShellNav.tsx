@@ -244,10 +244,10 @@ const ShellNav: React.FC = () => {
   }, [deleteEntry, t]);
 
   return (
-    <div className="bitfun-shell-nav" data-testid="shell-panel">
-      <div className="bitfun-shell-nav__header">
-        <div className="bitfun-shell-nav__title-group">
-          <span className="bitfun-shell-nav__title" data-testid="shell-panel-title">{t('nav.shell.title')}</span>
+    <div className="halo-shell-nav" data-testid="shell-panel">
+      <div className="halo-shell-nav__header">
+        <div className="halo-shell-nav__title-group">
+          <span className="halo-shell-nav__title" data-testid="shell-panel-title">{t('nav.shell.title')}</span>
           <ShellNavWorkspaceSwitcher
             workspaceName={workspaceName}
             hasMultipleWorkspaces={hasMultipleWorkspaces}
@@ -262,12 +262,12 @@ const ShellNav: React.FC = () => {
             onSelectWorkspace={handleSelectWorkspace}
           />
         </div>
-        <div className="bitfun-shell-nav__header-actions" ref={menuRef}>
-          <div className={`bitfun-shell-nav__split-button${menuOpen ? ' is-active' : ''}`}>
+        <div className="halo-shell-nav__header-actions" ref={menuRef}>
+          <div className={`halo-shell-nav__split-button${menuOpen ? ' is-active' : ''}`}>
             <Tooltip content={t('nav.shell.actions.newTerminal')} placement="bottom">
               <button
                 type="button"
-                className="bitfun-shell-nav__split-button-main"
+                className="halo-shell-nav__split-button-main"
                 onClick={() => { void handleCreateManualTerminal(); }}
               >
                 <Plus size={14} />
@@ -276,7 +276,7 @@ const ShellNav: React.FC = () => {
             <Tooltip content={t('actions.more')} placement="bottom">
               <button
                 type="button"
-                className="bitfun-shell-nav__split-button-toggle"
+                className="halo-shell-nav__split-button-toggle"
                 onClick={handleToggleCreateMenu}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
@@ -287,12 +287,12 @@ const ShellNav: React.FC = () => {
           </div>
 
           {menuOpen ? (
-            <div className="bitfun-shell-nav__dropdown-menu" role="menu">
+            <div className="halo-shell-nav__dropdown-menu" role="menu">
               {shellMenuItems.map((shell) => (
                 <button
                   key={shell.key}
                   type="button"
-                  className="bitfun-shell-nav__dropdown-item"
+                  className="halo-shell-nav__dropdown-item"
                   role="menuitem"
                   onClick={() => { void handleCreateManualTerminal(shell.shellType); }}
                 >
@@ -300,8 +300,8 @@ const ShellNav: React.FC = () => {
                   <span>{shell.label}</span>
                 </button>
               ))}
-              {shellMenuItems.length > 0 ? <div className="bitfun-shell-nav__dropdown-separator" /> : null}
-              <button type="button" className="bitfun-shell-nav__dropdown-item" role="menuitem" onClick={() => { setMenuOpen(false); void handleRefresh(); }}>
+              {shellMenuItems.length > 0 ? <div className="halo-shell-nav__dropdown-separator" /> : null}
+              <button type="button" className="halo-shell-nav__dropdown-item" role="menuitem" onClick={() => { setMenuOpen(false); void handleRefresh(); }}>
                 <RefreshCw size={14} />
                 <span>{t('nav.shell.actions.refresh')}</span>
               </button>
@@ -311,10 +311,10 @@ const ShellNav: React.FC = () => {
       </div>
 
       <div
-        className={`bitfun-shell-nav__sections${!hasVisibleContent ? ' bitfun-shell-nav__sections--empty' : ''}`}
+        className={`halo-shell-nav__sections${!hasVisibleContent ? ' halo-shell-nav__sections--empty' : ''}`}
       >
         {hasVisibleContent ? (
-          <div className="bitfun-shell-nav__terminal-list" data-testid="shell-command-list">
+          <div className="halo-shell-nav__terminal-list" data-testid="shell-command-list">
             {entries.map((entry) => (
               <ShellNavEntryItem
                 key={entry.sessionId}
@@ -331,8 +331,8 @@ const ShellNav: React.FC = () => {
             ))}
           </div>
         ) : (
-          <div className="bitfun-shell-nav__empty">
-            <p className="bitfun-shell-nav__empty-message">
+          <div className="halo-shell-nav__empty">
+            <p className="halo-shell-nav__empty-message">
               {t('nav.shell.empty.all')}
             </p>
             <Button

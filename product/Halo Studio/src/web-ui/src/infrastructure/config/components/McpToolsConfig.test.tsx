@@ -180,7 +180,7 @@ describe('McpToolsConfig remote behavior', () => {
     await act(async () => openEditor.click());
 
     expect(container.textContent).toContain('jsonEditor.loadFailed');
-    expect(container.querySelector('.bitfun-mcp-tools__json-textarea')).toBeNull();
+    expect(container.querySelector('.halo-mcp-tools__json-textarea')).toBeNull();
     expect(container.textContent).not.toContain('example-server');
 
     const retry = container.querySelector('[aria-label="actions.refresh"]') as HTMLButtonElement;
@@ -191,7 +191,7 @@ describe('McpToolsConfig remote behavior', () => {
     });
     expect(loadJsonConfigMock).toHaveBeenCalledTimes(2);
     expect(container.textContent).not.toContain('jsonEditor.loadFailed');
-    expect(container.querySelector('.bitfun-mcp-tools__json-textarea')).not.toBeNull();
+    expect(container.querySelector('.halo-mcp-tools__json-textarea')).not.toBeNull();
   });
 
   it('saves the JSON editor against the fingerprint that was loaded with it', async () => {

@@ -13,14 +13,14 @@ interface GraphViewProps {
 const GraphView: React.FC<GraphViewProps> = ({ workspacePath = '' }) => {
   if (!workspacePath) {
     return (
-      <div className="bitfun-git-scene-graph bitfun-git-scene-graph--empty">
+      <div className="halo-git-scene-graph halo-git-scene-graph--empty">
         <p>Open a workspace to see the commit graph.</p>
       </div>
     );
   }
 
   return (
-    <div className="bitfun-git-scene-graph">
+    <div className="halo-git-scene-graph">
       <GitGraphView repositoryPath={workspacePath} />
     </div>
   );

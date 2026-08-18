@@ -21,10 +21,10 @@ const ThemeToggleIcon: React.FC<{ isDark: boolean }> = ({ isDark }) => (
   </svg>
 );
 
-const MOBILE_INSTALL_ID_KEY = 'bitfun.mobile.install_id';
-const MOBILE_USER_ID_KEY = 'bitfun.mobile.user_id';
-const MOBILE_LOCK_UNTIL_KEY = 'bitfun.mobile.user_id_lock_until';
-const MOBILE_FAILURE_COUNT_KEY = 'bitfun.mobile.user_id_failure_count';
+const MOBILE_INSTALL_ID_KEY = 'halo.mobile.install_id';
+const MOBILE_USER_ID_KEY = 'halo.mobile.user_id';
+const MOBILE_LOCK_UNTIL_KEY = 'halo.mobile.user_id_lock_until';
+const MOBILE_FAILURE_COUNT_KEY = 'halo.mobile.user_id_failure_count';
 const MAX_FAILED_USER_ID_ATTEMPTS = 3;
 const USER_ID_LOCKOUT_MS = 60_000;
 
@@ -477,7 +477,7 @@ const PairingPage: React.FC<PairingPageProps> = ({ onPaired }) => {
           <ThemeToggleIcon isDark={isDark} />
         </button>
       </div>
-      <img src={logoIcon} alt="BitFun" className="pairing-page__logo" />
+      <img src={logoIcon} alt="Halo" className="pairing-page__logo" />
       <div className="pairing-page__brand">{t('shared.product.remote')}</div>
 
       <div className="pairing-page__spinner-wrap">

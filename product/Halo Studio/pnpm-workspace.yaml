@@ -2,7 +2,7 @@ packages:
   - "src/web-ui"
   - "src/mobile-web"
   - "src/miniapp-market-web"
-  - "BitFun-Installer"
+  - "Halo-Installer"
   - "tests/e2e"
 allowBuilds:
   '@parcel/watcher': true

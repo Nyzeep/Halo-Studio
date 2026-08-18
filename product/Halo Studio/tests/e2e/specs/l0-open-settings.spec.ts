@@ -39,7 +39,7 @@ describe('L0 Settings Panel', () => {
       await browser.pause(1500);
 
       // Settings is now in NavPanel footer menu (not header)
-      const moreBtn = await $('.bitfun-nav-panel__footer-btn--icon');
+      const moreBtn = await $('.halo-nav-panel__footer-btn--icon');
       const moreBtnExists = await moreBtn.isExisting();
 
       console.log('[L0] More options button found:', moreBtnExists);
@@ -51,7 +51,7 @@ describe('L0 Settings Panel', () => {
       await saveStepScreenshot('l0-settings-menu-opened');
 
       // Find settings menu item
-      const menuItems = await $$('.bitfun-nav-panel__footer-menu-item');
+      const menuItems = await $$('.halo-nav-panel__footer-menu-item');
       console.log(`[L0] Found ${menuItems.length} menu items`);
       expect(menuItems.length).toBeGreaterThan(0);
 
@@ -69,7 +69,7 @@ describe('L0 Settings Panel', () => {
       console.log('[L0] Settings menu item found');
 
       // Close menu
-      const backdrop = await $('.bitfun-nav-panel__footer-backdrop');
+      const backdrop = await $('.halo-nav-panel__footer-backdrop');
       if (await backdrop.isExisting()) {
         await backdrop.click();
         await browser.pause(500);
@@ -82,12 +82,12 @@ describe('L0 Settings Panel', () => {
       expect(hasWorkspace).toBe(true);
 
       // Open more options menu
-      const moreBtn = await $('.bitfun-nav-panel__footer-btn--icon');
+      const moreBtn = await $('.halo-nav-panel__footer-btn--icon');
       await moreBtn.click();
       await browser.pause(500);
 
       // Click settings menu item
-      const menuItems = await $$('.bitfun-nav-panel__footer-menu-item');
+      const menuItems = await $$('.halo-nav-panel__footer-menu-item');
       let settingsItem = null;
       for (const item of menuItems) {
         const html = await item.getHTML();
@@ -104,7 +104,7 @@ describe('L0 Settings Panel', () => {
       await browser.pause(2000);
 
       // Check for settings scene
-      const settingsScene = await $('.bitfun-settings-scene');
+      const settingsScene = await $('.halo-settings-scene');
       const sceneExists = await settingsScene.isExisting();
 
       console.log('[L0] Settings scene opened:', sceneExists);

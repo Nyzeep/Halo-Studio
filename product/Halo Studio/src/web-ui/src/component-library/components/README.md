@@ -2,7 +2,7 @@
 
 # Component Library
 
-BitFun component library for reusable UI building blocks and previewable demos.
+Halo Studio component library for reusable UI building blocks and previewable demos.
 
 ## Scope
 

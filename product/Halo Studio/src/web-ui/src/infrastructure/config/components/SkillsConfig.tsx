@@ -217,14 +217,14 @@ const SkillsConfig: React.FC = () => {
   const renderAddForm = (level: SkillLevel) => {
     if (!showAddForm || formLevel !== level) return null;
     return (
-      <div className="bitfun-collection-form">
-        <div className="bitfun-collection-form__header">
+      <div className="halo-collection-form">
+        <div className="halo-collection-form__header">
           <h3>{t('form.title')}</h3>
           <IconButton variant="ghost" size="small" onClick={resetForm} tooltip={t('form.closeTooltip')}>
             <X size={14} />
           </IconButton>
         </div>
-        <div className="bitfun-collection-form__body">
+        <div className="halo-collection-form__body">
           <Select
             label={t('form.level.label')}
             options={[
@@ -240,11 +240,11 @@ const SkillsConfig: React.FC = () => {
             size="medium"
           />
           {formLevel === 'project' && hasWorkspace && (
-            <div className="bitfun-skills-config__form-hint">
+            <div className="halo-skills-config__form-hint">
               {t('form.level.currentWorkspace', { path: workspacePath })}
             </div>
           )}
-          <div className="bitfun-skills-config__path-input">
+          <div className="halo-skills-config__path-input">
             <Input
               label={t('form.path.label')}
               placeholder={t('form.path.placeholder')}
@@ -256,22 +256,22 @@ const SkillsConfig: React.FC = () => {
               <FolderOpen size={16} />
             </IconButton>
           </div>
-          <div className="bitfun-skills-config__path-hint">{t('form.path.hint')}</div>
-          {isValidating && <div className="bitfun-skills-config__validating">{t('form.validating')}</div>}
+          <div className="halo-skills-config__path-hint">{t('form.path.hint')}</div>
+          {isValidating && <div className="halo-skills-config__validating">{t('form.validating')}</div>}
           {validationResult && (
-            <div className={`bitfun-skills-config__validation ${validationResult.valid ? 'is-valid' : 'is-invalid'}`}>
+            <div className={`halo-skills-config__validation ${validationResult.valid ? 'is-valid' : 'is-invalid'}`}>
               {validationResult.valid ? (
                 <>
-                  <div className="bitfun-skills-config__validation-name">✓ {validationResult.name}</div>
-                  <div className="bitfun-skills-config__validation-desc">{validationResult.description}</div>
+                  <div className="halo-skills-config__validation-name">✓ {validationResult.name}</div>
+                  <div className="halo-skills-config__validation-desc">{validationResult.description}</div>
                 </>
               ) : (
-                <div className="bitfun-skills-config__validation-error">✗ {validationResult.error}</div>
+                <div className="halo-skills-config__validation-error">✗ {validationResult.error}</div>
               )}
             </div>
           )}
         </div>
-        <div className="bitfun-collection-form__footer">
+        <div className="halo-collection-form__footer">
           <Button variant="secondary" size="small" onClick={resetForm}>
             {t('form.actions.cancel')}
           </Button>
@@ -293,7 +293,7 @@ const SkillsConfig: React.FC = () => {
     const coverageSourceLabel = coverageSourceBySkillKey.get(skill.key);
     const badge = (
       <>
-        <span className="bitfun-collection-item__badge">
+        <span className="halo-collection-item__badge">
           {isRemote
             ? skill.level === 'user'
               ? t('list.item.localUser')
@@ -302,12 +302,12 @@ const SkillsConfig: React.FC = () => {
               ? t('list.item.user')
               : t('list.item.project')}
         </span>
-        <span className="bitfun-collection-item__badge bitfun-skills-config__source-badge">
+        <span className="halo-collection-item__badge halo-skills-config__source-badge">
           {sourceLabel}
         </span>
         {skill.isShadowed && (
           <span
-            className="bitfun-collection-item__badge bitfun-skills-config__covered-badge"
+            className="halo-collection-item__badge halo-skills-config__covered-badge"
             title={t('list.item.shadowedTooltip', {
               source: coverageSourceLabel ?? t('list.item.unknownSource'),
             })}
@@ -320,7 +320,7 @@ const SkillsConfig: React.FC = () => {
     const control = canDeleteSkill(skill) ? (
         <button
           type="button"
-          className="bitfun-collection-btn bitfun-collection-btn--danger"
+          className="halo-collection-btn halo-collection-btn--danger"
           onClick={() => setDeleteConfirm({ show: true, skill })}
           title={t('list.item.deleteTooltip')}
         >
@@ -329,14 +329,14 @@ const SkillsConfig: React.FC = () => {
     ) : null;
     const details = (
       <>
-        <div className="bitfun-collection-details__field">{skill.description}</div>
-        <div className="bitfun-collection-details__meta">
-          <span className="bitfun-collection-details__label">{t('list.item.sourceLabel')}</span>
+        <div className="halo-collection-details__field">{skill.description}</div>
+        <div className="halo-collection-details__meta">
+          <span className="halo-collection-details__label">{t('list.item.sourceLabel')}</span>
           <span>{sourceLabel}</span>
         </div>
         {skill.isShadowed && (
-          <div className="bitfun-collection-details__meta bitfun-skills-config__coverage-detail">
-            <span className="bitfun-collection-details__label">{t('list.item.shadowedLabel')}</span>
+          <div className="halo-collection-details__meta halo-skills-config__coverage-detail">
+            <span className="halo-collection-details__label">{t('list.item.shadowedLabel')}</span>
             <span>
               {t('list.item.shadowedDetail', {
                 source: coverageSourceLabel ?? t('list.item.unknownSource'),
@@ -344,9 +344,9 @@ const SkillsConfig: React.FC = () => {
             </span>
           </div>
         )}
-        <div className="bitfun-collection-details__meta">
-          <span className="bitfun-collection-details__label">{t('list.item.pathLabel')}</span>
-          <code className="bitfun-skills-config__path-value">{skill.path}</code>
+        <div className="halo-collection-details__meta">
+          <span className="halo-collection-details__label">{t('list.item.pathLabel')}</span>
+          <code className="halo-skills-config__path-value">{skill.path}</code>
         </div>
       </>
     );
@@ -360,7 +360,7 @@ const SkillsConfig: React.FC = () => {
         details={details}
         expanded={expandedSkillIds.has(skill.key)}
         onToggle={() => toggleSkillExpanded(skill.key)}
-        className={skill.isShadowed ? 'bitfun-skills-config__item--covered' : undefined}
+        className={skill.isShadowed ? 'halo-skills-config__item--covered' : undefined}
       />
     );
   };
@@ -368,22 +368,22 @@ const SkillsConfig: React.FC = () => {
   const renderMarketList = () => {
     if (marketLoading) {
       return (
-        <div className="bitfun-skills-config__market-list" aria-busy="true" aria-label={t('market.loading')}>
+        <div className="halo-skills-config__market-list" aria-busy="true" aria-label={t('market.loading')}>
           {Array.from({ length: 5 }).map((_, index) => (
             <Card
               key={`market-loading-${index}`}
               variant="elevated"
               padding="none"
-              className="bitfun-skills-config__market-item is-loading"
+              className="halo-skills-config__market-item is-loading"
             >
-              <CardBody className="bitfun-skills-config__market-item-body">
-                <div className="bitfun-skills-config__market-skeleton-main">
-                  <div className="bitfun-skills-config__market-skeleton-line bitfun-skills-config__market-skeleton-line--title" />
-                  <div className="bitfun-skills-config__market-skeleton-line bitfun-skills-config__market-skeleton-line--desc" />
-                  <div className="bitfun-skills-config__market-skeleton-line bitfun-skills-config__market-skeleton-line--desc is-short" />
-                  <div className="bitfun-skills-config__market-skeleton-chip" />
+              <CardBody className="halo-skills-config__market-item-body">
+                <div className="halo-skills-config__market-skeleton-main">
+                  <div className="halo-skills-config__market-skeleton-line halo-skills-config__market-skeleton-line--title" />
+                  <div className="halo-skills-config__market-skeleton-line halo-skills-config__market-skeleton-line--desc" />
+                  <div className="halo-skills-config__market-skeleton-line halo-skills-config__market-skeleton-line--desc is-short" />
+                  <div className="halo-skills-config__market-skeleton-chip" />
                 </div>
-                <div className="bitfun-skills-config__market-skeleton-btn" />
+                <div className="halo-skills-config__market-skeleton-btn" />
               </CardBody>
             </Card>
           ))}
@@ -392,19 +392,19 @@ const SkillsConfig: React.FC = () => {
     }
 
     if (marketError) {
-      return <div className="bitfun-skills-config__market-state bitfun-skills-config__market-state--error">{t('market.errorPrefix')}{marketError}</div>;
+      return <div className="halo-skills-config__market-state halo-skills-config__market-state--error">{t('market.errorPrefix')}{marketError}</div>;
     }
 
     if (marketSkills.length === 0) {
       return (
-        <div className="bitfun-skills-config__market-state">
+        <div className="halo-skills-config__market-state">
           {marketKeyword.trim() ? t('market.empty.noMatch') : t('market.empty.noSkills')}
         </div>
       );
     }
 
     return (
-      <div className="bitfun-skills-config__market-list">
+      <div className="halo-skills-config__market-list">
         {displayMarketSkills.map((skill) => {
           const isDownloading = downloadingPackage === skill.installId;
           const isInstalled = installedSkillNames.has(skill.name);
@@ -420,38 +420,38 @@ const SkillsConfig: React.FC = () => {
               key={skill.installId}
               variant="elevated"
               padding="none"
-              className={`bitfun-skills-config__market-item${isInstalled ? ' is-installed' : ''}`}
+              className={`halo-skills-config__market-item${isInstalled ? ' is-installed' : ''}`}
             >
-              <CardBody className="bitfun-skills-config__market-item-body">
-                <div className="bitfun-skills-config__market-item-main">
-                  <div className="bitfun-skills-config__market-item-head">
-                    <div className="bitfun-skills-config__market-item-name-wrap">
-                      <div className="bitfun-skills-config__market-item-name">{skill.name}</div>
+              <CardBody className="halo-skills-config__market-item-body">
+                <div className="halo-skills-config__market-item-main">
+                  <div className="halo-skills-config__market-item-head">
+                    <div className="halo-skills-config__market-item-name-wrap">
+                      <div className="halo-skills-config__market-item-name">{skill.name}</div>
                       {isInstalled ? (
-                        <span className="bitfun-skills-config__market-item-badge bitfun-skills-config__market-item-badge--installed">
+                        <span className="halo-skills-config__market-item-badge halo-skills-config__market-item-badge--installed">
                           <CheckCircle2 size={12} />
                           {t('market.item.installed')}
                         </span>
                       ) : null}
                     </div>
-                    <span className="bitfun-skills-config__market-item-installs">
+                    <span className="halo-skills-config__market-item-installs">
                       <TrendingUp size={12} />
                       {t('market.item.installs', { count: skill.installs })}
                     </span>
                   </div>
-                  <div className="bitfun-skills-config__market-item-description">
+                  <div className="halo-skills-config__market-item-description">
                     {skill.description?.trim() || t('market.item.noDescription')}
                   </div>
-                  <div className="bitfun-skills-config__market-item-meta">
+                  <div className="halo-skills-config__market-item-meta">
                     {skill.source ? (
                       sourceLabel !== skill.source ? (
                         <Tooltip content={skill.source}>
-                          <span className="bitfun-skills-config__market-item-chip bitfun-skills-config__market-item-source">
+                          <span className="halo-skills-config__market-item-chip halo-skills-config__market-item-source">
                             {t('market.item.sourceLabel')}{sourceLabel}
                           </span>
                         </Tooltip>
                       ) : (
-                        <span className="bitfun-skills-config__market-item-chip bitfun-skills-config__market-item-source">
+                        <span className="halo-skills-config__market-item-chip halo-skills-config__market-item-source">
                           {t('market.item.sourceLabel')}{sourceLabel}
                         </span>
                       )
@@ -459,7 +459,7 @@ const SkillsConfig: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="bitfun-skills-config__market-item-action">
+                <div className="halo-skills-config__market-item-action">
                   {isInstalled ? (
                     <Tooltip content={installedTooltipText}>
                       <span>
@@ -590,10 +590,10 @@ const SkillsConfig: React.FC = () => {
 
   if (loading) {
     return (
-      <ConfigPageLayout className="bitfun-skills-config">
+      <ConfigPageLayout className="halo-skills-config">
         <ConfigPageHeader title={t('title')} subtitle={t('subtitle')} />
         <ConfigPageContent>
-          <div className="bitfun-collection-empty"><p>{t('list.loading')}</p></div>
+          <div className="halo-collection-empty"><p>{t('list.loading')}</p></div>
         </ConfigPageContent>
       </ConfigPageLayout>
     );
@@ -601,10 +601,10 @@ const SkillsConfig: React.FC = () => {
 
   if (error) {
     return (
-      <ConfigPageLayout className="bitfun-skills-config">
+      <ConfigPageLayout className="halo-skills-config">
         <ConfigPageHeader title={t('title')} subtitle={t('subtitle')} />
         <ConfigPageContent>
-          <div className="bitfun-collection-empty"><p>{t('list.errorPrefix')}{error}</p></div>
+          <div className="halo-collection-empty"><p>{t('list.errorPrefix')}{error}</p></div>
         </ConfigPageContent>
       </ConfigPageLayout>
     );
@@ -614,7 +614,7 @@ const SkillsConfig: React.FC = () => {
   const projectSkills = skills.filter(s => s.level === 'project');
 
   return (
-    <ConfigPageLayout className="bitfun-skills-config">
+    <ConfigPageLayout className="halo-skills-config">
       <ConfigPageHeader title={t('title')} subtitle={t('subtitle')} />
 
       <ConfigPageContent>
@@ -632,7 +632,7 @@ const SkillsConfig: React.FC = () => {
             </IconButton>
           )}
         >
-          <div className="bitfun-skills-config__market-toolbar">
+          <div className="halo-skills-config__market-toolbar">
             <Search
               placeholder={t('market.searchPlaceholder')}
               value={marketKeyword}
@@ -653,7 +653,7 @@ const SkillsConfig: React.FC = () => {
         >
           {renderAddForm('user')}
           {userSkills.length === 0 && !(showAddForm && formLevel === 'user') ? (
-            <div className="bitfun-collection-empty">
+            <div className="halo-collection-empty">
               <Button variant="dashed" size="small" onClick={() => { setFormLevel('user'); setShowAddForm(true); }}>
                 <Plus size={14} />
                 {t('toolbar.addTooltip')}
@@ -669,7 +669,7 @@ const SkillsConfig: React.FC = () => {
         >
           {renderAddForm('project')}
           {projectSkills.length === 0 && !(showAddForm && formLevel === 'project') ? (
-            <div className="bitfun-collection-empty">
+            <div className="halo-collection-empty">
               {!hasWorkspace && <p>{t('messages.noWorkspace')}</p>}
               {hasWorkspace && (
                 <Button variant="dashed" size="small" onClick={() => { setFormLevel('project'); setShowAddForm(true); }}>

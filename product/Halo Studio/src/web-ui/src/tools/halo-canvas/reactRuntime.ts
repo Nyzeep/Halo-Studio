@@ -1,6 +1,6 @@
 import reactUmd from '../../../node_modules/react/umd/react.production.min.js?raw';
 import reactDomUmd from '../../../node_modules/react-dom/umd/react-dom.production.min.js?raw';
-import bitfunCanvasRuntimeBundle from 'virtual:bitfun-canvas-runtime-bundle';
+import haloCanvasRuntimeBundle from 'virtual:halo-canvas-runtime-bundle';
 import { buildCanvasRuntimeInstallerScript } from './runtime/canvasRuntimeInstaller';
 
 interface ReactCanvasRuntimeOptions {
@@ -73,21 +73,21 @@ export function buildReactCanvasHtmlResult(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; frame-src 'none';">
-  <meta name="bitfun-canvas-revision" content="${escapeHtml(revision)}">
+  <meta name="halo-canvas-revision" content="${escapeHtml(revision)}">
   <title>${escapeHtml(options.title)}</title>
-  <style>${bitfunCanvasRuntimeBundle.css}</style>
+  <style>${haloCanvasRuntimeBundle.css}</style>
 </head>
 <body>
-  <div id="bitfun-canvas-root">
+  <div id="halo-canvas-root">
     <main class="bf-canvas-boot">Canvas runtime is starting...</main>
   </div>
   <script>${sanitizeInlineScript(reactCanvasEarlyBridge(revision))}</script>
   <script>${sanitizeInlineScript(reactUmd)}</script>
-  <script>window.__bitfunCanvasPost?.('bitfun-canvas-react-loaded', { hasReact: Boolean(window.React) });</script>
+  <script>window.__haloCanvasPost?.('halo-canvas-react-loaded', { hasReact: Boolean(window.React) });</script>
   <script>${sanitizeInlineScript(reactDomUmd)}</script>
-  <script>window.__bitfunCanvasPost?.('bitfun-canvas-react-dom-loaded', { hasReactDOM: Boolean(window.ReactDOM), hasCreateRoot: Boolean(window.ReactDOM?.createRoot) });</script>
+  <script>window.__haloCanvasPost?.('halo-canvas-react-dom-loaded', { hasReactDOM: Boolean(window.ReactDOM), hasCreateRoot: Boolean(window.ReactDOM?.createRoot) });</script>
   <script>${sanitizeInlineScript(buildCanvasRuntimeInstallerScript(revision))}</script>
-  <script>${sanitizeInlineScript(bitfunCanvasRuntimeBundle.js)}</script>
+  <script>${sanitizeInlineScript(haloCanvasRuntimeBundle.js)}</script>
   <script>${sanitizeInlineScript(wrapUserCanvasScript(componentScript.code))}</script>
 </body>
 </html>`,
@@ -108,11 +108,11 @@ function reactCanvasEarlyBridge(revision: string): string {
     }
     return { message: String(error || 'Canvas runtime error') };
   }
-  window.__bitfunCanvasPost = function (type, payload) {
+  window.__haloCanvasPost = function (type, payload) {
     window.parent?.postMessage({ type, sourceRevisionSeen: sourceRevision, ...(payload || {}) }, '*');
   };
   window.addEventListener('error', event => {
-    window.__bitfunCanvasPost('bitfun-canvas-early-error', {
+    window.__haloCanvasPost('halo-canvas-early-error', {
       ...errorPayload(event.error || event.message),
       filename: event.filename,
       lineno: event.lineno,
@@ -120,9 +120,9 @@ function reactCanvasEarlyBridge(revision: string): string {
     });
   });
   window.addEventListener('unhandledrejection', event => {
-    window.__bitfunCanvasPost('bitfun-canvas-early-error', errorPayload(event.reason || 'Canvas runtime promise rejection'));
+    window.__haloCanvasPost('halo-canvas-early-error', errorPayload(event.reason || 'Canvas runtime promise rejection'));
   });
-  window.__bitfunCanvasPost('bitfun-canvas-boot-started');
+  window.__haloCanvasPost('halo-canvas-boot-started');
 })();
 `;
 }
@@ -131,10 +131,10 @@ function wrapUserCanvasScript(componentCode: string): string {
   return `
 (function () {
   try {
-    window.BitfunCanvasRuntime.moduleStarted();
+    window.HaloCanvasRuntime.moduleStarted();
 ${componentCode}
   } catch (error) {
-    window.BitfunCanvasRuntime.reportRuntimeError(error);
+    window.HaloCanvasRuntime.reportRuntimeError(error);
   }
 })();
 `;

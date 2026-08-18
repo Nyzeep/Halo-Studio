@@ -17,7 +17,7 @@
       box-shadow $motion-fast $easing-standard,
       transform $motion-fast $easing-standard;
 
-    &:hover:not(:has(.bitfun-textarea__field:disabled)) {
+    &:hover:not(:has(.halo-textarea__field:disabled)) {
       transform: translateY(-2px);
       border-color: var(--border-strong);
       background: color-mix(in srgb, var(--element-bg-base) 90%, transparent);
@@ -37,15 +37,15 @@
   }
 
   // Textarea from component library — borderless inside composite box
-  &__embed.bitfun-textarea {
+  &__embed.halo-textarea {
     gap: 0;
     width: 100%;
 
-    .bitfun-textarea__wrapper {
+    .halo-textarea__wrapper {
       width: 100%;
     }
 
-    .bitfun-textarea__field {
+    .halo-textarea__field {
       width: 100%;
       min-height: 72px;
       max-height: 220px;

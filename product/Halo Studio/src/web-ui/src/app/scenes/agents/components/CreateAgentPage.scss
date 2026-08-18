@@ -125,7 +125,7 @@
   overscroll-behavior: contain;
 }
 
-.th-create-panel__prompt-textarea .bitfun-textarea__field {
+.th-create-panel__prompt-textarea .halo-textarea__field {
   min-height: 460px;
 }
 
@@ -241,7 +241,7 @@
 
 .th-create-panel__tool-tooltip,
 .th-create-panel__context-tooltip {
-  .bitfun-tooltip__content {
+  .halo-tooltip__content {
     width: max-content;
     max-width: min(520px, calc(100vw - 32px));
     white-space: pre-wrap;

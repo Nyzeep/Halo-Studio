@@ -241,7 +241,7 @@ function externalErrorMessageKey(error: ExternalSourcesError, hasSnapshot: boole
   return hasSnapshot ? 'errors.refreshFailed' : 'errors.loadFailed';
 }
 
-const DISABLED_SUBAGENT_CONFLICT_CHOICE = '__bitfun_disabled__';
+const DISABLED_SUBAGENT_CONFLICT_CHOICE = '__halo_disabled__';
 const KNOWN_INTEGRATION_MODES = new Set(['recommended', 'discover_only', 'disabled', 'custom']);
 const KNOWN_INTEGRATION_ACCESS = new Set([
   'disabled',
@@ -1059,7 +1059,7 @@ const ExternalSourcesConfig: React.FC = () => {
       return (
         <Tooltip content={unavailableMessage} placement="top">
           <span
-            className="bitfun-external-sources-config__path-link bitfun-external-sources-config__path-link--disabled"
+            className="halo-external-sources-config__path-link halo-external-sources-config__path-link--disabled"
             aria-label={unavailableMessage}
           >
             {display}
@@ -1070,7 +1070,7 @@ const ExternalSourcesConfig: React.FC = () => {
     return (
       <a
         href="#"
-        className="bitfun-external-sources-config__path-link"
+        className="halo-external-sources-config__path-link"
         title={location}
         translate="no"
         onClick={(event) => {
@@ -1085,7 +1085,7 @@ const ExternalSourcesConfig: React.FC = () => {
 
   const renderSourceMembers = useCallback((group: ExternalSourcePresentationGroup) => (
     <div
-      className="bitfun-external-sources-config__source-members"
+      className="halo-external-sources-config__source-members"
       role="group"
       aria-label={t('sources.toggleLabel', { name: group.displayName })}
     >
@@ -1097,7 +1097,7 @@ const ExternalSourcesConfig: React.FC = () => {
         return (
           <Switch
             key={member.stableKey}
-            className="bitfun-external-sources-config__source-member"
+            className="halo-external-sources-config__source-member"
             size="small"
             label={capabilityLabel}
             description={group.scopes.length > 1 ? scopeLabel : undefined}
@@ -1120,7 +1120,7 @@ const ExternalSourcesConfig: React.FC = () => {
             )}
           >
             {member.lifecycle !== 'available' ? (
-              <span className={`bitfun-external-sources-config__state is-${member.lifecycle}`}>
+              <span className={`halo-external-sources-config__state is-${member.lifecycle}`}>
                 {t(`lifecycle.${member.lifecycle}`)}
               </span>
             ) : null}
@@ -1132,7 +1132,7 @@ const ExternalSourcesConfig: React.FC = () => {
 
   if (loading && !snapshot) {
     return (
-      <ConfigPageLayout className="bitfun-external-sources-config">
+      <ConfigPageLayout className="halo-external-sources-config">
         <ConfigPageHeader title={t('title')} subtitle={t('subtitle')} />
         <ConfigPageContent>
           <ConfigPageLoading text={t('loading')} />
@@ -1144,7 +1144,7 @@ const ExternalSourcesConfig: React.FC = () => {
   const hostUnavailable = !snapshot && error?.code === 'host_unavailable';
 
   return (
-    <ConfigPageLayout className="bitfun-external-sources-config">
+    <ConfigPageLayout className="halo-external-sources-config">
       <ConfigPageHeader
         title={t('title')}
         subtitle={t('subtitle')}
@@ -1183,7 +1183,7 @@ const ExternalSourcesConfig: React.FC = () => {
           <>
             {error ? (
               <div
-                className="bitfun-external-sources-config__notice"
+                className="halo-external-sources-config__notice"
                 role={error.kind === 'mutation' ? 'alert' : 'status'}
               >
                 <div>{t(externalErrorMessageKey(error, Boolean(snapshot)))}</div>
@@ -1191,7 +1191,7 @@ const ExternalSourcesConfig: React.FC = () => {
                   <div>{t('operationErrors.referenceId', { id: error.correlationId })}</div>
                 ) : null}
                 {error.recoveryActions.length > 0 ? (
-                  <div className="bitfun-external-sources-config__recovery-actions">
+                  <div className="halo-external-sources-config__recovery-actions">
                     {error.recoveryActions.map((action) => {
                       if (action.type === 'refresh') {
                         return (
@@ -1268,13 +1268,13 @@ const ExternalSourcesConfig: React.FC = () => {
               </div>
             ) : null}
             {snapshot && hostReadOnly ? (
-              <div className="bitfun-external-sources-config__host-mode" role="status">
+              <div className="halo-external-sources-config__host-mode" role="status">
                 <ShieldCheck size={16} aria-hidden="true" />
                 <span>{t(readOnlyHintKey)}</span>
               </div>
             ) : null}
             {control?.recoveryActions.some((action) => action.type === 'reconnect_host') ? (
-              <div className="bitfun-external-sources-config__notice" role="status">
+              <div className="halo-external-sources-config__notice" role="status">
                 <div>{t('legacyHostNotice')}</div>
                 <div>{t('recoveryActions.reconnect_host')}</div>
               </div>
@@ -1298,7 +1298,7 @@ const ExternalSourcesConfig: React.FC = () => {
               >
                 {control.safeMode ? (
                   <div
-                    className="bitfun-external-sources-config__notice"
+                    className="halo-external-sources-config__notice"
                     role="status"
                     data-external-attention="true"
                   >
@@ -1309,10 +1309,10 @@ const ExternalSourcesConfig: React.FC = () => {
             ) : null}
             {snapshot && policy ? (
               <ConfigPageSection
-                className="bitfun-external-sources-config__policy-card"
+                className="halo-external-sources-config__policy-card"
                 title={t('policy.title')}
                 description={externalAttentionCount > 0 ? (
-                  <span className="bitfun-external-sources-config__policy-summary">
+                  <span className="halo-external-sources-config__policy-summary">
                     <button
                       type="button"
                       aria-controls="external-integration-attention-region"
@@ -1340,7 +1340,7 @@ const ExternalSourcesConfig: React.FC = () => {
               >
                 {policyIncompatible ? (
                   <div
-                    className="bitfun-external-sources-config__policy-recovery"
+                    className="halo-external-sources-config__policy-recovery"
                     role="alert"
                     data-external-attention="true"
                   >
@@ -1362,7 +1362,7 @@ const ExternalSourcesConfig: React.FC = () => {
                 ) : null}
                 {policyUnknown ? (
                   <div
-                    className="bitfun-external-sources-config__policy-recovery"
+                    className="halo-external-sources-config__policy-recovery"
                     role="alert"
                     data-external-attention="true"
                   >
@@ -1371,7 +1371,7 @@ const ExternalSourcesConfig: React.FC = () => {
                   </div>
                 ) : null}
 
-                <div className="bitfun-external-sources-config__scope-bar">
+                <div className="halo-external-sources-config__scope-bar">
                   <button
                     type="button"
                     className={policyScope === 'user' ? 'is-active' : undefined}
@@ -1409,11 +1409,11 @@ const ExternalSourcesConfig: React.FC = () => {
                     </span>
                   ) : null}
                   {workspacePolicyInherited ? (
-                    <span className="bitfun-external-sources-config__inherited-badge">
+                    <span className="halo-external-sources-config__inherited-badge">
                       {t('policy.inherited')}
                     </span>
                   ) : policyScope === 'workspace' ? (
-                    <span className="bitfun-external-sources-config__override-badge">
+                    <span className="halo-external-sources-config__override-badge">
                       {t('policy.projectOverride')}
                     </span>
                   ) : null}
@@ -1435,8 +1435,8 @@ const ExternalSourcesConfig: React.FC = () => {
                   if (isOpencode) {
                     return (
                       <React.Fragment key={ecosystem.ecosystemId}>
-                        <div className="bitfun-external-sources-config__opencode-card">
-                          <div className="bitfun-external-sources-config__opencode-summary">
+                        <div className="halo-external-sources-config__opencode-card">
+                          <div className="halo-external-sources-config__opencode-summary">
                             <div>
                               <strong>{t('opencode.title')}</strong>
                               <span> · {t('opencode.summary', {
@@ -1446,7 +1446,7 @@ const ExternalSourcesConfig: React.FC = () => {
                                 mcps: opencodeGroups.reduce((sum, g) => sum + g.counts.mcps, 0),
                               })}</span>
                             </div>
-                            <div className="bitfun-external-sources-config__policy-actions">
+                            <div className="halo-external-sources-config__policy-actions">
                               <Select
                                 size="small"
                                 value={selectedPolicyEnabled ? ecosystem.mode : 'disabled'}
@@ -1479,7 +1479,7 @@ const ExternalSourcesConfig: React.FC = () => {
                               <Tooltip content={t('policy.capabilitiesHint')} placement="top">
                                 <button
                                   type="button"
-                                  className="bitfun-external-sources-config__icon-action"
+                                  className="halo-external-sources-config__icon-action"
                                   aria-label={t('policy.capabilitiesFor', {
                                     ecosystem: ecosystem.descriptor.displayName,
                                   })}
@@ -1498,7 +1498,7 @@ const ExternalSourcesConfig: React.FC = () => {
                             </div>
                           </div>
                           {opencodeGroups.length > 0 ? (
-                            <div className="bitfun-external-sources-config__opencode-locations">
+                            <div className="halo-external-sources-config__opencode-locations">
                               {opencodeGroups.map((group) => (
                                 <div key={group.key}>
                                   <span>{renderPathLink(
@@ -1511,7 +1511,7 @@ const ExternalSourcesConfig: React.FC = () => {
                                   {renderSourceMembers(group)}
                                   {group.diagnostics.length > 0 ? (
                                     <details
-                                      className="bitfun-external-sources-config__notice"
+                                      className="halo-external-sources-config__notice"
                                       data-external-attention="true"
                                     >
                                       <summary>
@@ -1520,7 +1520,7 @@ const ExternalSourcesConfig: React.FC = () => {
                                           count: group.diagnostics.length,
                                         })}
                                       </summary>
-                                      <ul className="bitfun-external-sources-config__diagnostics">
+                                      <ul className="halo-external-sources-config__diagnostics">
                                         {group.diagnostics.map((diagnostic) => (
                                           <li key={externalSourceDiagnosticKey(diagnostic)}>
                                             <span>{t(`diagnostics.category.${sourceDiagnosticCategory(diagnostic.code)}`)}</span>
@@ -1540,7 +1540,7 @@ const ExternalSourcesConfig: React.FC = () => {
                           {expandedEcosystems.has(ecosystem.ecosystemId) ? (
                             <div
                               id={`external-capabilities-${ecosystem.ecosystemId}`}
-                              className="bitfun-external-sources-config__capability-grid"
+                              className="halo-external-sources-config__capability-grid"
                             >
                               {ecosystem.descriptor.capabilities.map((capabilityDescriptor) => {
                                 const capabilityId = capabilityDescriptor.capabilityId;
@@ -1562,27 +1562,27 @@ const ExternalSourcesConfig: React.FC = () => {
                                 const riskText = t(riskKey);
                                 return (
                                   <div
-                                    className="bitfun-external-sources-config__capability-row"
+                                    className="halo-external-sources-config__capability-row"
                                     key={capabilityId}
                                   >
                                     <div>
                                       <span>{t(`policy.capability.${capabilityId}`)}</span>
                                       {limited ? (
-                                        <span className="bitfun-external-sources-config__limited-badge">
+                                        <span className="halo-external-sources-config__limited-badge">
                                           {t('policy.safetyLimited')}
                                         </span>
                                       ) : null}
-                                      <span className="bitfun-external-sources-config__candidate-detail">
+                                      <span className="halo-external-sources-config__candidate-detail">
                                         {t(`opencode.capability.${capabilityId}.description`, {
                                           count,
                                           scope: opencodeScopeLabel,
                                         })}
                                       </span>
-                                      <span className="bitfun-external-sources-config__candidate-detail">
+                                      <span className="halo-external-sources-config__candidate-detail">
                                         {t(`opencode.capability.${capabilityId}.effect`)}
                                       </span>
                                       {riskText && riskText !== riskKey ? (
-                                        <span className="bitfun-external-sources-config__tool-warning">
+                                        <span className="halo-external-sources-config__tool-warning">
                                           {riskText}
                                         </span>
                                       ) : null}
@@ -1628,7 +1628,7 @@ const ExternalSourcesConfig: React.FC = () => {
                                 );
                               })}
                               {opencodeGroups.length > 0 ? (
-                                <div className="bitfun-external-sources-config__opencode-locations">
+                                <div className="halo-external-sources-config__opencode-locations">
                                   <span>{t('opencode.configLocations')}</span>
                                   {opencodeGroups.map((group) => (
                                     <span key={group.key}>{renderPathLink(
@@ -1646,12 +1646,12 @@ const ExternalSourcesConfig: React.FC = () => {
                   }
                   return (
                   <React.Fragment key={ecosystem.ecosystemId}>
-                <div className="bitfun-external-sources-config__ecosystem-card">
-                  <div className="bitfun-external-sources-config__ecosystem-heading">
+                <div className="halo-external-sources-config__ecosystem-card">
+                  <div className="halo-external-sources-config__ecosystem-heading">
                     <div>
-                      <div className="bitfun-external-sources-config__ecosystem-name">
+                      <div className="halo-external-sources-config__ecosystem-name">
                         {ecosystem.descriptor.displayName}
-                        <span className={`bitfun-external-sources-config__ecosystem-state is-${ecosystem.state}`}>
+                        <span className={`halo-external-sources-config__ecosystem-state is-${ecosystem.state}`}>
                           {ecosystem.state === 'checking' ? <CircleDashed size={13} aria-hidden="true" /> : null}
                           {ecosystem.state === 'attention' ? <AlertTriangle size={13} aria-hidden="true" /> : null}
                           {ecosystem.state === 'ready' ? <CheckCircle2 size={13} aria-hidden="true" /> : null}
@@ -1661,7 +1661,7 @@ const ExternalSourcesConfig: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  <div className="bitfun-external-sources-config__policy-actions">
+                  <div className="halo-external-sources-config__policy-actions">
                     <Select
                       size="small"
                       value={selectedPolicyEnabled ? ecosystem.mode : 'disabled'}
@@ -1694,7 +1694,7 @@ const ExternalSourcesConfig: React.FC = () => {
                     <Tooltip content={t('policy.capabilitiesHint')} placement="top">
                       <button
                         type="button"
-                        className="bitfun-external-sources-config__icon-action"
+                        className="halo-external-sources-config__icon-action"
                         aria-label={t('policy.capabilitiesFor', {
                           ecosystem: ecosystem.descriptor.displayName,
                         })}
@@ -1716,7 +1716,7 @@ const ExternalSourcesConfig: React.FC = () => {
                 {expandedEcosystems.has(ecosystem.ecosystemId) ? (
                   <div
                     id={`external-capabilities-${ecosystem.ecosystemId}`}
-                    className="bitfun-external-sources-config__capability-grid"
+                    className="halo-external-sources-config__capability-grid"
                   >
                     {ecosystem.descriptor.capabilities.map((capabilityDescriptor) => {
                       const capabilityId = capabilityDescriptor.capabilityId;
@@ -1727,13 +1727,13 @@ const ExternalSourcesConfig: React.FC = () => {
                         || KNOWN_INTEGRATION_ACCESS.has(configuredAccess);
                       return (
                         <div
-                          className="bitfun-external-sources-config__capability-row"
+                          className="halo-external-sources-config__capability-row"
                           key={capabilityId}
                         >
                           <div>
                             <span>{t(`policy.capability.${capabilityId}`)}</span>
                             {limited ? (
-                              <span className="bitfun-external-sources-config__limited-badge">
+                              <span className="halo-external-sources-config__limited-badge">
                                 {t('policy.safetyLimited')}
                               </span>
                             ) : null}
@@ -1787,7 +1787,7 @@ const ExternalSourcesConfig: React.FC = () => {
             ) : null}
             {operationStatus ? (
               <div
-                className="bitfun-external-sources-config__notice"
+                className="halo-external-sources-config__notice"
                 role="status"
                 aria-live="polite"
               >
@@ -1796,7 +1796,7 @@ const ExternalSourcesConfig: React.FC = () => {
             ) : null}
             {agentChangeNotice ? (
               <div
-                className="bitfun-external-sources-config__notice"
+                className="halo-external-sources-config__notice"
                 role="status"
                 aria-live="polite"
               >
@@ -1805,14 +1805,14 @@ const ExternalSourcesConfig: React.FC = () => {
             ) : null}
             {catalogDiagnostics.length > 0 ? (
               <details
-                className="bitfun-external-sources-config__notice"
+                className="halo-external-sources-config__notice"
                 data-external-attention={catalogDiagnostics
                   .some((diagnostic) => diagnostic.severity !== 'info') ? 'true' : undefined}
               >
                 <summary>
                   {t('diagnostics.summary', { count: catalogDiagnostics.length })}
                 </summary>
-                <ul className="bitfun-external-sources-config__diagnostics">
+                <ul className="halo-external-sources-config__diagnostics">
                   {catalogDiagnostics.map((diagnostic) => (
                     <li key={externalSourceDiagnosticKey(diagnostic)}>
                       <span>{t(`diagnostics.category.${sourceDiagnosticCategory(diagnostic.code)}`)}</span>
@@ -1826,7 +1826,7 @@ const ExternalSourcesConfig: React.FC = () => {
               </details>
             ) : null}
             {snapshot?.discoveryPending ? (
-              <div className="bitfun-external-sources-config__notice" role="status">
+              <div className="halo-external-sources-config__notice" role="status">
                 {t('checkingNonBlocking')}
               </div>
             ) : null}
@@ -1843,13 +1843,13 @@ const ExternalSourcesConfig: React.FC = () => {
                   const reviewRiskId = `mcp-review-risk-${encodeURIComponent(request.decisionKey)}`;
                   return (
                     <div
-                      className="bitfun-external-sources-config__tool-card"
+                      className="halo-external-sources-config__tool-card"
                       key={request.decisionKey}
                     >
-                    <div className="bitfun-external-sources-config__conflict-title">
+                    <div className="halo-external-sources-config__conflict-title">
                       {request.definition.name}
                     </div>
-                    <div className="bitfun-external-sources-config__review-summary">
+                    <div className="halo-external-sources-config__review-summary">
                       <span>{t('mcp.source', {
                         source: source?.record.displayName ?? t('mcp.externalSource'),
                       })}</span>
@@ -1863,17 +1863,17 @@ const ExternalSourcesConfig: React.FC = () => {
                     </div>
                     <div
                       className={[
-                        'bitfun-external-sources-config__tool-warning',
-                        'bitfun-external-sources-config__review-risk',
+                        'halo-external-sources-config__tool-warning',
+                        'halo-external-sources-config__review-risk',
                       ].join(' ')}
                       id={reviewRiskId}
                       role="note"
                     >
                       {t('mcpApprovals.compactWarning')}
                     </div>
-                    <details className="bitfun-external-sources-config__review-details">
+                    <details className="halo-external-sources-config__review-details">
                       <summary>{t('mcpApprovals.showDetails')}</summary>
-                      <div className="bitfun-external-sources-config__tool-detail">
+                      <div className="halo-external-sources-config__tool-detail">
                         {source ? (
                           <span>{t('mcp.sourceLocation', {
                             location: source.record.location,
@@ -1914,11 +1914,11 @@ const ExternalSourcesConfig: React.FC = () => {
                           })}</span>
                         ) : null}
                       </div>
-                      <div className="bitfun-external-sources-config__tool-warning">
+                      <div className="halo-external-sources-config__tool-warning">
                         {t('mcpApprovals.warning')}
                       </div>
                     </details>
-                    <div className="bitfun-external-sources-config__tool-actions">
+                    <div className="halo-external-sources-config__tool-actions">
                       <Button
                         variant="secondary"
                         size="small"
@@ -1971,9 +1971,9 @@ const ExternalSourcesConfig: React.FC = () => {
                         description={`${t(`mcp.transport.${server.definition.transport}`)} · ${t('mcp.externalSource')}`}
                         align="center"
                       >
-                        <div className="bitfun-external-sources-config__source-control">
+                        <div className="halo-external-sources-config__source-control">
                           <span
-                            className={`bitfun-external-sources-config__state is-${state}`}
+                            className={`halo-external-sources-config__state is-${state}`}
                             data-external-attention={state === 'approval_required' ? 'true' : undefined}
                           >
                             {t(`mcpState.${state}`)}
@@ -2004,8 +2004,8 @@ const ExternalSourcesConfig: React.FC = () => {
                         </div>
                       </ConfigPageRow>
                       {reviewing ? (
-                        <div className="bitfun-external-sources-config__tool-card">
-                          <div className="bitfun-external-sources-config__tool-detail">
+                        <div className="halo-external-sources-config__tool-card">
+                          <div className="halo-external-sources-config__tool-detail">
                             <span>{t('mcp.source', {
                               source: source?.record.displayName ?? t('mcp.externalSource'),
                             })}</span>
@@ -2047,7 +2047,7 @@ const ExternalSourcesConfig: React.FC = () => {
                             <span>{t('mcp.changePolicy')}</span>
                           </div>
                           {canEnable ? (
-                            <div className="bitfun-external-sources-config__tool-actions">
+                            <div className="halo-external-sources-config__tool-actions">
                               <Button
                                 variant="primary"
                                 size="small"
@@ -2077,14 +2077,14 @@ const ExternalSourcesConfig: React.FC = () => {
               >
                 {mcpConflicts.map((conflict) => (
                   <div
-                    className="bitfun-external-sources-config__conflict"
+                    className="halo-external-sources-config__conflict"
                     key={conflict.conflictKey}
                     data-external-attention={!conflict.selectedCandidateId ? 'true' : undefined}
                   >
-                    <div className="bitfun-external-sources-config__conflict-title">
+                    <div className="halo-external-sources-config__conflict-title">
                       {t('mcpConflicts.serverName', { name: conflict.serverName })}
                     </div>
-                    <div className="bitfun-external-sources-config__conflict-options">
+                    <div className="halo-external-sources-config__conflict-options">
                       {conflict.candidates.map((candidate) => {
                         const selected = conflict.selectedCandidateId === candidate.candidateId;
                         const externalServer = candidate.external
@@ -2104,7 +2104,7 @@ const ExternalSourcesConfig: React.FC = () => {
                         const reviewingExternal = reviewingMcpConflictKey === conflictReviewKey;
                         const detailId = `mcp-conflict-detail-${candidate.candidateId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
                         return (
-                          <div className="bitfun-external-sources-config__candidate" key={candidate.candidateId}>
+                          <div className="halo-external-sources-config__candidate" key={candidate.candidateId}>
                             <Button
                               variant={selected ? 'primary' : 'secondary'}
                               size="small"
@@ -2133,7 +2133,7 @@ const ExternalSourcesConfig: React.FC = () => {
                                   : t('mcpConflicts.review', { name: candidate.displayName })
                                 : candidate.displayName}
                             </Button>
-                            <span className="bitfun-external-sources-config__candidate-state">
+                            <span className="halo-external-sources-config__candidate-state">
                               {!candidate.available
                                 ? t(candidate.external
                                   ? 'mcpConflicts.unavailable'
@@ -2143,13 +2143,13 @@ const ExternalSourcesConfig: React.FC = () => {
                                   : t('common.availableChoice')}
                             </span>
                             {!candidate.available && candidate.unavailableReason ? (
-                              <span className="bitfun-external-sources-config__candidate-state">
+                              <span className="halo-external-sources-config__candidate-state">
                                 {candidate.unavailableReason}
                               </span>
                             ) : null}
                             {externalServer && (reviewingExternal || selected) ? (
                               <div
-                                className="bitfun-external-sources-config__tool-detail"
+                                className="halo-external-sources-config__tool-detail"
                                 id={detailId}
                               >
                                 <span>{t('mcp.source', {
@@ -2200,11 +2200,11 @@ const ExternalSourcesConfig: React.FC = () => {
                                     names: externalServer.definition.headerNames.join(', '),
                                   })}</span>
                                 ) : null}
-                                <span className="bitfun-external-sources-config__tool-warning">
+                                <span className="halo-external-sources-config__tool-warning">
                                   {t('mcpApprovals.warning')}
                                 </span>
                                 {reviewingExternal && !selected && candidate.available ? (
-                                  <div className="bitfun-external-sources-config__tool-actions">
+                                  <div className="halo-external-sources-config__tool-actions">
                                     <Button
                                       variant="primary"
                                       size="small"
@@ -2231,7 +2231,7 @@ const ExternalSourcesConfig: React.FC = () => {
                         );
                       })}
                     </div>
-                    <div className="bitfun-external-sources-config__conflict-hint">
+                    <div className="halo-external-sources-config__conflict-hint">
                       {conflict.selectedCandidateId
                         ? t('mcpConflicts.currentSelection')
                         : t('mcpConflicts.pending')}
@@ -2246,7 +2246,7 @@ const ExternalSourcesConfig: React.FC = () => {
               && mcpConflicts.length === 0
               && !snapshot?.discoveryPending ? (
               <ConfigPageSection title={t('mcp.title')}>
-                <div className="bitfun-external-sources-config__mcp-empty">
+                <div className="halo-external-sources-config__mcp-empty">
                   <span>{t('mcp.empty')}</span>
                   <span>{t('mcp.emptyGuidance')}</span>
                   <span>· {t('mcp.emptyLocation.userGlobal')}</span>
@@ -2289,9 +2289,9 @@ const ExternalSourcesConfig: React.FC = () => {
                         description={`${agent.providerLabel} · ${agent.logicalId} · ${externalAgentModelLabel(agent.effectiveModelLabel, t)} · ${t('agents.singleRun')}`}
                         align="center"
                       >
-                        <div className="bitfun-external-sources-config__source-control">
+                        <div className="halo-external-sources-config__source-control">
                           <span
-                            className={`bitfun-external-sources-config__state is-${state}`}
+                            className={`halo-external-sources-config__state is-${state}`}
                             data-external-attention={state === 'approval_required' ? 'true' : undefined}
                           >
                             {t(`agentState.${state}`)}
@@ -2318,20 +2318,20 @@ const ExternalSourcesConfig: React.FC = () => {
                         </div>
                       </ConfigPageRow>
                       {reviewing ? (
-                        <div className="bitfun-external-sources-config__tool-card">
-                          <div className="bitfun-external-sources-config__conflict-title">
+                        <div className="halo-external-sources-config__tool-card">
+                          <div className="halo-external-sources-config__conflict-title">
                             {t('agents.reviewTitle', { name: agent.displayName })}
                           </div>
-                          <div className="bitfun-external-sources-config__tool-detail">
+                          <div className="halo-external-sources-config__tool-detail">
                             <span>{agent.description || t('agents.noDescription')}</span>
                             <span>{t('agents.model', { model: externalAgentModelLabel(agent.effectiveModelLabel, t) })}</span>
                             <span>{t('agents.tools', { tools: agent.effectiveToolLabels.join(', ') || t('agents.noTools') })}</span>
                             <span>{t('agents.executionDomain')}</span>
                             <span>{t('agents.compatibility', { state: t(`agentCompatibility.${agent.compatibilityState}`) })}</span>
                             {sourceLocations.length > 0 ? (
-                              <details className="bitfun-external-sources-config__source-detail-toggle">
+                              <details className="halo-external-sources-config__source-detail-toggle">
                                 <summary>{t('agents.sourceLocations', { count: sourceLocations.length })}</summary>
-                                <div className="bitfun-external-sources-config__tool-detail">
+                                <div className="halo-external-sources-config__tool-detail">
                                   {sourceLocations.map((location) => (
                                     <span key={location.key}>{renderPathLink(
                                       location.label,
@@ -2363,11 +2363,11 @@ const ExternalSourcesConfig: React.FC = () => {
                             })}
                           </div>
                           {canEnable ? (
-                            <div className="bitfun-external-sources-config__tool-warning">
+                            <div className="halo-external-sources-config__tool-warning">
                               {t('agents.approvalWarning')}
                             </div>
                           ) : null}
-                          <div className="bitfun-external-sources-config__tool-actions">
+                          <div className="halo-external-sources-config__tool-actions">
                             <Button
                               variant="secondary"
                               size="small"
@@ -2415,14 +2415,14 @@ const ExternalSourcesConfig: React.FC = () => {
                   );
                   return (
                     <div
-                      className="bitfun-external-sources-config__conflict"
+                      className="halo-external-sources-config__conflict"
                       key={conflict.conflictKey}
                       data-external-attention={!conflict.selectedCandidateId ? 'true' : undefined}
                     >
-                    <div className="bitfun-external-sources-config__conflict-title">
+                    <div className="halo-external-sources-config__conflict-title">
                       {t('agentConflicts.agentName', { name: conflict.logicalId })}
                     </div>
-                    <div className="bitfun-external-sources-config__conflict-options">
+                    <div className="halo-external-sources-config__conflict-options">
                       {conflict.candidates.map((candidate) => {
                         const selected = conflict.selectedCandidateId === candidate.candidateId;
                         const externalAgent = candidate.external
@@ -2431,7 +2431,7 @@ const ExternalSourcesConfig: React.FC = () => {
                           ))
                           : undefined;
                         return (
-                          <div className="bitfun-external-sources-config__candidate" key={candidate.candidateId}>
+                          <div className="halo-external-sources-config__candidate" key={candidate.candidateId}>
                             <Button
                               variant={selected ? 'primary' : 'secondary'}
                               size="small"
@@ -2445,11 +2445,11 @@ const ExternalSourcesConfig: React.FC = () => {
                               )}
                             >
                               {candidate.displayName}
-                              <span className="bitfun-external-sources-config__ecosystem">
+                              <span className="halo-external-sources-config__ecosystem">
                                 {candidate.sourceLabel}
                               </span>
                             </Button>
-                            <span className="bitfun-external-sources-config__candidate-state">
+                            <span className="halo-external-sources-config__candidate-state">
                               {t(selected
                                 ? selectedChoiceUnavailable
                                   ? 'common.selectedUnavailable'
@@ -2459,7 +2459,7 @@ const ExternalSourcesConfig: React.FC = () => {
                                   : 'common.availableChoice')}
                             </span>
                             {externalAgent ? (
-                              <div className="bitfun-external-sources-config__candidate-detail">
+                              <div className="halo-external-sources-config__candidate-detail">
                                 <span>{t('agents.model', { model: externalAgentModelLabel(externalAgent.effectiveModelLabel, t) })}</span>
                                 <span>{t('agents.tools', { tools: externalAgent.effectiveToolLabels.join(', ') || t('agents.noTools') })}</span>
                                 <span>{t('agents.executionDomain')}</span>
@@ -2515,7 +2515,7 @@ const ExternalSourcesConfig: React.FC = () => {
                         {t('agentConflicts.disableAll')}
                       </Button>
                     </div>
-                    <div className="bitfun-external-sources-config__conflict-hint">
+                    <div className="halo-external-sources-config__conflict-hint">
                       {conflict.selectedCandidateId === DISABLED_SUBAGENT_CONFLICT_CHOICE
                         ? t('agentConflicts.keptUnavailable')
                         : conflict.selectedCandidateId
@@ -2549,13 +2549,13 @@ const ExternalSourcesConfig: React.FC = () => {
                   ));
                   return (
                     <div
-                      className="bitfun-external-sources-config__tool-card"
+                      className="halo-external-sources-config__tool-card"
                       key={request.decisionKey}
                     >
-                      <div className="bitfun-external-sources-config__conflict-title">
+                      <div className="halo-external-sources-config__conflict-title">
                         {request.sourceDisplayName}: {request.toolNames.join(', ')}
                       </div>
-                      <div className="bitfun-external-sources-config__tool-detail">
+                      <div className="halo-external-sources-config__tool-detail">
                         <span title={source?.record.location ?? request.sourceLocation}>
                           {t('toolApprovals.sourceRoot', {
                             location: source?.record.location ?? request.sourceLocation,
@@ -2597,10 +2597,10 @@ const ExternalSourcesConfig: React.FC = () => {
                           })}
                         </span>
                       </div>
-                      <div className="bitfun-external-sources-config__tool-warning">
+                      <div className="halo-external-sources-config__tool-warning">
                         {t('toolApprovals.warning')}
                       </div>
-                      <div className="bitfun-external-sources-config__tool-actions">
+                      <div className="halo-external-sources-config__tool-actions">
                         <Button
                           variant="secondary"
                           size="small"
@@ -2640,20 +2640,20 @@ const ExternalSourcesConfig: React.FC = () => {
                   return (
                     <React.Fragment key={group.key}>
                       <ConfigPageRow
-                        className="bitfun-external-sources-config__source-group"
+                        className="halo-external-sources-config__source-group"
                         label={group.displayName}
                         description={(
-                          <div className="bitfun-external-sources-config__source-description">
-                            <span className="bitfun-external-sources-config__source-origin">
+                          <div className="halo-external-sources-config__source-description">
+                            <span className="halo-external-sources-config__source-origin">
                               <span
-                                className="bitfun-external-sources-config__source-location"
+                                className="halo-external-sources-config__source-location"
                                 title={group.location}
                                 translate="no"
                               >
                                 {group.location}
                               </span>
                               <span aria-hidden="true">·</span>
-                              <span className="bitfun-external-sources-config__source-scopes">
+                              <span className="halo-external-sources-config__source-scopes">
                                 {group.scopes.map((scope, index) => (
                                   <React.Fragment key={scope}>
                                     {index > 0 ? <span aria-hidden="true"> + </span> : null}
@@ -2667,13 +2667,13 @@ const ExternalSourcesConfig: React.FC = () => {
                             {SOURCE_COUNT_LABELS.some(
                               ([capability]) => group.counts[capability] > 0,
                             ) ? (
-                              <span className="bitfun-external-sources-config__source-counts">
+                              <span className="halo-external-sources-config__source-counts">
                                 {SOURCE_COUNT_LABELS.map(([capability, label]) => {
                                   const count = group.counts[capability];
                                   return count > 0 ? (
                                     <span
                                       key={capability}
-                                      className="bitfun-external-sources-config__source-count"
+                                      className="halo-external-sources-config__source-count"
                                     >
                                       {t(label, { count })}
                                     </span>
@@ -2689,7 +2689,7 @@ const ExternalSourcesConfig: React.FC = () => {
                       </ConfigPageRow>
                       {group.diagnostics.length > 0 ? (
                         <details
-                          className="bitfun-external-sources-config__notice"
+                          className="halo-external-sources-config__notice"
                           data-external-attention="true"
                         >
                           <summary>
@@ -2698,7 +2698,7 @@ const ExternalSourcesConfig: React.FC = () => {
                               count: group.diagnostics.length,
                             })}
                           </summary>
-                          <ul className="bitfun-external-sources-config__diagnostics">
+                          <ul className="halo-external-sources-config__diagnostics">
                             {group.diagnostics.map((diagnostic) => (
                               <li key={externalSourceDiagnosticKey(diagnostic)}>
                                 <span>{t(`diagnostics.category.${sourceDiagnosticCategory(diagnostic.code)}`)}</span>
@@ -2747,9 +2747,9 @@ const ExternalSourcesConfig: React.FC = () => {
                           || abbreviatedLocation(tool.definition.modulePath)}
                         align="center"
                       >
-                        <div className="bitfun-external-sources-config__source-control">
+                        <div className="halo-external-sources-config__source-control">
                           <span
-                            className={`bitfun-external-sources-config__state is-${tool.activation.state}`}
+                            className={`halo-external-sources-config__state is-${tool.activation.state}`}
                             data-external-attention={tool.activation.state === 'approval_required'
                               ? 'true'
                               : undefined}
@@ -2782,14 +2782,14 @@ const ExternalSourcesConfig: React.FC = () => {
                         </div>
                       </ConfigPageRow>
                       {reviewing ? (
-                        <div className="bitfun-external-sources-config__tool-card">
-                          <div className="bitfun-external-sources-config__conflict-title">
+                        <div className="halo-external-sources-config__tool-card">
+                          <div className="halo-external-sources-config__conflict-title">
                             {t('tools.reviewTitle', {
                               name: tool.definition.name,
                               source: source?.record.displayName ?? tool.definition.id.target.source.providerId,
                             })}
                           </div>
-                          <div className="bitfun-external-sources-config__tool-detail">
+                          <div className="halo-external-sources-config__tool-detail">
                             <span title={source?.record.location}>
                               {t('toolApprovals.sourceRoot', {
                                 location: source?.record.location ?? t('common.unknown'),
@@ -2838,11 +2838,11 @@ const ExternalSourcesConfig: React.FC = () => {
                             </span>
                           </div>
                           {enableable ? (
-                            <div className="bitfun-external-sources-config__tool-warning">
+                            <div className="halo-external-sources-config__tool-warning">
                               {t('toolApprovals.warning')}
                             </div>
                           ) : null}
-                          <div className="bitfun-external-sources-config__tool-actions">
+                          <div className="halo-external-sources-config__tool-actions">
                             <Button
                               variant="secondary"
                               size="small"
@@ -2889,20 +2889,20 @@ const ExternalSourcesConfig: React.FC = () => {
                   ));
                   return (
                     <div
-                      className="bitfun-external-sources-config__conflict"
+                      className="halo-external-sources-config__conflict"
                       key={conflict.conflictKey}
                       data-external-attention={!conflict.selectedCandidateId ? 'true' : undefined}
                     >
-                    <div className="bitfun-external-sources-config__conflict-title">
+                    <div className="halo-external-sources-config__conflict-title">
                       {t('conflicts.commandName', { name: conflict.commandName })}
                     </div>
-                    <div className="bitfun-external-sources-config__conflict-options">
+                    <div className="halo-external-sources-config__conflict-options">
                       {conflict.candidates.map((candidate) => {
                         const selected = conflict.selectedCandidateId === candidate.candidateId;
                         const available = candidate.availability.state === 'available';
                         return (
                           <div
-                            className="bitfun-external-sources-config__candidate"
+                            className="halo-external-sources-config__candidate"
                             key={candidate.candidateId}
                           >
                             <Button
@@ -2917,11 +2917,11 @@ const ExternalSourcesConfig: React.FC = () => {
                               )}
                             >
                               {candidate.sourceDisplayName}
-                              <span className="bitfun-external-sources-config__ecosystem">
+                              <span className="halo-external-sources-config__ecosystem">
                                 {candidate.ecosystemId}
                               </span>
                             </Button>
-                            <span className="bitfun-external-sources-config__candidate-state">
+                            <span className="halo-external-sources-config__candidate-state">
                               {t(selected
                                 ? selectedChoiceUnavailable
                                   ? 'common.selectedUnavailable'
@@ -2932,7 +2932,7 @@ const ExternalSourcesConfig: React.FC = () => {
                                     ? 'common.notSelected'
                                     : 'common.availableChoice')}
                             </span>
-                            <div className="bitfun-external-sources-config__candidate-detail">
+                            <div className="halo-external-sources-config__candidate-detail">
                               {candidate.commandDescription}
                               {' · '}
                               {sourceScopeLabel(candidate.sourceScope, t)}
@@ -2946,7 +2946,7 @@ const ExternalSourcesConfig: React.FC = () => {
                         );
                       })}
                     </div>
-                    <div className="bitfun-external-sources-config__conflict-hint">
+                    <div className="halo-external-sources-config__conflict-hint">
                       {conflict.selectedCandidateId
                         ? t(selectedChoiceUnavailable
                           ? 'conflicts.currentSelectionUnavailable'
@@ -2982,18 +2982,18 @@ const ExternalSourcesConfig: React.FC = () => {
                     && selectedExternalTool?.activation.state !== 'active';
                   return (
                     <div
-                      className="bitfun-external-sources-config__conflict"
+                      className="halo-external-sources-config__conflict"
                       key={conflict.conflictKey}
                       data-external-attention={!conflict.selectedCandidateId ? 'true' : undefined}
                     >
-                    <div className="bitfun-external-sources-config__conflict-title">
+                    <div className="halo-external-sources-config__conflict-title">
                       {t('toolConflicts.toolName', { name: conflict.toolName })}
                     </div>
-                    <div className="bitfun-external-sources-config__conflict-options">
+                    <div className="halo-external-sources-config__conflict-options">
                       {conflict.candidates.map((candidate) => {
                         const selected = conflict.selectedCandidateId === candidate.candidateId;
                         return (
-                          <div className="bitfun-external-sources-config__candidate" key={candidate.candidateId}>
+                          <div className="halo-external-sources-config__candidate" key={candidate.candidateId}>
                             <Button
                               variant={selected ? 'primary' : 'secondary'}
                               size="small"
@@ -3006,11 +3006,11 @@ const ExternalSourcesConfig: React.FC = () => {
                               )}
                             >
                               {candidate.displayName}
-                              <span className="bitfun-external-sources-config__ecosystem">
+                              <span className="halo-external-sources-config__ecosystem">
                                 {t(`toolCandidateKind.${candidate.kind}`)}
                               </span>
                             </Button>
-                            <span className="bitfun-external-sources-config__candidate-state">
+                            <span className="halo-external-sources-config__candidate-state">
                               {t(selected
                                 ? selectedChoiceUnavailable
                                   ? 'common.selectedUnavailable'
@@ -3019,7 +3019,7 @@ const ExternalSourcesConfig: React.FC = () => {
                                   ? 'common.notSelected'
                                   : 'common.availableChoice')}
                             </span>
-                            <div className="bitfun-external-sources-config__candidate-detail">
+                            <div className="halo-external-sources-config__candidate-detail">
                               {candidate.sourceLocation
                                 ? abbreviatedLocation(candidate.sourceLocation)
                                 : candidate.providerId}
@@ -3028,7 +3028,7 @@ const ExternalSourcesConfig: React.FC = () => {
                         );
                       })}
                     </div>
-                    <div className="bitfun-external-sources-config__conflict-hint">
+                    <div className="halo-external-sources-config__conflict-hint">
                       {conflict.selectedCandidateId
                         ? t(selectedChoiceUnavailable
                           ? 'toolConflicts.currentSelectionUnavailable'

@@ -84,36 +84,36 @@ export function ComposerVoiceInputButton({ controller }: ComposerVoiceInputButto
     const controlsDisabled = preparing || transcribing;
 
     return (
-      <span className="bitfun-chat-input__voice-cluster bitfun-chat-input__voice-cluster--recording">
+      <span className="halo-chat-input__voice-cluster halo-chat-input__voice-cluster--recording">
         <span
           aria-label={controller.tooltip}
           aria-busy={preparing || transcribing}
-          className="bitfun-chat-input__voice-pill"
+          className="halo-chat-input__voice-pill"
           role="group"
         >
           <span
-            className="bitfun-chat-input__voice-pill-status"
+            className="halo-chat-input__voice-pill-status"
             title={controller.lowVolumeWarning ? controller.lowVolumeTooltip : undefined}
             aria-hidden="true"
           >
             {preparing ? (
-              <Loader2 size={12} className="bitfun-chat-input__voice-spinner" />
+              <Loader2 size={12} className="halo-chat-input__voice-spinner" />
             ) : controller.lowVolumeWarning ? (
               <VolumeX
                 size={13}
-                className="bitfun-chat-input__voice-low-volume"
+                className="halo-chat-input__voice-low-volume"
               />
             ) : (
-              <span className="bitfun-chat-input__voice-pill-recording-dot" />
+              <span className="halo-chat-input__voice-pill-recording-dot" />
             )}
           </span>
 
-          <span className="bitfun-chat-input__voice-pill-time" aria-hidden="true">
+          <span className="halo-chat-input__voice-pill-time" aria-hidden="true">
             {formatElapsedTime(elapsedSeconds)}
           </span>
 
           <span
-            className={`bitfun-chat-input__voice-pill-timeline${recording ? '' : ' bitfun-chat-input__voice-pill-timeline--paused'}`}
+            className={`halo-chat-input__voice-pill-timeline${recording ? '' : ' halo-chat-input__voice-pill-timeline--paused'}`}
             aria-hidden="true"
           >
             {visibleTimelineSamples.map((sample, index) => {
@@ -121,7 +121,7 @@ export function ComposerVoiceInputButton({ controller }: ComposerVoiceInputButto
               return (
                 <span
                   key={index}
-                  className="bitfun-chat-input__voice-pill-timeline-bar"
+                  className="halo-chat-input__voice-pill-timeline-bar"
                   style={{
                     opacity: sample === 0 ? 0.32 : 0.82,
                     transform: `scaleY(${scale})`,
@@ -131,11 +131,11 @@ export function ComposerVoiceInputButton({ controller }: ComposerVoiceInputButto
             })}
           </span>
 
-          <span className="bitfun-chat-input__voice-pill-divider" aria-hidden="true" />
+          <span className="halo-chat-input__voice-pill-divider" aria-hidden="true" />
 
           <IconButton
             aria-label={controller.cancelTooltip}
-            className="bitfun-chat-input__voice-pill-action bitfun-chat-input__voice-pill-action--cancel"
+            className="halo-chat-input__voice-pill-action halo-chat-input__voice-pill-action--cancel"
             variant="ghost"
             size="xs"
             disabled={transcribing}
@@ -150,7 +150,7 @@ export function ComposerVoiceInputButton({ controller }: ComposerVoiceInputButto
 
           <IconButton
             aria-label={controlsDisabled ? controller.tooltip : controller.transcribeTooltip}
-            className="bitfun-chat-input__voice-pill-action bitfun-chat-input__voice-pill-action--transcribe"
+            className="halo-chat-input__voice-pill-action halo-chat-input__voice-pill-action--transcribe"
             variant="ghost"
             size="xs"
             disabled={controlsDisabled}
@@ -161,7 +161,7 @@ export function ComposerVoiceInputButton({ controller }: ComposerVoiceInputButto
             }}
           >
             {transcribing && controller.completionMode === 'transcribe' ? (
-              <Loader2 size={15} className="bitfun-chat-input__voice-spinner" />
+              <Loader2 size={15} className="halo-chat-input__voice-spinner" />
             ) : (
               <Check size={16} />
             )}
@@ -169,7 +169,7 @@ export function ComposerVoiceInputButton({ controller }: ComposerVoiceInputButto
 
           <IconButton
             aria-label={controlsDisabled ? controller.tooltip : controller.sendTooltip}
-            className="bitfun-chat-input__voice-pill-send"
+            className="halo-chat-input__voice-pill-send"
             variant="danger"
             size="xs"
             disabled={controlsDisabled}
@@ -180,7 +180,7 @@ export function ComposerVoiceInputButton({ controller }: ComposerVoiceInputButto
             }}
           >
             {transcribing && controller.completionMode === 'send' ? (
-              <Loader2 size={15} className="bitfun-chat-input__voice-spinner" />
+              <Loader2 size={15} className="halo-chat-input__voice-spinner" />
             ) : (
               <ArrowUp size={15} strokeWidth={2.5} />
             )}
@@ -191,10 +191,10 @@ export function ComposerVoiceInputButton({ controller }: ComposerVoiceInputButto
   }
 
   return (
-    <span className="bitfun-chat-input__voice-cluster">
+    <span className="halo-chat-input__voice-cluster">
       <IconButton
         aria-label={controller.tooltip}
-        className="bitfun-chat-input__voice-control"
+        className="halo-chat-input__voice-control"
         variant="ghost"
         size="xs"
         disabled={controller.disabled}

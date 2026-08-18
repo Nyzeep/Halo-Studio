@@ -176,12 +176,12 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
     );
 
     const containerClassName = [
-      'bitfun-number-input',
-      `bitfun-number-input--${size}`,
-      `bitfun-number-input--${variant}`,
-      disabled && 'bitfun-number-input--disabled',
-      isDragging && 'bitfun-number-input--dragging',
-      isEditing && 'bitfun-number-input--editing',
+      'halo-number-input',
+      `halo-number-input--${size}`,
+      `halo-number-input--${variant}`,
+      disabled && 'halo-number-input--disabled',
+      isDragging && 'halo-number-input--dragging',
+      isEditing && 'halo-number-input--editing',
       className,
     ]
       .filter(Boolean)
@@ -189,18 +189,18 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 
     return (
       <div className={containerClassName}>
-        {label && <label className="bitfun-number-input__label">{label}</label>}
+        {label && <label className="halo-number-input__label">{label}</label>}
         <div
           ref={containerRef}
-          className="bitfun-number-input__container"
+          className="halo-number-input__container"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
           onWheel={handleWheel}
         >
-          <div className="bitfun-number-input__glow" />
+          <div className="halo-number-input__glow" />
 
           <div
-            className="bitfun-number-input__value-area"
+            className="halo-number-input__value-area"
             onMouseDown={draggable ? handleDragStart : undefined}
             style={{ cursor: draggable && !disabled ? 'ns-resize' : 'text' }}
           >
@@ -215,7 +215,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
               }}
               type="text"
               inputMode="decimal"
-              className="bitfun-number-input__input"
+              className="halo-number-input__input"
               value={inputValue}
               onChange={handleInputChange}
               onFocus={() => setIsEditing(true)}
@@ -223,16 +223,16 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
               onKeyDown={handleKeyDown}
               disabled={disabled}
             />
-            {unit && <span className="bitfun-number-input__unit">{unit}</span>}
+            {unit && <span className="halo-number-input__unit">{unit}</span>}
           </div>
 
           {showButtons && variant !== 'compact' && (
-            <div className="bitfun-number-input__buttons">
+            <div className="halo-number-input__buttons">
               {variant === 'stepper' ? (
                 <>
                   <button
                     type="button"
-                    className="bitfun-number-input__btn bitfun-number-input__btn--minus"
+                    className="halo-number-input__btn halo-number-input__btn--minus"
                     onClick={decrement}
                     disabled={disabled || value <= min}
                     tabIndex={-1}
@@ -242,7 +242,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
                   </button>
                   <button
                     type="button"
-                    className="bitfun-number-input__btn bitfun-number-input__btn--plus"
+                    className="halo-number-input__btn halo-number-input__btn--plus"
                     onClick={increment}
                     disabled={disabled || value >= max}
                     tabIndex={-1}
@@ -255,7 +255,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
                 <>
                   <button
                     type="button"
-                    className="bitfun-number-input__btn bitfun-number-input__btn--up"
+                    className="halo-number-input__btn halo-number-input__btn--up"
                     onClick={increment}
                     disabled={disabled || value >= max}
                     tabIndex={-1}
@@ -265,7 +265,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
                   </button>
                   <button
                     type="button"
-                    className="bitfun-number-input__btn bitfun-number-input__btn--down"
+                    className="halo-number-input__btn halo-number-input__btn--down"
                     onClick={decrement}
                     disabled={disabled || value <= min}
                     tabIndex={-1}
@@ -279,9 +279,9 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
           )}
 
           {min !== -Infinity && max !== Infinity && (
-            <div className="bitfun-number-input__progress">
+            <div className="halo-number-input__progress">
               <div
-                className="bitfun-number-input__progress-bar"
+                className="halo-number-input__progress-bar"
                 style={{ width: `${((value - min) / (max - min)) * 100}%` }}
               />
             </div>

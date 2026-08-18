@@ -81,7 +81,7 @@ describe('tiptap markdown compatibility', () => {
     const markdown = [
       '<div align="center">',
       '',
-      '![BitFun](./png/BitFun_title.png)',
+      '![Halo](./png/Halo-title.png)',
       '',
       '**AI assistant with personality and memory**',
       '',

@@ -597,7 +597,7 @@ const AgentsHomeView: React.FC = () => {
   );
 
   return (
-    <GalleryLayout className="bitfun-agents-scene" data-testid="agent-skill-panel">
+    <GalleryLayout className="halo-agents-scene" data-testid="agent-skill-panel">
       <GalleryPageHeader
         title={t('page.title')}
         subtitle={t('page.subtitle')}
@@ -701,9 +701,9 @@ const AgentsHomeView: React.FC = () => {
           subtitle={t('agentsZone.subtitle')}
           tools={(
             <>
-              <div className="bitfun-agents-scene__agent-filters">
-                <div className="bitfun-agents-scene__agent-filter-group">
-                  <span className="bitfun-agents-scene__agent-filter-label">
+              <div className="halo-agents-scene__agent-filters">
+                <div className="halo-agents-scene__agent-filter-group">
+                  <span className="halo-agents-scene__agent-filter-label">
                     {t('filters.source')}
                   </span>
                   {levelFilters.map(({ key, label, count }) => (
@@ -723,8 +723,8 @@ const AgentsHomeView: React.FC = () => {
                     </button>
                   ))}
                 </div>
-                <div className="bitfun-agents-scene__agent-filter-group">
-                  <span className="bitfun-agents-scene__agent-filter-label">
+                <div className="halo-agents-scene__agent-filter-group">
+                  <span className="halo-agents-scene__agent-filter-label">
                     {t('filters.kind')}
                   </span>
                   {typeFilters.map(({ key, label, count }) => (
@@ -1105,7 +1105,7 @@ const AgentsHomeView: React.FC = () => {
                   <Select
                     size="small"
                     searchable
-                    className="bitfun-agents-scene__subagent-model-select model-select-presentation__select"
+                    className="halo-agents-scene__subagent-model-select model-select-presentation__select"
                     options={subagentModelOptions}
                     value={selectedSubagentModelValue}
                     onChange={(value) => void handleSubagentModelChange(value)}
@@ -1309,7 +1309,7 @@ const AgentsScene: React.FC = () => {
 
   if (page === 'createAgent') {
     return (
-      <div className="bitfun-agents-scene bitfun-agents-scene--page">
+      <div className="halo-agents-scene halo-agents-scene--page">
         <CreateAgentPage />
       </div>
     );

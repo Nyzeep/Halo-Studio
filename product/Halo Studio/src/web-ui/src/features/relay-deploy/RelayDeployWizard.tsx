@@ -180,7 +180,7 @@ export const RelayDeployWizard: React.FC<RelayDeployWizardProps> = ({
   // relay is handled by alreadyDeployed / portOwnedByRelay instead.
   const portConflict = !!preflight && preflight.portBusy && !preflight.portOwnedByRelay;
   // Container-aware: health on the typed port alone misses a running
-  // bitfun-relay when the user changes RELAY_PORT. See feature README.
+  // halo-relay when the user changes RELAY_PORT. See feature README.
   const alreadyDeployed = !!preflight && (
     preflight.relayHealthy || preflight.containerRunning
   );
@@ -872,7 +872,7 @@ export const RelayDeployWizard: React.FC<RelayDeployWizardProps> = ({
               onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))}
               prefix={<Lock size={16} />} size="medium" disabled={connecting}
               suffix={
-                <button type="button" className="bitfun-input-toggle" onClick={() => setShowPassword((s) => !s)} tabIndex={-1}>
+                <button type="button" className="halo-input-toggle" onClick={() => setShowPassword((s) => !s)} tabIndex={-1}>
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               } />
@@ -901,7 +901,7 @@ export const RelayDeployWizard: React.FC<RelayDeployWizardProps> = ({
                 onChange={(e) => setFormData((p) => ({ ...p, passphrase: e.target.value }))}
                 placeholder={t('ssh.remote.passphraseOptional')} size="medium" disabled={connecting}
                 suffix={
-                  <button type="button" className="bitfun-input-toggle" onClick={() => setShowPassphrase((s) => !s)} tabIndex={-1}>
+                  <button type="button" className="halo-input-toggle" onClick={() => setShowPassphrase((s) => !s)} tabIndex={-1}>
                     {showPassphrase ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 } />
@@ -1259,7 +1259,7 @@ export const RelayDeployWizard: React.FC<RelayDeployWizardProps> = ({
             value={regPassword} onChange={(e) => setRegPassword(e.target.value)}
             prefix={<Lock size={16} />} size="medium" disabled={regLoading}
             suffix={
-              <button type="button" className="bitfun-input-toggle" onClick={() => setShowRegPassword((s) => !s)} tabIndex={-1}>
+              <button type="button" className="halo-input-toggle" onClick={() => setShowRegPassword((s) => !s)} tabIndex={-1}>
                 {showRegPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             } />

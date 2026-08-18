@@ -940,9 +940,9 @@ export class FlowChatStore {
   private clearOldStorage(): void {
     try {
       const keysToRemove = [
-        'bitfun-flow-chat-state',
-        'bitfun-flow-chat-global',
-        'bitfun-session-ids'
+        'halo-flow-chat-state',
+        'halo-flow-chat-global',
+        'halo-session-ids'
       ];
       
       keysToRemove.forEach(key => {
@@ -952,7 +952,7 @@ export class FlowChatStore {
       });
 
       Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('bitfun-session-')) {
+        if (key.startsWith('halo-session-')) {
           localStorage.removeItem(key);
         }
       });
@@ -1968,7 +1968,7 @@ export class FlowChatStore {
       };
     });
     
-    window.dispatchEvent(new CustomEvent('bitfun:session-switched', {
+    window.dispatchEvent(new CustomEvent('halo:session-switched', {
       detail: { sessionId, mode: sessionMode || 'agentic' }
     }));
 
@@ -3698,7 +3698,7 @@ export class FlowChatStore {
       const newSessions = new Map(prev.sessions);
       newSessions.set(sessionId, updatedSession);
 
-      window.dispatchEvent(new CustomEvent('bitfun:dialog-cancelled', {
+      window.dispatchEvent(new CustomEvent('halo:dialog-cancelled', {
         detail: { sessionId }
       }));
 

@@ -99,7 +99,7 @@ export interface DragEventPayload {
 }
 
 /**
- * Custom MIME type for transferring BitFun context payloads via the browser DnD API.
+ * Custom MIME type for transferring Halo context payloads via the browser DnD API.
  */
-export const BITFUN_CONTEXT_MIME_TYPE = 'application/x-bitfun-context';
-export const BITFUN_CONTEXT_JSON_MIME_TYPE = 'application/json';
+export const HALO_CONTEXT_MIME_TYPE = 'application/x-halo-context';
+export const HALO_CONTEXT_JSON_MIME_TYPE = 'application/json';

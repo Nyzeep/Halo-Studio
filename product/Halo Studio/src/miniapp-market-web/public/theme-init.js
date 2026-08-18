@@ -1,5 +1,5 @@
 (function () {
-  var storageKey = 'bitfun-market-theme';
+  var storageKey = 'halo-market-theme';
   var storedTheme = null;
 
   try {

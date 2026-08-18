@@ -185,7 +185,7 @@ vi.mock('./common', () => ({
     </header>
   ),
   ConfigPageLayout: ({ children }: { children: React.ReactNode }) => (
-    <main className="bitfun-config-page-layout">{children}</main>
+    <main className="halo-config-page-layout">{children}</main>
   ),
   ConfigPageRow: ({
     children,
@@ -226,7 +226,7 @@ function worktree(overrides: Record<string, unknown> = {}) {
   return {
     worktreeId: 'wt-1',
     projectWorkspacePath: '/repo',
-    path: '/managed/BitFun-wt-1',
+    path: '/managed/Halo-wt-1',
     head: '0123456789abcdef',
     lifecycle: 'managed',
     isMain: false,
@@ -317,7 +317,7 @@ describe('WorktreesConfig', () => {
     expect(checkboxes[1].checked).toBe(true);
     expect(limit?.value).toBe('15');
     expect(container.textContent).toContain('/repo');
-    expect(container.textContent).toContain('/managed/BitFun-wt-1');
+    expect(container.textContent).toContain('/managed/Halo-wt-1');
     expect(container.textContent).toContain('Ship worktree management');
   });
 
@@ -457,9 +457,9 @@ describe('WorktreesConfig', () => {
       .find(button => button.textContent === 'refresh');
     act(() => refreshButton?.click());
 
-    const results = container.querySelector('.bitfun-worktrees-config__results');
+    const results = container.querySelector('.halo-worktrees-config__results');
     expect(results?.getAttribute('aria-busy')).toBe('true');
-    expect(container.textContent).toContain('/managed/BitFun-wt-1');
+    expect(container.textContent).toContain('/managed/Halo-wt-1');
 
     await act(async () => {
       refresh.resolve([{
@@ -471,7 +471,7 @@ describe('WorktreesConfig', () => {
     });
 
     expect(results?.getAttribute('aria-busy')).toBe('false');
-    expect(container.textContent).toContain('/managed/BitFun-wt-1');
+    expect(container.textContent).toContain('/managed/Halo-wt-1');
   });
 
   it('keeps the settings scroll position while deletion refreshes the list', async () => {
@@ -486,7 +486,7 @@ describe('WorktreesConfig', () => {
     await flushPromises();
     listProjectsMock.mockReturnValueOnce(refresh.promise);
 
-    const layout = container.querySelector<HTMLElement>('.bitfun-config-page-layout');
+    const layout = container.querySelector<HTMLElement>('.halo-config-page-layout');
     expect(layout).not.toBeNull();
     if (layout) {
       layout.scrollTop = 420;
@@ -504,9 +504,9 @@ describe('WorktreesConfig', () => {
       await Promise.resolve();
     });
 
-    const results = container.querySelector('.bitfun-worktrees-config__results');
+    const results = container.querySelector('.halo-worktrees-config__results');
     expect(results?.getAttribute('aria-busy')).toBe('true');
-    expect(container.querySelector('.bitfun-worktrees-config__skeleton')).toBeNull();
+    expect(container.querySelector('.halo-worktrees-config__skeleton')).toBeNull();
     expect(layout?.scrollTop).toBe(420);
 
     await act(async () => {

@@ -306,7 +306,7 @@ export const MCPToolDisplay: React.FC<ToolCardProps> = ({
               id,
               result: {
                 protocolVersion: MCP_APPS_PROTOCOL_VERSION,
-                hostInfo: { name: 'BitFun', version: '1.0.0' },
+                hostInfo: { name: 'Halo', version: '1.0.0' },
                 hostCapabilities: {
                   openLinks: {},
                   serverTools: { listChanged: true },

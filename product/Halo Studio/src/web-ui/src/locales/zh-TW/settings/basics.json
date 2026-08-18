@@ -16,35 +16,35 @@
     "systemTheme": "跟隨系統",
     "systemThemeDescription": "根據系統淺色/深色外觀自動在亮暗主題間切換，並隨系統切換而更新。",
     "presets": {
-      "bitfun-dark": {
+      "halo-dark": {
         "name": "暗色",
         "description": "默認暗色主題"
       },
-      "bitfun-light": {
+      "halo-light": {
         "name": "亮色",
         "description": "亮色主題 - 素雅高級，淡藍灰調"
       },
-      "bitfun-midnight": {
+      "halo-midnight": {
         "name": "午夜",
         "description": "午夜灰暗色主題 - 專業優雅，靈感來自 JetBrains IDE"
       },
-      "bitfun-china-style": {
+      "halo-china-style": {
         "name": "墨韻",
         "description": "中國風主題 - 宣紙墨香，青花硃砂，溫潤典雅"
       },
-      "bitfun-china-night": {
+      "halo-china-night": {
         "name": "墨夜",
         "description": "中國風暗色主題 - 墨夜星辰，月華如水，沉靜典雅"
       },
-      "bitfun-cyber": {
+      "halo-cyber": {
         "name": "賽博",
         "description": "科技感主題 - 深邃黑洞，霓虹未來，極致科技美學"
       },
-      "bitfun-slate": {
+      "halo-slate": {
         "name": "石板灰",
         "description": "石板灰幾何主題 - 極深沉浸，高對比度灰度美學"
       },
-      "bitfun-tokyo-night": {
+      "halo-tokyo-night": {
         "name": "東京夜",
         "description": "Tokyo Night 經典配色 - 靛藍夜色，藍紫高光"
       }

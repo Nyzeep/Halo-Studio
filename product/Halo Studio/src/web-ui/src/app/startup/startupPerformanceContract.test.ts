@@ -29,15 +29,15 @@ describe('startup performance contract', () => {
 
     expect(source).toContain('<link rel="icon" type="image/svg+xml" href="/halo-icon.svg" />');
     expect(source).not.toContain('rel="preload" as="image"');
-    expect(source).toContain('class="bitfun-preload__logo"');
+    expect(source).toContain('class="halo-preload__logo"');
     expect(source).toContain('src="/halo-icon.svg"');
     expect(source).toContain('fetchpriority="low"');
     expect(source).not.toContain('Loading workspace...');
-    expect(source).not.toContain('bitfun-preload__spinner');
+    expect(source).not.toContain('halo-preload__spinner');
     expect(source).not.toContain('aria-live="polite"');
 
     expect(source.indexOf('<script type="module" src="/src/main.tsx"></script>')).toBeLessThan(
-      source.indexOf('class="bitfun-preload__logo"'),
+      source.indexOf('class="halo-preload__logo"'),
     );
   });
 
@@ -60,7 +60,7 @@ describe('startup performance contract', () => {
     const appSource = readSource('../App.tsx');
 
     expect(appSource).toContain('const MIN_SPLASH_MS = 650;');
-    expect(source).toContain('animation: bitfun-startup-overlay-exit 0.24s ease-in-out both;');
+    expect(source).toContain('animation: halo-startup-overlay-exit 0.24s ease-in-out both;');
   });
 
   it('keeps editor and tool infrastructure out of the first startup module', () => {
@@ -95,22 +95,22 @@ describe('startup performance contract', () => {
     expect(mainSource).not.toContain('before_render_step", "initialize_frontend_log_level_sync"');
     expect(mainSource).toContain('initializeFrontendLogLevelSync');
     expect(mainSource).toContain('installFrontendLogLevelConfigWatcher');
-    expect(loggerSource).toContain('__BITFUN_BOOTSTRAP_LOG_LEVEL__');
-    expect(themeSource).toContain('__BITFUN_BOOTSTRAP_LOG_LEVEL__');
+    expect(loggerSource).toContain('__HALO_BOOTSTRAP_LOG_LEVEL__');
+    expect(themeSource).toContain('__HALO_BOOTSTRAP_LOG_LEVEL__');
   });
 
   it('keeps startup keybindings on the bootstrap path instead of a first-window IPC', () => {
     const configManagerSource = readSource('../../infrastructure/config/services/ConfigManager.ts');
     const themeSource = readSource('../../../../apps/desktop/src/theme.rs');
 
-    expect(themeSource).toContain('__BITFUN_BOOTSTRAP_KEYBINDINGS__');
+    expect(themeSource).toContain('__HALO_BOOTSTRAP_KEYBINDINGS__');
     expect(themeSource).toContain('keybindings: global_config.app.keybindings');
     expect(themeSource).toContain('MAX_BOOTSTRAP_KEYBINDINGS_JSON_BYTES');
     expect(themeSource).toContain('.filter(|json| json.len() <= MAX_BOOTSTRAP_KEYBINDINGS_JSON_BYTES)');
     expect(configManagerSource).toContain('consumeBootstrapOptionalConfig');
-    expect(configManagerSource).toContain('__BITFUN_BOOTSTRAP_KEYBINDINGS__');
+    expect(configManagerSource).toContain('__HALO_BOOTSTRAP_KEYBINDINGS__');
     expect(configManagerSource).toContain("path !== 'app.keybindings'");
-    expect(configManagerSource).toContain('delete globalThis.__BITFUN_BOOTSTRAP_KEYBINDINGS__');
+    expect(configManagerSource).toContain('delete globalThis.__HALO_BOOTSTRAP_KEYBINDINGS__');
   });
 
   it('keeps workspace startup state on the bootstrap path with command fallback', () => {
@@ -119,16 +119,16 @@ describe('startup performance contract', () => {
     const desktopLibSource = readSource('../../../../apps/desktop/src/lib.rs');
     const desktopCommandsSource = readSource('../../../../apps/desktop/src/api/commands.rs');
 
-    expect(desktopThemeSource).toContain('__BITFUN_BOOTSTRAP_WORKSPACE_STARTUP_STATE__');
+    expect(desktopThemeSource).toContain('__HALO_BOOTSTRAP_WORKSPACE_STARTUP_STATE__');
     expect(desktopThemeSource).toContain('MAX_BOOTSTRAP_WORKSPACE_STATE_JSON_BYTES');
     expect(desktopLibSource).toContain('prepare_workspace_startup_bootstrap_snapshot');
     expect(desktopLibSource).toContain('tokio::task::block_in_place');
     expect(desktopLibSource).not.toContain('tauri::async_runtime::block_on(prepare_workspace_startup_bootstrap_snapshot');
     expect(desktopCommandsSource).toContain('initialize_workspace_startup_state_impl');
     expect(globalStateSource).toContain('consumeBootstrapWorkspaceStartupStateSnapshot');
-    expect(globalStateSource).toContain('__BITFUN_BOOTSTRAP_WORKSPACE_STARTUP_STATE__');
+    expect(globalStateSource).toContain('__HALO_BOOTSTRAP_WORKSPACE_STARTUP_STATE__');
     expect(globalStateSource).toContain(
-      'delete globalThis.__BITFUN_BOOTSTRAP_WORKSPACE_STARTUP_STATE__'
+      'delete globalThis.__HALO_BOOTSTRAP_WORKSPACE_STARTUP_STATE__'
     );
   });
 
@@ -153,10 +153,10 @@ describe('startup performance contract', () => {
     const themeServiceSource = readSource('../../infrastructure/theme/core/ThemeService.ts');
     const desktopThemeSource = readSource('../../../../apps/desktop/src/theme.rs');
 
-    expect(desktopThemeSource).toContain('__BITFUN_BOOTSTRAP_THEME_ID__');
-    expect(desktopThemeSource).toContain('__BITFUN_BOOTSTRAP_THEME_SELECTION__');
+    expect(desktopThemeSource).toContain('__HALO_BOOTSTRAP_THEME_ID__');
+    expect(desktopThemeSource).toContain('__HALO_BOOTSTRAP_THEME_SELECTION__');
     expect(desktopThemeSource).toContain('include_str!("generated/startup_theme_bootstrap.json")');
-    expect(desktopThemeSource).not.toContain('"bitfun-slate" => Some(Self');
+    expect(desktopThemeSource).not.toContain('"halo-slate" => Some(Self');
     expect(mainSource).toContain("before_render_step', 'theme_service_initialize'");
     expect(themeServiceSource).toContain('getBootstrapThemeSelection');
     expect(themeServiceSource).toContain('applyThemeSelection(bootstrapSelection, { persist: false })');
@@ -238,10 +238,10 @@ describe('startup performance contract', () => {
   it('starts non-critical work after the startup overlay handoff', () => {
     const source = readSource('../../main.tsx');
 
-    expect(STARTUP_OVERLAY_HIDDEN_EVENT).toBe('bitfun:startup-overlay-hidden');
+    expect(STARTUP_OVERLAY_HIDDEN_EVENT).toBe('halo:startup-overlay-hidden');
     expect(source).toContain('STARTUP_OVERLAY_HIDDEN_EVENT');
-    expect(source).not.toContain("signalName: 'bitfun:interactive-shell-ready'");
-    expect(source).not.toContain("signalName: 'bitfun:main-window-shown'");
+    expect(source).not.toContain("signalName: 'halo:interactive-shell-ready'");
+    expect(source).not.toContain("signalName: 'halo:main-window-shown'");
     expect(source).toContain('fallbackTimeoutMs: 10000');
   });
 
@@ -276,7 +276,7 @@ describe('startup performance contract', () => {
     expect(source).not.toMatch(/useAIInitialization/);
     expect(source).not.toMatch(/useCurrentModelConfig/);
     expect(source).not.toMatch(/from\s+['"]@\/infrastructure\/config\/services\/AIExperienceConfigService['"]/);
-    expect(source).toContain('bitfun:interactive-shell-ready');
+    expect(source).toContain('halo:interactive-shell-ready');
     expect(source).toContain('STARTUP_OVERLAY_HIDDEN_EVENT');
   });
 
@@ -497,7 +497,7 @@ describe('startup performance contract', () => {
     const source = readSource('../App.tsx');
 
     expect(source).toContain('userCloseRequestedRef');
-    expect(source).toContain("listen('bitfun_main_window_close_requested'");
+    expect(source).toContain("listen('halo_main_window_close_requested'");
     expect(source).toContain('user-close-requested');
     expect(source).toContain('startup-complete');
     expect(source).toContain('startup-watchdog');

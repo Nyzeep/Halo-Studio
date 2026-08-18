@@ -4,35 +4,35 @@ type RuntimeReactDOM = any;
 type RuntimeWindow = Window & {
   React?: unknown;
   ReactDOM?: unknown;
-  BitfunCanvasSDK?: CanvasRuntimeRecord;
-  BitfunCanvasSDKAdapters?: CanvasRuntimeRecord;
-  BitfunCanvasRuntimeHooks?: Record<string, unknown>;
-  BitfunCanvasRuntime?: CanvasRuntimeRecord;
+  HaloCanvasSDK?: CanvasRuntimeRecord;
+  HaloCanvasSDKAdapters?: CanvasRuntimeRecord;
+  HaloCanvasRuntimeHooks?: Record<string, unknown>;
+  HaloCanvasRuntime?: CanvasRuntimeRecord;
 };
 
 export function buildCanvasRuntimeInstallerScript(revision: string): string {
-  return `(${installBitfunCanvasRuntime.toString()})(${JSON.stringify(revision)});`;
+  return `(${installHaloCanvasRuntime.toString()})(${JSON.stringify(revision)});`;
 }
 
-function installBitfunCanvasRuntime(initialRevision: string): void {
+function installHaloCanvasRuntime(initialRevision: string): void {
   const runtimeWindow = window as unknown as RuntimeWindow;
   const React = runtimeWindow.React as RuntimeReact | undefined;
   const ReactDOM = runtimeWindow.ReactDOM as RuntimeReactDOM | undefined;
-  const rootElement = document.getElementById('bitfun-canvas-root');
+  const rootElement = document.getElementById('halo-canvas-root');
   let reactRoot: ReturnType<RuntimeReactDOM['createRoot']> | null = null;
   let renderComponent: any = null;
   let hostTheme = makeTheme({
     type: 'auto',
-    bg: 'var(--bitfun-canvas-bg)',
-    panel: 'var(--bitfun-canvas-panel)',
-    fg: 'var(--bitfun-canvas-fg)',
-    muted: 'var(--bitfun-canvas-muted)',
-    border: 'var(--bitfun-canvas-border)',
-    accent: 'var(--bitfun-canvas-accent)',
-    success: 'var(--bitfun-canvas-success)',
-    warning: 'var(--bitfun-canvas-warning)',
-    danger: 'var(--bitfun-canvas-danger)',
-    info: 'var(--bitfun-canvas-info)',
+    bg: 'var(--halo-canvas-bg)',
+    panel: 'var(--halo-canvas-panel)',
+    fg: 'var(--halo-canvas-fg)',
+    muted: 'var(--halo-canvas-muted)',
+    border: 'var(--halo-canvas-border)',
+    accent: 'var(--halo-canvas-accent)',
+    success: 'var(--halo-canvas-success)',
+    warning: 'var(--halo-canvas-warning)',
+    danger: 'var(--halo-canvas-danger)',
+    info: 'var(--halo-canvas-info)',
   });
   let sourceRevision = initialRevision;
   let hostStateValues: CanvasRuntimeRecord = {};
@@ -53,16 +53,16 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
   function makeTheme(tokens: CanvasRuntimeRecord): CanvasRuntimeRecord {
     const readToken = (value: unknown, fallback: string): string =>
       value === undefined || value === null || value === '' ? fallback : String(value);
-    const bg = readToken(tokens.bg, 'var(--bitfun-canvas-bg)');
-    const panel = readToken(tokens.panel, 'var(--bitfun-canvas-panel)');
-    const fg = readToken(tokens.fg, 'var(--bitfun-canvas-fg)');
-    const muted = readToken(tokens.muted, 'var(--bitfun-canvas-muted)');
-    const border = readToken(tokens.border, 'var(--bitfun-canvas-border)');
-    const accent = readToken(tokens.accent, 'var(--bitfun-canvas-accent)');
-    const success = readToken(tokens.success, 'var(--bitfun-canvas-success)');
-    const warning = readToken(tokens.warning, 'var(--bitfun-canvas-warning)');
-    const danger = readToken(tokens.danger, 'var(--bitfun-canvas-danger)');
-    const info = readToken(tokens.info, 'var(--bitfun-canvas-info)');
+    const bg = readToken(tokens.bg, 'var(--halo-canvas-bg)');
+    const panel = readToken(tokens.panel, 'var(--halo-canvas-panel)');
+    const fg = readToken(tokens.fg, 'var(--halo-canvas-fg)');
+    const muted = readToken(tokens.muted, 'var(--halo-canvas-muted)');
+    const border = readToken(tokens.border, 'var(--halo-canvas-border)');
+    const accent = readToken(tokens.accent, 'var(--halo-canvas-accent)');
+    const success = readToken(tokens.success, 'var(--halo-canvas-success)');
+    const warning = readToken(tokens.warning, 'var(--halo-canvas-warning)');
+    const danger = readToken(tokens.danger, 'var(--halo-canvas-danger)');
+    const info = readToken(tokens.info, 'var(--halo-canvas-info)');
     const token = (value: string, fields: CanvasRuntimeRecord = {}) =>
       Object.assign(new String(value), {
         toString() {
@@ -169,7 +169,7 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
     for (const key of allowed) {
       const value = nextTheme[key];
       if (typeof value === 'string' && value.trim()) {
-        rootStyle.setProperty(`--bitfun-canvas-${key}`, value.trim());
+        rootStyle.setProperty(`--halo-canvas-${key}`, value.trim());
       }
     }
     if (nextTheme.type === 'dark' || nextTheme.type === 'light') {
@@ -215,7 +215,7 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
         setValue(resolved);
         window.parent?.postMessage(
           {
-            type: 'bitfun-canvas-save-state',
+            type: 'halo-canvas-save-state',
             sourceRevisionSeen: sourceRevision,
             values: hostStateValues,
             updatedAt: Date.now(),
@@ -234,7 +234,7 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
         new Promise((resolve, reject) => {
           const requestId = `canvas-action-${++requestSeq}`;
           pendingRequests.set(requestId, { resolve, reject });
-          window.parent?.postMessage({ type: 'bitfun-canvas-action', requestId, action }, '*');
+          window.parent?.postMessage({ type: 'halo-canvas-action', requestId, action }, '*');
         }),
       [],
     );
@@ -245,12 +245,12 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
   }
 
   function postReady(): void {
-    window.parent?.postMessage({ type: 'bitfun-canvas-ready', sourceRevisionSeen: sourceRevision }, '*');
+    window.parent?.postMessage({ type: 'halo-canvas-ready', sourceRevisionSeen: sourceRevision }, '*');
   }
 
   function postRuntimeError(error: any): void {
     window.parent?.postMessage({
-      type: 'bitfun-canvas-runtime-error',
+      type: 'halo-canvas-runtime-error',
       message: String(error?.message || error || 'Canvas runtime error'),
       name: error?.name ? String(error.name) : undefined,
       stack: error?.stack ? String(error.stack) : undefined,
@@ -293,11 +293,11 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
   }
 
   function elementComponentName(element: Element): string | undefined {
-    const className = Array.from(element.classList).find(name => name.startsWith('bf-') || name.startsWith('bitfun-'));
+    const className = Array.from(element.classList).find(name => name.startsWith('bf-') || name.startsWith('halo-'));
     if (!className) return undefined;
     return className
       .replace(/^bf-/, '')
-      .replace(/^bitfun-canvas-/, '')
+      .replace(/^halo-canvas-/, '')
       .split('-')
       .filter(Boolean)
       .map(part => part.charAt(0).toUpperCase() + part.slice(1))
@@ -322,7 +322,7 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
   }
 
   function clearDesignHover(): void {
-    hoveredDesignElement?.removeAttribute('data-bitfun-canvas-hovered');
+    hoveredDesignElement?.removeAttribute('data-halo-canvas-hovered');
     hoveredDesignElement = null;
   }
 
@@ -330,12 +330,12 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
     if (hoveredDesignElement === element) return;
     clearDesignHover();
     hoveredDesignElement = element;
-    hoveredDesignElement?.setAttribute('data-bitfun-canvas-hovered', 'true');
+    hoveredDesignElement?.setAttribute('data-halo-canvas-hovered', 'true');
   }
 
   function setDesignMode(enabled: boolean): void {
     designModeEnabled = enabled;
-    document.documentElement.toggleAttribute('data-bitfun-canvas-design-mode', enabled);
+    document.documentElement.toggleAttribute('data-halo-canvas-design-mode', enabled);
     if (!enabled) clearDesignHover();
   }
 
@@ -354,7 +354,7 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
     event.preventDefault();
     event.stopPropagation();
     window.parent?.postMessage({
-      type: 'bitfun-canvas-element-selected',
+      type: 'halo-canvas-element-selected',
       sourceRevisionSeen: sourceRevision,
       reference: elementReference(event.target),
     }, '*');
@@ -364,7 +364,7 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
   function ErrorPanel({ error }: CanvasRuntimeRecord = {}) {
     return React.createElement('main', { style: { maxWidth: 860, margin: '0 auto', padding: 12, border: '1px solid var(--border-base)', borderRadius: 8 } }, [
       React.createElement('h1', { key: 'title', style: { fontSize: 18, margin: '0 0 8px' } }, 'Canvas runtime error'),
-      React.createElement('pre', { key: 'error', style: { whiteSpace: 'pre-wrap', color: 'var(--bitfun-canvas-danger)' } }, errorText(error)),
+      React.createElement('pre', { key: 'error', style: { whiteSpace: 'pre-wrap', color: 'var(--halo-canvas-danger)' } }, errorText(error)),
     ]);
   }
 
@@ -410,7 +410,7 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
   function reportRuntimeError(error: unknown): void {
     if (rootElement) {
       rootElement.innerHTML =
-        '<main style="max-width:860px;margin:0 auto;padding:12px;border:1px solid var(--border-base);border-radius:8px"><h1 style="font-size:18px;margin:0 0 8px">Canvas runtime error</h1><pre style="white-space:pre-wrap;color:var(--bitfun-canvas-danger)"></pre></main>';
+        '<main style="max-width:860px;margin:0 auto;padding:12px;border:1px solid var(--border-base);border-radius:8px"><h1 style="font-size:18px;margin:0 0 8px">Canvas runtime error</h1><pre style="white-space:pre-wrap;color:var(--halo-canvas-danger)"></pre></main>';
       const pre = rootElement.querySelector('pre');
       if (pre) pre.textContent = errorText(error);
     }
@@ -420,22 +420,22 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
   window.addEventListener('message', event => {
     const data = event.data;
     if (!data || typeof data !== 'object') return;
-    if (data.type === 'bitfun-canvas-theme') {
+    if (data.type === 'halo-canvas-theme') {
       applyTheme(data.theme);
       stateListeners.forEach(listener => listener());
-    } else if (data.type === 'bitfun-canvas-design-mode') {
+    } else if (data.type === 'halo-canvas-design-mode') {
       setDesignMode(Boolean(data.enabled));
     } else if (
-      data.type === 'bitfun-canvas-state' ||
-      data.type === 'bitfun-canvas-load-state-result' ||
-      data.type === 'bitfun-canvas-save-state-result'
+      data.type === 'halo-canvas-state' ||
+      data.type === 'halo-canvas-load-state-result' ||
+      data.type === 'halo-canvas-save-state-result'
     ) {
       if (data.state && typeof data.state === 'object' && data.state.values && typeof data.state.values === 'object') {
         hostStateValues = { ...data.state.values };
         if (data.state.sourceRevisionSeen) sourceRevision = data.state.sourceRevisionSeen;
         stateListeners.forEach(listener => listener());
       }
-    } else if (data.type === 'bitfun-canvas-action-result' || data.type === 'bitfun-canvas-error') {
+    } else if (data.type === 'halo-canvas-action-result' || data.type === 'halo-canvas-error') {
       const request = data.requestId ? pendingRequests.get(data.requestId) : null;
       if (!request) return;
       pendingRequests.delete(data.requestId);
@@ -451,14 +451,14 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
   document.addEventListener('click', handleDesignClick, true);
 
   function installSdkAdapters(): void {
-    if (!runtimeWindow.BitfunCanvasSDK || !runtimeWindow.BitfunCanvasSDKAdapters) return;
-    runtimeWindow.BitfunCanvasSDK = {
-      ...runtimeWindow.BitfunCanvasSDK,
-      ...runtimeWindow.BitfunCanvasSDKAdapters,
+    if (!runtimeWindow.HaloCanvasSDK || !runtimeWindow.HaloCanvasSDKAdapters) return;
+    runtimeWindow.HaloCanvasSDK = {
+      ...runtimeWindow.HaloCanvasSDK,
+      ...runtimeWindow.HaloCanvasSDKAdapters,
     };
   }
 
-  runtimeWindow.BitfunCanvasRuntimeHooks = {
+  runtimeWindow.HaloCanvasRuntimeHooks = {
     useHostTheme,
     useCanvasState<T>(key: string, defaultValue: T) {
       return useCanvasState(key, defaultValue) as [T, (value: T | ((previous: T) => T)) => void];
@@ -471,16 +471,16 @@ function installBitfunCanvasRuntime(initialRevision: string): void {
     useMemo: React.useMemo,
   };
 
-  runtimeWindow.BitfunCanvasSDK = {
-    ...runtimeWindow.BitfunCanvasRuntimeHooks,
+  runtimeWindow.HaloCanvasSDK = {
+    ...runtimeWindow.HaloCanvasRuntimeHooks,
   };
 
-  runtimeWindow.BitfunCanvasRuntime = {
+  runtimeWindow.HaloCanvasRuntime = {
     h: React.createElement,
     Fragment: React.Fragment,
     moduleStarted() {
       installSdkAdapters();
-      window.parent?.postMessage({ type: 'bitfun-canvas-module-started', sourceRevisionSeen: sourceRevision }, '*');
+      window.parent?.postMessage({ type: 'halo-canvas-module-started', sourceRevisionSeen: sourceRevision }, '*');
     },
     reportRuntimeError,
     mount(component: any) {

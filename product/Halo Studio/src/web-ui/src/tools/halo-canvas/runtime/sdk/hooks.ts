@@ -8,13 +8,13 @@ type CanvasRuntimeHooks = {
 
 declare global {
   interface Window {
-    BitfunCanvasRuntimeHooks?: CanvasRuntimeHooks;
+    HaloCanvasRuntimeHooks?: CanvasRuntimeHooks;
   }
 }
 
 function runtimeHooks(): CanvasRuntimeHooks {
   if (typeof window === 'undefined') return {};
-  return window.BitfunCanvasRuntimeHooks || {};
+  return window.HaloCanvasRuntimeHooks || {};
 }
 
 export function useHostTheme() {

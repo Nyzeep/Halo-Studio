@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { bitfunDarkTheme } from '../presets/dark-theme';
+import { haloDarkTheme } from '../presets/dark-theme';
 import { MonacoThemeSync } from './MonacoThemeSync';
 
 vi.mock('@/shared/utils/logger', () => ({
@@ -34,7 +34,7 @@ describe('MonacoThemeSync deferred runtime behavior', () => {
   it('keeps custom theme registrations until Monaco runtime is attached', () => {
     const sync = new MonacoThemeSync();
     const queuedTheme = {
-      ...bitfunDarkTheme,
+      ...haloDarkTheme,
       id: 'queued-theme',
       name: 'Queued theme',
     };

@@ -16,10 +16,10 @@ export const ConfigPageLayout: React.FC<ConfigPageLayoutProps> = ({
   className = '',
 }) => {
   return (
-    <div className={`bitfun-config-page-layout ${className}`}>
+    <div className={`halo-config-page-layout ${className}`}>
       {children}
       {/* Real DOM spacer: keeps a guaranteed blank tail at the end of the scroll range. */}
-      <div className="bitfun-config-page-layout__scroll-end-spacer" aria-hidden="true" />
+      <div className="halo-config-page-layout__scroll-end-spacer" aria-hidden="true" />
     </div>
   );
 };
@@ -39,8 +39,8 @@ export const ConfigPageContent: React.FC<ConfigPageContentProps> = ({
   id,
 }) => {
   return (
-    <div id={id} className={`bitfun-config-page-content ${className}`}>
-      <div className="bitfun-config-page-content__inner">
+    <div id={id} className={`halo-config-page-content ${className}`}>
+      <div className="halo-config-page-content__inner">
         {children}
       </div>
     </div>
@@ -63,7 +63,7 @@ export const ConfigPageSectionStack: React.FC<ConfigPageSectionStackProps> = ({
   return (
     <div
       {...props}
-      className={`bitfun-config-page-section-stack ${className}`.trim()}
+      className={`halo-config-page-section-stack ${className}`.trim()}
     >
       {children}
     </div>
@@ -92,25 +92,25 @@ export const ConfigPageSection: React.FC<ConfigPageSectionProps> = ({
   mouseGlowSurface = true,
 }) => {
   return (
-    <section className={`bitfun-config-page-section ${className}`}>
-      <div className="bitfun-config-page-section__header">
-        <div className="bitfun-config-page-section__heading">
-          <div className="bitfun-config-page-section__title-row">
-            <h3 className="bitfun-config-page-section__title">{title}</h3>
+    <section className={`halo-config-page-section ${className}`}>
+      <div className="halo-config-page-section__header">
+        <div className="halo-config-page-section__heading">
+          <div className="halo-config-page-section__title-row">
+            <h3 className="halo-config-page-section__title">{title}</h3>
             {titleSuffix}
           </div>
           {description && (
-            <p className="bitfun-config-page-section__description">{description}</p>
+            <p className="halo-config-page-section__description">{description}</p>
           )}
         </div>
         {extra && (
-          <div className="bitfun-config-page-section__extra">
+          <div className="halo-config-page-section__extra">
             {extra}
           </div>
         )}
       </div>
       <div
-        className="bitfun-config-page-section__body"
+        className="halo-config-page-section__body"
         data-mouse-glow-surface={mouseGlowSurface ? '' : undefined}
       >
         {children}
@@ -147,11 +147,11 @@ export const ConfigPageRow: React.FC<ConfigPageRowProps> = ({
   balanced = false,
 }) => {
   const cls = [
-    'bitfun-config-page-row',
-    `bitfun-config-page-row--${align}`,
-    multiline && 'bitfun-config-page-row--multiline',
-    wide && 'bitfun-config-page-row--wide',
-    balanced && 'bitfun-config-page-row--balanced',
+    'halo-config-page-row',
+    `halo-config-page-row--${align}`,
+    multiline && 'halo-config-page-row--multiline',
+    wide && 'halo-config-page-row--wide',
+    balanced && 'halo-config-page-row--balanced',
     className,
   ].filter(Boolean).join(' ');
 
@@ -165,14 +165,14 @@ export const ConfigPageRow: React.FC<ConfigPageRowProps> = ({
 
   return (
     <div className={cls} style={gridStyle}>
-      <div className="bitfun-config-page-row__meta">
+      <div className="halo-config-page-row__meta">
         {/* div (not p): label may contain buttons; button-in-p freezes React event path */}
-        <div className="bitfun-config-page-row__label">{label}</div>
+        <div className="halo-config-page-row__label">{label}</div>
         {description ? (
-          <div className="bitfun-config-page-row__description">{description}</div>
+          <div className="halo-config-page-row__description">{description}</div>
         ) : null}
       </div>
-      <div className="bitfun-config-page-row__control">
+      <div className="halo-config-page-row__control">
         {children}
       </div>
     </div>

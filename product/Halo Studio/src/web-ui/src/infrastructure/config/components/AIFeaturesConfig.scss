@@ -1,6 +1,6 @@
 @use '../../../component-library/styles/tokens' as *;
 
-.bitfun-func-agent-config {
+.halo-func-agent-config {
   &__content {
     display: flex;
     flex-direction: column;
@@ -95,7 +95,7 @@
     }
   }
 
-  .bitfun-config-page-row.bitfun-func-agent-config__model-row {
+  .halo-config-page-row.halo-func-agent-config__model-row {
     grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
   }
 
@@ -362,18 +362,18 @@
   &__pet-preview-sprite {
     width: 34px;
     height: 38px;
-    background-image: var(--bitfun-pet-preview-src);
+    background-image: var(--halo-pet-preview-src);
     background-repeat: no-repeat;
     background-size: 800% 900%;
     background-position: 0 0;
     image-rendering: pixelated;
-    animation: bitfun-config-pet-preview 1.2s steps(6) infinite;
+    animation: halo-config-pet-preview 1.2s steps(6) infinite;
   }
 
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-func-agent-config {
+  .halo-func-agent-config {
     &__pet-expand-button,
     &__pet-expand-button svg,
     &__pet-select-option,
@@ -384,7 +384,7 @@
   }
 }
 
-@keyframes bitfun-config-pet-preview {
+@keyframes halo-config-pet-preview {
   from {
     background-position-x: 0;
   }
@@ -395,7 +395,7 @@
 }
 
 @container config-panel (max-width: 520px) {
-  .bitfun-func-agent-config {
+  .halo-func-agent-config {
     &__row-control {
       align-items: flex-start;
     }

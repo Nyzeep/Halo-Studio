@@ -36,11 +36,11 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
   return (
     <div
       className={[
-        'bitfun-nav-panel__section-header',
-        isInteractive && 'bitfun-nav-panel__section-header--interactive',
-        collapsible && 'bitfun-nav-panel__section-header--collapsible',
-        onSceneOpen && 'bitfun-nav-panel__section-header--scene-link',
-        isSceneEntry && 'bitfun-nav-panel__section-header--scene-entry',
+        'halo-nav-panel__section-header',
+        isInteractive && 'halo-nav-panel__section-header--interactive',
+        collapsible && 'halo-nav-panel__section-header--collapsible',
+        onSceneOpen && 'halo-nav-panel__section-header--scene-link',
+        isSceneEntry && 'halo-nav-panel__section-header--scene-entry',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -59,15 +59,15 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
           : undefined
       }
     >
-      <span className="bitfun-nav-panel__section-label">{label}</span>
+      <span className="halo-nav-panel__section-label">{label}</span>
       {onSceneOpen ? (
-        <span className="bitfun-nav-panel__section-indicator" aria-hidden="true">
+        <span className="halo-nav-panel__section-indicator" aria-hidden="true">
           <ChevronRight size={14} />
         </span>
       ) : null}
       {actions ? (
         <div
-          className="bitfun-nav-panel__section-actions"
+          className="halo-nav-panel__section-actions"
           onClick={e => e.stopPropagation()}
           onKeyDown={e => e.stopPropagation()}
         >

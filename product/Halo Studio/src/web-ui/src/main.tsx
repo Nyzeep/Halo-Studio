@@ -56,7 +56,7 @@ async function traceStartupStep<T>(
 }
 
 /** Dedupe only for white-screen heuristic (empty #root), not for Error Boundary logs. */
-const WHITE_SCREEN_LOGGED_FLAG = '__bitfun_white_screen_crash_logged__';
+const WHITE_SCREEN_LOGGED_FLAG = '__halo_white_screen_crash_logged__';
 function hasLoggedWhiteScreenCrash(): boolean {
   return Boolean((window as any)[WHITE_SCREEN_LOGGED_FLAG]);
 }
@@ -84,7 +84,7 @@ function isRootEmpty(): boolean {
 }
 
 function registerGlobalErrorHandlers() {
-  const flag = '__bitfun_global_error_handlers_registered__';
+  const flag = '__halo_global_error_handlers_registered__';
   const w = window as any;
   if (w[flag]) {
     return;
@@ -344,7 +344,7 @@ async function startApplication(): Promise<void> {
     mode: 'static',
   });
   const isAgentCompanionWindow = new URLSearchParams(window.location.search)
-    .get('bitfunWindow') === 'agent-companion';
+    .get('haloWindow') === 'agent-companion';
 
   const renderStartedAt = nowMs();
   if (isAgentCompanionWindow) {

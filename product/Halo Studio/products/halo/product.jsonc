@@ -5,12 +5,12 @@
   "members": {
     "desktop": {
       "displayNameKey": "product.desktop.name",
-      "binaryName": "bitfun-desktop",
-      "bundleId": "com.bitfun.desktop"
+      "binaryName": "halo-desktop",
+      "bundleId": "com.halostudio.desktop"
     },
     "cli": {
       "displayNameKey": "product.cli.name",
-      "binaryName": "bitfun"
+      "binaryName": "halo"
     }
   }
 }

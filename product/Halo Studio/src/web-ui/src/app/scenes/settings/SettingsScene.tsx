@@ -30,11 +30,11 @@ const SETTINGS_CONTENT_EXIT_DURATION_MS = 180;
 
 function SettingsSceneLoading() {
   return (
-    <div className="bitfun-settings-scene__loading" aria-busy="true" aria-hidden="true">
-      <div className="bitfun-settings-scene__loading-line bitfun-settings-scene__loading-line--title" />
-      <div className="bitfun-settings-scene__loading-line" />
-      <div className="bitfun-settings-scene__loading-line" />
-      <div className="bitfun-settings-scene__loading-block" />
+    <div className="halo-settings-scene__loading" aria-busy="true" aria-hidden="true">
+      <div className="halo-settings-scene__loading-line halo-settings-scene__loading-line--title" />
+      <div className="halo-settings-scene__loading-line" />
+      <div className="halo-settings-scene__loading-line" />
+      <div className="halo-settings-scene__loading-block" />
     </div>
   );
 }
@@ -90,8 +90,8 @@ const SettingsScene: React.FC = () => {
   }
 
   return (
-    <div className="bitfun-settings-scene" data-testid="settings-scene" data-settings-tab={resolvedTab}>
-      <div className="bitfun-settings-scene__content-stack">
+    <div className="halo-settings-scene" data-testid="settings-scene" data-settings-tab={resolvedTab}>
+      <div className="halo-settings-scene__content-stack">
         {renderedTabs.map(tab => {
           const Content = resolveSettingsContent(tab);
           if (!Content) return null;
@@ -102,10 +102,10 @@ const SettingsScene: React.FC = () => {
             <div
               key={tab}
               className={[
-                'bitfun-settings-scene__content-wrapper',
-                isActive && 'bitfun-settings-scene__content-wrapper--active',
-                isActive && renderedOutgoingTab && 'bitfun-settings-scene__content-wrapper--entering',
-                isOutgoing && 'bitfun-settings-scene__content-wrapper--outgoing',
+                'halo-settings-scene__content-wrapper',
+                isActive && 'halo-settings-scene__content-wrapper--active',
+                isActive && renderedOutgoingTab && 'halo-settings-scene__content-wrapper--entering',
+                isOutgoing && 'halo-settings-scene__content-wrapper--outgoing',
               ].filter(Boolean).join(' ')}
               aria-hidden={!isActive}
               data-testid="settings-scene-content"

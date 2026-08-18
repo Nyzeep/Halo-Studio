@@ -23,28 +23,28 @@ const WorkbenchPermissionDecision: React.FC<WorkbenchPermissionDecisionProps> = 
   return (
     <div
       className={[
-        'bitfun-workbench-permission-decision',
+        'halo-workbench-permission-decision',
         operation.riskLevel === 'highRisk' ? 'is-high-risk' : '',
       ].filter(Boolean).join(' ')}
       data-testid="workbench-permission-decision"
       data-risk-level={operation.riskLevel}
     >
-      <div className="bitfun-workbench-permission-decision__summary">
-        <code className="bitfun-workbench-permission-decision__tool">
+      <div className="halo-workbench-permission-decision__summary">
+        <code className="halo-workbench-permission-decision__tool">
           {operation.toolName}
         </code>
         {operation.arguments ? (
-          <code className="bitfun-workbench-permission-decision__arguments">
+          <code className="halo-workbench-permission-decision__arguments">
             {operation.arguments}
           </code>
         ) : null}
         {operation.riskLevel === 'highRisk' ? (
-          <span className="bitfun-workbench-permission-decision__risk">
+          <span className="halo-workbench-permission-decision__risk">
             {t('nav.sessions.workbenchRuntime.permission.highRisk')}
           </span>
         ) : null}
       </div>
-      <div className="bitfun-workbench-permission-decision__actions">
+      <div className="halo-workbench-permission-decision__actions">
         <button
           type="button"
           data-testid="workbench-permission-allow"

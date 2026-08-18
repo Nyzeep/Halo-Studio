@@ -1,6 +1,6 @@
 @use '../../../component-library/styles/tokens.scss' as *;
 
-.bitfun-shell-nav {
+.halo-shell-nav {
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -332,8 +332,8 @@
       color: var(--color-text-primary);
       background: var(--element-bg-medium);
 
-      .bitfun-shell-nav__terminal-dot { display: none; }
-      .bitfun-shell-nav__terminal-close { display: inline-flex; }
+      .halo-shell-nav__terminal-dot { display: none; }
+      .halo-shell-nav__terminal-close { display: inline-flex; }
     }
 
     &.is-active {
@@ -483,7 +483,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-shell-nav {
+  .halo-shell-nav {
     &__workspace-trigger,
     &__workspace-menu-item,
     &__split-button,

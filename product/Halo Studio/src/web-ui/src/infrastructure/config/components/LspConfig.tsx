@@ -16,7 +16,7 @@ interface LspSettings {
 }
 
 const DEFAULT_LSP_SETTINGS: LspSettings = { autoStartEnabled: true };
-const LSP_SETTINGS_KEY = 'bitfun_lsp_settings';
+const LSP_SETTINGS_KEY = 'halo_lsp_settings';
 
 const LspConfig: React.FC = () => {
   const { t } = useTranslation('settings/lsp');
@@ -101,12 +101,12 @@ const LspConfig: React.FC = () => {
   ) : null;
 
   return (
-    <ConfigPageLayout className="bitfun-lsp-config">
+    <ConfigPageLayout className="halo-lsp-config">
       <ConfigPageHeader title={t('title')} subtitle={t('subtitle')} />
 
       <ConfigPageContent>
         {installMessage && (
-          <div className="bitfun-lsp-config__message-container">
+          <div className="halo-lsp-config__message-container">
             <Alert type={installMessage.type === 'success' ? 'success' : 'error'} message={installMessage.text} />
           </div>
         )}
@@ -140,7 +140,7 @@ const LspConfig: React.FC = () => {
                 disabled={isInitializing}
                 tooltip={t('pluginList.initTooltip')}
               >
-                <RefreshCw size={16} className={isInitializing ? 'bitfun-lsp-config__spinning' : ''} />
+                <RefreshCw size={16} className={isInitializing ? 'halo-lsp-config__spinning' : ''} />
               </IconButton>
               <IconButton
                 variant="ghost"
@@ -162,7 +162,7 @@ const LspConfig: React.FC = () => {
             </>
           }
         >
-          <div className="bitfun-lsp-config__plugins">
+          <div className="halo-lsp-config__plugins">
             <LspPluginList
               onInitialize={handleInitialize}
               onInstallPlugin={handleInstallPlugin}

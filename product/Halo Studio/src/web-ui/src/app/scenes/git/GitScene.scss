@@ -2,7 +2,7 @@
  * GitScene styles.
  */
 
-.bitfun-git-scene {
+.halo-git-scene {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -11,7 +11,7 @@
 
   &--not-repository,
   &--loading {
-    .bitfun-git-scene__content {
+    .halo-git-scene__content {
       display: flex;
       flex-direction: column;
       flex: 1;

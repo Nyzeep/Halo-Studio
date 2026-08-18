@@ -17,11 +17,11 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 vi.mock('./mainWindowInspector', () => ({
   createMainWindowInspectorScript: () =>
-    'window.__bitfunInspectorToggleCount = (window.__bitfunInspectorToggleCount || 0) + 1; window.__bitfun_main_inspector_active = true;',
+    'window.__haloInspectorToggleCount = (window.__haloInspectorToggleCount || 0) + 1; window.__halo_main_inspector_active = true;',
   CANCEL_MAIN_WINDOW_INSPECTOR_SCRIPT:
-    'window.__bitfun_main_inspector_active = false;',
+    'window.__halo_main_inspector_active = false;',
   IS_INSPECTOR_ACTIVE_SCRIPT:
-    'return Boolean(window.__bitfun_main_inspector_active);',
+    'return Boolean(window.__halo_main_inspector_active);',
 }));
 
 function DebugInspectorHarness(): null {
@@ -69,8 +69,8 @@ describe('useDebugInspector', () => {
     container.remove();
     vi.clearAllMocks();
     setTauriRuntime(false);
-    delete (window as unknown as { __bitfunInspectorToggleCount?: number }).__bitfunInspectorToggleCount;
-    delete (window as unknown as { __bitfun_main_inspector_active?: boolean }).__bitfun_main_inspector_active;
+    delete (window as unknown as { __haloInspectorToggleCount?: number }).__haloInspectorToggleCount;
+    delete (window as unknown as { __halo_main_inspector_active?: boolean }).__halo_main_inspector_active;
   });
 
   it('does not intercept DevTools shortcuts outside the desktop runtime', () => {
@@ -111,7 +111,7 @@ describe('useDebugInspector', () => {
 
     expect(event.defaultPrevented).toBe(true);
     await vi.waitFor(() =>
-      expect((window as unknown as { __bitfunInspectorToggleCount?: number }).__bitfunInspectorToggleCount)
+      expect((window as unknown as { __haloInspectorToggleCount?: number }).__haloInspectorToggleCount)
         .toBe(1)
     );
   });

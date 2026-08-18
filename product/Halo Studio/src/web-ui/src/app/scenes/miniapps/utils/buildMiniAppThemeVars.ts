@@ -1,6 +1,6 @@
 /**
  * Build MiniApp theme payload from main app ThemeConfig.
- * Maps to --bitfun-* CSS variables for iframe theme sync.
+ * Maps to --halo-* CSS variables for iframe theme sync.
  */
 import type { ThemeConfig, ThemeType } from '@/infrastructure/theme/types';
 import { MINI_APP_SCROLLBAR_FALLBACKS } from '@/shared/theme/themeBoundaryFallbacks';
@@ -17,46 +17,46 @@ export function buildMiniAppThemeVars(theme: ThemeConfig | null): MiniAppThemePa
   const { colors, effects, typography } = theme;
   const vars: Record<string, string> = {};
 
-  vars['--bitfun-bg'] = colors.background.primary;
-  vars['--bitfun-bg-secondary'] = colors.background.secondary;
-  vars['--bitfun-bg-tertiary'] = colors.background.tertiary;
-  vars['--bitfun-bg-elevated'] = colors.background.elevated;
+  vars['--halo-bg'] = colors.background.primary;
+  vars['--halo-bg-secondary'] = colors.background.secondary;
+  vars['--halo-bg-tertiary'] = colors.background.tertiary;
+  vars['--halo-bg-elevated'] = colors.background.elevated;
 
-  vars['--bitfun-text'] = colors.text.primary;
-  vars['--bitfun-text-secondary'] = colors.text.secondary;
-  vars['--bitfun-text-muted'] = colors.text.muted;
+  vars['--halo-text'] = colors.text.primary;
+  vars['--halo-text-secondary'] = colors.text.secondary;
+  vars['--halo-text-muted'] = colors.text.muted;
 
-  vars['--bitfun-accent'] = colors.accent[500];
-  vars['--bitfun-accent-hover'] = colors.accent[600];
+  vars['--halo-accent'] = colors.accent[500];
+  vars['--halo-accent-hover'] = colors.accent[600];
 
-  vars['--bitfun-success'] = colors.semantic.success;
-  vars['--bitfun-warning'] = colors.semantic.warning;
-  vars['--bitfun-error'] = colors.semantic.error;
-  vars['--bitfun-info'] = colors.semantic.info;
+  vars['--halo-success'] = colors.semantic.success;
+  vars['--halo-warning'] = colors.semantic.warning;
+  vars['--halo-error'] = colors.semantic.error;
+  vars['--halo-info'] = colors.semantic.info;
 
-  vars['--bitfun-border'] = colors.border.base;
-  vars['--bitfun-border-subtle'] = colors.border.subtle;
+  vars['--halo-border'] = colors.border.base;
+  vars['--halo-border-subtle'] = colors.border.subtle;
 
-  vars['--bitfun-element-bg'] = colors.element.base;
-  vars['--bitfun-element-hover'] = colors.element.medium;
+  vars['--halo-element-bg'] = colors.element.base;
+  vars['--halo-element-hover'] = colors.element.medium;
 
   if (effects?.radius) {
-    vars['--bitfun-radius'] = effects.radius.base;
-    vars['--bitfun-radius-lg'] = effects.radius.lg;
+    vars['--halo-radius'] = effects.radius.base;
+    vars['--halo-radius-lg'] = effects.radius.lg;
   }
 
   if (typography?.font) {
-    vars['--bitfun-font-sans'] = typography.font.sans;
-    vars['--bitfun-font-mono'] = typography.font.mono;
+    vars['--halo-font-sans'] = typography.font.sans;
+    vars['--halo-font-mono'] = typography.font.mono;
   }
 
   if (colors.scrollbar) {
-    vars['--bitfun-scrollbar-thumb'] = colors.scrollbar.thumb;
-    vars['--bitfun-scrollbar-thumb-hover'] = colors.scrollbar.thumbHover;
+    vars['--halo-scrollbar-thumb'] = colors.scrollbar.thumb;
+    vars['--halo-scrollbar-thumb-hover'] = colors.scrollbar.thumbHover;
   } else {
     const scrollbarFallback = MINI_APP_SCROLLBAR_FALLBACKS[theme.type];
-    vars['--bitfun-scrollbar-thumb'] = scrollbarFallback.thumb;
-    vars['--bitfun-scrollbar-thumb-hover'] = scrollbarFallback.thumbHover;
+    vars['--halo-scrollbar-thumb'] = scrollbarFallback.thumb;
+    vars['--halo-scrollbar-thumb-hover'] = scrollbarFallback.thumbHover;
   }
 
   return {

@@ -144,7 +144,7 @@ class FileTabManager {
   private isRightPanelCollapsed(): boolean {
     
     try {
-      const layoutState = (window as any).__BITFUN_LAYOUT_STATE__;
+      const layoutState = (window as any).__HALO_LAYOUT_STATE__;
       return layoutState?.rightPanelCollapsed ?? false;
     } catch {
       return false;

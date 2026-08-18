@@ -11,16 +11,16 @@ vi.mock('@tauri-apps/plugin-log', () => ({
 async function importLoggerWithBootstrapLevel(level: unknown) {
   vi.resetModules();
   if (level === undefined) {
-    delete globalThis.__BITFUN_BOOTSTRAP_LOG_LEVEL__;
+    delete globalThis.__HALO_BOOTSTRAP_LOG_LEVEL__;
   } else {
-    globalThis.__BITFUN_BOOTSTRAP_LOG_LEVEL__ = level as string;
+    globalThis.__HALO_BOOTSTRAP_LOG_LEVEL__ = level as string;
   }
   return import('./logger');
 }
 
 describe('logger bootstrap level', () => {
   afterEach(() => {
-    delete globalThis.__BITFUN_BOOTSTRAP_LOG_LEVEL__;
+    delete globalThis.__HALO_BOOTSTRAP_LOG_LEVEL__;
   });
 
   it('uses the native bootstrap log level before async config sync runs', async () => {

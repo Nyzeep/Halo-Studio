@@ -298,11 +298,11 @@ describe('ExternalSourcesConfig', () => {
     });
 
     const page = container.querySelector(
-      '.bitfun-config-page-layout.bitfun-external-sources-config',
+      '.halo-config-page-layout.halo-external-sources-config',
     );
-    expect(page?.querySelector('.bitfun-config-page-header__title')?.textContent).toBe('title');
+    expect(page?.querySelector('.halo-config-page-header__title')?.textContent).toBe('title');
     expect(page?.querySelector(
-      '.bitfun-config-page-content .bitfun-config-page-loading',
+      '.halo-config-page-content .halo-config-page-loading',
     )?.textContent).toBe('loading');
 
     await act(async () => {
@@ -334,7 +334,7 @@ describe('ExternalSourcesConfig', () => {
     expect(container.textContent).toContain('policy.mode.recommended');
     expect(container.textContent).toContain('policy.inherited');
     expect(container.querySelectorAll(
-      '.bitfun-external-sources-config__capability-row',
+      '.halo-external-sources-config__capability-row',
     )).toHaveLength(0);
 
     const capabilityButton = Array.from(container.querySelectorAll('button')).find((button) =>
@@ -346,7 +346,7 @@ describe('ExternalSourcesConfig', () => {
     expect(container.textContent).toContain('policy.access.askBeforeUse');
 
     const policyToggle = container.querySelector(
-      '.bitfun-external-sources-config__policy-card input[type="checkbox"]',
+      '.halo-external-sources-config__policy-card input[type="checkbox"]',
     ) as HTMLInputElement;
     expect(policyToggle.checked).toBe(true);
     await act(async () => policyToggle.click());
@@ -515,7 +515,7 @@ describe('ExternalSourcesConfig', () => {
       button.getAttribute('aria-label') === 'policy.capabilitiesFor:{"ecosystem":"OpenCode"}');
     await act(async () => capabilityButton?.click());
     const toolRow = Array.from(container.querySelectorAll(
-      '.bitfun-external-sources-config__capability-row',
+      '.halo-external-sources-config__capability-row',
     )).find((row) => row.textContent?.includes('policy.capability.tool'));
 
     expect(toolRow?.textContent).toContain('policy.access.askBeforeUse');
@@ -545,7 +545,7 @@ describe('ExternalSourcesConfig', () => {
     });
 
     const policyToggle = container.querySelector(
-      '.bitfun-external-sources-config__policy-card input[type="checkbox"]',
+      '.halo-external-sources-config__policy-card input[type="checkbox"]',
     ) as HTMLInputElement;
     expect(policyToggle.checked).toBe(false);
   });
@@ -661,7 +661,7 @@ describe('ExternalSourcesConfig', () => {
     });
 
     expect(container.querySelectorAll(
-      '.bitfun-external-sources-config__source-group',
+      '.halo-external-sources-config__source-group',
     )).toHaveLength(1);
     expect(container.textContent?.match(/Other user configuration/g)).toHaveLength(1);
     expect(container.textContent).toContain('sources.commandCount:{"count":1}');
@@ -806,7 +806,7 @@ describe('ExternalSourcesConfig', () => {
         serverName: 'github',
         candidates: [{
           candidateId: 'native-mcp-github',
-          displayName: 'BitFun: github',
+          displayName: 'Halo: github',
           external: false,
           behaviorVersion: 'native-v1',
           available: true,
@@ -846,16 +846,16 @@ describe('ExternalSourcesConfig', () => {
     expect(container.textContent).toContain('OPENCODE_TOKEN');
 
     const approvalDetails = container.querySelector(
-      '.bitfun-external-sources-config__review-details',
+      '.halo-external-sources-config__review-details',
     ) as HTMLDetailsElement;
     const approvalCard = approvalDetails.closest(
-      '.bitfun-external-sources-config__tool-card',
+      '.halo-external-sources-config__tool-card',
     ) as HTMLElement;
     const alwaysVisibleSummary = approvalCard.querySelector(
-      '.bitfun-external-sources-config__review-summary',
+      '.halo-external-sources-config__review-summary',
     ) as HTMLElement;
     const alwaysVisibleRisk = approvalCard.querySelector(
-      '.bitfun-external-sources-config__review-risk',
+      '.halo-external-sources-config__review-risk',
     ) as HTMLElement;
     expect(approvalDetails.open).toBe(false);
     expect(alwaysVisibleSummary.textContent).toContain('mcp.command:{"command":"npx"}');
@@ -867,11 +867,11 @@ describe('ExternalSourcesConfig', () => {
     expect(alwaysVisibleRisk.id).toBe('mcp-review-risk-mcp-decision-v1');
     expect(approvalEnable.getAttribute('aria-describedby')).toBe(alwaysVisibleRisk.id);
     const remoteSummary = Array.from(approvalCard.parentElement?.querySelectorAll(
-      '.bitfun-external-sources-config__review-summary',
+      '.halo-external-sources-config__review-summary',
     ) ?? []).find((candidate) => candidate.textContent?.includes('mcp.url')) as HTMLElement;
     const remoteDetails = remoteSummary.closest(
-      '.bitfun-external-sources-config__tool-card',
-    )?.querySelector('.bitfun-external-sources-config__review-details') as HTMLDetailsElement;
+      '.halo-external-sources-config__tool-card',
+    )?.querySelector('.halo-external-sources-config__review-details') as HTMLDetailsElement;
     expect(remoteSummary.textContent).toContain(
       'mcp.url:{"url":"https://mcp.example.test"}',
     );
@@ -885,7 +885,7 @@ describe('ExternalSourcesConfig', () => {
     expect(approvalDetails.open).toBe(true);
 
     const externalConflictCandidate = Array.from(
-      container.querySelectorAll('.bitfun-external-sources-config__candidate'),
+      container.querySelectorAll('.halo-external-sources-config__candidate'),
     ).find((candidate) => candidate.textContent?.includes('OpenCode: github'));
     expect(externalConflictCandidate?.textContent).toContain('mcpConflicts.review');
     expect(externalConflictCandidate?.textContent).not.toContain('mcp.argumentCount');
@@ -923,7 +923,7 @@ describe('ExternalSourcesConfig', () => {
     );
 
     const nativeCandidate = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('BitFun: github'));
+      button.textContent?.includes('Halo: github'));
     await act(async () => nativeCandidate?.click());
     expect(chooseMcpConflictMock).toHaveBeenCalledWith(
       'D:/workspace/project',
@@ -948,9 +948,9 @@ describe('ExternalSourcesConfig', () => {
         selectedCandidateId: 'builtin-review',
         candidates: [{
           candidateId: 'builtin-review',
-          displayName: 'BitFun Review',
+          displayName: 'Halo Review',
           kind: 'built_in',
-          providerId: 'bitfun.builtin',
+          providerId: 'halo.builtin',
           contentVersion: 'builtin-v1',
         }, {
           candidateId: 'external-review',
@@ -967,11 +967,11 @@ describe('ExternalSourcesConfig', () => {
       subagentConflicts: [{
         conflictKey: 'agent-conflict-v1',
         logicalId: 'review',
-        selectedCandidateId: '__bitfun_disabled__',
+        selectedCandidateId: '__halo_disabled__',
         candidates: [{
           candidateId: 'builtin-agent-review',
-          displayName: 'BitFun Review Agent',
-          sourceLabel: 'BitFun',
+          displayName: 'Halo Review Agent',
+          sourceLabel: 'Halo',
           external: false,
         }, {
           candidateId: 'external-agent-review',
@@ -994,9 +994,9 @@ describe('ExternalSourcesConfig', () => {
     expect(container.textContent).toContain('conflicts.currentSelection');
     expect(container.textContent).toContain('toolConflicts.currentSelection');
     expect(container.textContent).toContain('agentConflicts.keptUnavailable');
-    expect(container.textContent).toContain('BitFun Review');
+    expect(container.textContent).toContain('Halo Review');
     expect(container.textContent).toContain('OpenCode Review Tool');
-    expect(container.textContent).toContain('BitFun Review Agent');
+    expect(container.textContent).toContain('Halo Review Agent');
     expect(container.textContent).toContain('OpenCode Review Agent');
 
     const externalTool = Array.from(container.querySelectorAll('button')).find((button) =>
@@ -1009,9 +1009,9 @@ describe('ExternalSourcesConfig', () => {
       7,
     );
 
-    const bitfunAgent = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('BitFun Review Agent'));
-    await act(async () => bitfunAgent?.click());
+    const haloAgent = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Halo Review Agent'));
+    await act(async () => haloAgent?.click());
     expect(chooseSubagentConflictMock).toHaveBeenCalledWith(
       'D:/workspace/project',
       'agent-conflict-v1',
@@ -1086,9 +1086,9 @@ describe('ExternalSourcesConfig', () => {
         selectedCandidateId: 'external-review',
         candidates: [{
           candidateId: 'builtin-review',
-          displayName: 'BitFun Review',
+          displayName: 'Halo Review',
           kind: 'built_in',
-          providerId: 'bitfun.builtin',
+          providerId: 'halo.builtin',
           contentVersion: 'builtin-v1',
         }, {
           candidateId: 'external-review',
@@ -1126,8 +1126,8 @@ describe('ExternalSourcesConfig', () => {
         selectedCandidateId: 'external-agent-review',
         candidates: [{
           candidateId: 'builtin-agent-review',
-          displayName: 'BitFun Review Agent',
-          sourceLabel: 'BitFun',
+          displayName: 'Halo Review Agent',
+          sourceLabel: 'Halo',
           external: false,
         }, {
           candidateId: 'external-agent-review',
@@ -1312,7 +1312,7 @@ describe('ExternalSourcesConfig', () => {
     expect(container.textContent).not.toContain('refresh failed');
   });
 
-  it('describes BitFun preference-storage diagnostics without blaming source files', async () => {
+  it('describes Halo preference-storage diagnostics without blaming source files', async () => {
     getSnapshotMock.mockResolvedValue({
       ...snapshot,
       diagnostics: [{
@@ -1417,8 +1417,8 @@ describe('ExternalSourcesConfig', () => {
         logicalId: 'explore',
         candidates: [{
           candidateId: 'builtin-explore',
-          displayName: 'BitFun Explore',
-          sourceLabel: 'BitFun',
+          displayName: 'Halo Explore',
+          sourceLabel: 'Halo',
           external: false,
         }, {
           candidateId: 'external-explore-v1',
@@ -1952,11 +1952,11 @@ describe('ExternalSourcesConfig', () => {
     expect(container.textContent).toContain('lifecycle.degraded');
     expect(container.textContent).toContain('opencode.configuration.invalid');
     expect(container.querySelector(
-      '.bitfun-external-sources-config__opencode-card [data-external-attention="true"]',
+      '.halo-external-sources-config__opencode-card [data-external-attention="true"]',
     )).not.toBeNull();
     expect(container.textContent?.match(/opencode\.configuration\.invalid/g)).toHaveLength(1);
     const sourceToggle = container.querySelector(
-      '.bitfun-external-sources-config__opencode-card input[aria-label^="sources.toggleLabel"]',
+      '.halo-external-sources-config__opencode-card input[aria-label^="sources.toggleLabel"]',
     ) as HTMLInputElement;
     expect(sourceToggle).not.toBeNull();
     await act(async () => sourceToggle.click());
@@ -2237,10 +2237,10 @@ describe('ExternalSourcesConfig', () => {
       'input[aria-label^="sources.toggleLabel"]',
     ) as HTMLInputElement;
     const policyToggle = container.querySelector(
-      '.bitfun-external-sources-config__policy-card input[type="checkbox"]',
+      '.halo-external-sources-config__policy-card input[type="checkbox"]',
     ) as HTMLInputElement;
     expect(container.querySelectorAll(
-      '.bitfun-external-sources-config__source-group',
+      '.halo-external-sources-config__source-group',
     )).toHaveLength(2);
     expect(sourceToggle.disabled).toBe(true);
     expect(policyToggle.disabled).toBe(true);
@@ -2454,7 +2454,7 @@ describe('ExternalSourcesConfig', () => {
     await act(async () => detailsButton?.click());
 
     const pathLinks = container.querySelectorAll(
-      '.bitfun-external-sources-config__source-detail-toggle .bitfun-external-sources-config__path-link',
+      '.halo-external-sources-config__source-detail-toggle .halo-external-sources-config__path-link',
     );
     expect(pathLinks).toHaveLength(2);
     await act(async () => {
@@ -2518,7 +2518,7 @@ describe('ExternalSourcesConfig', () => {
 
     expect(container.textContent).toContain('opencode.title');
     expect(container.querySelector(
-      '.bitfun-external-sources-config__opencode-card',
+      '.halo-external-sources-config__opencode-card',
     )).not.toBeNull();
     expect(container.textContent).not.toContain('sources.title');
 
@@ -2532,11 +2532,11 @@ describe('ExternalSourcesConfig', () => {
     });
     expect(expandButton?.getAttribute('aria-expanded')).toBe('true');
     const locationBlocks = container.querySelectorAll(
-      '.bitfun-external-sources-config__opencode-locations',
+      '.halo-external-sources-config__opencode-locations',
     );
     expect(locationBlocks).toHaveLength(2);
     const expandedLinks = locationBlocks[1].querySelectorAll(
-      '.bitfun-external-sources-config__path-link',
+      '.halo-external-sources-config__path-link',
     );
     expect(expandedLinks).toHaveLength(2);
     await act(async () => {
@@ -2597,10 +2597,10 @@ describe('ExternalSourcesConfig', () => {
     });
 
     expect(container.querySelector(
-      '.bitfun-external-sources-config__opencode-locations a.bitfun-external-sources-config__path-link',
+      '.halo-external-sources-config__opencode-locations a.halo-external-sources-config__path-link',
     )).toBeNull();
     expect(container.querySelector(
-      '.bitfun-external-sources-config__opencode-locations .bitfun-external-sources-config__path-link--disabled',
+      '.halo-external-sources-config__opencode-locations .halo-external-sources-config__path-link--disabled',
     )?.getAttribute('aria-label')).toBe('common.openInExplorerUnavailable');
     expect(revealSourceLocationMock).not.toHaveBeenCalled();
   });
@@ -2654,7 +2654,7 @@ describe('ExternalSourcesConfig', () => {
       await Promise.resolve();
     });
     const pathLink = container.querySelector(
-      '.bitfun-external-sources-config__opencode-locations a.bitfun-external-sources-config__path-link',
+      '.halo-external-sources-config__opencode-locations a.halo-external-sources-config__path-link',
     );
     await act(async () => {
       (pathLink as HTMLAnchorElement).click();

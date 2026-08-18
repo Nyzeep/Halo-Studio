@@ -30,8 +30,8 @@ const WorkbenchSessionsSection: React.FC<WorkbenchSessionsSectionProps> = ({
       || runtimeState.syncStatus === 'resyncing'
     )) {
       return (
-        <div className="bitfun-nav-panel__inline-list">
-          <div className="bitfun-nav-panel__inline-loading">
+        <div className="halo-nav-panel__inline-list">
+          <div className="halo-nav-panel__inline-loading">
             <Loader2 size={12} />
             <span>{t('nav.sessions.loading')}</span>
           </div>
@@ -42,7 +42,7 @@ const WorkbenchSessionsSection: React.FC<WorkbenchSessionsSectionProps> = ({
   }
 
   return (
-    <div className="bitfun-nav-panel__inline-list" data-testid="workbench-session-list">
+    <div className="halo-nav-panel__inline-list" data-testid="workbench-session-list">
       {sessions.map((session, index) => {
         const awaitingDecision = selectWorkbenchRuntimeSessionNeedsDecision(
           runtimeState,
@@ -55,40 +55,40 @@ const WorkbenchSessionsSection: React.FC<WorkbenchSessionsSectionProps> = ({
         return (
           <div
             key={session.sessionId}
-            className="bitfun-nav-panel__inline-item"
+            className="halo-nav-panel__inline-item"
             data-testid="workbench-session-item"
             data-session-id={session.sessionId}
             data-session-phase={session.phase}
           >
             {showSessionModeIcon ? (
-              <span className="bitfun-nav-panel__inline-item-icon-slot">
+              <span className="halo-nav-panel__inline-item-icon-slot">
                 {awaitingDecision ? (
                   <CircleHelp
                     size={14}
-                    className="bitfun-nav-panel__inline-item-icon is-ask-user"
+                    className="halo-nav-panel__inline-item-icon is-ask-user"
                     aria-hidden="true"
                   />
                 ) : isRunning ? (
                   <Loader2
                     size={14}
-                    className="bitfun-nav-panel__inline-item-icon is-running"
+                    className="halo-nav-panel__inline-item-icon is-running"
                     aria-hidden="true"
                   />
                 ) : (
                   <Code2
                     size={14}
-                    className="bitfun-nav-panel__inline-item-icon is-code"
+                    className="halo-nav-panel__inline-item-icon is-code"
                     aria-hidden="true"
                   />
                 )}
               </span>
             ) : null}
-            <span className="bitfun-nav-panel__inline-item-main">
-              <span className="bitfun-nav-panel__inline-item-label">
+            <span className="halo-nav-panel__inline-item-main">
+              <span className="halo-nav-panel__inline-item-label">
                 {t('nav.sessions.newSession')} {index + 1}
               </span>
               {awaitingDecision ? (
-                <span className="bitfun-nav-panel__inline-item-attention-badge">
+                <span className="halo-nav-panel__inline-item-attention-badge">
                   {t('nav.sessions.badgeNeedsConfirm')}
                 </span>
               ) : null}

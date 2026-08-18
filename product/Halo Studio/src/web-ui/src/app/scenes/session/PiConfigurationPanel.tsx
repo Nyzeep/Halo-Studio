@@ -149,8 +149,8 @@ const PiConfigurationPanel: React.FC<PiConfigurationPanelProps> = ({
   };
 
   return (
-    <section className="bitfun-pi-configuration" data-testid="pi-configuration-panel">
-      <header className="bitfun-pi-configuration__header">
+    <section className="halo-pi-configuration" data-testid="pi-configuration-panel">
+      <header className="halo-pi-configuration__header">
         <div>
           <h2>{t('nav.sessions.workbenchRuntime.piConfiguration.title')}</h2>
           <p>{t('nav.sessions.workbenchRuntime.piConfiguration.description')}</p>
@@ -158,7 +158,7 @@ const PiConfigurationPanel: React.FC<PiConfigurationPanelProps> = ({
         <Settings2 size={18} aria-hidden="true" />
       </header>
 
-      <div className="bitfun-pi-configuration__status" data-testid="pi-configuration-status">
+      <div className="halo-pi-configuration__status" data-testid="pi-configuration-status">
         <span>{t(runtimeReady
           ? 'nav.sessions.workbenchRuntime.piConfiguration.runtimeReady'
           : 'nav.sessions.workbenchRuntime.piConfiguration.runtimeUnavailable')}</span>
@@ -172,7 +172,7 @@ const PiConfigurationPanel: React.FC<PiConfigurationPanelProps> = ({
         ) : null}
       </div>
 
-      <form className="bitfun-pi-configuration__form" data-testid="pi-configuration-form" onSubmit={saveConfiguration}>
+      <form className="halo-pi-configuration__form" data-testid="pi-configuration-form" onSubmit={saveConfiguration}>
         <label>
           <span>{t('nav.sessions.workbenchRuntime.piConfiguration.provider')}</span>
           <input
@@ -237,7 +237,7 @@ const PiConfigurationPanel: React.FC<PiConfigurationPanelProps> = ({
             ? 'nav.sessions.workbenchRuntime.piConfiguration.credentialOptional'
             : 'nav.sessions.workbenchRuntime.piConfiguration.credentialRequired')}</small>
         </label>
-        <p className="bitfun-pi-configuration__policy">
+        <p className="halo-pi-configuration__policy">
           <KeyRound size={13} aria-hidden="true" />
           <span>{t('nav.sessions.workbenchRuntime.piConfiguration.managedPolicy')}</span>
         </p>
@@ -247,8 +247,8 @@ const PiConfigurationPanel: React.FC<PiConfigurationPanelProps> = ({
         </button>
       </form>
 
-      {statusKey ? <p className="bitfun-pi-configuration__notice" role="status">{t(statusKey)}</p> : null}
-      {errorKey ? <p className="bitfun-pi-configuration__error" role="alert">{t(errorKey)}</p> : null}
+      {statusKey ? <p className="halo-pi-configuration__notice" role="status">{t(statusKey)}</p> : null}
+      {errorKey ? <p className="halo-pi-configuration__error" role="alert">{t(errorKey)}</p> : null}
     </section>
   );
 };

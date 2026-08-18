@@ -249,8 +249,8 @@ export const PANEL_CONTENT_CONFIGS: Record<PanelContentType, PanelContentConfig>
     supportsDownload: false,
     showHeader: false
   },
-  'bitfun-canvas': {
-    type: 'bitfun-canvas',
+  'halo-canvas': {
+    type: 'halo-canvas',
     displayName: 'Halo Studio Canvas',
     icon: Network,
     supportsCopy: false,

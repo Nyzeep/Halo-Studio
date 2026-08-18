@@ -64,7 +64,7 @@ const LazyAppLayout = lazy(async () => {
 });
 
 /**
- * BitFun main application component.
+ * Halo main application component.
  *
  * Unified architecture:
  * - Use a single AppLayout component
@@ -133,7 +133,7 @@ function App() {
     }
     interactiveShellReadyRef.current = true;
     startupTrace.markPhase('interactive_shell_ready', { reason });
-    window.dispatchEvent(new CustomEvent('bitfun:interactive-shell-ready', {
+    window.dispatchEvent(new CustomEvent('halo:interactive-shell-ready', {
       detail: { reason },
     }));
     setInteractiveShellReady(true);
@@ -217,7 +217,7 @@ function App() {
     let disposed = false;
 
     void import('@tauri-apps/api/event')
-      .then(({ listen }) => listen('bitfun_main_window_close_requested', () => {
+      .then(({ listen }) => listen('halo_main_window_close_requested', () => {
         userCloseRequestedRef.current = true;
         startupTrace.markPhase('main_window_user_close_requested', { reason: 'user-close-requested' });
       }))
@@ -251,7 +251,7 @@ function App() {
       await invoke('show_main_window');
       log.debug('Main window shown', { reason });
       startupTrace.markPhase('main_window_shown', { reason });
-      window.dispatchEvent(new CustomEvent('bitfun:main-window-shown', { detail: { reason } }));
+      window.dispatchEvent(new CustomEvent('halo:main-window-shown', { detail: { reason } }));
     } catch (error: any) {
       log.error('Failed to show main window', error);
 
@@ -262,7 +262,7 @@ function App() {
         await mainWindow.setFocus();
         log.debug('Main window shown via fallback', { reason });
         startupTrace.markPhase('main_window_shown_fallback', { reason });
-        window.dispatchEvent(new CustomEvent('bitfun:main-window-shown', { detail: { reason } }));
+        window.dispatchEvent(new CustomEvent('halo:main-window-shown', { detail: { reason } }));
       } catch (fallbackError) {
         log.error('Fallback window show failed', fallbackError);
         mainWindowShownRef.current = false;
@@ -306,7 +306,7 @@ function App() {
     if (isTauriRuntime()) {
       mainWindowShownRef.current = true;
       startupTrace.markPhase('main_window_shown', { reason: 'startup-native' });
-      window.dispatchEvent(new CustomEvent('bitfun:main-window-shown', {
+      window.dispatchEvent(new CustomEvent('halo:main-window-shown', {
         detail: { reason: 'startup-native' },
       }));
       return;
@@ -815,7 +815,7 @@ function App() {
         if (cancelled || !runtimeInfo.previousUnexpectedExit?.notifyOnStartup) {
           return;
         }
-        const recoveryKey = `bitfun:unexpected-exit-notice:${runtimeInfo.previousUnexpectedExit.sessionLogDir || 'unknown'}`;
+        const recoveryKey = `halo:unexpected-exit-notice:${runtimeInfo.previousUnexpectedExit.sessionLogDir || 'unknown'}`;
         if (sessionStorage.getItem(recoveryKey) === 'shown') {
           return;
         }
@@ -895,7 +895,7 @@ function App() {
   );
 
   // Halo's composition point has no legacy FlowChat provider in its startup
-  // graph. The provider is loaded only for the historical BitFun path.
+  // graph. The provider is loaded only for the historical Halo path.
   return (
     <ChatProvider>
       {isHaloLocalCodingScope() ? appShell : (

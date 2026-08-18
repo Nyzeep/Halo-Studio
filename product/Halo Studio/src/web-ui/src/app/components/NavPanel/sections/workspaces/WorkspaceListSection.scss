@@ -1,7 +1,7 @@
 @use '../../../../../component-library/styles/tokens.scss' as *;
 @use '../../../../styles/nav-panel-font-scope.scss' as nav-font;
 
-.bitfun-nav-panel {
+.halo-nav-panel {
   &__workspace-list {
     display: flex;
     flex-direction: column;
@@ -14,7 +14,7 @@
     padding: 2px 0 0;
 
     &.is-dragging {
-      .bitfun-nav-panel__workspace-item {
+      .halo-nav-panel__workspace-item {
         cursor: default;
       }
     }
@@ -102,7 +102,7 @@
     &.is-dragging {
       opacity: 0.42;
 
-      .bitfun-nav-panel__workspace-item-card {
+      .halo-nav-panel__workspace-item-card {
         cursor: default;
       }
     }
@@ -118,20 +118,20 @@
     }
 
     &:not(.is-active) {
-      .bitfun-nav-panel__workspace-item-card {
+      .halo-nav-panel__workspace-item-card {
         gap: 1px;
 
         &:hover {
           color: var(--color-text-secondary);
 
-          .bitfun-nav-panel__workspace-item-collapse-btn,
-          .bitfun-nav-panel__workspace-item-name-btn {
+          .halo-nav-panel__workspace-item-collapse-btn,
+          .halo-nav-panel__workspace-item-name-btn {
             background: transparent;
           }
         }
       }
 
-      .bitfun-nav-panel__workspace-item-collapse-btn {
+      .halo-nav-panel__workspace-item-collapse-btn {
         border-radius: 6px 0 0 6px;
 
         &:hover {
@@ -139,17 +139,17 @@
         }
       }
 
-      .bitfun-nav-panel__workspace-item-name-cluster {
+      .halo-nav-panel__workspace-item-name-cluster {
         border-radius: 0 6px 6px 0;
       }
 
-      .bitfun-nav-panel__workspace-item-name-btn {
+      .halo-nav-panel__workspace-item-name-btn {
         border-radius: 0;
       }
     }
 
     &:not(:hover):not(:focus-within):not(.is-menu-open) {
-      .bitfun-nav-panel__workspace-item-branch {
+      .halo-nav-panel__workspace-item-branch {
         max-width: 0;
         margin-left: 0;
         padding-left: 0;
@@ -159,7 +159,7 @@
         pointer-events: none;
       }
 
-      .bitfun-nav-panel__workspace-item-menu {
+      .halo-nav-panel__workspace-item-menu {
         opacity: 0;
         visibility: hidden;
         pointer-events: none;
@@ -186,12 +186,12 @@
 
 
     &:hover {
-      .bitfun-nav-panel__workspace-item-icon-default {
+      .halo-nav-panel__workspace-item-icon-default {
         opacity: 0;
         transform: scale(0.7);
       }
 
-      .bitfun-nav-panel__workspace-item-icon-toggle {
+      .halo-nav-panel__workspace-item-icon-toggle {
         opacity: 1;
         transform: scale(1);
       }
@@ -235,12 +235,12 @@
     &:hover {
       background: color-mix(in srgb, var(--element-bg-medium) 60%, transparent);
 
-      .bitfun-nav-panel__workspace-item-icon-default {
+      .halo-nav-panel__workspace-item-icon-default {
         opacity: 0;
         transform: scale(0.7);
       }
 
-      .bitfun-nav-panel__workspace-item-icon-toggle {
+      .halo-nav-panel__workspace-item-icon-toggle {
         opacity: 1;
         transform: scale(1);
       }
@@ -332,7 +332,7 @@
     color: var(--color-text-primary);
     overflow: hidden;
 
-    .bitfun-nav-panel__workspace-item-avatar-letter {
+    .halo-nav-panel__workspace-item-avatar-letter {
       font-size: var(--font-size-lg);
       font-weight: 700;
       line-height: 1;
@@ -343,7 +343,7 @@
       transform: scale(1);
     }
 
-    .bitfun-nav-panel__workspace-item-icon-toggle {
+    .halo-nav-panel__workspace-item-icon-toggle {
       position: absolute;
       display: inline-flex;
       align-items: center;
@@ -492,7 +492,7 @@
 
     &.is-connecting {
       background: var(--color-warning);
-      animation: bitfun-status-dot-pulse 1.4s ease-in-out infinite;
+      animation: halo-status-dot-pulse 1.4s ease-in-out infinite;
     }
   }
 
@@ -537,7 +537,7 @@
   }
 
   &__workspace-index-tooltip {
-    --bitfun-index-tone: var(--color-text-secondary);
+    --halo-index-tone: var(--color-text-secondary);
 
     display: flex;
     flex-direction: column;
@@ -550,15 +550,15 @@
     color: var(--color-text-primary);
 
     &.is-green {
-      --bitfun-index-tone: var(--color-success);
+      --halo-index-tone: var(--color-success);
     }
 
     &.is-yellow {
-      --bitfun-index-tone: var(--color-warning);
+      --halo-index-tone: var(--color-warning);
     }
 
     &.is-red {
-      --bitfun-index-tone: var(--color-error);
+      --halo-index-tone: var(--color-error);
     }
   }
 
@@ -583,25 +583,25 @@
     height: 10px;
     margin-top: 3px;
     border-radius: 50%;
-    background: var(--bitfun-index-tone);
+    background: var(--halo-index-tone);
     box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--bitfun-index-tone) 18%, transparent),
-      0 0 10px color-mix(in srgb, var(--bitfun-index-tone) 26%, transparent);
+      0 0 0 1px color-mix(in srgb, var(--halo-index-tone) 18%, transparent),
+      0 0 10px color-mix(in srgb, var(--halo-index-tone) 26%, transparent);
 
     &.is-green {
-      --bitfun-index-tone: var(--color-success);
+      --halo-index-tone: var(--color-success);
     }
 
     &.is-yellow {
-      --bitfun-index-tone: var(--color-warning);
+      --halo-index-tone: var(--color-warning);
     }
 
     &.is-gray {
-      --bitfun-index-tone: color-mix(in srgb, var(--color-text-muted) 75%, var(--element-bg-medium));
+      --halo-index-tone: color-mix(in srgb, var(--color-text-muted) 75%, var(--element-bg-medium));
     }
 
     &.is-red {
-      --bitfun-index-tone: var(--color-error);
+      --halo-index-tone: var(--color-error);
     }
   }
 
@@ -629,24 +629,24 @@
     font-weight: 600;
     line-height: 1.4;
     white-space: nowrap;
-    border: 1px solid color-mix(in srgb, var(--bitfun-index-tone) 24%, transparent);
-    background: color-mix(in srgb, var(--bitfun-index-tone) 10%, transparent);
-    color: color-mix(in srgb, var(--bitfun-index-tone) 78%, var(--color-text-primary));
+    border: 1px solid color-mix(in srgb, var(--halo-index-tone) 24%, transparent);
+    background: color-mix(in srgb, var(--halo-index-tone) 10%, transparent);
+    color: color-mix(in srgb, var(--halo-index-tone) 78%, var(--color-text-primary));
 
     &.is-green {
-      --bitfun-index-tone: var(--color-success);
+      --halo-index-tone: var(--color-success);
     }
 
     &.is-yellow {
-      --bitfun-index-tone: var(--color-warning);
+      --halo-index-tone: var(--color-warning);
     }
 
     &.is-gray {
-      --bitfun-index-tone: color-mix(in srgb, var(--color-text-muted) 75%, var(--element-bg-medium));
+      --halo-index-tone: color-mix(in srgb, var(--color-text-muted) 75%, var(--element-bg-medium));
     }
 
     &.is-red {
-      --bitfun-index-tone: var(--color-error);
+      --halo-index-tone: var(--color-error);
     }
   }
 
@@ -659,11 +659,11 @@
   &__workspace-index-tooltip-summary {
     padding: 10px 12px;
     border-radius: 10px;
-    border: 1px solid color-mix(in srgb, var(--bitfun-index-tone) 12%, var(--border-subtle));
+    border: 1px solid color-mix(in srgb, var(--halo-index-tone) 12%, var(--border-subtle));
     background:
       linear-gradient(
         180deg,
-        color-mix(in srgb, var(--bitfun-index-tone) 7%, transparent),
+        color-mix(in srgb, var(--halo-index-tone) 7%, transparent),
         color-mix(in srgb, var(--element-bg-subtle) 92%, transparent)
       );
     color: var(--color-text-secondary);
@@ -692,7 +692,7 @@
 
   &__workspace-index-tooltip-progress-value {
     font-variant-numeric: tabular-nums;
-    color: color-mix(in srgb, var(--bitfun-index-tone) 76%, var(--color-text-primary));
+    color: color-mix(in srgb, var(--halo-index-tone) 76%, var(--color-text-primary));
     font-weight: 600;
   }
 
@@ -709,41 +709,41 @@
     display: block;
     height: 100%;
     border-radius: inherit;
-    box-shadow: 0 0 12px color-mix(in srgb, var(--bitfun-index-tone) 28%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--halo-index-tone) 28%, transparent);
 
     &.is-green {
-      --bitfun-index-tone: var(--color-success);
+      --halo-index-tone: var(--color-success);
       background: linear-gradient(
         90deg,
-        color-mix(in srgb, var(--bitfun-index-tone) 82%, var(--color-static-white) 18%),
-        var(--bitfun-index-tone)
+        color-mix(in srgb, var(--halo-index-tone) 82%, var(--color-static-white) 18%),
+        var(--halo-index-tone)
       );
     }
 
     &.is-yellow {
-      --bitfun-index-tone: var(--color-warning);
+      --halo-index-tone: var(--color-warning);
       background: linear-gradient(
         90deg,
-        color-mix(in srgb, var(--bitfun-index-tone) 84%, var(--color-static-white) 16%),
-        var(--bitfun-index-tone)
+        color-mix(in srgb, var(--halo-index-tone) 84%, var(--color-static-white) 16%),
+        var(--halo-index-tone)
       );
     }
 
     &.is-gray {
-      --bitfun-index-tone: color-mix(in srgb, var(--color-text-muted) 75%, var(--element-bg-medium));
+      --halo-index-tone: color-mix(in srgb, var(--color-text-muted) 75%, var(--element-bg-medium));
       background: linear-gradient(
         90deg,
-        color-mix(in srgb, var(--bitfun-index-tone) 88%, var(--color-static-white) 12%),
-        var(--bitfun-index-tone)
+        color-mix(in srgb, var(--halo-index-tone) 88%, var(--color-static-white) 12%),
+        var(--halo-index-tone)
       );
     }
 
     &.is-red {
-      --bitfun-index-tone: var(--color-error);
+      --halo-index-tone: var(--color-error);
       background: linear-gradient(
         90deg,
-        color-mix(in srgb, var(--bitfun-index-tone) 84%, var(--color-static-white) 16%),
-        var(--bitfun-index-tone)
+        color-mix(in srgb, var(--halo-index-tone) 84%, var(--color-static-white) 16%),
+        var(--halo-index-tone)
       );
     }
   }
@@ -884,10 +884,10 @@
     box-shadow: 0 4px 12px var(--color-overlay-black-30);
     z-index: 10000;
     transform-origin: top left;
-    animation: bitfun-footer-menu-in $motion-fast $easing-decelerate forwards;
+    animation: halo-footer-menu-in $motion-fast $easing-decelerate forwards;
   }
 
-  /* Match `.bitfun-nav-panel__footer-menu-divider` (PersistentFooterActions more menu) */
+  /* Match `.halo-nav-panel__footer-menu-divider` (PersistentFooterActions more menu) */
   &__workspace-item-menu-divider {
     height: 1px;
     margin: $size-gap-1 $size-gap-2;
@@ -967,7 +967,7 @@
       pointer-events: none;
     }
 
-    .bitfun-nav-panel__inline-list {
+    .halo-nav-panel__inline-list {
       margin-left: 8px;
       margin-right: 0;
       padding-top: 0;
@@ -975,7 +975,7 @@
       padding-right: 0;
     }
 
-    .bitfun-nav-panel__inline-empty {
+    .halo-nav-panel__inline-empty {
       padding-left: $size-gap-1;
     }
   }
@@ -990,13 +990,13 @@
     gap: 0;
 
     &.is-drag-active {
-      .bitfun-nav-panel__workspace-item {
+      .halo-nav-panel__workspace-item {
         box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-subtle) 80%, transparent);
       }
     }
 
     &.is-drop-target {
-      .bitfun-nav-panel__workspace-item {
+      .halo-nav-panel__workspace-item {
         border-color: color-mix(in srgb, var(--color-accent-500) 18%, transparent);
       }
     }
@@ -1012,7 +1012,7 @@
 }
 
 // ── Assistant-mode row item (standalone styles, not shared with pro mode) ────────────
-.bitfun-nav-panel {
+.halo-nav-panel {
   &__assistant-item {
     position: relative;
     display: flex;
@@ -1034,7 +1034,7 @@
     &.is-dragging {
       opacity: 0.42;
 
-      .bitfun-nav-panel__assistant-item-card {
+      .halo-nav-panel__assistant-item-card {
         cursor: default;
       }
     }
@@ -1045,7 +1045,7 @@
     }
 
     &:not(:hover):not(:focus-within):not(.is-menu-open) {
-      .bitfun-nav-panel__assistant-item-menu {
+      .halo-nav-panel__assistant-item-menu {
         opacity: 0;
         visibility: hidden;
         pointer-events: none;
@@ -1070,12 +1070,12 @@
                 box-shadow $motion-fast $easing-standard;
 
     &:hover {
-      .bitfun-nav-panel__assistant-item-avatar-letter {
+      .halo-nav-panel__assistant-item-avatar-letter {
         opacity: 0;
         transform: scale(0.6);
       }
 
-      .bitfun-nav-panel__assistant-item-icon-toggle {
+      .halo-nav-panel__assistant-item-icon-toggle {
         opacity: 1;
         transform: scale(1);
       }
@@ -1115,13 +1115,13 @@
     &:hover {
       background: color-mix(in srgb, var(--element-bg-medium) 60%, transparent);
 
-      .bitfun-nav-panel__assistant-item-avatar-letter,
-      .bitfun-nav-panel__assistant-item-active-icon {
+      .halo-nav-panel__assistant-item-avatar-letter,
+      .halo-nav-panel__assistant-item-active-icon {
         opacity: 0;
         transform: scale(0.6);
       }
 
-      .bitfun-nav-panel__assistant-item-icon-toggle {
+      .halo-nav-panel__assistant-item-icon-toggle {
         opacity: 1;
         transform: scale(1);
       }
@@ -1284,7 +1284,7 @@
       pointer-events: none;
     }
 
-    .bitfun-nav-panel__inline-list {
+    .halo-nav-panel__inline-list {
       margin-left: 8px;
       margin-right: 0;
       padding-top: 0;
@@ -1292,13 +1292,13 @@
       padding-right: 0;
     }
 
-    .bitfun-nav-panel__inline-empty {
+    .halo-nav-panel__inline-empty {
       padding-left: $size-gap-1;
     }
   }
 }
 
-@keyframes bitfun-status-dot-pulse {
+@keyframes halo-status-dot-pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.3; }
 }

@@ -4,7 +4,7 @@
 
 @use '../../component-library/styles/tokens.scss' as *;
 
-.bitfun-scene-viewport {
+.halo-scene-viewport {
   flex: 1;
   position: relative;
   overflow: hidden;
@@ -112,13 +112,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-scene-viewport__clip::after {
+  .halo-scene-viewport__clip::after {
     transition: none;
   }
 
   // Do not keep the previous scene painted during the exit grace period when
   // the user has asked for motion to be reduced.
-  .bitfun-scene-viewport__scene--exiting {
+  .halo-scene-viewport__scene--exiting {
     display: none;
   }
 }

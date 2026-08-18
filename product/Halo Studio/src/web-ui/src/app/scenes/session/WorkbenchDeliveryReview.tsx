@@ -45,8 +45,8 @@ const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({
 
   if (session.phase === 'interrupted' && !review) {
     return (
-      <div className="bitfun-workbench-delivery-review" data-testid="workbench-interruption-actions">
-        <div className="bitfun-workbench-delivery-review__actions">
+      <div className="halo-workbench-delivery-review" data-testid="workbench-interruption-actions">
+        <div className="halo-workbench-delivery-review__actions">
           <button
             type="button"
             disabled={busy}
@@ -76,12 +76,12 @@ const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({
           </button>
         </div>
         {keptCurrentState ? (
-          <span className="bitfun-workbench-delivery-review__status" role="status">
+          <span className="halo-workbench-delivery-review__status" role="status">
             {t('nav.sessions.workbenchRuntime.interruptionDisposition.kept')}
           </span>
         ) : null}
         {error ? (
-          <span className="bitfun-workbench-delivery-review__error" role="alert">{t(error)}</span>
+          <span className="halo-workbench-delivery-review__error" role="alert">{t(error)}</span>
         ) : null}
       </div>
     );
@@ -89,7 +89,7 @@ const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({
 
   if (session.phase === 'waitingDeveloper') {
     return (
-      <div className="bitfun-workbench-delivery-review" data-testid="workbench-delivery-finish">
+      <div className="halo-workbench-delivery-review" data-testid="workbench-delivery-finish">
         <button
           type="button"
           disabled={busy}
@@ -100,7 +100,7 @@ const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({
           <span>{t('nav.sessions.workbenchRuntime.deliveryReview.finishAndReview')}</span>
         </button>
         {error ? (
-          <span className="bitfun-workbench-delivery-review__error" role="alert">{t(error)}</span>
+          <span className="halo-workbench-delivery-review__error" role="alert">{t(error)}</span>
         ) : null}
       </div>
     );
@@ -110,13 +110,13 @@ const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({
 
   return (
     <section
-      className="bitfun-workbench-delivery-review"
+      className="halo-workbench-delivery-review"
       data-testid="workbench-delivery-review"
     >
-      <header className="bitfun-workbench-delivery-review__header">
+      <header className="halo-workbench-delivery-review__header">
         <FileDiff size={15} aria-hidden="true" />
         <span>{t('nav.sessions.workbenchRuntime.deliveryReview.title')}</span>
-        <span className="bitfun-workbench-delivery-review__freshness">
+        <span className="halo-workbench-delivery-review__freshness">
           {t('nav.sessions.workbenchRuntime.deliveryReview.freshness')}
           {': '}
           {formatDate(review.evidence.capturedAtMs, {
@@ -129,7 +129,7 @@ const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({
         </span>
       </header>
 
-      <div className="bitfun-workbench-delivery-review__grid">
+      <div className="halo-workbench-delivery-review__grid">
         <section>
           <h3>{t('nav.sessions.workbenchRuntime.deliveryReview.summary')}</h3>
           <p>{review.summary || '—'}</p>
@@ -146,7 +146,7 @@ const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({
 
       <section>
         <h3>{t('nav.sessions.workbenchRuntime.deliveryReview.changedFiles')}</h3>
-        <ul className="bitfun-workbench-delivery-review__files">
+        <ul className="halo-workbench-delivery-review__files">
           {review.evidence.changedFiles.map(file => (
             <li key={file}>{file}</li>
           ))}
@@ -156,7 +156,7 @@ const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({
       {review.evidence.attribution.length > 0 ? (
         <section>
           <h3>{t('nav.sessions.workbenchRuntime.deliveryReview.attribution')}</h3>
-          <ul className="bitfun-workbench-delivery-review__attribution">
+          <ul className="halo-workbench-delivery-review__attribution">
             {review.evidence.attribution.map((item, index) => (
               <li key={`${item.path}-${index}`}>
                 <code>{item.path}</code>
@@ -171,12 +171,12 @@ const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({
 
       <section>
         <h3>{t('nav.sessions.workbenchRuntime.deliveryReview.diffPreview')}</h3>
-        <pre className="bitfun-workbench-delivery-review__diff" data-testid="workbench-delivery-diff">
+        <pre className="halo-workbench-delivery-review__diff" data-testid="workbench-delivery-diff">
           {review.evidence.diffPreview || '—'}
         </pre>
       </section>
 
-      <div className="bitfun-workbench-delivery-review__actions">
+      <div className="halo-workbench-delivery-review__actions">
         <button
           type="button"
           disabled={busy || review.decision !== null}
@@ -214,7 +214,7 @@ const WorkbenchDeliveryReview: React.FC<WorkbenchDeliveryReviewProps> = ({
           <span>{t('nav.sessions.workbenchRuntime.deliveryReview.reject')}</span>
         </button>
         {error ? (
-          <span className="bitfun-workbench-delivery-review__error" role="alert">{t(error)}</span>
+          <span className="halo-workbench-delivery-review__error" role="alert">{t(error)}</span>
         ) : null}
       </div>
     </section>

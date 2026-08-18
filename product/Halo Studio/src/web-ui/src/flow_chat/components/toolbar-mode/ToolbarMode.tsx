@@ -135,7 +135,7 @@ export const ToolbarMode: React.FC = () => {
       if (headerOverflowRef.current?.contains(target)) {
         return;
       }
-      if (target.closest?.('.bitfun-toolbar-mode__overflow-trigger')) {
+      if (target.closest?.('.halo-toolbar-mode__overflow-trigger')) {
         return;
       }
       setShowHeaderOverflowMenu(false);
@@ -156,7 +156,7 @@ export const ToolbarMode: React.FC = () => {
     const target = e.target as HTMLElement;
     // Avoid dragging when interacting with UI controls.
     if (target.closest?.(
-      'button, input, .bitfun-session-menu, .bitfun-toolbar-mode__overflow-menu, .bitfun-toolbar-mode__stream-content, .bitfun-toolbar-mode__session-surface'
+      'button, input, .halo-session-menu, .halo-toolbar-mode__overflow-menu, .halo-toolbar-mode__stream-content, .halo-toolbar-mode__session-surface'
     )) {
       return;
     }
@@ -206,36 +206,36 @@ export const ToolbarMode: React.FC = () => {
   }
   
   const containerClassName = [
-    'bitfun-toolbar-mode',
-    isExpanded && 'bitfun-toolbar-mode--expanded',
-    currentStreamState.isStreaming && 'bitfun-toolbar-mode--processing',
-    toolbarState.hasError && 'bitfun-toolbar-mode--error',
-    toolbarState.hasPendingConfirmation && 'bitfun-toolbar-mode--confirm',
-    isMacOS && 'bitfun-toolbar-mode--macos',
+    'halo-toolbar-mode',
+    isExpanded && 'halo-toolbar-mode--expanded',
+    currentStreamState.isStreaming && 'halo-toolbar-mode--processing',
+    toolbarState.hasError && 'halo-toolbar-mode--error',
+    toolbarState.hasPendingConfirmation && 'halo-toolbar-mode--confirm',
+    isMacOS && 'halo-toolbar-mode--macos',
   ].filter(Boolean).join(' ');
   
   return (
     <div className={containerClassName} onMouseDown={handleStartDrag}>
-      <div className="bitfun-toolbar-mode__header">
-        <div className="bitfun-toolbar-mode__header-left">
+      <div className="halo-toolbar-mode__header">
+        <div className="halo-toolbar-mode__header-left">
           {isExpanded ? <SessionMenu onOpenChange={handleSessionMenuOpenChange} /> : null}
         </div>
 
-        <div className="bitfun-toolbar-mode__title-wrapper">
-          <div className="bitfun-toolbar-mode__title-display" title={sessionTitle}>
-            <span className="bitfun-toolbar-mode__title-text">{sessionTitle}</span>
+        <div className="halo-toolbar-mode__title-wrapper">
+          <div className="halo-toolbar-mode__title-display" title={sessionTitle}>
+            <span className="halo-toolbar-mode__title-text">{sessionTitle}</span>
           </div>
         </div>
 
-        <div className="bitfun-toolbar-mode__header-right">
-          <div className="bitfun-toolbar-mode__header-drag-area" aria-hidden="true" />
-          <div className="bitfun-toolbar-mode__header-overflow">
+        <div className="halo-toolbar-mode__header-right">
+          <div className="halo-toolbar-mode__header-drag-area" aria-hidden="true" />
+          <div className="halo-toolbar-mode__header-overflow">
             {isExpanded ? (
               <>
                 <Tooltip content={t('toolCards.toolbar.moreMenu')}>
                   <button
                     type="button"
-                    className="toolbar-btn toolbar-btn--overflow bitfun-toolbar-mode__overflow-trigger"
+                    className="toolbar-btn toolbar-btn--overflow halo-toolbar-mode__overflow-trigger"
                     onClick={toggleHeaderOverflowMenu}
                     aria-expanded={showHeaderOverflowMenu}
                     aria-haspopup="menu"
@@ -246,13 +246,13 @@ export const ToolbarMode: React.FC = () => {
                 {showHeaderOverflowMenu && (
                   <div
                     ref={headerOverflowRef}
-                    className="bitfun-toolbar-mode__overflow-menu"
+                    className="halo-toolbar-mode__overflow-menu"
                     role="menu"
                     onMouseDown={(e) => e.stopPropagation()}
                   >
                     <button
                       type="button"
-                      className="bitfun-toolbar-mode__overflow-menu-item"
+                      className="halo-toolbar-mode__overflow-menu-item"
                       role="menuitem"
                       onClick={() => {
                         void toggleExpanded();
@@ -264,7 +264,7 @@ export const ToolbarMode: React.FC = () => {
                     </button>
                     <button
                       type="button"
-                      className="bitfun-toolbar-mode__overflow-menu-item"
+                      className="halo-toolbar-mode__overflow-menu-item"
                       role="menuitem"
                       onClick={() => {
                         void handleExpand();
@@ -278,7 +278,7 @@ export const ToolbarMode: React.FC = () => {
                 )}
               </>
             ) : (
-              <div className="bitfun-toolbar-mode__header-collapsed-actions">
+              <div className="halo-toolbar-mode__header-collapsed-actions">
                 <Tooltip content={t('toolCards.toolbar.expandChat')}>
                   <button
                     type="button"
@@ -308,7 +308,7 @@ export const ToolbarMode: React.FC = () => {
       {isExpanded ? (
         /* Main window session surface, reused as-is: same conversation view and
            same full composer, so there is nothing extra to maintain here. */
-        <div className="bitfun-toolbar-mode__session-surface">
+        <div className="halo-toolbar-mode__session-surface">
           <ChatPane
             width={0}
             isFullscreen={false}
@@ -318,30 +318,30 @@ export const ToolbarMode: React.FC = () => {
           />
         </div>
       ) : (
-        <div className="bitfun-toolbar-mode__content-row">
-          <div className="bitfun-toolbar-mode__stream-content" onClick={toggleExpanded}>
+        <div className="halo-toolbar-mode__content-row">
+          <div className="halo-toolbar-mode__stream-content" onClick={toggleExpanded}>
             {currentStreamState.toolName ? (
-              <div className="bitfun-toolbar-mode__tool">
-                <span className="bitfun-toolbar-mode__tool-name">{currentStreamState.toolName}</span>
-                <span className="bitfun-toolbar-mode__tool-summary">{currentStreamState.content || t('toolCards.toolbar.executing')}</span>
+              <div className="halo-toolbar-mode__tool">
+                <span className="halo-toolbar-mode__tool-name">{currentStreamState.toolName}</span>
+                <span className="halo-toolbar-mode__tool-summary">{currentStreamState.content || t('toolCards.toolbar.executing')}</span>
               </div>
             ) : toolbarState.todoProgress && toolbarState.todoProgress.total > 0 ? (
-              <div className="bitfun-toolbar-mode__todo">
-                <span className="bitfun-toolbar-mode__todo-progress">
+              <div className="halo-toolbar-mode__todo">
+                <span className="halo-toolbar-mode__todo-progress">
                   {toolbarState.todoProgress.completed}/{toolbarState.todoProgress.total}
                 </span>
-                <span className="bitfun-toolbar-mode__todo-current">
+                <span className="halo-toolbar-mode__todo-current">
                   {toolbarState.todoProgress.current || currentStreamState.content}
                 </span>
               </div>
             ) : (
-              <span className={`bitfun-toolbar-mode__text ${currentStreamState.isStreaming ? 'bitfun-toolbar-mode__text--streaming' : ''}`}>
+              <span className={`halo-toolbar-mode__text ${currentStreamState.isStreaming ? 'halo-toolbar-mode__text--streaming' : ''}`}>
                 {currentStreamState.content || (currentStreamState.isStreaming ? t('toolCards.toolbar.processing') : (lastMessageContent || t('toolCards.toolbar.startNewChat')))}
               </span>
             )}
           </div>
 
-          <div className="bitfun-toolbar-mode__controls">
+          <div className="halo-toolbar-mode__controls">
             {toolbarState.hasPendingConfirmation && (
               <>
                 <Tooltip content={t('toolCards.common.confirm')}>

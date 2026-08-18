@@ -6,7 +6,7 @@ $_node-padding-y: 4px;
 $_node-padding-x: 8px;
 $_icon-size: 16px;
 
-.bitfun-search-results {
+.halo-search-results {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -20,7 +20,7 @@ $_icon-size: 16px;
   }
 }
 
-.bitfun-search-results__empty {
+.halo-search-results__empty {
   text-align: center;
   color: var(--color-text-muted);
   padding: $size-gap-8;
@@ -37,20 +37,20 @@ $_icon-size: 16px;
   }
 }
 
-.bitfun-search-results__header {
+.halo-search-results__header {
   padding: $size-gap-2 $size-gap-3;
   border-bottom: 1px solid var(--border-base);
   background: var(--color-bg-primary);
   flex-shrink: 0;
 }
 
-.bitfun-search-results__count {
+.halo-search-results__count {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   font-weight: $font-weight-medium;
 }
 
-.bitfun-search-results__list {
+.halo-search-results__list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -60,7 +60,7 @@ $_icon-size: 16px;
 
 }
 
-.bitfun-search-results__group {
+.halo-search-results__group {
   margin-bottom: $size-gap-3;
   
   &:last-child {
@@ -68,7 +68,7 @@ $_icon-size: 16px;
   }
 }
 
-.bitfun-search-results__file {
+.halo-search-results__file {
   @include mixins.flex-layout(row, center, start, $size-gap-1);
   margin: 0 $size-gap-1;
   position: relative;
@@ -177,14 +177,14 @@ $_icon-size: 16px;
   }
 }
 
-.bitfun-search-results__matches {
+.halo-search-results__matches {
   margin-top: $size-gap-1;
   margin-left: $size-gap-1;
   margin-right: $size-gap-1;
   margin-bottom: $size-gap-1;
 }
 
-.bitfun-search-results__match {
+.halo-search-results__match {
   @include mixins.flex-layout(row, center, start, 0);
   width: 100%;
   padding: $size-gap-1 $size-gap-2;
@@ -229,7 +229,7 @@ $_icon-size: 16px;
   }
 }
 
-.bitfun-search-results__highlight {
+.halo-search-results__highlight {
   background: color-mix(in srgb, var(--color-accent-500) 25%, transparent);
   color: var(--color-accent-500);
   padding: 1px 2px;
@@ -237,13 +237,13 @@ $_icon-size: 16px;
   font-weight: $font-weight-medium;
 }
 
-.bitfun-search-results__showing {
+.halo-search-results__showing {
   color: var(--color-text-muted);
   font-weight: $font-weight-normal;
   opacity: 0.7;
 }
 
-.bitfun-search-results__load-more {
+.halo-search-results__load-more {
   @include mixins.flex-layout(row, center, center, $size-gap-1);
   padding: $size-gap-1 $size-gap-2;
   flex-shrink: 0;

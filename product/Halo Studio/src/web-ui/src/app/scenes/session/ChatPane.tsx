@@ -151,13 +151,13 @@ const ChatPaneInner: React.FC<ChatPaneProps> = ({
 
   return (
     <div
-      className="bitfun-chat-pane__content"
+      className="halo-chat-pane__content"
       data-shortcut-scope="chat"
       data-fullscreen={isFullscreen}
       data-testid="chat-pane"
     >
       <FlowChatContainer
-        className="bitfun-chat-pane__chat-container"
+        className="halo-chat-pane__chat-container"
         permissionPanelAboveChatInput={showChatInput}
         emptyState={emptyState}
         onOpenVisualization={(type, data) => {

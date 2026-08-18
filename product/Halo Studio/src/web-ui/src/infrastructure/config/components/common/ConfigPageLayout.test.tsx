@@ -40,13 +40,13 @@ describe('ConfigPageLayout', () => {
       );
     });
 
-    const contentInner = container.querySelector('.bitfun-config-page-content__inner');
+    const contentInner = container.querySelector('.halo-config-page-content__inner');
     const stack = container.querySelector('[data-testid="section-stack"]');
 
     expect(contentInner?.children).toHaveLength(1);
     expect(contentInner?.firstElementChild).toBe(stack);
-    expect(stack?.classList.contains('bitfun-config-page-section-stack')).toBe(true);
-    expect(stack?.querySelectorAll(':scope > .bitfun-config-page-section')).toHaveLength(2);
+    expect(stack?.classList.contains('halo-config-page-section-stack')).toBe(true);
+    expect(stack?.querySelectorAll(':scope > .halo-config-page-section')).toHaveLength(2);
   });
 
   it('can omit the mouse glow surface from a borderless section body', () => {
@@ -63,7 +63,7 @@ describe('ConfigPageLayout', () => {
       );
     });
 
-    const bodies = container.querySelectorAll('.bitfun-config-page-section__body');
+    const bodies = container.querySelectorAll('.halo-config-page-section__body');
     expect(bodies[0]?.hasAttribute('data-mouse-glow-surface')).toBe(true);
     expect(bodies[1]?.hasAttribute('data-mouse-glow-surface')).toBe(false);
   });

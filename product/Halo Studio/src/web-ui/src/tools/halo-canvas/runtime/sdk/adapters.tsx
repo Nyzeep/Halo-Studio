@@ -1,15 +1,15 @@
 import React from 'react';
-import { Badge as BitFunBadge } from '@/component-library/components/Badge';
-import { Button as BitFunButton } from '@/component-library/components/Button';
+import { Badge as HaloBadge } from '@/component-library/components/Badge';
+import { Button as HaloButton } from '@/component-library/components/Button';
 import {
-  Card as BitFunCard,
-  CardBody as BitFunCardBody,
-  CardHeader as BitFunCardHeader,
+  Card as HaloCard,
+  CardBody as HaloCardBody,
+  CardHeader as HaloCardHeader,
 } from '@/component-library/components/Card';
-import { Empty as BitFunEmpty } from '@/component-library/components/Empty';
-import { Input as BitFunInput } from '@/component-library/components/Input';
-import { TabPane as BitFunTabPane, Tabs as BitFunTabs } from '@/component-library/components/Tabs';
-import { Tag as BitFunTag } from '@/component-library/components/Tag';
+import { Empty as HaloEmpty } from '@/component-library/components/Empty';
+import { Input as HaloInput } from '@/component-library/components/Input';
+import { TabPane as HaloTabPane, Tabs as HaloTabs } from '@/component-library/components/Tabs';
+import { Tag as HaloTag } from '@/component-library/components/Tag';
 import type {
   CanvasButtonProps,
   CanvasCardBodyProps,
@@ -23,14 +23,14 @@ import type {
   CanvasTone,
 } from './types';
 
-function cardVariant(variant: CanvasCardProps['variant']): React.ComponentProps<typeof BitFunCard>['variant'] {
+function cardVariant(variant: CanvasCardProps['variant']): React.ComponentProps<typeof HaloCard>['variant'] {
   if (variant === 'borderless') return 'subtle';
   return variant ?? 'default';
 }
 
 export function Card({ variant, padding = 'medium', radius = 'small', style, ...props }: CanvasCardProps) {
   return (
-    <BitFunCard
+    <HaloCard
       {...props}
       variant={cardVariant(variant)}
       padding={variant === 'borderless' ? 'none' : padding}
@@ -45,7 +45,7 @@ export function Card({ variant, padding = 'medium', radius = 'small', style, ...
 
 export function CardHeader({ children, title, subtitle, trailing, ...props }: CanvasCardHeaderProps) {
   return (
-    <BitFunCardHeader
+    <HaloCardHeader
       {...props}
       title={title ?? children}
       subtitle={subtitle}
@@ -55,10 +55,10 @@ export function CardHeader({ children, title, subtitle, trailing, ...props }: Ca
 }
 
 export function CardBody(props: CanvasCardBodyProps) {
-  return <BitFunCardBody {...props} />;
+  return <HaloCardBody {...props} />;
 }
 
-function buttonSize(size: CanvasButtonProps['size']): React.ComponentProps<typeof BitFunButton>['size'] {
+function buttonSize(size: CanvasButtonProps['size']): React.ComponentProps<typeof HaloButton>['size'] {
   if (size === 'sm') return 'small';
   if (size === 'md') return 'medium';
   if (size === 'lg') return 'large';
@@ -67,7 +67,7 @@ function buttonSize(size: CanvasButtonProps['size']): React.ComponentProps<typeo
 
 export function Button({ variant = 'secondary', size, ...props }: CanvasButtonProps) {
   return (
-    <BitFunButton
+    <HaloButton
       {...props}
       variant={variant}
       size={buttonSize(size)}
@@ -85,7 +85,7 @@ function pillTone(tone: CanvasTone | 'accent' | 'purple' | undefined, active: bo
   return { badge: 'neutral' as const, tag: 'gray' as const };
 }
 
-function tagSize(size: CanvasPillProps['size']): React.ComponentProps<typeof BitFunTag>['size'] {
+function tagSize(size: CanvasPillProps['size']): React.ComponentProps<typeof HaloTag>['size'] {
   if (size === 'sm') return 'small';
   if (size === 'md') return 'medium';
   if (size === 'lg') return 'large';
@@ -107,20 +107,20 @@ export function Pill({
     <>
       {leadingContent}
       {children}
-      {keyboardHint ? <span className="bitfun-canvas-adapter-pill__hint">{keyboardHint}</span> : null}
+      {keyboardHint ? <span className="halo-canvas-adapter-pill__hint">{keyboardHint}</span> : null}
     </>
   );
 
   if (active) {
     return (
-      <BitFunBadge variant={resolvedTone.badge} className={className}>
+      <HaloBadge variant={resolvedTone.badge} className={className}>
         {content}
-      </BitFunBadge>
+      </HaloBadge>
     );
   }
 
   return (
-    <BitFunTag
+    <HaloTag
       {...props}
       color={resolvedTone.tag}
       size={tagSize(size)}
@@ -128,35 +128,35 @@ export function Pill({
       className={className}
     >
       {content}
-    </BitFunTag>
+    </HaloTag>
   );
 }
 
 function renderTabItems(items: CanvasTabsItem[]) {
   return items.map(item => (
-    <BitFunTabPane
+    <HaloTabPane
       key={item.key}
       tabKey={item.key}
       label={item.label}
       disabled={item.disabled}
     >
       {item.children}
-    </BitFunTabPane>
+    </HaloTabPane>
   ));
 }
 
 export function Tabs({ items, children, ...props }: CanvasTabsProps) {
   return (
-    <BitFunTabs {...props}>
+    <HaloTabs {...props}>
       {items ? renderTabItems(items) : children}
-    </BitFunTabs>
+    </HaloTabs>
   );
 }
 
 export function Input({ size, ...props }: CanvasInputProps) {
-  return <BitFunInput {...props} size={size} />;
+  return <HaloInput {...props} size={size} />;
 }
 
 export function Empty(props: CanvasEmptyProps) {
-  return <BitFunEmpty {...props} />;
+  return <HaloEmpty {...props} />;
 }

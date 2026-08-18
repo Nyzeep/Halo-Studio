@@ -1,7 +1,7 @@
 @use '../../../../component-library/styles/tokens' as tokens;
 
 .agent-capability-tooltip {
-  .bitfun-tooltip__content {
+  .halo-tooltip__content {
     width: min(360px, calc(100vw - 16px));
     max-width: min(360px, calc(100vw - 16px));
     padding: tokens.$size-gap-2 tokens.$size-gap-3;

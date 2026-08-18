@@ -1,8 +1,8 @@
 /**
  * Empty component styles
- * Based on the BitFun glassmorphism design system
+ * Based on the Halo glassmorphism design system
  */
-.bitfun-empty {
+.halo-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -13,7 +13,7 @@
   &__image {
     margin-bottom: 16px;
     opacity: 0.8;
-    animation: bitfun-empty-fade-in 0.5s ease-out;
+    animation: halo-empty-fade-in 0.5s ease-out;
 
     svg {
       display: block;
@@ -24,15 +24,15 @@
     font-size: 14px;
     color: var(--color-overlay-white-60);
     margin-bottom: 16px;
-    animation: bitfun-empty-fade-in 0.5s ease-out 0.1s both;
+    animation: halo-empty-fade-in 0.5s ease-out 0.1s both;
   }
 
   &__footer {
-    animation: bitfun-empty-fade-in 0.5s ease-out 0.2s both;
+    animation: halo-empty-fade-in 0.5s ease-out 0.2s both;
   }
 }
 
-@keyframes bitfun-empty-fade-in {
+@keyframes halo-empty-fade-in {
   from {
     opacity: 0;
     transform: translateY(10px);

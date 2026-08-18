@@ -65,13 +65,13 @@ const PersistentFooterActions: React.FC = () => {
 
   return (
     <>
-      <div className="bitfun-nav-panel__footer">
-        <div className="bitfun-nav-panel__footer-left">
-          <div className="bitfun-nav-panel__footer-more-wrap">
+      <div className="halo-nav-panel__footer">
+        <div className="halo-nav-panel__footer-left">
+          <div className="halo-nav-panel__footer-more-wrap">
             <Tooltip content={t('nav.moreOptions')} placement="right" followCursor disabled={menuOpen}>
               <button
                 type="button"
-                className={`bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon${menuOpen ? ' is-active' : ''}`}
+                className={`halo-nav-panel__footer-btn halo-nav-panel__footer-btn--icon${menuOpen ? ' is-active' : ''}`}
                 aria-label={t('nav.moreOptions')}
                 aria-expanded={menuOpen}
                 onClick={toggleMenu}
@@ -80,9 +80,9 @@ const PersistentFooterActions: React.FC = () => {
                 {menuOpen ? (
                   <MoreVertical size={15} aria-hidden="true" />
                 ) : (
-                  <span className="bitfun-nav-panel__footer-btn-icon-swap" aria-hidden="true">
-                    <MoreVertical size={15} className="bitfun-nav-panel__footer-btn-icon-swap-default" />
-                    <ChevronUp size={15} className="bitfun-nav-panel__footer-btn-icon-swap-hover" />
+                  <span className="halo-nav-panel__footer-btn-icon-swap" aria-hidden="true">
+                    <MoreVertical size={15} className="halo-nav-panel__footer-btn-icon-swap-default" />
+                    <ChevronUp size={15} className="halo-nav-panel__footer-btn-icon-swap-hover" />
                   </span>
                 )}
               </button>
@@ -91,17 +91,17 @@ const PersistentFooterActions: React.FC = () => {
             {menuOpen && (
               <>
                 <div
-                  className="bitfun-nav-panel__footer-backdrop"
+                  className="halo-nav-panel__footer-backdrop"
                   onClick={closeMenu}
                 />
                 <div
-                  className={`bitfun-nav-panel__footer-menu${menuClosing ? ' is-closing' : ''}`}
+                  className={`halo-nav-panel__footer-menu${menuClosing ? ' is-closing' : ''}`}
                   role="menu"
                   data-testid="nav-footer-menu"
                 >
                   <button
                     type="button"
-                    className="bitfun-nav-panel__footer-menu-item"
+                    className="halo-nav-panel__footer-menu-item"
                     role="menuitem"
                     onClick={handleOpenSettings}
                     data-testid="nav-footer-settings-item"
@@ -111,7 +111,7 @@ const PersistentFooterActions: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    className="bitfun-nav-panel__footer-menu-item"
+                    className="halo-nav-panel__footer-menu-item"
                     role="menuitem"
                     onClick={handleShowAbout}
                   >
@@ -126,22 +126,22 @@ const PersistentFooterActions: React.FC = () => {
           <Tooltip content={t('scenes.shell')} placement="right">
             <button
               type="button"
-              className={`bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon${showSceneNav && navSceneId === 'shell' ? ' is-active' : ''}`}
+              className={`halo-nav-panel__footer-btn halo-nav-panel__footer-btn--icon${showSceneNav && navSceneId === 'shell' ? ' is-active' : ''}`}
               aria-label={t('scenes.shell')}
               aria-pressed={showSceneNav && navSceneId === 'shell'}
               onClick={handleOpenShell}
               data-testid="shell-panel-entry"
             >
-              <span className="bitfun-nav-panel__footer-btn-icon-swap" aria-hidden="true">
-                <SquareTerminal size={15} className="bitfun-nav-panel__footer-btn-icon-swap-default" />
-                <Terminal size={15} className="bitfun-nav-panel__footer-btn-icon-swap-hover" />
+              <span className="halo-nav-panel__footer-btn-icon-swap" aria-hidden="true">
+                <SquareTerminal size={15} className="halo-nav-panel__footer-btn-icon-swap-default" />
+                <Terminal size={15} className="halo-nav-panel__footer-btn-icon-swap-hover" />
               </span>
             </button>
           </Tooltip>
         </div>
 
-        <div className="bitfun-nav-panel__footer-right">
-          <NotificationButton className="bitfun-nav-panel__footer-btn" navFooterHoverIconSwap />
+        <div className="halo-nav-panel__footer-right">
+          <NotificationButton className="halo-nav-panel__footer-btn" navFooterHoverIconSwap />
         </div>
       </div>
       {showAbout && (

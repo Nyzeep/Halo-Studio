@@ -388,33 +388,33 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
 
   if (!workspacePath) {
     return (
-      <div className="bitfun-git-scene-working-copy">
-        <div className="bitfun-git-scene-working-copy__placeholder">
+      <div className="halo-git-scene-working-copy">
+        <div className="halo-git-scene-working-copy__placeholder">
           <FileCode2 size={48} aria-hidden />
           <p>{t('tabs.changes')}</p>
-          <p className="bitfun-git-scene-working-copy__hint">Open a workspace to see changes.</p>
+          <p className="halo-git-scene-working-copy__hint">Open a workspace to see changes.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bitfun-git-scene-working-copy">
-      <div className="bitfun-git-scene-working-copy__commit-bar">
-        <div className="bitfun-git-scene-working-copy__status-row">
+    <div className="halo-git-scene-working-copy">
+      <div className="halo-git-scene-working-copy__commit-bar">
+        <div className="halo-git-scene-working-copy__status-row">
           <GitBranch size={12} />
-          <span className="bitfun-git-scene-working-copy__branch">{status?.current_branch ?? t('common.unknown')}</span>
+          <span className="halo-git-scene-working-copy__branch">{status?.current_branch ?? t('common.unknown')}</span>
           {(status?.ahead ?? 0) > 0 && (
             <Tooltip content={t('status.ahead')}>
-              <span className="bitfun-git-scene-working-copy__badge wcv-badge--ahead">↑{status?.ahead}</span>
+              <span className="halo-git-scene-working-copy__badge wcv-badge--ahead">↑{status?.ahead}</span>
             </Tooltip>
           )}
           {(status?.behind ?? 0) > 0 && (
             <Tooltip content={t('status.behind')}>
-              <span className="bitfun-git-scene-working-copy__badge wcv-badge--behind">↓{status?.behind}</span>
+              <span className="halo-git-scene-working-copy__badge wcv-badge--behind">↓{status?.behind}</span>
             </Tooltip>
           )}
-          <div className="bitfun-git-scene-working-copy__sync-actions">
+          <div className="halo-git-scene-working-copy__sync-actions">
             <IconButton size="xs" variant="ghost" onClick={handlePull} disabled={isOperating} tooltip={t('actions.pull')}>
               <ArrowDown size={14} />
             </IconButton>
@@ -423,9 +423,9 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
             </IconButton>
           </div>
         </div>
-        <div className="bitfun-git-scene-working-copy__commit-input-row">
+        <div className="halo-git-scene-working-copy__commit-input-row">
           <Textarea
-            className="bitfun-git-scene-working-copy__message"
+            className="halo-git-scene-working-copy__message"
             placeholder={status?.staged?.length ? t('commit.inputPlaceholder') : t('commit.inputPlaceholderNoStaged')}
             value={quickCommitMessage}
             onChange={e => setQuickCommitMessage(e.target.value)}
@@ -445,7 +445,7 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
             </IconButton>
           ))}
         </div>
-        <div className="bitfun-git-scene-working-copy__commit-actions">
+        <div className="halo-git-scene-working-copy__commit-actions">
           <Button
             size="small"
             variant={quickCommitMessage.trim() && status?.staged?.length ? 'primary' : 'secondary'}
@@ -457,9 +457,9 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
         </div>
       </div>
 
-      <div className="bitfun-git-scene-working-copy__main" ref={mainRef}>
-        <div className="bitfun-git-scene-working-copy__file-list" style={{ width: fileListWidth }}>
-          <div className="bitfun-git-scene-working-copy__search">
+      <div className="halo-git-scene-working-copy__main" ref={mainRef}>
+        <div className="halo-git-scene-working-copy__file-list" style={{ width: fileListWidth }}>
+          <div className="halo-git-scene-working-copy__search">
             <SearchComponent
               placeholder={t('search.files')}
               value={searchQuery}
@@ -472,7 +472,7 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
               {filteredFiles.unstaged.length > 0 && (
                 <>
                   <div
-                    className="bitfun-git-scene-working-copy__group-header"
+                    className="halo-git-scene-working-copy__group-header"
                     onClick={() => toggleFileGroup('unstaged')}
                   >
                     {expandedFileGroups.has('unstaged') ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -514,13 +514,13 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
                       return (
                         <div
                           key={`u-${idx}`}
-                          className={`bitfun-git-scene-working-copy__file-row ${isSelected ? 'wcv-file--selected' : ''} ${isLoading ? 'wcv-file--loading' : ''}`}
+                          className={`halo-git-scene-working-copy__file-row ${isSelected ? 'wcv-file--selected' : ''} ${isLoading ? 'wcv-file--loading' : ''}`}
                           onClick={() => !isLoading && handleOpenFileDiff(file.path, file.status)}
                           title={t('tooltips.viewDiff')}
                         >
                           <button
                             type="button"
-                            className="bitfun-git-scene-working-copy__file-check"
+                            className="halo-git-scene-working-copy__file-check"
                             onClick={e => {
                               e.stopPropagation();
                               toggleFileSelection(file.path);
@@ -528,9 +528,9 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
                           >
                             {isSelected ? <Check size={14} /> : <Circle size={14} />}
                           </button>
-                          <span className="bitfun-git-scene-working-copy__file-name">{fileName}</span>
-                          {dirPath && <span className="bitfun-git-scene-working-copy__file-dir">{dirPath}</span>}
-                          <span className={`bitfun-git-scene-working-copy__file-status ${statusInfo.className}`}>{statusInfo.text}</span>
+                          <span className="halo-git-scene-working-copy__file-name">{fileName}</span>
+                          {dirPath && <span className="halo-git-scene-working-copy__file-dir">{dirPath}</span>}
+                          <span className={`halo-git-scene-working-copy__file-status ${statusInfo.className}`}>{statusInfo.text}</span>
                           <IconButton
                             size="xs"
                             variant="ghost"
@@ -550,7 +550,7 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
               )}
               {filteredFiles.untracked.length > 0 && (
                 <>
-                  <div className="bitfun-git-scene-working-copy__group-header" onClick={() => toggleFileGroup('untracked')}>
+                  <div className="halo-git-scene-working-copy__group-header" onClick={() => toggleFileGroup('untracked')}>
                     {expandedFileGroups.has('untracked') ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                     <span>
                       {searchQuery
@@ -566,13 +566,13 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
                       return (
                         <div
                           key={`ut-${idx}`}
-                          className={`bitfun-git-scene-working-copy__file-row ${isSelected ? 'wcv-file--selected' : ''} ${isLoading ? 'wcv-file--loading' : ''}`}
+                          className={`halo-git-scene-working-copy__file-row ${isSelected ? 'wcv-file--selected' : ''} ${isLoading ? 'wcv-file--loading' : ''}`}
                           onClick={() => !isLoading && handleOpenFileDiff(filePath, 'Untracked')}
                           title={t('tooltips.viewDiff')}
                         >
                           <button
                             type="button"
-                            className="bitfun-git-scene-working-copy__file-check"
+                            className="halo-git-scene-working-copy__file-check"
                             onClick={e => {
                               e.stopPropagation();
                               toggleFileSelection(filePath);
@@ -580,9 +580,9 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
                           >
                             {isSelected ? <Check size={14} /> : <Circle size={14} />}
                           </button>
-                          <span className="bitfun-git-scene-working-copy__file-name">{fileName}</span>
-                          {dirPath && <span className="bitfun-git-scene-working-copy__file-dir">{dirPath}</span>}
-                          <span className="bitfun-git-scene-working-copy__file-status wcv-status--added">U</span>
+                          <span className="halo-git-scene-working-copy__file-name">{fileName}</span>
+                          {dirPath && <span className="halo-git-scene-working-copy__file-dir">{dirPath}</span>}
+                          <span className="halo-git-scene-working-copy__file-status wcv-status--added">U</span>
                           <IconButton
                             size="xs"
                             variant="ghost"
@@ -602,7 +602,7 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
               )}
               {filteredFiles.staged.length > 0 && (
                 <>
-                  <div className="bitfun-git-scene-working-copy__group-header" onClick={() => toggleFileGroup('staged')}>
+                  <div className="halo-git-scene-working-copy__group-header" onClick={() => toggleFileGroup('staged')}>
                     {expandedFileGroups.has('staged') ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                     <span>
                       {searchQuery
@@ -617,12 +617,12 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
                       return (
                         <div
                           key={`s-${idx}`}
-                          className={`bitfun-git-scene-working-copy__file-row ${isLoading ? 'wcv-file--loading' : ''}`}
+                          className={`halo-git-scene-working-copy__file-row ${isLoading ? 'wcv-file--loading' : ''}`}
                           onClick={() => !isLoading && handleOpenFileDiff(file.path, file.status)}
                           title={t('tooltips.viewDiff')}
                         >
-                          <span className="bitfun-git-scene-working-copy__file-name">{file.path}</span>
-                          <span className={`bitfun-git-scene-working-copy__file-status ${statusInfo.className}`}>{statusInfo.text}</span>
+                          <span className="halo-git-scene-working-copy__file-name">{file.path}</span>
+                          <span className={`halo-git-scene-working-copy__file-status ${statusInfo.className}`}>{statusInfo.text}</span>
                           <IconButton
                             size="xs"
                             variant="ghost"
@@ -642,18 +642,18 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
               )}
             </>
           ) : (
-            <div className="bitfun-git-scene-working-copy__empty">{t('empty.noChanges')}</div>
+            <div className="halo-git-scene-working-copy__empty">{t('empty.noChanges')}</div>
           )}
         </div>
         <div
-          className="bitfun-git-scene-working-copy__resizer"
+          className="halo-git-scene-working-copy__resizer"
           onMouseDown={handleResizerMouseDown}
           role="separator"
           aria-orientation="vertical"
           aria-valuenow={fileListWidth}
           title={t('tooltips.resizeFileList')}
         />
-        <div className="bitfun-git-scene-working-copy__diff-area">
+        <div className="halo-git-scene-working-copy__diff-area">
           <CanvasStoreModeContext.Provider value="git">
             <ContentCanvas workspacePath={workspacePath} mode="git" onInteraction={handleInteraction} onBeforeClose={handleBeforeClose} />
           </CanvasStoreModeContext.Provider>

@@ -31,12 +31,12 @@ describe('GitAPI repository probe cache', () => {
     const deferred = createDeferred<boolean>();
     invokeMock.mockReturnValueOnce(deferred.promise);
 
-    const first = gitAPI.isGitRepository('D:/workspace/BitFun');
-    const second = gitAPI.isGitRepository('D:/workspace/BitFun');
+    const first = gitAPI.isGitRepository('D:/workspace/Halo');
+    const second = gitAPI.isGitRepository('D:/workspace/Halo');
 
     expect(invokeMock).toHaveBeenCalledTimes(1);
     expect(invokeMock).toHaveBeenCalledWith('git_is_repository', {
-      request: { repositoryPath: 'D:/workspace/BitFun' },
+      request: { repositoryPath: 'D:/workspace/Halo' },
     });
 
     deferred.resolve(true);
@@ -46,8 +46,8 @@ describe('GitAPI repository probe cache', () => {
   it('reuses a recent repository probe result for the same path', async () => {
     invokeMock.mockResolvedValueOnce(true);
 
-    await expect(gitAPI.isGitRepository('D:/workspace/BitFun')).resolves.toBe(true);
-    await expect(gitAPI.isGitRepository('D:/workspace/BitFun')).resolves.toBe(true);
+    await expect(gitAPI.isGitRepository('D:/workspace/Halo')).resolves.toBe(true);
+    await expect(gitAPI.isGitRepository('D:/workspace/Halo')).resolves.toBe(true);
 
     expect(invokeMock).toHaveBeenCalledTimes(1);
   });

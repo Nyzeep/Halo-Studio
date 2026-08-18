@@ -3,7 +3,7 @@
  */
 @use '../../styles/tokens.scss' as tokens;
 
-.bitfun-tooltip {
+.halo-tooltip {
   position: fixed;
   opacity: 0;
   pointer-events: none;
@@ -20,7 +20,7 @@
     transform: scale(1);
   }
 
-  &--interactive.bitfun-tooltip--visible {
+  &--interactive.halo-tooltip--visible {
     pointer-events: auto;
   }
 
@@ -64,25 +64,25 @@
     }
   }
 
-  &--top.bitfun-tooltip--visible {
-    animation: bitfun-tooltip-fade-in-top 0.12s ease-out;
+  &--top.halo-tooltip--visible {
+    animation: halo-tooltip-fade-in-top 0.12s ease-out;
   }
 
-  &--bottom.bitfun-tooltip--visible {
-    animation: bitfun-tooltip-fade-in-bottom 0.12s ease-out;
+  &--bottom.halo-tooltip--visible {
+    animation: halo-tooltip-fade-in-bottom 0.12s ease-out;
   }
 
-  &--left.bitfun-tooltip--visible {
-    animation: bitfun-tooltip-fade-in-left 0.12s ease-out;
+  &--left.halo-tooltip--visible {
+    animation: halo-tooltip-fade-in-left 0.12s ease-out;
   }
 
-  &--right.bitfun-tooltip--visible {
-    animation: bitfun-tooltip-fade-in-right 0.12s ease-out;
+  &--right.halo-tooltip--visible {
+    animation: halo-tooltip-fade-in-right 0.12s ease-out;
   }
 }
 
 
-@keyframes bitfun-tooltip-fade-in-top {
+@keyframes halo-tooltip-fade-in-top {
   from {
     opacity: 0;
     transform: translateY(3px);
@@ -93,7 +93,7 @@
   }
 }
 
-@keyframes bitfun-tooltip-fade-in-bottom {
+@keyframes halo-tooltip-fade-in-bottom {
   from {
     opacity: 0;
     transform: translateY(-3px);
@@ -104,7 +104,7 @@
   }
 }
 
-@keyframes bitfun-tooltip-fade-in-left {
+@keyframes halo-tooltip-fade-in-left {
   from {
     opacity: 0;
     transform: translateX(3px);
@@ -115,7 +115,7 @@
   }
 }
 
-@keyframes bitfun-tooltip-fade-in-right {
+@keyframes halo-tooltip-fade-in-right {
   from {
     opacity: 0;
     transform: translateX(-3px);
@@ -128,7 +128,7 @@
 
 
 @media (prefers-contrast: high) {
-  .bitfun-tooltip {
+  .halo-tooltip {
     &__content {
       border-width: 1px;
       border-color: var(--border-prominent);
@@ -138,7 +138,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-tooltip {
+  .halo-tooltip {
     transition: opacity 0.08s ease;
     transform: none;
 

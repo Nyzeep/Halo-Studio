@@ -31,7 +31,7 @@ export const ThreadGoalStripButton: React.FC<ThreadGoalStripButtonProps> = ({
   return (
     <Tooltip content={tooltip}>
       <IconButton
-        className={`bitfun-chat-input-workspace-strip__goal-btn bitfun-chat-input-workspace-strip__goal-btn--${iconTone}`}
+        className={`halo-chat-input-workspace-strip__goal-btn halo-chat-input-workspace-strip__goal-btn--${iconTone}`}
         variant="ghost"
         size="xs"
         type="button"

@@ -1,4 +1,4 @@
-.bitfun-external-sources-config {
+.halo-external-sources-config {
   container-name: external-sources;
   container-type: inline-size;
 
@@ -33,17 +33,17 @@
     transform: rotate(45deg);
   }
 
-  .bitfun-config-page-header__inner {
+  .halo-config-page-header__inner {
     position: relative;
   }
 
-  .bitfun-config-page-section__body {
+  .halo-config-page-section__body {
     border: 0;
     border-radius: 0;
     background: transparent;
   }
 
-  .bitfun-config-page-row {
+  .halo-config-page-row {
     padding: 12px 0;
   }
 
@@ -142,7 +142,7 @@
       }
     }
 
-    .bitfun-button {
+    .halo-button {
       margin-left: auto;
     }
   }
@@ -376,22 +376,22 @@
       background: color-mix(in srgb, var(--color-text-primary) 4%, transparent);
     }
 
-    .bitfun-switch__wrapper {
+    .halo-switch__wrapper {
       margin-top: 0;
     }
 
-    .bitfun-switch__content {
+    .halo-switch__content {
       min-width: 0;
       gap: 0;
       text-align: left;
     }
 
-    .bitfun-switch__label {
+    .halo-switch__label {
       font-size: 12px;
       line-height: 15px;
     }
 
-    .bitfun-switch__description {
+    .halo-switch__description {
       font-size: 10px;
       line-height: 13px;
     }
@@ -648,13 +648,13 @@
   }
 
   @container external-sources (max-width: 720px) {
-    &__source-group.bitfun-config-page-row {
+    &__source-group.halo-config-page-row {
       grid-template-columns: minmax(0, 1fr);
       gap: var(--size-gap-2);
       align-items: stretch;
     }
 
-    &__source-group .bitfun-config-page-row__control {
+    &__source-group .halo-config-page-row__control {
       justify-content: flex-start;
     }
 
@@ -683,8 +683,8 @@
       grid-template-columns: 1fr;
     }
 
-    &__scope-bar .bitfun-button,
-    &__policy-recovery .bitfun-button {
+    &__scope-bar .halo-button,
+    &__policy-recovery .halo-button {
       width: 100%;
       margin-left: 0;
     }
@@ -697,7 +697,7 @@
 }
 
 @container external-sources (max-width: 520px) {
-  .bitfun-external-sources-config .bitfun-config-page-header__extra {
+  .halo-external-sources-config .halo-config-page-header__extra {
     position: absolute;
     top: 0;
     right: 0;

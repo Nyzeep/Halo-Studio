@@ -6,22 +6,22 @@ export const APP_INFO = {
   version: '1.0.0',
   description: 'AI code analysis and visualization tool',
   author: 'Halo Studio Team',
-  homepage: 'https://bitfun.dev'
+  homepage: 'https://halo.dev'
 } as const;
 
 
 export const STORAGE_KEYS = {
-  THEME: 'bitfun-theme',
-  LANGUAGE: 'bitfun-language',
-  LEFT_PANEL_WIDTH: 'bitfun-left-panel-width',
-  LEFT_PANEL_COLLAPSED: 'bitfun-left-panel-collapsed',
-  RIGHT_PANEL_COLLAPSED: 'bitfun-right-panel-collapsed',
-  RECENT_WORKSPACES: 'bitfun-recent-workspaces',
-  USER_PREFERENCES: 'bitfun-user-preferences',
-  MODEL_CONFIGS: 'bitfun-model-configs',
-  CHAT_HISTORY: 'bitfun-chat-history',
-  DIFF_CLOSE_WARNING_DISABLED: 'bitfun-diff-close-warning-disabled',
-  MANUAL_TERMINAL_PROFILES: 'bitfun-manual-terminal-profiles'
+  THEME: 'halo-theme',
+  LANGUAGE: 'halo-language',
+  LEFT_PANEL_WIDTH: 'halo-left-panel-width',
+  LEFT_PANEL_COLLAPSED: 'halo-left-panel-collapsed',
+  RIGHT_PANEL_COLLAPSED: 'halo-right-panel-collapsed',
+  RECENT_WORKSPACES: 'halo-recent-workspaces',
+  USER_PREFERENCES: 'halo-user-preferences',
+  MODEL_CONFIGS: 'halo-model-configs',
+  CHAT_HISTORY: 'halo-chat-history',
+  DIFF_CLOSE_WARNING_DISABLED: 'halo-diff-close-warning-disabled',
+  MANUAL_TERMINAL_PROFILES: 'halo-manual-terminal-profiles'
 } as const;
 
 

@@ -179,7 +179,7 @@ describe('ExternalMcpOverview', () => {
     expect(container.textContent).toContain('external.status.approvalRequired');
 
     await act(async () => {
-      (container.querySelector('[data-testid="external-mcp-item"] .bitfun-collection-item__details-toggle') as HTMLButtonElement).click();
+      (container.querySelector('[data-testid="external-mcp-item"] .halo-collection-item__details-toggle') as HTMLButtonElement).click();
     });
     expect(container.textContent).toContain('<workspace>/.opencode/opencode.json');
   });
@@ -309,7 +309,7 @@ describe('ExternalMcpOverview', () => {
     });
 
     expect(Array.from(
-      container.querySelectorAll('[data-testid="external-mcp-item"] .bitfun-collection-item__name'),
+      container.querySelectorAll('[data-testid="external-mcp-item"] .halo-collection-item__name'),
     ).map((node) => node.textContent)).toEqual(['peer-b-docs']);
   });
 

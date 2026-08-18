@@ -1,5 +1,5 @@
 /**
- * Account ("My BitFun") panel inside the Remote Connect dialog.
+ * Account ("My Halo") panel inside the Remote Connect dialog.
  *
  * Views: login → overwrite (optional) → devices
  * Unlike the old standalone dialog, a successful login keeps the panel open
@@ -1074,7 +1074,7 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({
                   suffix={
                     <button
                       type="button"
-                      className="bitfun-input-toggle"
+                      className="halo-input-toggle"
                       onClick={() => setShowPassword(s => !s)}
                       aria-label={showPassword
                         ? t('accountLogin.hidePassword')

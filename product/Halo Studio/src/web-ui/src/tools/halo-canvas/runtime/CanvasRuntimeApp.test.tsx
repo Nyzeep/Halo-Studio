@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { installBitfunCanvasRuntimeApp } from './CanvasRuntimeApp';
+import { installHaloCanvasRuntimeApp } from './CanvasRuntimeApp';
 
 type TestWindow = Window & {
-  BitfunCanvasSDK?: Record<string, unknown>;
-  BitfunCanvasSDKAdapters?: Record<string, unknown>;
-  BitfunCanvasRuntime?: Record<string, any>;
+  HaloCanvasSDK?: Record<string, unknown>;
+  HaloCanvasSDKAdapters?: Record<string, unknown>;
+  HaloCanvasRuntime?: Record<string, any>;
   ReactDOM?: {
     createRoot: (element: HTMLElement) => { render: (node: unknown) => void };
   };
@@ -30,9 +30,9 @@ function installTestDom() {
     parent: { postMessage },
     setTimeout: vi.fn(),
     clearTimeout: vi.fn(),
-    BitfunCanvasSDK: { Fallback: true },
-    BitfunCanvasSDKAdapters: { Adapter: true },
-    BitfunCanvasRuntime: { fallback: true },
+    HaloCanvasSDK: { Fallback: true },
+    HaloCanvasSDKAdapters: { Adapter: true },
+    HaloCanvasRuntime: { fallback: true },
     ReactDOM: {
       createRoot: vi.fn(() => ({ render })),
     },
@@ -52,23 +52,23 @@ describe('CanvasRuntimeApp', () => {
   it('installs runtime hooks without removing fallback runtime fields', () => {
     const { testWindow } = installTestDom();
 
-    installBitfunCanvasRuntimeApp();
+    installHaloCanvasRuntimeApp();
 
-    expect(testWindow.BitfunCanvasRuntime?.fallback).toBe(true);
-    expect(testWindow.BitfunCanvasRuntime?.h).toBeTypeOf('function');
-    expect(testWindow.BitfunCanvasRuntime?.Fragment).toBeTruthy();
+    expect(testWindow.HaloCanvasRuntime?.fallback).toBe(true);
+    expect(testWindow.HaloCanvasRuntime?.h).toBeTypeOf('function');
+    expect(testWindow.HaloCanvasRuntime?.Fragment).toBeTruthy();
   });
 
   it('merges SDK adapters on module start and posts startup event', () => {
     const { postMessage, testWindow } = installTestDom();
 
-    installBitfunCanvasRuntimeApp();
-    testWindow.BitfunCanvasRuntime?.moduleStarted();
+    installHaloCanvasRuntimeApp();
+    testWindow.HaloCanvasRuntime?.moduleStarted();
 
-    expect(testWindow.BitfunCanvasSDK).toMatchObject({ Fallback: true, Adapter: true });
+    expect(testWindow.HaloCanvasSDK).toMatchObject({ Fallback: true, Adapter: true });
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'bitfun-canvas-module-started',
+        type: 'halo-canvas-module-started',
         sourceRevisionSeen: 'rev_test',
       }),
       '*',
@@ -81,14 +81,14 @@ describe('CanvasRuntimeApp', () => {
       return null;
     }
 
-    installBitfunCanvasRuntimeApp();
-    testWindow.BitfunCanvasRuntime?.mount(Canvas);
+    installHaloCanvasRuntimeApp();
+    testWindow.HaloCanvasRuntime?.mount(Canvas);
 
     expect(testWindow.ReactDOM?.createRoot).toHaveBeenCalled();
     expect(render).toHaveBeenCalled();
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'bitfun-canvas-ready',
+        type: 'halo-canvas-ready',
         sourceRevisionSeen: 'rev_test',
       }),
       '*',

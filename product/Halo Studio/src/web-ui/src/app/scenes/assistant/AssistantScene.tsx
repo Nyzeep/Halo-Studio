@@ -69,11 +69,11 @@ const AssistantScene: React.FC<AssistantSceneProps> = ({ workspacePath }) => {
   ]);
 
   return (
-    <div className="bitfun-assistant-scene">
+    <div className="halo-assistant-scene">
       <Suspense
         fallback={(
           <div
-            className="bitfun-assistant-scene__loading"
+            className="halo-assistant-scene__loading"
             role="status"
             aria-busy="true"
             aria-label={t('loading.scenes')}

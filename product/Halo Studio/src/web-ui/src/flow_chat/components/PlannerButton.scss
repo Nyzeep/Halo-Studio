@@ -4,7 +4,7 @@
 
 @use '../../component-library/styles/tokens.scss' as *;
 
-.bitfun-planner-button {
+.halo-planner-button {
   // Reset default styles
   margin: 0;
   padding: 0 10px;
@@ -89,7 +89,7 @@
     border-radius: 50%;
     background: color-mix(in srgb, var(--color-warning) 90%, transparent);
     box-shadow: 0 0 6px color-mix(in srgb, var(--color-warning) 60%, transparent);
-    animation: bitfun-planner-button-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    animation: halo-planner-button-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     flex-shrink: 0;
     position: relative;
     z-index: 2;
@@ -113,7 +113,7 @@
   }
 }
 
-@keyframes bitfun-planner-button-pulse {
+@keyframes halo-planner-button-pulse {
   0%, 100% {
     opacity: 1;
     transform: scale(1);

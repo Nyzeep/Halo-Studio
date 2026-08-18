@@ -553,7 +553,7 @@
 }
 
 .terminal-command-tooltip {
-  .bitfun-tooltip__content {
+  .halo-tooltip__content {
     max-width: min(640px, calc(100vw - 32px));
     cursor: text;
   }
@@ -593,7 +593,7 @@
 }
 
 /* ========== Narrow width adaptation (Toolbar mode) ========== */
-.bitfun-toolbar-mode__session-surface {
+.halo-toolbar-mode__session-surface {
   .terminal-tool-card {
     .tool-card-action {
       display: none;

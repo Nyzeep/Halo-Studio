@@ -167,7 +167,7 @@ describe('AcpAgentsConfig', () => {
     listSavedConnectionsMock.mockResolvedValue([]);
     probeClientRequirementsMock.mockResolvedValue([]);
     saveJsonConfigMock.mockImplementation(async () => {
-      window.dispatchEvent(new Event('bitfun:acp-clients-changed'));
+      window.dispatchEvent(new Event('halo:acp-clients-changed'));
     });
     installClientCliMock.mockResolvedValue(undefined);
     predownloadClientAdapterMock.mockResolvedValue(undefined);
@@ -312,7 +312,7 @@ describe('AcpAgentsConfig', () => {
     ];
     probeClientRequirementsMock.mockResolvedValue(healthyProbes);
     saveJsonConfigMock.mockImplementation(async () => {
-      window.dispatchEvent(new Event('bitfun:acp-clients-changed'));
+      window.dispatchEvent(new Event('halo:acp-clients-changed'));
       loadJsonConfigMock.mockResolvedValue(JSON.stringify({
         acpClients: {
           opencode: {

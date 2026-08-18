@@ -7,7 +7,7 @@ $_node-padding-x: 8px;
 $_icon-size: 16px;
 $_indent-width: 8px;
 
-.bitfun-file-explorer {
+.halo-file-explorer {
   height: 100%;
   overflow: hidden;
   @include mixins.flex-layout(column, stretch, start, 0);
@@ -21,7 +21,7 @@ $_indent-width: 8px;
   }
 }
 
-.bitfun-file-explorer__toolbar {
+.halo-file-explorer__toolbar {
   position: absolute;
   top: $size-gap-2;
   right: $size-gap-1;
@@ -59,18 +59,18 @@ $_indent-width: 8px;
   }
 }
 
-.bitfun-file-explorer__empty {
+.halo-file-explorer__empty {
   text-align: center;
   color: var(--color-text-muted);
   padding: $size-gap-8;
 }
 
-.bitfun-file-explorer__empty-icon {
+.halo-file-explorer__empty-icon {
   margin-bottom: $size-gap-4;
   opacity: $opacity-disabled;
 }
 
-.bitfun-file-explorer__breadcrumb {
+.halo-file-explorer__breadcrumb {
   display: flex;
   align-items: center;
   gap: 1px;
@@ -88,14 +88,14 @@ $_indent-width: 8px;
   transition: all 0.15s ease-out;
 }
 
-.bitfun-file-explorer__breadcrumb-separator {
+.halo-file-explorer__breadcrumb-separator {
   color: var(--color-text-disabled);
   flex-shrink: 0;
   opacity: 0.4;
   margin: 0 1px;
 }
 
-.bitfun-file-explorer__breadcrumb-item {
+.halo-file-explorer__breadcrumb-item {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -119,7 +119,7 @@ $_indent-width: 8px;
   }
 }
 
-.bitfun-file-explorer__tree {
+.halo-file-explorer__tree {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -129,11 +129,11 @@ $_indent-width: 8px;
 
 }
 
-.bitfun-file-explorer__node {
+.halo-file-explorer__node {
   user-select: none;
 }
 
-.bitfun-file-explorer__node-content {
+.halo-file-explorer__node-content {
   @include mixins.flex-layout(row, center, start, $size-gap-1);
   padding: $_node-padding-y $_node-padding-x;
   cursor: pointer;
@@ -166,7 +166,7 @@ $_indent-width: 8px;
     background: var(--git-color-branch-bg);
     color: var(--git-color-branch);
 
-    .bitfun-file-explorer__node-name {
+    .halo-file-explorer__node-name {
       color: var(--git-color-branch);
       font-weight: $font-weight-medium;
     }
@@ -189,7 +189,7 @@ $_indent-width: 8px;
     background: var(--git-color-branch-bg) !important;
     animation: file-node-highlight-fade 2s ease-out forwards;
     
-    .bitfun-file-explorer__node-name {
+    .halo-file-explorer__node-name {
       color: var(--git-color-branch);
       font-weight: $font-weight-medium;
     }
@@ -208,7 +208,7 @@ $_indent-width: 8px;
   }
 }
 
-.bitfun-file-explorer__expand-icon {
+.halo-file-explorer__expand-icon {
   @include mixins.flex-layout(row, center, center, 0);
   @include mixins.size($_icon-size);
   transition: transform $motion-fast $easing-standard;
@@ -217,7 +217,7 @@ $_indent-width: 8px;
   min-width: $_icon-size;
 }
 
-.bitfun-file-explorer__icon {
+.halo-file-explorer__icon {
   @include mixins.flex-layout(row, center, center, 0);
   flex-shrink: 0;
   transition: all $motion-fast $easing-standard;
@@ -275,13 +275,13 @@ $_indent-width: 8px;
   }
 }
 
-.bitfun-file-explorer__node-wrapper {
+.halo-file-explorer__node-wrapper {
   @include mixins.flex-layout(row, center, start, $size-gap-2);
   flex: 1;
   min-width: 0;
 }
 
-.bitfun-file-explorer__node-name {
+.halo-file-explorer__node-name {
   flex: 1;
   font-size: var(--font-size-sm);
   font-weight: $font-weight-normal;
@@ -291,16 +291,16 @@ $_indent-width: 8px;
   color: inherit;
 }
 
-.bitfun-file-explorer__rename-input-wrapper {
+.halo-file-explorer__rename-input-wrapper {
   flex: 1;
   min-width: 0;
   z-index: 10;
   
-  .bitfun-input-wrapper {
+  .halo-input-wrapper {
     gap: 0;
     border: none;
     
-    .bitfun-input-container {
+    .halo-input-container {
       height: 26px;
       padding: 0 8px;
       background: var(--color-bg-elevated);
@@ -326,7 +326,7 @@ $_indent-width: 8px;
       }
     }
     
-    .bitfun-input {
+    .halo-input {
       font-size: var(--font-size-sm);
       color: var(--color-text-primary);
       font-weight: $font-weight-medium;
@@ -334,19 +334,19 @@ $_indent-width: 8px;
       outline: none !important;
     }
     
-    .bitfun-input-prefix {
+    .halo-input-prefix {
       color: color-mix(in srgb, var(--color-accent-500) 85%, transparent);
     }
   }
 }
 
-.bitfun-file-explorer__compressed-path {
+.halo-file-explorer__compressed-path {
   font-style: italic;
   opacity: 0.85;
   color: var(--color-text-muted);
 }
 
-.bitfun-file-explorer__node-size {
+.halo-file-explorer__node-size {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   opacity: 0.7;
@@ -355,7 +355,7 @@ $_indent-width: 8px;
   z-index: 2;
 }
 
-.bitfun-file-explorer__node-modified {
+.halo-file-explorer__node-modified {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   opacity: 0.7;
@@ -364,24 +364,24 @@ $_indent-width: 8px;
   z-index: 2;
 }
 
-.bitfun-file-explorer__node-actions {
+.halo-file-explorer__node-actions {
   @include mixins.flex-layout(row, center, start, $size-gap-1);
   opacity: 0;
   transition: opacity $motion-fast $easing-standard;
   position: relative;
   z-index: 2;
 
-  .bitfun-file-explorer__node-content:hover & {
+  .halo-file-explorer__node-content:hover & {
     opacity: 1;
   }
 }
 
-.bitfun-file-explorer__node-children {
+.halo-file-explorer__node-children {
   // Indentation is computed in JS via paddingLeft; avoid additional spacing here.
   position: relative;
 }
 
-.bitfun-file-explorer__load-more {
+.halo-file-explorer__load-more {
   @include mixins.flex-layout(row, center, start, $size-gap-2);
   width: calc(100% - #{$size-gap-2});
   margin: 0 $size-gap-1;
@@ -406,7 +406,7 @@ $_indent-width: 8px;
   }
 }
 
-.bitfun-file-explorer__empty-message {
+.halo-file-explorer__empty-message {
   @include mixins.flex-layout(row, center, center, 0);
   padding: $size-gap-8;
   color: var(--color-text-muted);
@@ -414,22 +414,22 @@ $_indent-width: 8px;
 }
 
 @include mixins.respond-to('mobile') {
-  .bitfun-file-explorer__node-content {
+  .halo-file-explorer__node-content {
     padding: 6px $_node-padding-x;
     min-height: 32px;
   }
 
-  .bitfun-file-explorer__node-name {
+  .halo-file-explorer__node-name {
     font-size: var(--font-size-base);
   }
 
-  .bitfun-file-explorer__node-size,
-  .bitfun-file-explorer__node-modified {
+  .halo-file-explorer__node-size,
+  .halo-file-explorer__node-modified {
     display: none;
   }
 }
 
-// .file-explorer { @extend .bitfun-file-explorer; }
-// .file-tree { @extend .bitfun-file-explorer__tree; }
-// .file-tree-node { @extend .bitfun-file-explorer__node; }
-// .node-content { @extend .bitfun-file-explorer__node-content; }
+// .file-explorer { @extend .halo-file-explorer; }
+// .file-tree { @extend .halo-file-explorer__tree; }
+// .file-tree-node { @extend .halo-file-explorer__node; }
+// .node-content { @extend .halo-file-explorer__node-content; }

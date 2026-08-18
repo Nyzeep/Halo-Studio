@@ -47,7 +47,7 @@ const MINUTE_IN_MS = 60_000;
 const NEW_JOB_ID = '__new__';
 const DEFAULT_AGENT_TYPE = 'agentic';
 const ASSISTANT_WORKSPACE_AGENT_TYPE = 'Claw';
-const SCHEDULED_JOBS_CHANGED_EVENT = 'bitfun:scheduled-jobs-changed';
+const SCHEDULED_JOBS_CHANGED_EVENT = 'halo:scheduled-jobs-changed';
 
 type ScheduleKind = CronSchedule['kind'];
 

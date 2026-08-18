@@ -180,12 +180,12 @@ describe('AgentCompanionDesktopPet', () => {
   });
 
   it('closes the desktop pet from the pet context menu', () => {
-    const hitbox = query('.bitfun-agent-companion-window__pet-hitbox');
+    const hitbox = query('.halo-agent-companion-window__pet-hitbox');
     expect(hitbox).not.toBeNull();
 
     dispatch(hitbox!, 'contextmenu', { clientX: 300, clientY: 200 });
 
-    const menuItem = query<HTMLButtonElement>('.bitfun-agent-companion-window__menu-item');
+    const menuItem = query<HTMLButtonElement>('.halo-agent-companion-window__menu-item');
     expect(menuItem?.textContent).toBe('Close pet');
 
     act(() => {
@@ -193,16 +193,16 @@ describe('AgentCompanionDesktopPet', () => {
     });
 
     expect(emitMock).toHaveBeenCalledWith(PET_COMMAND_EVENT, { type: 'close-desktop-pet' });
-    expect(query('.bitfun-agent-companion-window__menu-item')).toBeNull();
+    expect(query('.halo-agent-companion-window__menu-item')).toBeNull();
   });
 
   it('anchors the context menu to the cursor position', () => {
-    dispatch(query('.bitfun-agent-companion-window__pet-hitbox')!, 'contextmenu', {
+    dispatch(query('.halo-agent-companion-window__pet-hitbox')!, 'contextmenu', {
       clientX: 300,
       clientY: 200,
     });
 
-    const menu = query<HTMLDivElement>('.bitfun-agent-companion-window__overlay--anchored');
+    const menu = query<HTMLDivElement>('.halo-agent-companion-window__overlay--anchored');
     expect(menu).not.toBeNull();
     // The anchor is measured from the bottom-right corner, which the host keeps
     // fixed while the window grows for the menu.
@@ -219,8 +219,8 @@ describe('AgentCompanionDesktopPet', () => {
     });
     hostInvokeMock.mockClear();
 
-    dispatch(query('.bitfun-agent-companion-window__bubble-shell')!, 'contextmenu');
-    dispatch(query('.bitfun-agent-companion-window__pet-hitbox')!, 'contextmenu');
+    dispatch(query('.halo-agent-companion-window__bubble-shell')!, 'contextmenu');
+    dispatch(query('.halo-agent-companion-window__pet-hitbox')!, 'contextmenu');
     await act(async () => {
       await Promise.resolve();
     });
@@ -237,7 +237,7 @@ describe('AgentCompanionDesktopPet', () => {
   it('sends a message from the bubble composer', async () => {
     pushActivity({ mood: 'working', tasks: [task()], sequence: 1, emittedAt: 1 });
 
-    const composeButton = query<HTMLButtonElement>('.bitfun-agent-companion-window__bubble-compose');
+    const composeButton = query<HTMLButtonElement>('.halo-agent-companion-window__bubble-compose');
     expect(composeButton).not.toBeNull();
 
     act(() => {
@@ -245,16 +245,16 @@ describe('AgentCompanionDesktopPet', () => {
     });
 
     // The input bar belongs to the bubble itself; no extra bubble or panel.
-    expect(container.querySelectorAll('.bitfun-agent-companion-window__bubble')).toHaveLength(1);
-    const input = query<HTMLInputElement>('.bitfun-agent-companion-window__bubble .bitfun-agent-companion-window__bubble-composer-input');
+    expect(container.querySelectorAll('.halo-agent-companion-window__bubble')).toHaveLength(1);
+    const input = query<HTMLInputElement>('.halo-agent-companion-window__bubble .halo-agent-companion-window__bubble-composer-input');
     expect(input).not.toBeNull();
     expect(input!.hasAttribute('data-mouse-glow-ignore')).toBe(true);
-    expect(query('.bitfun-agent-companion-window__bubble--composing')).not.toBeNull();
-    expect(query('.bitfun-agent-companion-window__bubble-compose')).toBeNull();
+    expect(query('.halo-agent-companion-window__bubble--composing')).not.toBeNull();
+    expect(query('.halo-agent-companion-window__bubble-compose')).toBeNull();
 
     typeInto(input!, '  ship it  ');
     act(() => {
-      query<HTMLButtonElement>('.bitfun-agent-companion-window__bubble-composer-send')!.click();
+      query<HTMLButtonElement>('.halo-agent-companion-window__bubble-composer-send')!.click();
     });
 
     expect(emitMock).toHaveBeenCalledWith(PET_COMMAND_EVENT, {
@@ -267,14 +267,14 @@ describe('AgentCompanionDesktopPet', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(query('.bitfun-agent-companion-window__bubble-composer-input')).toBeNull();
-    expect(query('.bitfun-agent-companion-window__bubble-compose')).not.toBeNull();
+    expect(query('.halo-agent-companion-window__bubble-composer-input')).toBeNull();
+    expect(query('.halo-agent-companion-window__bubble-compose')).not.toBeNull();
   });
 
   it('reveals the bubble entry from cursor polling before the pet window is clicked', async () => {
     pushActivity({ mood: 'working', tasks: [task()], sequence: 1, emittedAt: 1 });
 
-    const bubbleShell = query<HTMLElement>('.bitfun-agent-companion-window__bubble-shell');
+    const bubbleShell = query<HTMLElement>('.halo-agent-companion-window__bubble-shell');
     expect(bubbleShell).not.toBeNull();
     vi.spyOn(bubbleShell!, 'getBoundingClientRect').mockReturnValue({
       x: 10,
@@ -295,23 +295,23 @@ describe('AgentCompanionDesktopPet', () => {
       await new Promise(resolve => window.setTimeout(resolve, 150));
     });
 
-    expect(bubbleShell!.classList).toContain('bitfun-agent-companion-window__bubble-shell--hovered');
+    expect(bubbleShell!.classList).toContain('halo-agent-companion-window__bubble-shell--hovered');
 
     cursorPositionMock.mockResolvedValue({ x: 200, y: 200 });
     await act(async () => {
       await new Promise(resolve => window.setTimeout(resolve, 150));
     });
 
-    expect(bubbleShell!.classList).not.toContain('bitfun-agent-companion-window__bubble-shell--hovered');
+    expect(bubbleShell!.classList).not.toContain('halo-agent-companion-window__bubble-shell--hovered');
   });
 
   it('sends the composer message on Enter', () => {
     pushActivity({ mood: 'working', tasks: [task()], sequence: 1, emittedAt: 1 });
 
     act(() => {
-      query<HTMLButtonElement>('.bitfun-agent-companion-window__bubble-compose')!.click();
+      query<HTMLButtonElement>('.halo-agent-companion-window__bubble-compose')!.click();
     });
-    const input = query<HTMLInputElement>('.bitfun-agent-companion-window__bubble-composer-input')!;
+    const input = query<HTMLInputElement>('.halo-agent-companion-window__bubble-composer-input')!;
     typeInto(input, 'run the tests');
 
     act(() => {
@@ -333,17 +333,17 @@ describe('AgentCompanionDesktopPet', () => {
     pushActivity({ mood: 'working', tasks: [task()], sequence: 1, emittedAt: 1 });
 
     act(() => {
-      query<HTMLButtonElement>('.bitfun-agent-companion-window__bubble-compose')!.click();
+      query<HTMLButtonElement>('.halo-agent-companion-window__bubble-compose')!.click();
     });
-    const input = query<HTMLInputElement>('.bitfun-agent-companion-window__bubble-composer-input')!;
+    const input = query<HTMLInputElement>('.halo-agent-companion-window__bubble-composer-input')!;
     typeInto(input, 'keep this draft local');
 
     act(() => {
-      query<HTMLButtonElement>('.bitfun-agent-companion-window__bubble-composer-cancel')!.click();
+      query<HTMLButtonElement>('.halo-agent-companion-window__bubble-composer-cancel')!.click();
     });
 
-    expect(query('.bitfun-agent-companion-window__bubble-composer-input')).toBeNull();
-    expect(query('.bitfun-agent-companion-window__bubble-compose')).not.toBeNull();
+    expect(query('.halo-agent-companion-window__bubble-composer-input')).toBeNull();
+    expect(query('.halo-agent-companion-window__bubble-compose')).not.toBeNull();
     expect(emitMock).not.toHaveBeenCalledWith(
       PET_COMMAND_EVENT,
       expect.objectContaining({ type: 'send-message' }),
@@ -358,8 +358,8 @@ describe('AgentCompanionDesktopPet', () => {
       emittedAt: 1,
     });
 
-    expect(query('.bitfun-agent-companion-window__bubble')).not.toBeNull();
-    expect(query('.bitfun-agent-companion-window__bubble-compose')).toBeNull();
+    expect(query('.halo-agent-companion-window__bubble')).not.toBeNull();
+    expect(query('.halo-agent-companion-window__bubble-compose')).toBeNull();
   });
 
   it('closes a finished bubble and acknowledges it in the main window', () => {
@@ -370,18 +370,18 @@ describe('AgentCompanionDesktopPet', () => {
       emittedAt: 1,
     });
 
-    dispatch(query('.bitfun-agent-companion-window__bubble-shell')!, 'contextmenu');
+    dispatch(query('.halo-agent-companion-window__bubble-shell')!, 'contextmenu');
 
-    const menuItem = query<HTMLButtonElement>('.bitfun-agent-companion-window__menu-item');
+    const menuItem = query<HTMLButtonElement>('.halo-agent-companion-window__menu-item');
     expect(menuItem?.textContent).toBe('Close this bubble');
     // The bubble menu shows the action only, not the session title.
-    expect(query('.bitfun-agent-companion-window__overlay--anchored .bitfun-agent-companion-window__overlay-title')).toBeNull();
+    expect(query('.halo-agent-companion-window__overlay--anchored .halo-agent-companion-window__overlay-title')).toBeNull();
 
     act(() => {
       menuItem!.click();
     });
 
-    expect(query('.bitfun-agent-companion-window__bubble')).toBeNull();
+    expect(query('.halo-agent-companion-window__bubble')).toBeNull();
     expect(emitMock).toHaveBeenCalledWith(PET_COMMAND_EVENT, {
       type: 'dismiss-task',
       sessionId: 'session-1',
@@ -392,12 +392,12 @@ describe('AgentCompanionDesktopPet', () => {
     const runningTask = task();
     pushActivity({ mood: 'working', tasks: [runningTask], sequence: 1, emittedAt: 1 });
 
-    dispatch(query('.bitfun-agent-companion-window__bubble-shell')!, 'contextmenu');
+    dispatch(query('.halo-agent-companion-window__bubble-shell')!, 'contextmenu');
     act(() => {
-      query<HTMLButtonElement>('.bitfun-agent-companion-window__menu-item')!.click();
+      query<HTMLButtonElement>('.halo-agent-companion-window__menu-item')!.click();
     });
 
-    expect(query('.bitfun-agent-companion-window__bubble')).toBeNull();
+    expect(query('.halo-agent-companion-window__bubble')).toBeNull();
     // A running bubble is not an unread notice, so nothing is acknowledged.
     expect(emitMock).not.toHaveBeenCalledWith(PET_COMMAND_EVENT, expect.objectContaining({
       type: 'dismiss-task',
@@ -410,7 +410,7 @@ describe('AgentCompanionDesktopPet', () => {
       sequence: 2,
       emittedAt: 2,
     });
-    expect(query('.bitfun-agent-companion-window__bubble')).toBeNull();
+    expect(query('.halo-agent-companion-window__bubble')).toBeNull();
 
     pushActivity({
       mood: 'rest',
@@ -418,6 +418,6 @@ describe('AgentCompanionDesktopPet', () => {
       sequence: 3,
       emittedAt: 3,
     });
-    expect(query('.bitfun-agent-companion-window__bubble')).not.toBeNull();
+    expect(query('.halo-agent-companion-window__bubble')).not.toBeNull();
   });
 });

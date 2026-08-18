@@ -18,20 +18,20 @@
 
 /* ---------- Slot ---------- */
 
-.bitfun-chat-input-pixel-pet {
+.halo-chat-input-pixel-pet {
   /* FIXED panda body palette — never inverted. */
-  --bitfun-pet-color-rgb: 32, 32, 36;
-  --bitfun-pet-cream-rgb: 250, 250, 249;
-  --bitfun-pet-color: rgb(var(--bitfun-pet-color-rgb));
-  --bitfun-pet-cream: rgb(var(--bitfun-pet-cream-rgb));
+  --halo-pet-color-rgb: 32, 32, 36;
+  --halo-pet-cream-rgb: 250, 250, 249;
+  --halo-pet-color: rgb(var(--halo-pet-color-rgb));
+  --halo-pet-cream: rgb(var(--halo-pet-cream-rgb));
 
   /* Decorative palette — inverts between light/dark themes so overlays
      stay readable on either chat background. */
-  --bitfun-pet-decor: rgb(var(--bitfun-pet-color-rgb));
-  --bitfun-pet-decor-soft: rgba(var(--bitfun-pet-color-rgb), 0.55);
-  --bitfun-petdex-width: 42px;
-  --bitfun-petdex-height: 46px;
-  --bitfun-petdex-margin-top: -8px;
+  --halo-pet-decor: rgb(var(--halo-pet-color-rgb));
+  --halo-pet-decor-soft: rgba(var(--halo-pet-color-rgb), 0.55);
+  --halo-petdex-width: 42px;
+  --halo-petdex-height: 46px;
+  --halo-petdex-margin-top: -8px;
 
   position: relative;
   z-index: 0;
@@ -56,48 +56,48 @@
     width: 100%;
     height: 100%;
     overflow: visible;
-    color: var(--bitfun-pet-cream);
+    color: var(--halo-pet-cream);
     shape-rendering: geometricPrecision;
   }
 
   &__petdex {
-    width: var(--bitfun-petdex-width);
-    height: var(--bitfun-petdex-height);
-    margin-top: var(--bitfun-petdex-margin-top);
-    background-image: var(--bitfun-petdex-src);
+    width: var(--halo-petdex-width);
+    height: var(--halo-petdex-height);
+    margin-top: var(--halo-petdex-margin-top);
+    background-image: var(--halo-petdex-src);
     background-repeat: no-repeat;
     background-size: 800% 900%;
     background-position-x: 0;
-    background-position-y: calc(var(--bitfun-petdex-row) * 12.5%);
+    background-position-y: calc(var(--halo-petdex-row) * 12.5%);
     image-rendering: pixelated;
     transform-origin: 50% 80%;
     animation:
-      bitfun-petdex-walk 1.8s steps(6) infinite,
-      bitfun-petdex-breathe 6s ease-in-out infinite;
+      halo-petdex-walk 1.8s steps(6) infinite,
+      halo-petdex-breathe 6s ease-in-out infinite;
   }
 
   &__petdex--rest {
     animation:
-      bitfun-petdex-walk 2.4s steps(6) infinite,
-      bitfun-petdex-breathe 6.4s ease-in-out infinite;
+      halo-petdex-walk 2.4s steps(6) infinite,
+      halo-petdex-breathe 6.4s ease-in-out infinite;
   }
 
   &__petdex--working {
     animation:
-      bitfun-petdex-walk 1.16s steps(6) infinite,
-      bitfun-petdex-work 0.56s linear infinite;
+      halo-petdex-walk 1.16s steps(6) infinite,
+      halo-petdex-work 0.56s linear infinite;
   }
 
   &__petdex--hover {
     animation:
-      bitfun-petdex-walk 1.44s steps(6) infinite,
-      bitfun-petdex-hover 1.9s ease-in-out infinite;
+      halo-petdex-walk 1.44s steps(6) infinite,
+      halo-petdex-hover 1.9s ease-in-out infinite;
   }
 
   &__petdex--dragging {
     animation:
-      bitfun-petdex-walk 0.96s steps(6) infinite,
-      bitfun-petdex-dragging 0.48s linear infinite;
+      halo-petdex-walk 0.96s steps(6) infinite,
+      halo-petdex-dragging 0.48s linear infinite;
   }
 }
 
@@ -105,67 +105,67 @@
    SVG outline filter (defined inline in the markup) so the silhouette is
    surrounded by a single continuous light contour rather than per-shape
    outlines on every internal element. */
-:root[data-theme-type='dark'] .bitfun-chat-input-pixel-pet,
-[data-theme-type='dark'] .bitfun-chat-input-pixel-pet {
-  --bitfun-pet-decor: rgb(var(--bitfun-pet-cream-rgb));
-  --bitfun-pet-decor-soft: rgba(var(--bitfun-pet-cream-rgb), 0.6);
+:root[data-theme-type='dark'] .halo-chat-input-pixel-pet,
+[data-theme-type='dark'] .halo-chat-input-pixel-pet {
+  --halo-pet-decor: rgb(var(--halo-pet-cream-rgb));
+  --halo-pet-decor-soft: rgba(var(--halo-pet-cream-rgb), 0.6);
 
-  .bitfun-panda-head__silhouette {
-    filter: url(#bitfun-panda-outline);
+  .halo-panda-head__silhouette {
+    filter: url(#halo-panda-outline);
   }
 }
 
 /* ---------- Fills ---------- */
 
-.bitfun-panda__b {
-  fill: var(--bitfun-pet-color);
+.halo-panda__b {
+  fill: var(--halo-pet-color);
 }
 
-.bitfun-panda__face-mask {
-  fill: var(--bitfun-pet-cream);
+.halo-panda__face-mask {
+  fill: var(--halo-pet-cream);
 }
 
 /* ---------- Head: gentle continuous breathing ---------- */
 
-.bitfun-panda-head {
+.halo-panda-head {
   transform-origin: 50% 88%;
   transform-box: fill-box;
-  animation: bitfun-head-breathe 6.8s ease-in-out infinite;
+  animation: halo-head-breathe 6.8s ease-in-out infinite;
 
   &--analyzing {
     animation:
-      bitfun-head-breathe 5.2s ease-in-out infinite,
-      bitfun-head-tilt 4.8s ease-in-out infinite;
+      halo-head-breathe 5.2s ease-in-out infinite,
+      halo-head-tilt 4.8s ease-in-out infinite;
   }
 
   &--waiting {
     animation:
-      bitfun-head-breathe 5.2s ease-in-out infinite,
-      bitfun-head-look 6s ease-in-out infinite;
+      halo-head-breathe 5.2s ease-in-out infinite,
+      halo-head-look 6s ease-in-out infinite;
   }
 
   &--working {
     animation:
-      bitfun-head-breathe 5.2s ease-in-out infinite,
-      bitfun-head-shake 0.36s linear infinite;
+      halo-head-breathe 5.2s ease-in-out infinite,
+      halo-head-shake 0.36s linear infinite;
   }
 
   &--hover {
     animation:
-      bitfun-head-breathe 4.2s ease-in-out infinite,
-      bitfun-head-perk 1.9s ease-in-out infinite;
+      halo-head-breathe 4.2s ease-in-out infinite,
+      halo-head-perk 1.9s ease-in-out infinite;
   }
 
   &--dragging {
     animation:
-      bitfun-head-breathe 4.8s ease-in-out infinite,
-      bitfun-head-carried 0.48s linear infinite;
+      halo-head-breathe 4.8s ease-in-out infinite,
+      halo-head-carried 0.48s linear infinite;
   }
 }
 
 /* ---------- Mood overlay layers ---------- */
 
-.bitfun-panda-head {
+.halo-panda-head {
   &__face-layer {
     opacity: 0;
     transition: opacity 0.64s ease;
@@ -178,7 +178,7 @@
   /* Floating ZZZ above the sleeping panda. */
 
   &__zzz-glyph {
-    fill: var(--bitfun-pet-decor);
+    fill: var(--halo-pet-decor);
     font-family:
       'Comic Sans MS', 'Marker Felt', 'Trebuchet MS', system-ui, sans-serif;
     font-weight: 700;
@@ -186,38 +186,38 @@
 
     &--a {
       font-size: 30px;
-      animation: bitfun-zzz-rise 6.8s ease-in-out infinite;
+      animation: halo-zzz-rise 6.8s ease-in-out infinite;
     }
 
     &--b {
       font-size: 40px;
-      animation: bitfun-zzz-rise 6.8s ease-in-out -2.2s infinite;
+      animation: halo-zzz-rise 6.8s ease-in-out -2.2s infinite;
     }
 
     &--c {
       font-size: 54px;
-      animation: bitfun-zzz-rise 6.8s ease-in-out -4.4s infinite;
+      animation: halo-zzz-rise 6.8s ease-in-out -4.4s infinite;
     }
   }
 
   /* Analyzing — ears twitch + think pips climb upward in sequence. */
 
-  &--analyzing .bitfun-panda-head__ear--left {
-    animation: bitfun-ear-twitch-l 2.8s ease-in-out infinite;
+  &--analyzing .halo-panda-head__ear--left {
+    animation: halo-ear-twitch-l 2.8s ease-in-out infinite;
     transform-origin: 50% 100%;
     transform-box: fill-box;
   }
 
-  &--analyzing .bitfun-panda-head__ear--right {
-    animation: bitfun-ear-twitch-r 2.8s ease-in-out 0.72s infinite;
+  &--analyzing .halo-panda-head__ear--right {
+    animation: halo-ear-twitch-r 2.8s ease-in-out 0.72s infinite;
     transform-origin: 50% 100%;
     transform-box: fill-box;
   }
 
   &__think-pip {
-    fill: var(--bitfun-pet-decor);
+    fill: var(--halo-pet-decor);
     opacity: 0;
-    animation: bitfun-think-pulse 3.2s ease-in-out infinite;
+    animation: halo-think-pulse 3.2s ease-in-out infinite;
 
     &:nth-child(1) {
       animation-delay: 0s;
@@ -234,16 +234,16 @@
 
   /* Waiting — front paw taps + dots bob. */
 
-  &--waiting .bitfun-panda-head__paw--front {
-    animation: bitfun-paw-tap 1.8s ease-in-out infinite;
+  &--waiting .halo-panda-head__paw--front {
+    animation: halo-paw-tap 1.8s ease-in-out infinite;
     transform-origin: 70% 60%;
     transform-box: fill-box;
   }
 
   &__wait-pip {
-    fill: var(--bitfun-pet-decor);
+    fill: var(--halo-pet-decor);
     opacity: 0.5;
-    animation: bitfun-wait-bounce 2.2s ease-in-out infinite;
+    animation: halo-wait-bounce 2.2s ease-in-out infinite;
 
     &:nth-child(1) {
       animation-delay: 0s;
@@ -261,50 +261,50 @@
   /* Working — sweat drop + tense ear. */
 
   &__sweat-drop {
-    fill: var(--bitfun-pet-decor-soft);
+    fill: var(--halo-pet-decor-soft);
     opacity: 0;
-    animation: bitfun-sweat-fall 3.2s ease-in infinite;
+    animation: halo-sweat-fall 3.2s ease-in infinite;
   }
 
-  &--working .bitfun-panda-head__ear--right {
-    animation: bitfun-ear-tense 3.2s ease-in-out infinite;
+  &--working .halo-panda-head__ear--right {
+    animation: halo-ear-tense 3.2s ease-in-out infinite;
     transform-origin: 50% 100%;
     transform-box: fill-box;
   }
 
-  &--hover .bitfun-panda-head__ear--left,
-  &--hover .bitfun-panda-head__ear--right {
-    animation: bitfun-ear-perk 1.9s ease-in-out infinite;
+  &--hover .halo-panda-head__ear--left,
+  &--hover .halo-panda-head__ear--right {
+    animation: halo-ear-perk 1.9s ease-in-out infinite;
     transform-origin: 50% 100%;
     transform-box: fill-box;
   }
 
   &__sparkle {
-    fill: var(--bitfun-pet-decor);
+    fill: var(--halo-pet-decor);
     opacity: 0;
     transform-origin: center;
     transform-box: fill-box;
-    animation: bitfun-sparkle-pop 2.4s ease-in-out infinite;
+    animation: halo-sparkle-pop 2.4s ease-in-out infinite;
 
     &--b {
       animation-delay: 0.44s;
     }
   }
 
-  &--dragging .bitfun-panda-head__paw--front,
-  &--dragging .bitfun-panda-head__paw--rear {
-    animation: bitfun-paw-hold 0.96s ease-in-out infinite;
+  &--dragging .halo-panda-head__paw--front,
+  &--dragging .halo-panda-head__paw--rear {
+    animation: halo-paw-hold 0.96s ease-in-out infinite;
     transform-origin: 50% 60%;
     transform-box: fill-box;
   }
 
   &__drag-line {
     fill: none;
-    stroke: var(--bitfun-pet-decor-soft);
+    stroke: var(--halo-pet-decor-soft);
     stroke-width: 8;
     stroke-linecap: round;
     opacity: 0;
-    animation: bitfun-drag-line-swoop 1.44s ease-in-out infinite;
+    animation: halo-drag-line-swoop 1.44s ease-in-out infinite;
 
     &--b {
       animation-delay: 0.32s;
@@ -314,51 +314,51 @@
 
 /* ---------- Mood transition micro-bump ---------- */
 
-.bitfun-chat-input-pixel-pet__stage--transition {
-  animation: bitfun-stage-bump 0.64s cubic-bezier(0.2, 1.4, 0.5, 1);
+.halo-chat-input-pixel-pet__stage--transition {
+  animation: halo-stage-bump 0.64s cubic-bezier(0.2, 1.4, 0.5, 1);
 }
 
 /* ---------- Idle micro-actions (rest only, all in-place) ---------- */
 
-.bitfun-chat-input-pixel-pet__stage--idle-ear-twitch-left .bitfun-panda-head__ear--left {
-  animation: bitfun-ear-twitch-once 1.4s ease-in-out;
+.halo-chat-input-pixel-pet__stage--idle-ear-twitch-left .halo-panda-head__ear--left {
+  animation: halo-ear-twitch-once 1.4s ease-in-out;
   transform-origin: 50% 100%;
   transform-box: fill-box;
 }
 
-.bitfun-chat-input-pixel-pet__stage--idle-ear-twitch-right .bitfun-panda-head__ear--right {
-  animation: bitfun-ear-twitch-once 1.4s ease-in-out;
+.halo-chat-input-pixel-pet__stage--idle-ear-twitch-right .halo-panda-head__ear--right {
+  animation: halo-ear-twitch-once 1.4s ease-in-out;
   transform-origin: 50% 100%;
   transform-box: fill-box;
 }
 
-.bitfun-chat-input-pixel-pet__stage--idle-yawn .bitfun-panda-head__muzzle {
-  animation: bitfun-yawn 2.6s ease-in-out;
+.halo-chat-input-pixel-pet__stage--idle-yawn .halo-panda-head__muzzle {
+  animation: halo-yawn 2.6s ease-in-out;
   transform-origin: 50% 30%;
   transform-box: fill-box;
 }
 
-.bitfun-chat-input-pixel-pet__stage--idle-deep-breath .bitfun-panda-head__body--front {
-  animation: bitfun-deep-breath 1.8s ease-in-out;
+.halo-chat-input-pixel-pet__stage--idle-deep-breath .halo-panda-head__body--front {
+  animation: halo-deep-breath 1.8s ease-in-out;
   transform-origin: 50% 95%;
   transform-box: fill-box;
 }
 
-.bitfun-chat-input-pixel-pet__stage--idle-body-roll .bitfun-panda-head {
+.halo-chat-input-pixel-pet__stage--idle-body-roll .halo-panda-head {
   animation:
-    bitfun-head-breathe 6.8s ease-in-out infinite,
-    bitfun-body-roll 3.0s ease-in-out;
+    halo-head-breathe 6.8s ease-in-out infinite,
+    halo-body-roll 3.0s ease-in-out;
 }
 
-.bitfun-chat-input-pixel-pet__stage--idle-paw-wiggle .bitfun-panda-head__paw--front {
-  animation: bitfun-paw-wiggle 1.8s ease-in-out;
+.halo-chat-input-pixel-pet__stage--idle-paw-wiggle .halo-panda-head__paw--front {
+  animation: halo-paw-wiggle 1.8s ease-in-out;
   transform-origin: 70% 60%;
   transform-box: fill-box;
 }
 
 /* ---------- Keyframes ---------- */
 
-@keyframes bitfun-head-breathe {
+@keyframes halo-head-breathe {
   0%,
   100% {
     transform: translateY(0) scale(1, 1);
@@ -369,7 +369,7 @@
   }
 }
 
-@keyframes bitfun-head-tilt {
+@keyframes halo-head-tilt {
   0%,
   100% {
     transform: rotate(-2.2deg);
@@ -380,7 +380,7 @@
   }
 }
 
-@keyframes bitfun-head-look {
+@keyframes halo-head-look {
   0%,
   100% {
     transform: translateX(0);
@@ -395,7 +395,7 @@
   }
 }
 
-@keyframes bitfun-head-shake {
+@keyframes halo-head-shake {
   0%,
   100% {
     transform: translate(0, 0);
@@ -414,7 +414,7 @@
   }
 }
 
-@keyframes bitfun-zzz-rise {
+@keyframes halo-zzz-rise {
   0% {
     opacity: 0;
     transform: translate(0, 0) scale(0.7);
@@ -436,7 +436,7 @@
   }
 }
 
-@keyframes bitfun-think-pulse {
+@keyframes halo-think-pulse {
   0%,
   60%,
   100% {
@@ -451,7 +451,7 @@
   }
 }
 
-@keyframes bitfun-wait-bounce {
+@keyframes halo-wait-bounce {
   0%,
   100% {
     transform: translateY(0);
@@ -464,7 +464,7 @@
   }
 }
 
-@keyframes bitfun-paw-tap {
+@keyframes halo-paw-tap {
   0%,
   100% {
     transform: rotate(0deg) translateY(0);
@@ -479,7 +479,7 @@
   }
 }
 
-@keyframes bitfun-sweat-fall {
+@keyframes halo-sweat-fall {
   0% {
     opacity: 0;
     transform: translate(0, -12px) scale(0.4);
@@ -501,7 +501,7 @@
   }
 }
 
-@keyframes bitfun-ear-twitch-l {
+@keyframes halo-ear-twitch-l {
   0%,
   85%,
   100% {
@@ -513,7 +513,7 @@
   }
 }
 
-@keyframes bitfun-ear-twitch-r {
+@keyframes halo-ear-twitch-r {
   0%,
   85%,
   100% {
@@ -525,7 +525,7 @@
   }
 }
 
-@keyframes bitfun-ear-twitch-once {
+@keyframes halo-ear-twitch-once {
   0%,
   100% {
     transform: rotate(0deg);
@@ -544,7 +544,7 @@
   }
 }
 
-@keyframes bitfun-ear-tense {
+@keyframes halo-ear-tense {
   0%,
   100% {
     transform: rotate(0deg);
@@ -555,7 +555,7 @@
   }
 }
 
-@keyframes bitfun-stage-bump {
+@keyframes halo-stage-bump {
   0%,
   100% {
     transform: scale(1, 1);
@@ -570,7 +570,7 @@
   }
 }
 
-@keyframes bitfun-yawn {
+@keyframes halo-yawn {
   0%,
   100% {
     transform: scale(1, 1);
@@ -582,7 +582,7 @@
   }
 }
 
-@keyframes bitfun-deep-breath {
+@keyframes halo-deep-breath {
   0%,
   100% {
     transform: scale(1, 1);
@@ -593,7 +593,7 @@
   }
 }
 
-@keyframes bitfun-body-roll {
+@keyframes halo-body-roll {
   0%,
   100% {
     transform: rotate(0deg);
@@ -608,7 +608,7 @@
   }
 }
 
-@keyframes bitfun-paw-wiggle {
+@keyframes halo-paw-wiggle {
   0%,
   100% {
     transform: rotate(0deg);
@@ -627,7 +627,7 @@
   }
 }
 
-@keyframes bitfun-head-perk {
+@keyframes halo-head-perk {
   0%,
   100% {
     transform: translateY(0) rotate(0deg);
@@ -638,7 +638,7 @@
   }
 }
 
-@keyframes bitfun-head-carried {
+@keyframes halo-head-carried {
   0%,
   100% {
     transform: rotate(0deg) translateY(0);
@@ -653,7 +653,7 @@
   }
 }
 
-@keyframes bitfun-ear-perk {
+@keyframes halo-ear-perk {
   0%,
   100% {
     transform: rotate(0deg) translateY(0);
@@ -664,7 +664,7 @@
   }
 }
 
-@keyframes bitfun-sparkle-pop {
+@keyframes halo-sparkle-pop {
   0%,
   100% {
     opacity: 0;
@@ -678,7 +678,7 @@
   }
 }
 
-@keyframes bitfun-paw-hold {
+@keyframes halo-paw-hold {
   0%,
   100% {
     transform: translateY(0) rotate(0deg);
@@ -689,7 +689,7 @@
   }
 }
 
-@keyframes bitfun-drag-line-swoop {
+@keyframes halo-drag-line-swoop {
   0% {
     opacity: 0;
     transform: translateX(10px) scaleX(0.7);
@@ -707,7 +707,7 @@
   }
 }
 
-@keyframes bitfun-petdex-walk {
+@keyframes halo-petdex-walk {
   from {
     background-position-x: 0;
   }
@@ -717,7 +717,7 @@
   }
 }
 
-@keyframes bitfun-petdex-breathe {
+@keyframes halo-petdex-breathe {
   0%,
   100% {
     transform: translateY(0) scale(1);
@@ -728,7 +728,7 @@
   }
 }
 
-@keyframes bitfun-petdex-work {
+@keyframes halo-petdex-work {
   0%,
   100% {
     transform: translate(0, 0);
@@ -739,7 +739,7 @@
   }
 }
 
-@keyframes bitfun-petdex-hover {
+@keyframes halo-petdex-hover {
   0%,
   100% {
     transform: translateY(0) scale(1);
@@ -750,7 +750,7 @@
   }
 }
 
-@keyframes bitfun-petdex-dragging {
+@keyframes halo-petdex-dragging {
   0%,
   100% {
     transform: rotate(0deg) translateY(0);
@@ -775,119 +775,119 @@
    preserve animation-delay set by nth-child rules. */
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-chat-input-pixel-pet__petdex,
-  .bitfun-chat-input-pixel-pet__petdex--rest,
-  .bitfun-chat-input-pixel-pet__petdex--working,
-  .bitfun-chat-input-pixel-pet__petdex--hover,
-  .bitfun-chat-input-pixel-pet__petdex--dragging,
-  .bitfun-panda-head,
-  .bitfun-panda-head--analyzing,
-  .bitfun-panda-head--waiting,
-  .bitfun-panda-head--working,
-  .bitfun-panda-head--hover,
-  .bitfun-panda-head--dragging,
-  .bitfun-panda-head__zzz-glyph--a,
-  .bitfun-panda-head__zzz-glyph--b,
-  .bitfun-panda-head__zzz-glyph--c,
-  .bitfun-panda-head--analyzing .bitfun-panda-head__ear--left,
-  .bitfun-panda-head--analyzing .bitfun-panda-head__ear--right,
-  .bitfun-panda-head__think-pip,
-  .bitfun-panda-head--waiting .bitfun-panda-head__paw--front,
-  .bitfun-panda-head__wait-pip,
-  .bitfun-panda-head__sweat-drop,
-  .bitfun-panda-head--working .bitfun-panda-head__ear--right,
-  .bitfun-panda-head--hover .bitfun-panda-head__ear--left,
-  .bitfun-panda-head--hover .bitfun-panda-head__ear--right,
-  .bitfun-panda-head__sparkle,
-  .bitfun-panda-head--dragging .bitfun-panda-head__paw--front,
-  .bitfun-panda-head--dragging .bitfun-panda-head__paw--rear,
-  .bitfun-panda-head__drag-line {
+  .halo-chat-input-pixel-pet__petdex,
+  .halo-chat-input-pixel-pet__petdex--rest,
+  .halo-chat-input-pixel-pet__petdex--working,
+  .halo-chat-input-pixel-pet__petdex--hover,
+  .halo-chat-input-pixel-pet__petdex--dragging,
+  .halo-panda-head,
+  .halo-panda-head--analyzing,
+  .halo-panda-head--waiting,
+  .halo-panda-head--working,
+  .halo-panda-head--hover,
+  .halo-panda-head--dragging,
+  .halo-panda-head__zzz-glyph--a,
+  .halo-panda-head__zzz-glyph--b,
+  .halo-panda-head__zzz-glyph--c,
+  .halo-panda-head--analyzing .halo-panda-head__ear--left,
+  .halo-panda-head--analyzing .halo-panda-head__ear--right,
+  .halo-panda-head__think-pip,
+  .halo-panda-head--waiting .halo-panda-head__paw--front,
+  .halo-panda-head__wait-pip,
+  .halo-panda-head__sweat-drop,
+  .halo-panda-head--working .halo-panda-head__ear--right,
+  .halo-panda-head--hover .halo-panda-head__ear--left,
+  .halo-panda-head--hover .halo-panda-head__ear--right,
+  .halo-panda-head__sparkle,
+  .halo-panda-head--dragging .halo-panda-head__paw--front,
+  .halo-panda-head--dragging .halo-panda-head__paw--rear,
+  .halo-panda-head__drag-line {
     animation-iteration-count: infinite !important;
   }
 
   /* Single-animation elements grouped by duration */
-  .bitfun-panda-head,
-  .bitfun-panda-head__zzz-glyph--a,
-  .bitfun-panda-head__zzz-glyph--b,
-  .bitfun-panda-head__zzz-glyph--c {
+  .halo-panda-head,
+  .halo-panda-head__zzz-glyph--a,
+  .halo-panda-head__zzz-glyph--b,
+  .halo-panda-head__zzz-glyph--c {
     animation-duration: 6.8s !important;
   }
 
-  .bitfun-panda-head__think-pip,
-  .bitfun-panda-head__sweat-drop,
-  .bitfun-panda-head--working .bitfun-panda-head__ear--right {
+  .halo-panda-head__think-pip,
+  .halo-panda-head__sweat-drop,
+  .halo-panda-head--working .halo-panda-head__ear--right {
     animation-duration: 3.2s !important;
   }
 
-  .bitfun-panda-head--analyzing .bitfun-panda-head__ear--left,
-  .bitfun-panda-head--analyzing .bitfun-panda-head__ear--right {
+  .halo-panda-head--analyzing .halo-panda-head__ear--left,
+  .halo-panda-head--analyzing .halo-panda-head__ear--right {
     animation-duration: 2.8s !important;
   }
 
-  .bitfun-panda-head__sparkle {
+  .halo-panda-head__sparkle {
     animation-duration: 2.4s !important;
   }
 
-  .bitfun-panda-head__wait-pip {
+  .halo-panda-head__wait-pip {
     animation-duration: 2.2s !important;
   }
 
-  .bitfun-panda-head--hover .bitfun-panda-head__ear--left,
-  .bitfun-panda-head--hover .bitfun-panda-head__ear--right {
+  .halo-panda-head--hover .halo-panda-head__ear--left,
+  .halo-panda-head--hover .halo-panda-head__ear--right {
     animation-duration: 1.9s !important;
   }
 
-  .bitfun-panda-head--waiting .bitfun-panda-head__paw--front {
+  .halo-panda-head--waiting .halo-panda-head__paw--front {
     animation-duration: 1.8s !important;
   }
 
-  .bitfun-panda-head__drag-line {
+  .halo-panda-head__drag-line {
     animation-duration: 1.44s !important;
   }
 
-  .bitfun-panda-head--dragging .bitfun-panda-head__paw--front,
-  .bitfun-panda-head--dragging .bitfun-panda-head__paw--rear {
+  .halo-panda-head--dragging .halo-panda-head__paw--front,
+  .halo-panda-head--dragging .halo-panda-head__paw--rear {
     animation-duration: 0.96s !important;
   }
 
   /* Two-animation elements (comma-separated durations) */
-  .bitfun-chat-input-pixel-pet__petdex {
+  .halo-chat-input-pixel-pet__petdex {
     animation-duration: 1.8s, 6s !important;
   }
 
-  .bitfun-chat-input-pixel-pet__petdex--rest {
+  .halo-chat-input-pixel-pet__petdex--rest {
     animation-duration: 2.4s, 6.4s !important;
   }
 
-  .bitfun-chat-input-pixel-pet__petdex--working {
+  .halo-chat-input-pixel-pet__petdex--working {
     animation-duration: 1.16s, 0.56s !important;
   }
 
-  .bitfun-chat-input-pixel-pet__petdex--hover {
+  .halo-chat-input-pixel-pet__petdex--hover {
     animation-duration: 1.44s, 1.9s !important;
   }
 
-  .bitfun-chat-input-pixel-pet__petdex--dragging {
+  .halo-chat-input-pixel-pet__petdex--dragging {
     animation-duration: 0.96s, 0.48s !important;
   }
 
-  .bitfun-panda-head--analyzing {
+  .halo-panda-head--analyzing {
     animation-duration: 5.2s, 4.8s !important;
   }
 
-  .bitfun-panda-head--waiting {
+  .halo-panda-head--waiting {
     animation-duration: 5.2s, 6s !important;
   }
 
-  .bitfun-panda-head--working {
+  .halo-panda-head--working {
     animation-duration: 5.2s, 0.36s !important;
   }
 
-  .bitfun-panda-head--hover {
+  .halo-panda-head--hover {
     animation-duration: 4.2s, 1.9s !important;
   }
 
-  .bitfun-panda-head--dragging {
+  .halo-panda-head--dragging {
     animation-duration: 4.8s, 0.48s !important;
   }
 }

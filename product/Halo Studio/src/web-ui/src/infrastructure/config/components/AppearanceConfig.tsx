@@ -208,7 +208,7 @@ function ThemePreviewThumbnail({ theme }: ThemePreviewThumbnailProps) {
         </div>
 
         <div className="theme-preview-thumbnail__title" style={{ color: colors.text.muted }}>
-          BitFun
+          Halo
         </div>
 
         <div className="theme-preview-thumbnail__window-controls">
@@ -420,9 +420,9 @@ const AppearanceConfig: React.FC = () => {
   const { t } = useTranslation('settings/appearance');
 
   return (
-    <ConfigPageLayout className="bitfun-appearance-config">
+    <ConfigPageLayout className="halo-appearance-config">
       <ConfigPageHeader title={t('title')} subtitle={t('subtitle')} />
-      <ConfigPageContent className="bitfun-appearance-config__content">
+      <ConfigPageContent className="halo-appearance-config__content">
         <ConfigPageSectionStack data-testid="appearance-config">
           <AppearanceThemeSection />
           <AppearanceEffectsSection />

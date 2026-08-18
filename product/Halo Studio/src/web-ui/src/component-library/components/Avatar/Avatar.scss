@@ -1,10 +1,10 @@
 /**
  * Avatar component styles
- * Based on the BitFun glassmorphism design system
+ * Based on the Halo glassmorphism design system
  */
-.bitfun-avatar {
-  --bitfun-avatar-rest-start-rgb: 30, 41, 59;
-  --bitfun-avatar-rest-end-rgb: 51, 65, 85;
+.halo-avatar {
+  --halo-avatar-rest-start-rgb: 30, 41, 59;
+  --halo-avatar-rest-end-rgb: 51, 65, 85;
 
   display: inline-flex;
   align-items: center;
@@ -66,11 +66,11 @@
   }
 }
 
-.bitfun-avatar-group {
+.halo-avatar-group {
   display: inline-flex;
   align-items: center;
 
-  .bitfun-avatar {
+  .halo-avatar {
     margin-left: -8px;
     border: 2px solid rgba(var(--color-overlay-slate-rgb), 0.8);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -88,8 +88,8 @@
 
   &__rest {
     background: linear-gradient(135deg,
-      rgba(var(--bitfun-avatar-rest-start-rgb), 0.9) 0%,
-      rgba(var(--bitfun-avatar-rest-end-rgb), 0.9) 100%);
+      rgba(var(--halo-avatar-rest-start-rgb), 0.9) 0%,
+      rgba(var(--halo-avatar-rest-end-rgb), 0.9) 100%);
     font-size: 12px;
   }
 }

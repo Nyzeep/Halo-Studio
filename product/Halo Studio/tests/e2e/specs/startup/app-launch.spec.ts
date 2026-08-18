@@ -8,7 +8,7 @@ import { StartupPage } from '../../page-objects/StartupPage';
 import { isTauriAvailable, getWindowInfo } from '../../helpers/tauri-utils';
 import { saveScreenshot, saveFailureScreenshot } from '../../helpers/screenshot-utils';
 
-describe('BitFun app launch', () => {
+describe('Halo app launch', () => {
   const header = new Header();
   const startupPage = new StartupPage();
 

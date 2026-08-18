@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import * as adapters from './index';
 
-describe('BitFun Canvas SDK adapters', () => {
+describe('Halo Canvas SDK adapters', () => {
   it('exports the first component-library adapter set', () => {
     expect(Object.keys(adapters).sort()).toEqual([
       'Alert',

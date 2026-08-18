@@ -345,7 +345,7 @@ $pages-gutter: clamp(24px, 4vw, 56px);
     display: flex;
     gap: $size-gap-2;
 
-    .bitfun-input-wrapper {
+    .halo-input-wrapper {
       min-width: 0;
       width: 100%;
       flex: 1;
@@ -354,7 +354,7 @@ $pages-gutter: clamp(24px, 4vw, 56px);
     // The Input component only inherits font-family, so the native <input>
     // falls back to the WebView UA size. Pin it to the container size (13px
     // for size="small") so it matches the visibility Select below.
-    .bitfun-input {
+    .halo-input {
       font-size: inherit;
     }
   }

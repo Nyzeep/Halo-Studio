@@ -37,12 +37,12 @@
   }
 }
 
-::highlight(bitfun-flowchat-search-current) {
+::highlight(halo-flowchat-search-current) {
   color: inherit;
   background: color-mix(in srgb, var(--color-accent-500) 42%, transparent);
 }
 
-::highlight(bitfun-flowchat-search-match) {
+::highlight(halo-flowchat-search-match) {
   color: inherit;
   background: color-mix(in srgb, var(--color-accent-500) 16%, transparent);
 }

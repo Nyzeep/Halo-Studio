@@ -22,7 +22,7 @@ vi.mock('../utils/logger', () => ({
 }));
 
 type BootstrapGlobals = typeof globalThis & {
-  __BITFUN_BOOTSTRAP_WORKSPACE_STARTUP_STATE__?: unknown;
+  __HALO_BOOTSTRAP_WORKSPACE_STARTUP_STATE__?: unknown;
 };
 
 const bootstrapGlobals = globalThis as BootstrapGlobals;
@@ -58,11 +58,11 @@ function createWorkspaceSnapshot(): WorkspaceStartupStateSnapshot {
 describe('createGlobalStateAPI workspace startup bootstrap', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete bootstrapGlobals.__BITFUN_BOOTSTRAP_WORKSPACE_STARTUP_STATE__;
+    delete bootstrapGlobals.__HALO_BOOTSTRAP_WORKSPACE_STARTUP_STATE__;
   });
 
   it('uses the injected startup workspace snapshot once without a startup IPC', async () => {
-    bootstrapGlobals.__BITFUN_BOOTSTRAP_WORKSPACE_STARTUP_STATE__ = createWorkspaceSnapshot();
+    bootstrapGlobals.__HALO_BOOTSTRAP_WORKSPACE_STARTUP_STATE__ = createWorkspaceSnapshot();
     globalApiMocks.initializeWorkspaceStartupState.mockResolvedValue({
       cleanupRemovedCount: 0,
       currentWorkspace: null,
@@ -91,7 +91,7 @@ describe('createGlobalStateAPI workspace startup bootstrap', () => {
     expect(
       Object.prototype.hasOwnProperty.call(
         bootstrapGlobals,
-        '__BITFUN_BOOTSTRAP_WORKSPACE_STARTUP_STATE__'
+        '__HALO_BOOTSTRAP_WORKSPACE_STARTUP_STATE__'
       )
     ).toBe(false);
 
@@ -100,7 +100,7 @@ describe('createGlobalStateAPI workspace startup bootstrap', () => {
   });
 
   it('falls back to the startup command when the bootstrap snapshot is invalid', async () => {
-    bootstrapGlobals.__BITFUN_BOOTSTRAP_WORKSPACE_STARTUP_STATE__ = { recentWorkspaces: [] };
+    bootstrapGlobals.__HALO_BOOTSTRAP_WORKSPACE_STARTUP_STATE__ = { recentWorkspaces: [] };
     globalApiMocks.initializeWorkspaceStartupState.mockResolvedValue(createWorkspaceSnapshot());
 
     const api = createGlobalStateAPI();
@@ -111,7 +111,7 @@ describe('createGlobalStateAPI workspace startup bootstrap', () => {
     expect(
       Object.prototype.hasOwnProperty.call(
         bootstrapGlobals,
-        '__BITFUN_BOOTSTRAP_WORKSPACE_STARTUP_STATE__'
+        '__HALO_BOOTSTRAP_WORKSPACE_STARTUP_STATE__'
       )
     ).toBe(false);
   });

@@ -10,20 +10,20 @@
  *     captured data so the host React component can receive it.
  *  5. Pressing Escape cancels inspection and emits
  *     `browser-inspector-cancelled-{label}`.
- *  6. Exposes `window.__bitfun_inspector_cancel` so a second eval call can
+ *  6. Exposes `window.__halo_inspector_cancel` so a second eval call can
  *     programmatically cancel an active session.
  */
 import { INSPECTOR_OVERLAY_THEME } from '@/shared/inspector/inspectorOverlayTheme';
 
 const INSPECTOR_SCRIPT_BODY = /* js */ `
 (function () {
-  if (window.__bitfun_inspector_active) {
-    window.__bitfun_inspector_cancel && window.__bitfun_inspector_cancel();
+  if (window.__halo_inspector_active) {
+    window.__halo_inspector_cancel && window.__halo_inspector_cancel();
     return;
   }
-  window.__bitfun_inspector_active = true;
+  window.__halo_inspector_active = true;
 
-  var LABEL = window.__bitfun_inspector_label || '';
+  var LABEL = window.__halo_inspector_label || '';
   var EVENT_SELECTED = 'browser-inspector-element-selected-' + LABEL;
   var EVENT_CANCELLED = 'browser-inspector-cancelled-' + LABEL;
 
@@ -151,9 +151,9 @@ const INSPECTOR_SCRIPT_BODY = /* js */ `
     document.removeEventListener('keydown', onKeyDown, true);
     try { overlay.parentNode && overlay.parentNode.removeChild(overlay); } catch (e) {}
     try { tooltip.parentNode && tooltip.parentNode.removeChild(tooltip); } catch (e) {}
-    delete window.__bitfun_inspector_active;
-    delete window.__bitfun_inspector_cancel;
-    delete window.__bitfun_inspector_label;
+    delete window.__halo_inspector_active;
+    delete window.__halo_inspector_cancel;
+    delete window.__halo_inspector_label;
   }
 
   // ── event handlers ────────────────────────────────────────────────────────
@@ -194,7 +194,7 @@ const INSPECTOR_SCRIPT_BODY = /* js */ `
     }
   }
 
-  window.__bitfun_inspector_cancel = function () {
+  window.__halo_inspector_cancel = function () {
     emitTauri(EVENT_CANCELLED, null);
     cleanup();
   };
@@ -212,12 +212,12 @@ const INSPECTOR_SCRIPT_BODY = /* js */ `
  */
 export function createInspectorScript(webviewLabel: string): string {
   // Inject the label as a global before the IIFE runs.
-  return `window.__bitfun_inspector_label = ${JSON.stringify(webviewLabel)};\n${INSPECTOR_SCRIPT_BODY}`;
+  return `window.__halo_inspector_label = ${JSON.stringify(webviewLabel)};\n${INSPECTOR_SCRIPT_BODY}`;
 }
 
 /** Script to cancel an active inspector session without triggering a selection. */
 export const CANCEL_INSPECTOR_SCRIPT =
-  `if (window.__bitfun_inspector_cancel) { window.__bitfun_inspector_cancel(); }`;
+  `if (window.__halo_inspector_cancel) { window.__halo_inspector_cancel(); }`;
 
 /**
  * Script injected into the webview to intercept `target="_blank"` link clicks
@@ -225,8 +225,8 @@ export const CANCEL_INSPECTOR_SCRIPT =
  * Re-injected after every page load since full navigations destroy JS state.
  */
 export const BLANK_TARGET_INTERCEPT_SCRIPT = `(function(){
-  if(window.__bitfun_blank_intercept){return;}
-  window.__bitfun_blank_intercept=true;
+  if(window.__halo_blank_intercept){return;}
+  window.__halo_blank_intercept=true;
   document.addEventListener('click',function(e){
     var el=e.target;
     while(el&&el.tagName!=='A'){el=el.parentElement;}

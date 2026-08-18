@@ -47,18 +47,18 @@ describe('Canvas runtime installer', () => {
     const script = buildCanvasRuntimeInstallerScript('rev_test');
 
     expect(script).toContain('function installSdkAdapters()');
-    expect(script).toContain('...runtimeWindow.BitfunCanvasSDKAdapters');
-    expect(script).toContain('runtimeWindow.BitfunCanvasRuntimeHooks');
+    expect(script).toContain('...runtimeWindow.HaloCanvasSDKAdapters');
+    expect(script).toContain('runtimeWindow.HaloCanvasRuntimeHooks');
     expect(script.indexOf('installSdkAdapters();')).toBeLessThan(
-      script.indexOf('bitfun-canvas-module-started'),
+      script.indexOf('halo-canvas-module-started'),
     );
   });
 
   it('keeps fallback SDK scoped to runtime hooks while bundled adapters own components', () => {
     const script = buildCanvasRuntimeInstallerScript('rev_test');
 
-    expect(script).toContain('runtimeWindow.BitfunCanvasSDK = {');
-    expect(script).toContain('...runtimeWindow.BitfunCanvasRuntimeHooks');
+    expect(script).toContain('runtimeWindow.HaloCanvasSDK = {');
+    expect(script).toContain('...runtimeWindow.HaloCanvasRuntimeHooks');
     expect(script).not.toContain('function Stack');
     expect(script).not.toContain('function BarChart');
     expect(script).not.toContain('function DependencyGraph');
@@ -74,9 +74,9 @@ describe('Canvas runtime installer', () => {
   it('installs design-mode element selection handlers', () => {
     const script = buildCanvasRuntimeInstallerScript('rev_test');
 
-    expect(script).toContain('bitfun-canvas-design-mode');
-    expect(script).toContain('data-bitfun-canvas-design-mode');
-    expect(script).toContain('bitfun-canvas-element-selected');
+    expect(script).toContain('halo-canvas-design-mode');
+    expect(script).toContain('data-halo-canvas-design-mode');
+    expect(script).toContain('halo-canvas-element-selected');
     expect(script).toContain('document.addEventListener("pointermove"');
     expect(script).toContain('document.addEventListener("click"');
   });

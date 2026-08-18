@@ -942,7 +942,7 @@ const SessionListPage: React.FC<SessionListPageProps> = ({ sessionMgr, onSelectS
     <div className="session-list">
       <div className="session-list__header">
         <div className="session-list__header-brand">
-          <img src={logoIcon} alt="BitFun" className="session-list__logo" />
+          <img src={logoIcon} alt="Halo" className="session-list__logo" />
           <div className="session-list__header-copy">
             <h1>{t('shared.product.remote')}</h1>
             {authenticatedUserLabel && (

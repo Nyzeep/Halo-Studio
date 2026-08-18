@@ -1,31 +1,31 @@
 :root {
   color-scheme: light;
-  --bitfun-canvas-bg: Canvas;
-  --bitfun-canvas-panel: Canvas;
-  --bitfun-canvas-fg: CanvasText;
-  --bitfun-canvas-muted: color-mix(in srgb, CanvasText 65%, transparent);
-  --bitfun-canvas-border: color-mix(in srgb, CanvasText 18%, transparent);
-  --bitfun-canvas-accent: LinkText;
-  --bitfun-canvas-success: LinkText;
-  --bitfun-canvas-warning: CanvasText;
-  --bitfun-canvas-danger: Mark;
-  --bitfun-canvas-info: LinkText;
+  --halo-canvas-bg: Canvas;
+  --halo-canvas-panel: Canvas;
+  --halo-canvas-fg: CanvasText;
+  --halo-canvas-muted: color-mix(in srgb, CanvasText 65%, transparent);
+  --halo-canvas-border: color-mix(in srgb, CanvasText 18%, transparent);
+  --halo-canvas-accent: LinkText;
+  --halo-canvas-success: LinkText;
+  --halo-canvas-warning: CanvasText;
+  --halo-canvas-danger: Mark;
+  --halo-canvas-info: LinkText;
   --color-static-white: Canvas;
-  --color-bg-primary: var(--bitfun-canvas-bg);
-  --color-bg-secondary: var(--bitfun-canvas-panel);
-  --color-bg-elevated: color-mix(in srgb, var(--bitfun-canvas-bg) 86%, var(--bitfun-canvas-panel) 14%);
-  --color-bg-chrome: color-mix(in srgb, var(--bitfun-canvas-panel) 92%, var(--bitfun-canvas-bg) 8%);
+  --color-bg-primary: var(--halo-canvas-bg);
+  --color-bg-secondary: var(--halo-canvas-panel);
+  --color-bg-elevated: color-mix(in srgb, var(--halo-canvas-bg) 86%, var(--halo-canvas-panel) 14%);
+  --color-bg-chrome: color-mix(in srgb, var(--halo-canvas-panel) 92%, var(--halo-canvas-bg) 8%);
   --color-bg-scene: var(--color-bg-secondary);
-  --color-text-primary: var(--bitfun-canvas-fg);
-  --color-text-secondary: color-mix(in srgb, var(--bitfun-canvas-fg) 76%, transparent);
-  --color-text-muted: var(--bitfun-canvas-muted);
-  --color-accent-500: var(--bitfun-canvas-accent);
-  --color-accent-200: color-mix(in srgb, var(--bitfun-canvas-accent) 18%, transparent);
-  --color-success: var(--bitfun-canvas-success);
-  --color-warning: var(--bitfun-canvas-warning);
-  --color-error: var(--bitfun-canvas-danger);
-  --border-subtle: color-mix(in srgb, var(--bitfun-canvas-border) 70%, transparent);
-  --border-base: var(--bitfun-canvas-border);
+  --color-text-primary: var(--halo-canvas-fg);
+  --color-text-secondary: color-mix(in srgb, var(--halo-canvas-fg) 76%, transparent);
+  --color-text-muted: var(--halo-canvas-muted);
+  --color-accent-500: var(--halo-canvas-accent);
+  --color-accent-200: color-mix(in srgb, var(--halo-canvas-accent) 18%, transparent);
+  --color-success: var(--halo-canvas-success);
+  --color-warning: var(--halo-canvas-warning);
+  --color-error: var(--halo-canvas-danger);
+  --border-subtle: color-mix(in srgb, var(--halo-canvas-border) 70%, transparent);
+  --border-base: var(--halo-canvas-border);
   --element-bg-subtle: color-mix(in srgb, var(--color-text-primary) 5%, transparent);
   --element-bg-soft: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
   --element-bg-base: color-mix(in srgb, var(--color-text-primary) 12%, transparent);
@@ -62,7 +62,7 @@
 
 html,
 body,
-#bitfun-canvas-root {
+#halo-canvas-root {
   min-height: 100%;
 }
 
@@ -93,7 +93,7 @@ button {
   color: inherit;
 }
 
-#bitfun-canvas-root {
+#halo-canvas-root {
   padding: 24px 20px 56px;
 }
 
@@ -112,20 +112,20 @@ button {
   width: 100%;
 }
 
-#bitfun-canvas-root > .bf-canvas-stack {
+#halo-canvas-root > .bf-canvas-stack {
   max-width: min(100%, 980px);
   margin-inline: auto;
 }
 
-html[data-bitfun-canvas-design-mode] {
+html[data-halo-canvas-design-mode] {
   cursor: crosshair;
 }
 
-html[data-bitfun-canvas-design-mode] body {
+html[data-halo-canvas-design-mode] body {
   user-select: none;
 }
 
-[data-bitfun-canvas-hovered='true'] {
+[data-halo-canvas-hovered='true'] {
   outline: 2px solid var(--color-accent-500) !important;
   outline-offset: 2px !important;
 }

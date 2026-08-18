@@ -63,7 +63,7 @@ describe('Canvas diagram helpers', () => {
     const layout = computeDAGLayout({
       nodes: [
         { id: 'entrypoints', label: 'Entrypoints', subtitle: 'Desktop · CLI', group: 'app' },
-        { id: 'assembly', label: 'Assembly', subtitle: 'bitfun-core', group: 'assembly' },
+        { id: 'assembly', label: 'Assembly', subtitle: 'halo-core', group: 'assembly' },
       ],
       edges: [{ source: 'entrypoints', target: 'assembly' }],
       nodeWidth: 120,

@@ -3,7 +3,7 @@
  */
 @use '../../styles/tokens.scss' as tokens;
 
-.bitfun-switch {
+.halo-switch {
   display: inline-flex;
   align-items: flex-start;
   gap: tokens.$size-gap-3;
@@ -95,7 +95,7 @@
     width: 10px;
     height: 10px;
     color: var(--color-accent-500);
-    animation: bitfun-switch-spin 1s linear infinite;
+    animation: halo-switch-spin 1s linear infinite;
   }
 
   &__input:checked + &__track &__thumb {
@@ -172,33 +172,33 @@
   &--small {
     gap: tokens.$size-gap-2;
 
-    .bitfun-switch__track {
+    .halo-switch__track {
       width: 32px;
       height: 18px;
       border-radius: 9px;
       padding: 2px;
     }
 
-    .bitfun-switch__thumb {
+    .halo-switch__thumb {
       width: 14px;
       height: 14px;
       left: 2px;
     }
 
-    .bitfun-switch__input:checked + .bitfun-switch__track .bitfun-switch__thumb {
+    .halo-switch__input:checked + .halo-switch__track .halo-switch__thumb {
       left: calc(100% - 16px);
     }
 
-    .bitfun-switch__loading {
+    .halo-switch__loading {
       width: 8px;
       height: 8px;
     }
 
-    .bitfun-switch__label {
+    .halo-switch__label {
       font-size: var(--font-size-xs);
     }
 
-    .bitfun-switch__description {
+    .halo-switch__description {
       font-size: 11px;
     }
   }
@@ -206,42 +206,42 @@
   &--large {
     gap: tokens.$size-gap-4;
 
-    .bitfun-switch__wrapper {
+    .halo-switch__wrapper {
       margin-top: 2px;
     }
 
-    .bitfun-switch__track {
+    .halo-switch__track {
       width: 44px;
       height: 24px;
       border-radius: 12px;
       padding: 2px;
     }
 
-    .bitfun-switch__thumb {
+    .halo-switch__thumb {
       width: 20px;
       height: 20px;
     }
 
-    .bitfun-switch__input:checked + .bitfun-switch__track .bitfun-switch__thumb {
+    .halo-switch__input:checked + .halo-switch__track .halo-switch__thumb {
       left: calc(100% - 22px);
     }
 
-    .bitfun-switch__loading {
+    .halo-switch__loading {
       width: 12px;
       height: 12px;
     }
 
-    .bitfun-switch__label {
+    .halo-switch__label {
       font-size: var(--font-size-base);
     }
 
-    .bitfun-switch__description {
+    .halo-switch__description {
       font-size: var(--font-size-xs);
     }
   }
 }
 
-@keyframes bitfun-switch-spin {
+@keyframes halo-switch-spin {
   from {
     transform: rotate(0deg);
   }

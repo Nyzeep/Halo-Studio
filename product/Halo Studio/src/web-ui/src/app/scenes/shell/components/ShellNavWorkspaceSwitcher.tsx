@@ -42,7 +42,7 @@ const ShellNavWorkspaceSwitcher: React.FC<ShellNavWorkspaceSwitcherProps> = ({
   }
 
   return (
-    <div className="bitfun-shell-nav__workspace-switcher">
+    <div className="halo-shell-nav__workspace-switcher">
       <Tooltip
         content={hasMultipleWorkspaces ? switchWorkspaceLabel : workspaceName}
         placement="bottom"
@@ -50,15 +50,15 @@ const ShellNavWorkspaceSwitcher: React.FC<ShellNavWorkspaceSwitcherProps> = ({
         <button
           ref={workspaceTriggerRef}
           type="button"
-          className={`bitfun-shell-nav__workspace-trigger${workspaceMenuOpen ? ' is-active' : ''}${hasMultipleWorkspaces ? ' is-switchable' : ''}`}
+          className={`halo-shell-nav__workspace-trigger${workspaceMenuOpen ? ' is-active' : ''}${hasMultipleWorkspaces ? ' is-switchable' : ''}`}
           onClick={onToggle}
           aria-haspopup={hasMultipleWorkspaces ? 'menu' : undefined}
           aria-expanded={hasMultipleWorkspaces ? workspaceMenuOpen : undefined}
         >
-          <span className="bitfun-shell-nav__workspace-separator">/</span>
-          <span className="bitfun-shell-nav__workspace-name">{workspaceName}</span>
+          <span className="halo-shell-nav__workspace-separator">/</span>
+          <span className="halo-shell-nav__workspace-name">{workspaceName}</span>
           {hasMultipleWorkspaces ? (
-            <ChevronDown size={12} className="bitfun-shell-nav__workspace-trigger-icon" />
+            <ChevronDown size={12} className="halo-shell-nav__workspace-trigger-icon" />
           ) : null}
         </button>
       </Tooltip>
@@ -67,7 +67,7 @@ const ShellNavWorkspaceSwitcher: React.FC<ShellNavWorkspaceSwitcherProps> = ({
         ? createPortal(
             <div
               ref={workspaceMenuRef}
-              className="bitfun-shell-nav__workspace-menu"
+              className="halo-shell-nav__workspace-menu"
               role="menu"
               aria-label={switchWorkspaceLabel}
               style={{
@@ -90,13 +90,13 @@ const ShellNavWorkspaceSwitcher: React.FC<ShellNavWorkspaceSwitcherProps> = ({
                       type="button"
                       role="menuitemradio"
                       aria-checked={isActive}
-                      className={`bitfun-shell-nav__workspace-menu-item${isActive ? ' is-active' : ''}`}
+                      className={`halo-shell-nav__workspace-menu-item${isActive ? ' is-active' : ''}`}
                       onClick={() => { void onSelectWorkspace(workspace.id); }}
                     >
-                      <span className="bitfun-shell-nav__workspace-menu-check" aria-hidden="true">
+                      <span className="halo-shell-nav__workspace-menu-check" aria-hidden="true">
                         {isActive ? <Check size={12} /> : null}
                       </span>
-                      <span className="bitfun-shell-nav__workspace-menu-text">{label}</span>
+                      <span className="halo-shell-nav__workspace-menu-text">{label}</span>
                     </button>
                   </Tooltip>
                 );

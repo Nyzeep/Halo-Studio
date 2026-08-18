@@ -6,7 +6,7 @@ import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BitfunCanvasPanel } from './BitfunCanvasPanel';
+import { HaloCanvasPanel } from './HaloCanvasPanel';
 
 const canvasApiMock = vi.hoisted(() => ({
   loadArtifact: vi.fn(() => Promise.resolve({ canvas: null })),
@@ -70,7 +70,7 @@ vi.mock('@/tools/editor/components/CodeEditor', () => ({
   default: () => null,
 }));
 
-describe('BitfunCanvasPanel message boundary', () => {
+describe('HaloCanvasPanel message boundary', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -91,8 +91,8 @@ describe('BitfunCanvasPanel message boundary', () => {
   it('renders Canvas HTML through document write instead of a blob URL', async () => {
     await act(async () => {
       root.render(
-        <BitfunCanvasPanel
-          artifactReference="bitfun-canvas://session/session_1/canvas/canvas_1"
+        <HaloCanvasPanel
+          artifactReference="halo-canvas://session/session_1/canvas/canvas_1"
           html="<!doctype html><html><body>Canvas</body></html>"
         />,
       );
@@ -112,8 +112,8 @@ describe('BitfunCanvasPanel message boundary', () => {
   it('ignores Canvas host actions from non-iframe message sources', async () => {
     await act(async () => {
       root.render(
-        <BitfunCanvasPanel
-          artifactReference="bitfun-canvas://session/session_1/canvas/canvas_1"
+        <HaloCanvasPanel
+          artifactReference="halo-canvas://session/session_1/canvas/canvas_1"
           html="<!doctype html><html><body>Canvas</body></html>"
         />,
       );
@@ -126,7 +126,7 @@ describe('BitfunCanvasPanel message boundary', () => {
     await act(async () => {
       window.dispatchEvent(new MessageEvent('message', {
         data: {
-          type: 'bitfun-canvas-action',
+          type: 'halo-canvas-action',
           requestId: 'forged-action',
           action: { type: 'copyText', text: 'forged clipboard write' },
         },
@@ -148,9 +148,9 @@ describe('BitfunCanvasPanel message boundary', () => {
 
     await act(async () => {
       root.render(
-        <BitfunCanvasPanel
-          artifactReference="bitfun-canvas://session/session_1/canvas/canvas_1"
-          html={`<!doctype html><html><body><script data-revision="rev_1">window.BitfunCanvasRuntime.mount(Canvas);</script></body></html>`}
+        <HaloCanvasPanel
+          artifactReference="halo-canvas://session/session_1/canvas/canvas_1"
+          html={`<!doctype html><html><body><script data-revision="rev_1">window.HaloCanvasRuntime.mount(Canvas);</script></body></html>`}
           workspacePath="/repo"
         />,
       );
@@ -168,7 +168,7 @@ describe('BitfunCanvasPanel message boundary', () => {
     await act(async () => {
       window.dispatchEvent(new MessageEvent('message', {
         data: {
-          type: 'bitfun-canvas-runtime-error',
+          type: 'halo-canvas-runtime-error',
           message: "undefined is not an object (evaluating 'theme.surface.primary')",
           name: 'TypeError',
           stack: 'LayerDiagram@blob:test:1:1',
@@ -191,7 +191,7 @@ describe('BitfunCanvasPanel message boundary', () => {
     await act(async () => {
       window.dispatchEvent(new MessageEvent('message', {
         data: {
-          type: 'bitfun-canvas-runtime-error',
+          type: 'halo-canvas-runtime-error',
           message: "undefined is not an object (evaluating 'theme.surface.primary')",
           name: 'TypeError',
           stack: 'LayerDiagram@blob:test:1:1',

@@ -1,11 +1,11 @@
-﻿.bitfun-workbench-delivery-review {
+﻿.halo-workbench-delivery-review {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  border: 1px solid var(--bitfun-border, rgba(128, 128, 128, 0.28));
+  border: 1px solid var(--halo-border, rgba(128, 128, 128, 0.28));
   border-radius: 8px;
-  background: var(--bitfun-surface, rgba(255, 255, 255, 0.02));
+  background: var(--halo-surface, rgba(255, 255, 255, 0.02));
 
   &__header {
     display: flex;
@@ -67,7 +67,7 @@
   }
 
   &__error {
-    color: var(--bitfun-danger, #ff6b6b);
+    color: var(--halo-danger, #ff6b6b);
     font-size: 12px;
   }
 

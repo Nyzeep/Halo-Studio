@@ -12,25 +12,25 @@ import './GenerativeWidgetFrame.scss';
 
 export type WidgetMessage =
   | {
-      source: 'bitfun-widget';
-      type: 'bitfun-widget:event';
+      source: 'halo-widget';
+      type: 'halo-widget:event';
       widgetId?: string;
       payload?: unknown;
     }
   | {
-      source: 'bitfun-widget';
-      type: 'bitfun-widget:prompt';
+      source: 'halo-widget';
+      type: 'halo-widget:prompt';
       widgetId?: string;
       text?: string;
     }
   | {
-      source: 'bitfun-widget';
-      type: 'bitfun-widget:ready';
+      source: 'halo-widget';
+      type: 'halo-widget:ready';
       widgetId?: string;
     }
   | {
-      source: 'bitfun-widget';
-      type: 'bitfun-widget:open-file';
+      source: 'halo-widget';
+      type: 'halo-widget:open-file';
       widgetId?: string;
       filePath?: string;
       line?: number;
@@ -39,24 +39,24 @@ export type WidgetMessage =
       nodeType?: string;
     }
   | {
-      source: 'bitfun-widget';
-      type: 'bitfun-widget:resize';
+      source: 'halo-widget';
+      type: 'halo-widget:resize';
       widgetId?: string;
       height?: number;
     }
   | {
-      source: 'bitfun-widget';
-      type: 'bitfun-widget:clear-selection';
+      source: 'halo-widget';
+      type: 'halo-widget:clear-selection';
       widgetId?: string;
     }
   | {
-      source: 'bitfun-widget';
-      type: 'bitfun-widget:selection-cleared';
+      source: 'halo-widget';
+      type: 'halo-widget:selection-cleared';
       widgetId?: string;
     }
   | {
-      source: 'bitfun-widget';
-      type: 'bitfun-widget:context-menu';
+      source: 'halo-widget';
+      type: 'halo-widget:context-menu';
       widgetId?: string;
       clientX?: number;
       clientY?: number;
@@ -70,7 +70,7 @@ export type WidgetMessage =
 
 export type WidgetContextMenuMessage = Extract<
   WidgetMessage,
-  { type: 'bitfun-widget:context-menu' }
+  { type: 'halo-widget:context-menu' }
 >;
 
 export interface GenerativeWidgetFrameProps {
@@ -160,7 +160,7 @@ ${createWidgetThemeCompatibilityAliasCss()}
       color: var(--color-accent-600);
     }
     [data-file-path],
-    [data-bitfun-open-file] {
+    [data-halo-open-file] {
       cursor: pointer;
     }
     .bf-root,
@@ -262,8 +262,8 @@ ${createWidgetThemeCompatibilityAliasCss()}
     .bf-panel {
       background: color-mix(in srgb, var(--color-bg-secondary) 74%, var(--element-bg-subtle));
     }
-    [data-bitfun-prompt-selected="true"],
-    [data-bitfun-context-selected="true"] {
+    [data-halo-prompt-selected="true"],
+    [data-halo-context-selected="true"] {
       position: relative;
       outline: 2px solid var(--color-accent-500);
       outline-offset: 2px;
@@ -430,7 +430,7 @@ ${createWidgetThemeCompatibilityAliasCss()}
       border: 1px solid transparent;
     }
     .bf-list-item[data-file-path]:hover,
-    .bf-list-item[data-bitfun-open-file]:hover,
+    .bf-list-item[data-halo-open-file]:hover,
     .bf-card[data-file-path]:hover,
     .bf-panel[data-file-path]:hover {
       border-color: color-mix(in srgb, var(--color-accent-500) 35%, var(--border-subtle));
@@ -510,7 +510,7 @@ ${createWidgetThemeCompatibilityAliasCss()}
         font-size: var(--font-size-base);
       }
     }
-    @keyframes bitfunWidgetFadeIn {
+    @keyframes haloWidgetFadeIn {
       from { opacity: 0; transform: translateY(4px); }
       to { opacity: 1; transform: translateY(0); }
     }
@@ -529,7 +529,7 @@ ${createWidgetThemeCompatibilityAliasCss()}
 
       function send(type, payload) {
         parent.postMessage({
-          source: 'bitfun-widget',
+          source: 'halo-widget',
           type: type,
           widgetId: currentWidgetId,
           payload: payload
@@ -553,7 +553,7 @@ ${createWidgetThemeCompatibilityAliasCss()}
 
       function clearPromptTargetSelection() {
         if (!selectedPromptTarget) return;
-        selectedPromptTarget.removeAttribute('data-bitfun-prompt-selected');
+        selectedPromptTarget.removeAttribute('data-halo-prompt-selected');
         selectedPromptTarget = null;
       }
 
@@ -565,7 +565,7 @@ ${createWidgetThemeCompatibilityAliasCss()}
         if (selectedPromptTarget === element) return;
         clearPromptTargetSelection();
         selectedPromptTarget = element;
-        selectedPromptTarget.setAttribute('data-bitfun-prompt-selected', 'true');
+        selectedPromptTarget.setAttribute('data-halo-prompt-selected', 'true');
       }
 
       function findPromptTarget(target) {
@@ -573,7 +573,7 @@ ${createWidgetThemeCompatibilityAliasCss()}
         while (node && node !== document.body) {
           if (
             node.hasAttribute('data-file-path') ||
-            node.hasAttribute('data-bitfun-open-file') ||
+            node.hasAttribute('data-halo-open-file') ||
             node.hasAttribute('data-prompt-target') ||
             node.hasAttribute('data-section-title')
           ) {
@@ -670,8 +670,8 @@ ${createWidgetThemeCompatibilityAliasCss()}
         resizeFrame = window.requestAnimationFrame(function () {
           resizeFrame = null;
           sendMessage({
-            source: 'bitfun-widget',
-            type: 'bitfun-widget:resize',
+            source: 'halo-widget',
+            type: 'halo-widget:resize',
             widgetId: currentWidgetId,
             height: measureHeight()
           });
@@ -719,7 +719,7 @@ ${createWidgetThemeCompatibilityAliasCss()}
                 node.tagName !== 'SCRIPT' &&
                 node.tagName !== 'STYLE'
               ) {
-                node.style.animation = 'bitfunWidgetFadeIn 0.18s ease both';
+                node.style.animation = 'haloWidgetFadeIn 0.18s ease both';
               }
               return node;
             }
@@ -762,16 +762,16 @@ ${createWidgetThemeCompatibilityAliasCss()}
 
       var bridge = {
         send: function (data) {
-          send('bitfun-widget:event', data);
+          send('halo-widget:event', data);
         }
       };
 
-      window.bitfunWidget = bridge;
+      window.haloWidget = bridge;
       window.glimpse = bridge;
       window.sendPrompt = function (text) {
         parent.postMessage({
-          source: 'bitfun-widget',
-          type: 'bitfun-widget:prompt',
+          source: 'halo-widget',
+          type: 'halo-widget:prompt',
           widgetId: currentWidgetId,
           text: String(text || '')
         }, '*');
@@ -779,9 +779,9 @@ ${createWidgetThemeCompatibilityAliasCss()}
 
       document.addEventListener('click', function (event) {
         var target = event.target;
-        var fileTarget = target && target.closest ? target.closest('[data-file-path], [data-bitfun-open-file]') : null;
+        var fileTarget = target && target.closest ? target.closest('[data-file-path], [data-halo-open-file]') : null;
         if (fileTarget) {
-          var filePath = fileTarget.getAttribute('data-file-path') || fileTarget.getAttribute('data-bitfun-open-file') || '';
+          var filePath = fileTarget.getAttribute('data-file-path') || fileTarget.getAttribute('data-halo-open-file') || '';
           if (filePath) {
             var lineValue = Number(fileTarget.getAttribute('data-line') || '');
             var columnValue = Number(fileTarget.getAttribute('data-column') || '');
@@ -789,8 +789,8 @@ ${createWidgetThemeCompatibilityAliasCss()}
             event.preventDefault();
             event.stopPropagation();
             sendMessage({
-              source: 'bitfun-widget',
-              type: 'bitfun-widget:open-file',
+              source: 'halo-widget',
+              type: 'halo-widget:open-file',
               widgetId: currentWidgetId,
               filePath: filePath,
               line: Number.isFinite(lineValue) && lineValue > 0 ? lineValue : undefined,
@@ -817,8 +817,8 @@ ${createWidgetThemeCompatibilityAliasCss()}
         if (selectedPromptTarget.contains && selectedPromptTarget.contains(target)) return;
         clearPromptTargetSelection();
         sendMessage({
-          source: 'bitfun-widget',
-          type: 'bitfun-widget:selection-cleared',
+          source: 'halo-widget',
+          type: 'halo-widget:selection-cleared',
           widgetId: currentWidgetId
         });
       }, true);
@@ -835,7 +835,7 @@ ${createWidgetThemeCompatibilityAliasCss()}
 
         var filePath = normalizeSpace(
           promptTarget && promptTarget.getAttribute
-            ? promptTarget.getAttribute('data-file-path') || promptTarget.getAttribute('data-bitfun-open-file')
+            ? promptTarget.getAttribute('data-file-path') || promptTarget.getAttribute('data-halo-open-file')
             : ''
         );
         var lineValue = Number(
@@ -845,8 +845,8 @@ ${createWidgetThemeCompatibilityAliasCss()}
         event.preventDefault();
         event.stopPropagation();
         sendMessage({
-          source: 'bitfun-widget',
-          type: 'bitfun-widget:context-menu',
+          source: 'halo-widget',
+          type: 'halo-widget:context-menu',
           widgetId: currentWidgetId,
           clientX: Number(event.clientX) || 0,
           clientY: Number(event.clientY) || 0,
@@ -860,13 +860,13 @@ ${createWidgetThemeCompatibilityAliasCss()}
       window.addEventListener('message', function (event) {
         var data = event.data;
         if (!data) return;
-        if (data.type === 'bitfun-widget:clear-selection') {
+        if (data.type === 'halo-widget:clear-selection') {
           if (!data.widgetId || data.widgetId === currentWidgetId) {
             clearPromptTargetSelection();
           }
           return;
         }
-        if (data.type !== 'bitfun-widget:update') return;
+        if (data.type !== 'halo-widget:update') return;
         currentWidgetId = data.widgetId || currentWidgetId || '';
         applyTheme(data.theme);
         setContent(String(data.html || ''), Boolean(data.runScripts));
@@ -883,8 +883,8 @@ ${createWidgetThemeCompatibilityAliasCss()}
       }
 
       sendMessage({
-        source: 'bitfun-widget',
-        type: 'bitfun-widget:ready',
+        source: 'halo-widget',
+        type: 'halo-widget:ready',
         widgetId: currentWidgetId
       });
       scheduleResize();
@@ -917,10 +917,10 @@ export const GenerativeWidgetFrame: React.FC<GenerativeWidgetFrameProps> = ({
     const handleMessage = (event: MessageEvent<WidgetMessage>) => {
       const data = event.data;
       if (event.source !== iframeRef.current?.contentWindow) return;
-      if (!data || data.source !== 'bitfun-widget') return;
+      if (!data || data.source !== 'halo-widget') return;
       if (data.widgetId && data.widgetId !== widgetId) return;
 
-      if (data.type === 'bitfun-widget:resize') {
+      if (data.type === 'halo-widget:resize') {
         const nextHeight = Math.max(120, Math.ceil(Number(data.height) || 0));
         setFrameHeight((prev) => {
           if (Math.abs(prev - nextHeight) <= 1) return prev;
@@ -930,7 +930,7 @@ export const GenerativeWidgetFrame: React.FC<GenerativeWidgetFrameProps> = ({
         return;
       }
 
-      if (data.type === 'bitfun-widget:context-menu') {
+      if (data.type === 'halo-widget:context-menu') {
         const iframeRect = iframeRef.current?.getBoundingClientRect();
         onWidgetEvent?.({
           ...data,
@@ -1007,7 +1007,7 @@ export const GenerativeWidgetFrame: React.FC<GenerativeWidgetFrameProps> = ({
 
     iframeRef.current.contentWindow.postMessage(
       {
-        type: 'bitfun-widget:update',
+        type: 'halo-widget:update',
         widgetId,
         title,
         html: normalizedCode,
@@ -1029,7 +1029,7 @@ export const GenerativeWidgetFrame: React.FC<GenerativeWidgetFrameProps> = ({
 
     iframeRef.current.contentWindow.postMessage(
       {
-        type: 'bitfun-widget:clear-selection',
+        type: 'halo-widget:clear-selection',
         widgetId,
       },
       '*',
@@ -1038,13 +1038,13 @@ export const GenerativeWidgetFrame: React.FC<GenerativeWidgetFrameProps> = ({
 
   return (
     <div
-      className={`bitfun-generative-widget-frame ${className}`.trim()}
+      className={`halo-generative-widget-frame ${className}`.trim()}
       style={{ height: `${frameHeight}px` }}
     >
       <iframe
         ref={iframeRef}
         title={title || 'Generative widget'}
-        className="bitfun-generative-widget-frame__iframe"
+        className="halo-generative-widget-frame__iframe"
         style={{ width: '100%', minWidth: '100%' }}
         sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
         src="about:blank"

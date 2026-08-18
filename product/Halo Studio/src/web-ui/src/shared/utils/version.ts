@@ -89,7 +89,7 @@ export function getAboutInfo(): AboutInfo {
     version: versionInfo,
     license: {
       type: 'MIT',
-      text: 'MIT License - BitFun upstream attribution retained for the Halo Studio product build',
+      text: 'MIT License - Halo upstream attribution retained for the Halo Studio product build',
       url: 'https://opensource.org/licenses/MIT'
     },
     links: {

@@ -1,5 +1,5 @@
 /**
- * BitFun Dark Theme Definition
+ * Halo Dark Theme Definition
  * Custom Monaco Editor Theme
  *
  * Design Philosophy:
@@ -7,7 +7,7 @@
  * - High saturation, modern color palette
  * - Carefully balanced multi-color scheme
  * - Excellent contrast and distinction between syntax elements
- * - Consistent with BitFun UI style
+ * - Consistent with Halo UI style
  * - Inspired by Night Owl, Tokyo Night themes
  */
 
@@ -60,11 +60,11 @@ const MONACO_DIFF_COLOR = {
 } as const;
 
 /**
- * BitFun Dark Theme Configuration
+ * Halo Dark Theme Configuration
  * Follows Monaco Editor official theme format
  * @see https://microsoft.github.io/monaco-editor/api/interfaces/monaco.editor.IStandaloneThemeData.html
  */
-export const BitFunDarkTheme: editor.IStandaloneThemeData = {
+export const HaloDarkTheme: editor.IStandaloneThemeData = {
   base: 'vs-dark',
   inherit: true,
 
@@ -426,10 +426,10 @@ export const BitFunDarkTheme: editor.IStandaloneThemeData = {
   }
 };
 
-export const BitFunDarkThemeMetadata = {
-  id: 'bitfun-dark',
+export const HaloDarkThemeMetadata = {
+  id: 'halo-dark',
   label: 'Dark',
   description: 'Premium vibrant dark theme with modern multi-color palette',
-  author: 'BitFun Team',
+  author: 'Halo Studio Team',
   version: '2.0.0',
 };

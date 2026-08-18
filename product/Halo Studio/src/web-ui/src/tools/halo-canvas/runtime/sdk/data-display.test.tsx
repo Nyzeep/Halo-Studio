@@ -15,7 +15,7 @@ import {
   UsageBar,
 } from './data-display';
 
-describe('BitFun Canvas data display components', () => {
+describe('Halo Canvas data display components', () => {
   it('renders callouts as lightweight themed notes', () => {
     const markup = renderToStaticMarkup(
       <Callout tone="info" title="Repository Rule">
@@ -26,7 +26,7 @@ describe('BitFun Canvas data display components', () => {
     expect(markup).toContain('bf-callout');
     expect(markup).toContain('bf-callout-title');
     expect(markup).toContain('bf-callout-body');
-    expect(markup).toContain('--bf-callout-accent:var(--bitfun-canvas-info)');
+    expect(markup).toContain('--bf-callout-accent:var(--halo-canvas-info)');
     expect(markup).toContain('Repository Rule');
   });
 

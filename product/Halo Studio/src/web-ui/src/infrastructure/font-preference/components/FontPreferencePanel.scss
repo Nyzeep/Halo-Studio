@@ -3,16 +3,16 @@
 
 .font-pref-panel {
   /* 界面字体：多行区块，标题与说明之间略松一点 */
-  &__row--ui.bitfun-config-page-row--multiline {
+  &__row--ui.halo-config-page-row--multiline {
     gap: $size-gap-3;
 
-    .bitfun-config-page-row__description {
+    .halo-config-page-row__description {
       max-width: 52ch;
     }
   }
 
   /* 对话：左右单行，左侧说明区偏宽、右侧控件区保证最小宽度 */
-  &__row--flow-chat.bitfun-config-page-row:not(.bitfun-config-page-row--multiline) {
+  &__row--flow-chat.halo-config-page-row:not(.halo-config-page-row--multiline) {
     --row-grid-cols: minmax(0, 8fr) minmax(220px, 4fr);
   }
 

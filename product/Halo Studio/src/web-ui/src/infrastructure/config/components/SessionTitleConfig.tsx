@@ -109,12 +109,12 @@ export const SessionTitleConfig: React.FC = () => {
 
   return (
     <ConfigPageSection
-      className="bitfun-func-agent-config"
+      className="halo-func-agent-config"
       title={t('sessionTitle.title')}
       description={t('sessionTitle.subtitle')}
     >
       <ConfigPageRow label={t('sessionTitle.enable')} align="center">
-        <div className="bitfun-func-agent-config__row-control">
+        <div className="halo-func-agent-config__row-control">
           <Switch
             checked={settings?.enable_session_title_generation ?? false}
             onChange={(e) => void updateEnabled(e.target.checked)}
@@ -124,12 +124,12 @@ export const SessionTitleConfig: React.FC = () => {
         </div>
       </ConfigPageRow>
       <ConfigPageRow
-        className="bitfun-func-agent-config__model-row"
+        className="halo-func-agent-config__model-row"
         label={t('sessionTitle.model.label')}
         description={enabledModels.length === 0 ? t('sessionTitle.models.empty') : undefined}
         align="center"
       >
-        <div className="bitfun-func-agent-config__row-control bitfun-func-agent-config__row-control--model">
+        <div className="halo-func-agent-config__row-control halo-func-agent-config__row-control--model">
           <ModelSelectionRadio
             value={sessionTitleModelId}
             models={enabledModels}

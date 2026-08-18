@@ -7,7 +7,7 @@ $transition-duration: 0.25s;
 $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
 
 // Full-window container; draggable.
-.bitfun-toolbar-mode {
+.halo-toolbar-mode {
   position: fixed;
   top: 0;
   left: 0;
@@ -61,7 +61,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-.bitfun-toolbar-mode__header {
+.halo-toolbar-mode__header {
   flex: 0 0 auto;
   height: 32px;
   position: relative;
@@ -76,11 +76,11 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 // macOS overlay titlebar: reserve left space for traffic light buttons
-.bitfun-toolbar-mode--macos .bitfun-toolbar-mode__header {
+.halo-toolbar-mode--macos .halo-toolbar-mode__header {
   padding-left: 78px;
 }
 
-.bitfun-toolbar-mode__header-left {
+.halo-toolbar-mode__header-left {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -88,7 +88,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
 }
 
-.bitfun-toolbar-mode__header-right {
+.halo-toolbar-mode__header-right {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
@@ -99,7 +99,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
 }
 
-.bitfun-toolbar-mode__header-overflow {
+.halo-toolbar-mode__header-overflow {
   position: relative;
   flex-shrink: 0;
   display: flex;
@@ -107,14 +107,14 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: auto;
 }
 
-.bitfun-toolbar-mode__header-collapsed-actions {
+.halo-toolbar-mode__header-collapsed-actions {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
 }
 
-.bitfun-toolbar-mode__title-wrapper {
+.halo-toolbar-mode__title-wrapper {
   // Horizontally centered in the header bar; width follows title up to max-width.
   position: absolute;
   left: 50%;
@@ -127,7 +127,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: auto;
 }
 
-.bitfun-toolbar-mode__header-drag-area {
+.halo-toolbar-mode__header-drag-area {
   flex: 1 1 auto;
   min-width: 12px;
   min-height: 100%;
@@ -135,7 +135,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
 }
 
-.bitfun-toolbar-mode__title-display {
+.halo-toolbar-mode__title-display {
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -150,7 +150,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: var(--size-radius-sm);
 }
 
-.bitfun-toolbar-mode__title-text {
+.halo-toolbar-mode__title-text {
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
@@ -159,7 +159,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   text-align: center;
 }
 
-.bitfun-toolbar-mode__overflow-menu {
+.halo-toolbar-mode__overflow-menu {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
@@ -173,7 +173,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   animation: dropdown-appear 0.2s $transition-timing;
 }
 
-.bitfun-toolbar-mode__overflow-menu-item {
+.halo-toolbar-mode__overflow-menu-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -204,7 +204,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 
-.bitfun-toolbar-mode__content-row {
+.halo-toolbar-mode__content-row {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -215,7 +215,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   animation: content-row-enter 0.2s $transition-timing;
 }
 
-.bitfun-toolbar-mode__stream-content {
+.halo-toolbar-mode__stream-content {
   flex: 1;
   min-width: 0;
   align-self: stretch;
@@ -226,15 +226,15 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   
   &:hover {
-    .bitfun-toolbar-mode__text,
-    .bitfun-toolbar-mode__tool-summary,
-    .bitfun-toolbar-mode__todo-current {
+    .halo-toolbar-mode__text,
+    .halo-toolbar-mode__tool-summary,
+    .halo-toolbar-mode__todo-current {
       color: var(--color-text-primary);
     }
   }
 }
 
-.bitfun-toolbar-mode__text {
+.halo-toolbar-mode__text {
   display: block;
   white-space: nowrap;
   overflow: hidden;
@@ -254,7 +254,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-.bitfun-toolbar-mode__tool {
+.halo-toolbar-mode__tool {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -280,7 +280,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-.bitfun-toolbar-mode__todo {
+.halo-toolbar-mode__todo {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -306,7 +306,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-.bitfun-toolbar-mode__controls {
+.halo-toolbar-mode__controls {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -438,7 +438,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
 // Host for the reused main-window session surface (ChatPane: conversation +
 // ChatInput). Only sizing is adjusted here — the surface keeps the main
 // window's own look and behavior.
-.bitfun-toolbar-mode__session-surface {
+.halo-toolbar-mode__session-surface {
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -448,7 +448,7 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
 
   animation: flowchat-expand-in $transition-duration $transition-timing;
 
-  .bitfun-chat-pane__content {
+  .halo-chat-pane__content {
     flex: 1;
     min-height: 0;
   }
@@ -461,10 +461,10 @@ $transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-.bitfun-toolbar-mode--expanded {
+.halo-toolbar-mode--expanded {
   cursor: default;
 
-  .bitfun-toolbar-mode__header {
+  .halo-toolbar-mode__header {
     border-bottom-color: var(--border-base);
   }
 }

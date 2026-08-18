@@ -1,7 +1,7 @@
 /**
  * SCENE_TAB_REGISTRY - Halo local-coding scene definitions.
  *
- * The full BitFun source tree remains present for upstream sync and audit, but
+ * The full Halo source tree remains present for upstream sync and audit, but
  * the Halo product entry only assembles the first-release local coding path.
  */
 

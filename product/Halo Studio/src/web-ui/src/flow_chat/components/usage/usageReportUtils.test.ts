@@ -38,7 +38,7 @@ function usageReport(overrides: Partial<SessionUsageReport> = {}): SessionUsageR
     generatedAt: 1_778_347_200_000,
     workspace: {
       kind: 'local',
-      pathLabel: 'D:/workspace/bitfun',
+      pathLabel: 'D:/workspace/halo',
     },
     scope: {
       kind: 'entire_session',

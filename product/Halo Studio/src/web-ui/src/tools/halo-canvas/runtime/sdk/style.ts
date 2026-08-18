@@ -28,7 +28,7 @@ export const categoryPaletteLight: Record<CanvasColor, string> = {
   green: 'var(--color-success)',
   yellow: 'var(--color-warning)',
   cyan: 'var(--color-info)',
-  pink: 'var(--bitfun-canvas-danger)',
+  pink: 'var(--halo-canvas-danger)',
   blue: 'var(--color-accent-500)',
   orange: 'var(--color-warning)',
 };
@@ -48,7 +48,7 @@ export const canvasTokensLight = {
   success: 'var(--color-success)',
   warning: 'var(--color-warning)',
   danger: 'var(--color-error)',
-  info: 'var(--bitfun-canvas-info)',
+  info: 'var(--halo-canvas-info)',
 };
 
 export const canvasTokens = canvasTokensLight;
@@ -156,10 +156,10 @@ export function weightValue(weight: unknown): number | string {
 }
 
 export function toneColor(tone: CanvasTone | undefined): string {
-  if (tone === 'success') return 'var(--bitfun-canvas-success)';
-  if (tone === 'warning') return 'var(--bitfun-canvas-warning)';
-  if (tone === 'danger' || tone === 'error') return 'var(--bitfun-canvas-danger)';
-  if (tone === 'info') return 'var(--bitfun-canvas-info)';
+  if (tone === 'success') return 'var(--halo-canvas-success)';
+  if (tone === 'warning') return 'var(--halo-canvas-warning)';
+  if (tone === 'danger' || tone === 'error') return 'var(--halo-canvas-danger)';
+  if (tone === 'info') return 'var(--halo-canvas-info)';
   if (
     tone === 'secondary' ||
     tone === 'tertiary' ||

@@ -10,7 +10,7 @@ import {
   Toggle,
 } from './controls';
 
-describe('BitFun Canvas control adapters', () => {
+describe('Halo Canvas control adapters', () => {
   it('renders toggle and checkbox through component-library controls', () => {
     const markup = renderToStaticMarkup(
       <>
@@ -19,8 +19,8 @@ describe('BitFun Canvas control adapters', () => {
       </>,
     );
 
-    expect(markup).toContain('bitfun-switch');
-    expect(markup).toContain('bitfun-checkbox');
+    expect(markup).toContain('halo-switch');
+    expect(markup).toContain('halo-checkbox');
     expect(markup).toContain('Enabled');
     expect(markup).toContain('Reviewed');
   });
@@ -53,8 +53,8 @@ describe('BitFun Canvas control adapters', () => {
       </>,
     );
 
-    expect(markup).toContain('bitfun-input-wrapper');
-    expect(markup).toContain('bitfun-textarea');
+    expect(markup).toContain('halo-input-wrapper');
+    expect(markup).toContain('halo-textarea');
     expect(markup).toContain('icon-btn');
     expect(markup).toContain('Refresh');
   });

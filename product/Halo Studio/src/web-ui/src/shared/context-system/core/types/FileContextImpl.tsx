@@ -100,21 +100,21 @@ export class FileCardRenderer implements ContextCardRenderer<'file'> {
     const { compact = false, interactive = true } = options || {};
     
     return (
-      <div className={`bitfun-context-card bitfun-context-card--file ${compact ? 'bitfun-context-card--compact' : ''}`}>
-        <div className="bitfun-context-card__icon">
+      <div className={`halo-context-card halo-context-card--file ${compact ? 'halo-context-card--compact' : ''}`}>
+        <div className="halo-context-card__icon">
           <FileIcon size={compact ? 16 : 20} />
         </div>
         
-        <div className="bitfun-context-card__content">
-          <div className="bitfun-context-card__title">
+        <div className="halo-context-card__content">
+          <div className="halo-context-card__title">
             {context.fileName}
           </div>
           
           {!compact && (
-            <div className="bitfun-context-card__subtitle">
+            <div className="halo-context-card__subtitle">
               {context.relativePath || context.filePath}
               {context.fileSize && (
-                <span className="bitfun-context-card__meta">
+                <span className="halo-context-card__meta">
                   {' • '}{this.formatFileSize(context.fileSize)}
                 </span>
               )}
@@ -123,7 +123,7 @@ export class FileCardRenderer implements ContextCardRenderer<'file'> {
         </div>
         
         {interactive && (
-          <div className="bitfun-context-card__actions">
+          <div className="halo-context-card__actions">
             {this.renderValidationIndicator(context)}
           </div>
         )}
@@ -141,8 +141,8 @@ export class FileCardRenderer implements ContextCardRenderer<'file'> {
     
     
     return (
-      <div className="bitfun-context-card__status">
-        <CheckCircle size={16} className="bitfun-context-card__status-icon--success" />
+      <div className="halo-context-card__status">
+        <CheckCircle size={16} className="halo-context-card__status-icon--success" />
       </div>
     );
   }

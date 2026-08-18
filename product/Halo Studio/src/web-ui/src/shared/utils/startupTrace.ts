@@ -152,9 +152,9 @@ export interface StartupTraceDiagnostics {
 declare global {
   // E2E and manual performance collection read this sanitized diagnostic surface.
   // It intentionally exposes no raw request payloads or workspace paths.
-  var __BITFUN_STARTUP_TRACE__: StartupTraceDiagnostics | undefined;
-  var __BITFUN_PERF_TRACE_ENABLED__: boolean | undefined;
-  var __BITFUN_RENDER_PROFILE_ENABLED__: boolean | undefined;
+  var __HALO_STARTUP_TRACE__: StartupTraceDiagnostics | undefined;
+  var __HALO_PERF_TRACE_ENABLED__: boolean | undefined;
+  var __HALO_RENDER_PROFILE_ENABLED__: boolean | undefined;
 }
 
 const DEFAULT_MAX_ESTIMATED_BYTES = 64 * 1024;
@@ -162,8 +162,8 @@ const SENSITIVE_KEY_PATTERN =
   /(api[-_]?key|authorization|bearer|token|secret|password|credential|payload|request|response|args|remoteconnectionid|remote[_-]?connection[_-]?id|remotesshhost|remote[_-]?ssh[_-]?host|sshhost|ssh[_-]?host|workspacepath|workspace[_-]?path)/i;
 
 function createTraceId(): string {
-  const injectedTraceId = (globalThis as { __BITFUN_STARTUP_TRACE_ID__?: unknown })
-    .__BITFUN_STARTUP_TRACE_ID__;
+  const injectedTraceId = (globalThis as { __HALO_STARTUP_TRACE_ID__?: unknown })
+    .__HALO_STARTUP_TRACE_ID__;
   if (typeof injectedTraceId === 'string' && injectedTraceId.trim().length > 0) {
     return injectedTraceId;
   }
@@ -554,7 +554,7 @@ export function createStartupTrace(options: StartupTraceOptions = {}): StartupTr
 export const startupTrace = createStartupTrace();
 
 export function isStartupRenderTraceEnabled(): boolean {
-  return globalThis.__BITFUN_RENDER_PROFILE_ENABLED__ === true;
+  return globalThis.__HALO_RENDER_PROFILE_ENABLED__ === true;
 }
 
 export function recordReactRenderProfile(
@@ -593,8 +593,8 @@ export function recordReactRenderProfile(
   });
 }
 
-if (import.meta.env.DEV || globalThis.__BITFUN_PERF_TRACE_ENABLED__ === true) {
-  globalThis.__BITFUN_STARTUP_TRACE__ = {
+if (import.meta.env.DEV || globalThis.__HALO_PERF_TRACE_ENABLED__ === true) {
+  globalThis.__HALO_STARTUP_TRACE__ = {
     snapshot: () => startupTrace.getSnapshot(),
     flushSummary: (reason: string) => startupTrace.flushSummary(reason),
   };

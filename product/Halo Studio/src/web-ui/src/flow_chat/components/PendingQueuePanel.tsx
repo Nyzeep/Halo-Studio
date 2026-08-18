@@ -212,23 +212,23 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
 
   return (
     <div
-      className={`bitfun-pending-queue-panel ${className ?? ''}`.trim()}
+      className={`halo-pending-queue-panel ${className ?? ''}`.trim()}
       data-testid="pending-queue-panel"
       onClick={e => {
         e.stopPropagation();
       }}
     >
-      <div className="bitfun-pending-queue-panel__header">
-        <Inbox size={10} className="bitfun-pending-queue-panel__header-icon" />
-        <span className="bitfun-pending-queue-panel__title">
+      <div className="halo-pending-queue-panel__header">
+        <Inbox size={10} className="halo-pending-queue-panel__header-icon" />
+        <span className="halo-pending-queue-panel__title">
           {t('pendingQueue.title', { count: visibleItems.length })}
-          <span className="bitfun-pending-queue-panel__hint">
+          <span className="halo-pending-queue-panel__hint">
             {' · '}
             {t('pendingQueue.hint')}
           </span>
         </span>
       </div>
-      <ul className="bitfun-pending-queue-panel__list">
+      <ul className="halo-pending-queue-panel__list">
         {visibleItems.map(item => {
           const isEditing = editingId === item.id;
           const isSendingNow = item.status === 'sending_now';
@@ -236,20 +236,20 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
           const isFailed = item.status === 'failed' || (item.retryCount ?? 0) > 0;
           const previewText = item.displayMessage ?? item.content;
           const itemClass = [
-            'bitfun-pending-queue-panel__item',
-            isEditing && 'bitfun-pending-queue-panel__item--editing',
-            isSending && 'bitfun-pending-queue-panel__item--sending',
-            isFailed && 'bitfun-pending-queue-panel__item--failed',
+            'halo-pending-queue-panel__item',
+            isEditing && 'halo-pending-queue-panel__item--editing',
+            isSending && 'halo-pending-queue-panel__item--sending',
+            isFailed && 'halo-pending-queue-panel__item--failed',
           ]
             .filter(Boolean)
             .join(' ');
           return (
             <li key={item.id} className={itemClass}>
-              <div className="bitfun-pending-queue-panel__content">
+              <div className="halo-pending-queue-panel__content">
                 {isEditing ? (
                   <>
                     <textarea
-                      className="bitfun-pending-queue-panel__editor"
+                      className="halo-pending-queue-panel__editor"
                       value={editingDraft}
                       autoFocus
                       rows={Math.min(6, Math.max(2, editingDraft.split('\n').length))}
@@ -264,23 +264,23 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                         }
                       }}
                     />
-                    <div className="bitfun-pending-queue-panel__editor-hint">
+                    <div className="halo-pending-queue-panel__editor-hint">
                       {t('pendingQueue.editorHint')}
                     </div>
                   </>
                 ) : isSendingNow ? (
                   <>
                     <div
-                      className="bitfun-pending-queue-panel__preview"
+                      className="halo-pending-queue-panel__preview"
                       title={previewText}
                     >
                       {previewText || (
-                        <span className="bitfun-pending-queue-panel__preview-empty">
+                        <span className="halo-pending-queue-panel__preview-empty">
                           {t('pendingQueue.emptyPlaceholder')}
                         </span>
                       )}
                     </div>
-                    <div className="bitfun-pending-queue-panel__sending-label">
+                    <div className="halo-pending-queue-panel__sending-label">
                       <Loader2 size={11} />
                       {t('pendingQueue.statusSending')}
                     </div>
@@ -288,7 +288,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                 ) : (
                   <>
                     <div
-                      className="bitfun-pending-queue-panel__preview"
+                      className="halo-pending-queue-panel__preview"
                       title={t('pendingQueue.actions.edit')}
                       role="button"
                       tabIndex={0}
@@ -301,26 +301,26 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                       }}
                     >
                       {previewText || (
-                        <span className="bitfun-pending-queue-panel__preview-empty">
+                        <span className="halo-pending-queue-panel__preview-empty">
                           {t('pendingQueue.emptyPlaceholder')}
                         </span>
                       )}
                     </div>
                     {isFailed && (
-                      <div className="bitfun-pending-queue-panel__failed-label">
+                      <div className="halo-pending-queue-panel__failed-label">
                         {t('pendingQueue.statusFailed')}
                       </div>
                     )}
                   </>
                 )}
               </div>
-              <div className="bitfun-pending-queue-panel__actions">
+              <div className="halo-pending-queue-panel__actions">
                 {isEditing ? (
                   <>
                     <Tooltip content={t('pendingQueue.actions.saveEdit')}>
                       <IconButton
                         size="small"
-                        className="bitfun-pending-queue-panel__btn bitfun-pending-queue-panel__btn--primary"
+                        className="halo-pending-queue-panel__btn halo-pending-queue-panel__btn--primary"
                         onClick={() => handleEditSave(item)}
                         aria-label={t('pendingQueue.actions.saveEdit')}
                       >
@@ -330,7 +330,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                     <Tooltip content={t('pendingQueue.actions.cancelEdit')}>
                       <IconButton
                         size="small"
-                        className="bitfun-pending-queue-panel__btn"
+                        className="halo-pending-queue-panel__btn"
                         onClick={handleEditCancel}
                         aria-label={t('pendingQueue.actions.cancelEdit')}
                       >
@@ -343,7 +343,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                     <Tooltip content={t('pendingQueue.actions.edit')}>
                       <IconButton
                         size="small"
-                        className="bitfun-pending-queue-panel__btn"
+                        className="halo-pending-queue-panel__btn"
                         disabled={isSending}
                         onClick={() => handleEditStart(item)}
                         aria-label={t('pendingQueue.actions.edit')}
@@ -355,7 +355,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                       <Tooltip content={t('pendingQueue.tooltip.sendNow')}>
                         <IconButton
                           size="small"
-                          className="bitfun-pending-queue-panel__btn bitfun-pending-queue-panel__btn--primary"
+                          className="halo-pending-queue-panel__btn halo-pending-queue-panel__btn--primary"
                           disabled={isSending}
                           onClick={() => {
                             void handleSendNow(item);
@@ -363,7 +363,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                           aria-label={t('pendingQueue.actions.sendNow')}
                         >
                           {isSendingNow ? (
-                            <Loader2 size={12} strokeWidth={2.5} className="bitfun-pending-queue-panel__spin" />
+                            <Loader2 size={12} strokeWidth={2.5} className="halo-pending-queue-panel__spin" />
                           ) : (
                             <ArrowUp size={12} strokeWidth={2.5} />
                           )}
@@ -373,7 +373,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                     <Tooltip content={t('pendingQueue.actions.delete')}>
                       <IconButton
                         size="small"
-                        className="bitfun-pending-queue-panel__btn bitfun-pending-queue-panel__btn--danger"
+                        className="halo-pending-queue-panel__btn halo-pending-queue-panel__btn--danger"
                         disabled={isSending}
                         onClick={() => handleDelete(item)}
                         aria-label={t('pendingQueue.actions.delete')}

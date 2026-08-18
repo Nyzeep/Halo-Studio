@@ -12,7 +12,7 @@ function extractShellCss(html: string): string {
   const css = match?.[1] ?? '';
   return css.replace(
     /^(\s*):root\s*\{/m,
-    '$1.bitfun-generative-widget-static-renderer {',
+    '$1.halo-generative-widget-static-renderer {',
   );
 }
 
@@ -49,17 +49,17 @@ export const GenerativeWidgetStaticRenderer: React.FC<GenerativeWidgetStaticRend
     if (!root) return;
 
     const globalWindow = window as Window & {
-      bitfunWidget?: { send: (data: unknown) => void };
+      haloWidget?: { send: (data: unknown) => void };
       glimpse?: { send: (data: unknown) => void };
       sendPrompt?: (text: string) => void;
     };
 
-    const prevBridge = globalWindow.bitfunWidget;
+    const prevBridge = globalWindow.haloWidget;
     const prevGlimpse = globalWindow.glimpse;
     const prevSendPrompt = globalWindow.sendPrompt;
 
     const noopBridge = { send: (_data: unknown) => {} };
-    globalWindow.bitfunWidget = noopBridge;
+    globalWindow.haloWidget = noopBridge;
     globalWindow.glimpse = noopBridge;
     globalWindow.sendPrompt = (_text: string) => {};
 
@@ -68,7 +68,7 @@ export const GenerativeWidgetStaticRenderer: React.FC<GenerativeWidgetStaticRend
 
     return () => {
       root.innerHTML = '';
-      globalWindow.bitfunWidget = prevBridge;
+      globalWindow.haloWidget = prevBridge;
       globalWindow.glimpse = prevGlimpse;
       globalWindow.sendPrompt = prevSendPrompt;
     };
@@ -90,13 +90,13 @@ export const GenerativeWidgetStaticRenderer: React.FC<GenerativeWidgetStaticRend
 
   return (
     <div
-      className={`bitfun-generative-widget-static-renderer ${className}`.trim()}
+      className={`halo-generative-widget-static-renderer ${className}`.trim()}
       style={themeStyle}
       data-theme={themePayload?.id ?? 'unknown'}
       data-theme-type={themePayload?.type ?? 'dark'}
     >
       <style>{shellCss}</style>
-      <div ref={rootRef} className="bitfun-generative-widget-static-renderer__root" />
+      <div ref={rootRef} className="halo-generative-widget-static-renderer__root" />
     </div>
   );
 };

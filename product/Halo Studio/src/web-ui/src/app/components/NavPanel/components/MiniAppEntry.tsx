@@ -47,10 +47,10 @@ const MiniAppEntry: React.FC<MiniAppEntryProps> = ({
   const overflowCount = Math.max(0, runningApps.length - visibleApps.length);
 
   return (
-    <div className="bitfun-nav-panel__miniapp-entry-wrap">
+    <div className="halo-nav-panel__miniapp-entry-wrap">
       <div
         className={[
-          'bitfun-nav-panel__miniapp-entry',
+          'halo-nav-panel__miniapp-entry',
           isActive && 'is-active',
           runningApps.length > 0 && 'has-running-apps',
           hasCustomizingApps && 'has-customizing-apps',
@@ -67,14 +67,14 @@ const MiniAppEntry: React.FC<MiniAppEntryProps> = ({
         tabIndex={0}
         aria-label={t('scenes.miniApps')}
       >
-        <span className="bitfun-nav-panel__miniapp-entry-main">
-          <span className="bitfun-nav-panel__miniapp-entry-copy">
-            <span className="bitfun-nav-panel__miniapp-entry-title">{t('scenes.miniApps')}</span>
-            <Badge variant="neutral" className="bitfun-nav-panel__miniapp-badge">Beta</Badge>
+        <span className="halo-nav-panel__miniapp-entry-main">
+          <span className="halo-nav-panel__miniapp-entry-copy">
+            <span className="halo-nav-panel__miniapp-entry-title">{t('scenes.miniApps')}</span>
+            <Badge variant="neutral" className="halo-nav-panel__miniapp-badge">Beta</Badge>
           </span>
         </span>
 
-        <span className="bitfun-nav-panel__miniapp-entry-apps">
+        <span className="halo-nav-panel__miniapp-entry-apps">
           {visibleApps.length > 0 ? (
             <>
               {visibleApps.map((app) => {
@@ -83,7 +83,7 @@ const MiniAppEntry: React.FC<MiniAppEntryProps> = ({
                   <Tooltip key={app.id} content={app.name} placement="right">
                     <span
                       className={[
-                        'bitfun-nav-panel__miniapp-bubble',
+                        'halo-nav-panel__miniapp-bubble',
                         isAppActive && 'is-active',
                         customizingIdSet.has(app.id) && 'is-customizing',
                       ].filter(Boolean).join(' ')}
@@ -106,14 +106,14 @@ const MiniAppEntry: React.FC<MiniAppEntryProps> = ({
                     >
                       {renderMiniAppIcon(app.icon || 'box', 14)}
                       {customizingIdSet.has(app.id) && (
-                        <span className="bitfun-nav-panel__miniapp-bubble-customize-dot" aria-hidden="true" />
+                        <span className="halo-nav-panel__miniapp-bubble-customize-dot" aria-hidden="true" />
                       )}
                     </span>
                   </Tooltip>
                 );
               })}
               {overflowCount > 0 ? (
-                <span className="bitfun-nav-panel__miniapp-bubble bitfun-nav-panel__miniapp-bubble--more">
+                <span className="halo-nav-panel__miniapp-bubble halo-nav-panel__miniapp-bubble--more">
                   +{overflowCount}
                 </span>
               ) : null}

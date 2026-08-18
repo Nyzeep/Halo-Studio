@@ -4,7 +4,7 @@
 
 
 
-.bitfun-context-card {
+.halo-context-card {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -92,7 +92,7 @@
   
   &__spinner {
     color: var(--color-accent-500);
-    animation: bitfun-context-spin 1s linear infinite;
+    animation: halo-context-spin 1s linear infinite;
   }
   
   
@@ -203,7 +203,7 @@
   }
   
   &__remove-btn {
-    @extend .bitfun-context-card__action-btn;
+    @extend .halo-context-card__action-btn;
     
     &:hover {
       background: var(--color-error-bg);
@@ -260,7 +260,7 @@
   &--invalid {
     border-color: var(--color-error-border);
     
-    .bitfun-context-card__indicator {
+    .halo-context-card__indicator {
       background-color: var(--color-error) !important;
     }
   }
@@ -270,7 +270,7 @@
   &--compact {
     padding: $size-gap-2;
     
-    .bitfun-context-card__icon {
+    .halo-context-card__icon {
       width: 24px;
       height: 24px;
       
@@ -280,12 +280,12 @@
       }
     }
     
-    .bitfun-context-card__title {
+    .halo-context-card__title {
       font-size: var(--font-size-xs);
     }
     
-    .bitfun-context-card__preview,
-    .bitfun-context-card__subtitle {
+    .halo-context-card__preview,
+    .halo-context-card__subtitle {
       display: none;
     }
   }
@@ -325,19 +325,19 @@
   
   
   &--file {
-    .bitfun-context-card__icon {
+    .halo-context-card__icon {
       color: var(--color-accent-500);
     }
   }
   
   &--code-snippet {
-    .bitfun-context-card__icon {
+    .halo-context-card__icon {
       color: var(--color-purple-500);
     }
   }
   
   &--mermaid-node {
-    .bitfun-context-card__icon {
+    .halo-context-card__icon {
       --context-card-mermaid-node-icon-rgb: 255, 54, 112;
 
       color: rgb(var(--context-card-mermaid-node-icon-rgb));
@@ -345,7 +345,7 @@
   }
   
   &--image {
-    .bitfun-context-card__icon {
+    .halo-context-card__icon {
       color: var(--color-success);
     }
   }
@@ -353,7 +353,7 @@
 
 
 
-@keyframes bitfun-context-spin {
+@keyframes halo-context-spin {
   from {
     transform: rotate(0deg);
   }

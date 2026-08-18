@@ -42,7 +42,7 @@ function canvasToolItem(toolName: string): FlowToolItem {
       success: true,
       result: {
         action: toolName,
-        artifactReference: 'bitfun-canvas://session/test/canvas/canvas_123',
+        artifactReference: 'halo-canvas://session/test/canvas/canvas_123',
         compiled: true,
         canvas: {
           status: 'compiled',

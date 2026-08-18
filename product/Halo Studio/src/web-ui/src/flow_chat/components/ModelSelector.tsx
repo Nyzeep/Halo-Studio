@@ -258,7 +258,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     const restoreRequestId = `acp-options:${sessionId}:${acpClientId}`;
     if (shouldShowRestoreToast) {
       acpRestoreToastShownRef.current = sessionId;
-      window.dispatchEvent(new CustomEvent('bitfun:acp-session-creation', {
+      window.dispatchEvent(new CustomEvent('halo:acp-session-creation', {
         detail: { phase: 'start', clientId: acpClientId, action: 'restore', requestId: restoreRequestId },
       }));
     }
@@ -284,7 +284,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       setAcpOptions(null);
     } finally {
       if (shouldShowRestoreToast) {
-        window.dispatchEvent(new CustomEvent('bitfun:acp-session-creation', {
+        window.dispatchEvent(new CustomEvent('halo:acp-session-creation', {
           detail: {
             phase: 'finish',
             clientId: acpClientId,
@@ -645,12 +645,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     return (
       <div
         ref={dropdownRef}
-        className={`bitfun-model-selector ${className}`}
+        className={`halo-model-selector ${className}`}
       >
         <Tooltip content={acpTooltip}>
           <button
             data-testid="chat-model-selector-btn"
-            className={`bitfun-model-selector__trigger ${dropdownOpen ? 'bitfun-model-selector__trigger--open' : ''}`}
+            className={`halo-model-selector__trigger ${dropdownOpen ? 'halo-model-selector__trigger--open' : ''}`}
             onClick={() => {
               const nextOpen = !dropdownOpen;
               setDropdownOpen(nextOpen);
@@ -660,36 +660,36 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             }}
             disabled={loading}
           >
-            <span className="bitfun-model-selector__name">
+            <span className="halo-model-selector__name">
               {getModelDisplayLabel(acpCurrentModel, currentAcpModelId)}
             </span>
             {acpFastMode?.enabled && (
-              <Zap size={9} className="bitfun-model-selector__fast-icon" />
+              <Zap size={9} className="halo-model-selector__fast-icon" />
             )}
             {tokenPercentage > 0 && (
-              <span className={`bitfun-model-selector__ctx-usage${tokenStatusClass ? ` bitfun-model-selector__ctx-usage--${tokenStatusClass}` : ''}`}>
+              <span className={`halo-model-selector__ctx-usage${tokenStatusClass ? ` halo-model-selector__ctx-usage--${tokenStatusClass}` : ''}`}>
                 · {tokenPercentage}%
               </span>
             )}
-            <ChevronDown size={10} className="bitfun-model-selector__chevron" />
+            <ChevronDown size={10} className="halo-model-selector__chevron" />
           </button>
         </Tooltip>
 
         {dropdownOpen && createPortal(
           <div
-            className="bitfun-model-selector__dropdown"
+            className="halo-model-selector__dropdown"
             ref={portalDropdownRef}
             style={dropdownStyle}
             data-testid="chat-model-selector-menu"
           >
-            <div className="bitfun-model-selector__dropdown-header">
+            <div className="halo-model-selector__dropdown-header">
               <span>ACP model</span>
-              <span className="bitfun-model-selector__dropdown-hint">
+              <span className="halo-model-selector__dropdown-hint">
                 {acpClientId}
               </span>
             </div>
 
-            <div className="bitfun-model-selector__list">
+            <div className="halo-model-selector__list">
               {acpAvailableModels.map(model => {
                 const isSelected = currentAcpModelId === model.id;
 
@@ -700,16 +700,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                       data-model-id={model.id}
                       data-model-name={model.modelName}
                       data-selected={isSelected ? 'true' : 'false'}
-                      className={`bitfun-model-selector__option ${isSelected ? 'bitfun-model-selector__option--selected' : ''}`}
+                      className={`halo-model-selector__option ${isSelected ? 'halo-model-selector__option--selected' : ''}`}
                       onClick={() => handleSelectModel(model.id)}
                     >
-                      <div className="bitfun-model-selector__option-main">
-                        <span className="bitfun-model-selector__option-name">
+                      <div className="halo-model-selector__option-main">
+                        <span className="halo-model-selector__option-name">
                           {model.modelName}
                         </span>
                       </div>
                       {isSelected && (
-                        <Check size={14} className="bitfun-model-selector__option-check" />
+                        <Check size={14} className="halo-model-selector__option-check" />
                       )}
                     </div>
                   </Tooltip>
@@ -718,13 +718,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             </div>
             {acpFastMode && (
               <>
-                <div className="bitfun-model-selector__divider" />
-                <div className="bitfun-model-selector__config-row">
-                  <div className="bitfun-model-selector__config-copy">
-                    <span className="bitfun-model-selector__config-name">
+                <div className="halo-model-selector__divider" />
+                <div className="halo-model-selector__config-row">
+                  <div className="halo-model-selector__config-copy">
+                    <span className="halo-model-selector__config-name">
                       {t('modelSelector.fastMode')}
                     </span>
-                    <span className="bitfun-model-selector__config-description">
+                    <span className="halo-model-selector__config-description">
                       {t('modelSelector.fastModeDescription')}
                     </span>
                   </div>
@@ -766,43 +766,43 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   return (
     <div
       ref={dropdownRef}
-      className={`bitfun-model-selector ${className}`}
+      className={`halo-model-selector ${className}`}
     >
       <Tooltip content={tooltipContent}>
         <button
           data-testid="chat-model-selector-btn"
-          className={`bitfun-model-selector__trigger ${dropdownOpen ? 'bitfun-model-selector__trigger--open' : ''}`}
+          className={`halo-model-selector__trigger ${dropdownOpen ? 'halo-model-selector__trigger--open' : ''}`}
           onClick={() => setDropdownOpen(!dropdownOpen)}
           disabled={loading}
         >
-          <span className="bitfun-model-selector__name">
+          <span className="halo-model-selector__name">
             {getModelDisplayLabel(currentModel, t('modelSelector.autoModel'))}
           </span>
           {currentModel?.enableThinking && (
-            <Brain size={9} className="bitfun-model-selector__thinking-icon" />
+            <Brain size={9} className="halo-model-selector__thinking-icon" />
           )}
           {currentModel?.reasoningEffort && (
-            <span className="bitfun-model-selector__effort-badge">
+            <span className="halo-model-selector__effort-badge">
               {currentModel.reasoningEffort}
             </span>
           )}
           {tokenPercentage > 0 && (
-            <span className={`bitfun-model-selector__ctx-usage${tokenStatusClass ? ` bitfun-model-selector__ctx-usage--${tokenStatusClass}` : ''}`}>
+            <span className={`halo-model-selector__ctx-usage${tokenStatusClass ? ` halo-model-selector__ctx-usage--${tokenStatusClass}` : ''}`}>
               · {tokenPercentage}%
             </span>
           )}
-          <ChevronDown size={10} className="bitfun-model-selector__chevron" />
+          <ChevronDown size={10} className="halo-model-selector__chevron" />
         </button>
       </Tooltip>
 
       {dropdownOpen && createPortal(
         <div
-          className="bitfun-model-selector__dropdown"
+          className="halo-model-selector__dropdown"
           ref={portalDropdownRef}
           style={dropdownStyle}
           data-testid="chat-model-selector-menu"
         >
-          <div className="bitfun-model-selector__dropdown-header">
+          <div className="halo-model-selector__dropdown-header">
             <span>{t('modelSelector.modelSelection')}</span>
           </div>
 
@@ -812,14 +812,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               data-model-id="auto"
               data-model-name="auto"
               data-selected={currentModelId === 'auto' ? 'true' : 'false'}
-              className={`bitfun-model-selector__option bitfun-model-selector__option--special ${currentModelId === 'auto' ? 'bitfun-model-selector__option--selected' : ''}`}
+              className={`halo-model-selector__option halo-model-selector__option--special ${currentModelId === 'auto' ? 'halo-model-selector__option--selected' : ''}`}
               onClick={() => handleSelectModel('auto')}
             >
-              <div className="bitfun-model-selector__option-main">
-                <span className="bitfun-model-selector__option-name">{t('modelSelector.autoModel')}</span>
+              <div className="halo-model-selector__option-main">
+                <span className="halo-model-selector__option-name">{t('modelSelector.autoModel')}</span>
               </div>
               {currentModelId === 'auto' && (
-                <Check size={14} className="bitfun-model-selector__option-check" />
+                <Check size={14} className="halo-model-selector__option-check" />
               )}
             </div>
           </Tooltip>
@@ -839,14 +839,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   data-model-id="primary"
                   data-model-name={primaryModel?.model_name || 'primary'}
                   data-selected={currentModelId === 'primary' ? 'true' : 'false'}
-                  className={`bitfun-model-selector__option bitfun-model-selector__option--special ${currentModelId === 'primary' ? 'bitfun-model-selector__option--selected' : ''}`}
+                  className={`halo-model-selector__option halo-model-selector__option--special ${currentModelId === 'primary' ? 'halo-model-selector__option--selected' : ''}`}
                   onClick={() => handleSelectModel('primary')}
                 >
-                  <div className="bitfun-model-selector__option-main">
-                    <span className="bitfun-model-selector__option-name">{t('modelSelector.primaryModel')}</span>
+                  <div className="halo-model-selector__option-main">
+                    <span className="halo-model-selector__option-name">{t('modelSelector.primaryModel')}</span>
                   </div>
                   {currentModelId === 'primary' && (
-                    <Check size={14} className="bitfun-model-selector__option-check" />
+                    <Check size={14} className="halo-model-selector__option-check" />
                   )}
                 </div>
               </Tooltip>
@@ -868,23 +868,23 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   data-model-id="fast"
                   data-model-name={fastModel?.model_name || 'fast'}
                   data-selected={currentModelId === 'fast' ? 'true' : 'false'}
-                  className={`bitfun-model-selector__option bitfun-model-selector__option--special ${currentModelId === 'fast' ? 'bitfun-model-selector__option--selected' : ''}`}
+                  className={`halo-model-selector__option halo-model-selector__option--special ${currentModelId === 'fast' ? 'halo-model-selector__option--selected' : ''}`}
                   onClick={() => handleSelectModel('fast')}
                 >
-                  <div className="bitfun-model-selector__option-main">
-                    <span className="bitfun-model-selector__option-name">{t('modelSelector.fastModel')}</span>
+                  <div className="halo-model-selector__option-main">
+                    <span className="halo-model-selector__option-name">{t('modelSelector.fastModel')}</span>
                   </div>
                   {currentModelId === 'fast' && (
-                    <Check size={14} className="bitfun-model-selector__option-check" />
+                    <Check size={14} className="halo-model-selector__option-check" />
                   )}
                 </div>
               </Tooltip>
             );
           })()}
 
-          <div className="bitfun-model-selector__divider" />
+          <div className="halo-model-selector__divider" />
 
-          <div className="bitfun-model-selector__list">
+          <div className="halo-model-selector__list">
             {availableModels.map(model => {
               const isSelected = currentModelId === model.id;
 
@@ -895,19 +895,19 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                     data-model-id={model.id}
                     data-model-name={model.modelName}
                     data-selected={isSelected ? 'true' : 'false'}
-                    className={`bitfun-model-selector__option ${isSelected ? 'bitfun-model-selector__option--selected' : ''}`}
+                    className={`halo-model-selector__option ${isSelected ? 'halo-model-selector__option--selected' : ''}`}
                     onClick={() => handleSelectModel(model.id)}
                   >
-                    <div className="bitfun-model-selector__option-main">
-                      <span className="bitfun-model-selector__option-name">
+                    <div className="halo-model-selector__option-main">
+                      <span className="halo-model-selector__option-name">
                         {model.modelName}
                         {model.enableThinking && (
-                          <Brain size={10} className="bitfun-model-selector__option-thinking" />
+                          <Brain size={10} className="halo-model-selector__option-thinking" />
                         )}
                       </span>
                     </div>
                     {isSelected && (
-                      <Check size={14} className="bitfun-model-selector__option-check" />
+                      <Check size={14} className="halo-model-selector__option-check" />
                     )}
                   </div>
                 </Tooltip>

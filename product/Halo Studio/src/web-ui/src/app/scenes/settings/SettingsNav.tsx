@@ -128,7 +128,7 @@ function highlightFirstMatch(text: string, query: string): React.ReactNode {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="bitfun-settings-nav__search-highlight">
+      <mark className="halo-settings-nav__search-highlight">
         {text.slice(idx, idx + qi.length)}
       </mark>
       {text.slice(idx + qi.length)}
@@ -309,17 +309,17 @@ const SettingsNav: React.FC = () => {
   } = useSettingsNav();
 
   return (
-    <div className="bitfun-settings-nav" data-testid="settings-nav">
-      <div className="bitfun-settings-nav__header">
-        <span className="bitfun-settings-nav__title">
+    <div className="halo-settings-nav" data-testid="settings-nav">
+      <div className="halo-settings-nav__header">
+        <span className="halo-settings-nav__title">
           {t('shared:features.settings')}
         </span>
       </div>
 
-      <div className="bitfun-settings-nav__search">
+      <div className="halo-settings-nav__search">
         <Search
           ref={searchInputRef}
-          className="bitfun-settings-nav__search-field"
+          className="halo-settings-nav__search-field"
           size="small"
           value={draftQuery}
           onChange={setDraftQuery}
@@ -337,7 +337,7 @@ const SettingsNav: React.FC = () => {
       <div
         ref={resultsRef}
         id="settings-nav-results"
-        className="bitfun-settings-nav__sections"
+        className="halo-settings-nav__sections"
         role={isSearchMode ? 'listbox' : undefined}
         tabIndex={isSearchMode && results.length > 0 ? 0 : undefined}
         onKeyDown={handleResultsKeyDown}
@@ -350,11 +350,11 @@ const SettingsNav: React.FC = () => {
         {isSearchMode ? (
           <>
             {results.length === 0 ? (
-              <div className="bitfun-settings-nav__search-empty" role="status">
+              <div className="halo-settings-nav__search-empty" role="status">
                 {t('configCenter.searchNoResults')}
               </div>
             ) : (
-              <div className="bitfun-settings-nav__search-results">
+              <div className="halo-settings-nav__search-results">
                 {results.map((row, index) => {
                   const line = `${row.categoryLabel} › ${row.tabLabel}`;
                   const active = activeTab === row.tabId;
@@ -367,7 +367,7 @@ const SettingsNav: React.FC = () => {
                       role="option"
                       aria-selected={active}
                       className={[
-                        'bitfun-settings-nav__search-result-item',
+                        'halo-settings-nav__search-result-item',
                         active && 'is-active',
                         highlighted && 'is-highlighted',
                       ]
@@ -380,11 +380,11 @@ const SettingsNav: React.FC = () => {
                       }}
                       onFocus={() => preloadTab(row.tabId)}
                     >
-                      <span className="bitfun-settings-nav__search-result-line">
+                      <span className="halo-settings-nav__search-result-line">
                         {highlightFirstMatch(line, displayQuery)}
                       </span>
                       {row.description ? (
-                        <span className="bitfun-settings-nav__search-result-desc">
+                        <span className="halo-settings-nav__search-result-desc">
                           {highlightFirstMatch(row.description, displayQuery)}
                         </span>
                       ) : null}
@@ -396,14 +396,14 @@ const SettingsNav: React.FC = () => {
           </>
         ) : (
           SETTINGS_CATEGORIES.map((category) => (
-            <div key={category.id} className="bitfun-settings-nav__category">
-              <div className="bitfun-settings-nav__category-header">
-                <span className="bitfun-settings-nav__category-label">
+            <div key={category.id} className="halo-settings-nav__category">
+              <div className="halo-settings-nav__category-header">
+                <span className="halo-settings-nav__category-label">
                   {t(category.nameKey, { defaultValue: category.id })}
                 </span>
               </div>
 
-              <div className="bitfun-settings-nav__items">
+              <div className="halo-settings-nav__items">
                 {category.tabs.map((tabDef) => (
                   <button
                     key={tabDef.id}
@@ -411,7 +411,7 @@ const SettingsNav: React.FC = () => {
                     data-testid="settings-nav-tab"
                     data-settings-tab={tabDef.id}
                     className={[
-                      'bitfun-settings-nav__item',
+                      'halo-settings-nav__item',
                       activeTab === tabDef.id && 'is-active',
                     ]
                       .filter(Boolean)
@@ -420,11 +420,11 @@ const SettingsNav: React.FC = () => {
                     onPointerEnter={() => preloadTab(tabDef.id)}
                     onFocus={() => preloadTab(tabDef.id)}
                   >
-                    <span className="bitfun-settings-nav__item-label">
+                    <span className="halo-settings-nav__item-label">
                       {t(tabDef.labelKey, { defaultValue: tabDef.id })}
                     </span>
                     {tabDef.beta ? (
-                      <Badge variant="warning" className="bitfun-settings-nav__item-beta">
+                      <Badge variant="warning" className="halo-settings-nav__item-beta">
                         {t('configCenter.beta')}
                       </Badge>
                     ) : null}

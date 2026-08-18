@@ -1,8 +1,8 @@
 {
-  "name": "@bitfun/web-ui",
+  "name": "@halo-studio/web-ui",
   "version": "0.2.14",
   "private": true,
-  "description": "BitFun Web UI - 支持 Desktop 和 Server 两种部署方式",
+  "description": "Halo Studio Web UI - 支持 Desktop 和 Server 两种部署方式",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -7,15 +7,15 @@ import {
 type CanvasRuntimeRecord = Record<string, any>;
 
 type CanvasRuntimeWindow = Window & {
-  BitfunCanvasSDK?: CanvasRuntimeRecord;
-  BitfunCanvasSDKAdapters?: CanvasRuntimeRecord;
-  BitfunCanvasRuntime?: CanvasRuntimeRecord;
+  HaloCanvasSDK?: CanvasRuntimeRecord;
+  HaloCanvasSDKAdapters?: CanvasRuntimeRecord;
+  HaloCanvasRuntime?: CanvasRuntimeRecord;
   ReactDOM?: {
     createRoot?: (element: HTMLElement) => {
       render: (node: React.ReactNode) => void;
     };
   };
-  __bitfunCanvasPost?: (type: string, payload?: CanvasRuntimeRecord) => void;
+  __haloCanvasPost?: (type: string, payload?: CanvasRuntimeRecord) => void;
 };
 
 let reactRoot: { render: (node: React.ReactNode) => void } | null = null;
@@ -28,13 +28,13 @@ function runtimeWindow(): CanvasRuntimeWindow {
 
 function currentRevision(): string {
   return document
-    .querySelector('meta[name="bitfun-canvas-revision"]')
+    .querySelector('meta[name="halo-canvas-revision"]')
     ?.getAttribute('content') || '';
 }
 
 function postCanvasMessage(type: string, payload: CanvasRuntimeRecord = {}) {
   const revision = currentRevision();
-  const post = runtimeWindow().__bitfunCanvasPost;
+  const post = runtimeWindow().__haloCanvasPost;
   if (post) {
     post(type, { sourceRevisionSeen: revision, ...payload });
     return;
@@ -51,14 +51,14 @@ function errorText(error: unknown): string {
 }
 
 function postReady(): void {
-  postCanvasMessage('bitfun-canvas-ready');
+  postCanvasMessage('halo-canvas-ready');
 }
 
 function postRuntimeError(error: unknown): void {
   const details = error && typeof error === 'object'
     ? error as { message?: unknown; name?: unknown; stack?: unknown }
     : null;
-  postCanvasMessage('bitfun-canvas-runtime-error', {
+  postCanvasMessage('halo-canvas-runtime-error', {
     message: details?.message ? String(details.message) : String(error || 'Canvas runtime error'),
     name: details?.name ? String(details.name) : undefined,
     stack: details?.stack ? String(details.stack) : undefined,
@@ -67,10 +67,10 @@ function postRuntimeError(error: unknown): void {
 
 function installSdkAdapters(): void {
   const target = runtimeWindow();
-  if (!target.BitfunCanvasSDK || !target.BitfunCanvasSDKAdapters) return;
-  target.BitfunCanvasSDK = {
-    ...target.BitfunCanvasSDK,
-    ...target.BitfunCanvasSDKAdapters,
+  if (!target.HaloCanvasSDK || !target.HaloCanvasSDKAdapters) return;
+  target.HaloCanvasSDK = {
+    ...target.HaloCanvasSDK,
+    ...target.HaloCanvasSDKAdapters,
   };
 }
 
@@ -108,7 +108,7 @@ function renderErrorPanel(error: unknown): void {
   }
 
   rootElement.innerHTML =
-    '<main style="max-width:860px;margin:0 auto;padding:12px;border:1px solid var(--border-base);border-radius:8px"><h1 style="font-size:18px;margin:0 0 8px">Canvas runtime error</h1><pre style="white-space:pre-wrap;color:var(--bitfun-canvas-danger)"></pre></main>';
+    '<main style="max-width:860px;margin:0 auto;padding:12px;border:1px solid var(--border-base);border-radius:8px"><h1 style="font-size:18px;margin:0 0 8px">Canvas runtime error</h1><pre style="white-space:pre-wrap;color:var(--halo-canvas-danger)"></pre></main>';
   const pre = rootElement.querySelector('pre');
   if (pre) pre.textContent = errorText(error);
 }
@@ -118,18 +118,18 @@ function reportRuntimeError(error: unknown): void {
   postRuntimeError(error);
 }
 
-export function installBitfunCanvasRuntimeApp(): void {
-  rootElement = document.getElementById('bitfun-canvas-root');
+export function installHaloCanvasRuntimeApp(): void {
+  rootElement = document.getElementById('halo-canvas-root');
   const target = runtimeWindow();
-  const previousRuntime = target.BitfunCanvasRuntime || {};
+  const previousRuntime = target.HaloCanvasRuntime || {};
 
-  target.BitfunCanvasRuntime = {
+  target.HaloCanvasRuntime = {
     ...previousRuntime,
     h: React.createElement,
     Fragment: React.Fragment,
     moduleStarted() {
       installSdkAdapters();
-      postCanvasMessage('bitfun-canvas-module-started');
+      postCanvasMessage('halo-canvas-module-started');
     },
     reportRuntimeError,
     mount(component: React.ComponentType) {

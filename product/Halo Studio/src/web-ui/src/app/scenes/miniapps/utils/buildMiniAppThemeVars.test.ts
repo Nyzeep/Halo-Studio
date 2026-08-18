@@ -46,13 +46,13 @@ function createTheme(type: ThemeType, scrollbar?: { thumb: string; thumbHover: s
 describe('buildMiniAppThemeVars', () => {
   it('keeps dark and light scrollbar fallbacks output-equivalent', () => {
     expect(buildMiniAppThemeVars(createTheme('dark'))?.vars).toMatchObject({
-      '--bitfun-scrollbar-thumb': 'rgba(255, 255, 255, 0.12)',
-      '--bitfun-scrollbar-thumb-hover': 'rgba(255, 255, 255, 0.24)',
+      '--halo-scrollbar-thumb': 'rgba(255, 255, 255, 0.12)',
+      '--halo-scrollbar-thumb-hover': 'rgba(255, 255, 255, 0.24)',
     });
 
     expect(buildMiniAppThemeVars(createTheme('light'))?.vars).toMatchObject({
-      '--bitfun-scrollbar-thumb': 'rgba(0, 0, 0, 0.15)',
-      '--bitfun-scrollbar-thumb-hover': 'rgba(0, 0, 0, 0.3)',
+      '--halo-scrollbar-thumb': 'rgba(0, 0, 0, 0.15)',
+      '--halo-scrollbar-thumb-hover': 'rgba(0, 0, 0, 0.3)',
     });
   });
 
@@ -63,8 +63,8 @@ describe('buildMiniAppThemeVars', () => {
         thumbHover: 'theme-thumb-hover',
       }))?.vars,
     ).toMatchObject({
-      '--bitfun-scrollbar-thumb': 'theme-thumb',
-      '--bitfun-scrollbar-thumb-hover': 'theme-thumb-hover',
+      '--halo-scrollbar-thumb': 'theme-thumb',
+      '--halo-scrollbar-thumb-hover': 'theme-thumb-hover',
     });
   });
 });

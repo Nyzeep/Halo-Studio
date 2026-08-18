@@ -110,7 +110,7 @@ vi.mock('@/app/stores/sessionModeStore', () => ({
 
 vi.mock('@/infrastructure/contexts/WorkspaceContext', () => ({
   useWorkspaceContext: () => ({
-    workspacePath: 'D:/workspace/BitFun',
+    workspacePath: 'D:/workspace/Halo',
   }),
 }));
 
@@ -212,7 +212,7 @@ function createSession(overrides: Partial<Session> = {}): Session {
     isHistorical: true,
     todos: [],
     mode: 'agentic',
-    workspacePath: 'D:/workspace/BitFun',
+    workspacePath: 'D:/workspace/Halo',
     sessionKind: 'normal',
     ...overrides,
   };

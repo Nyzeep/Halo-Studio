@@ -124,7 +124,7 @@ function createHistoricalSession(overrides: Record<string, unknown> = {}) {
     historyState: 'metadata-only',
     todos: [],
     mode: 'agentic',
-    workspacePath: 'D:/workspace/BitFun',
+    workspacePath: 'D:/workspace/Halo',
     sessionKind: 'normal',
     ...overrides,
   };
@@ -190,7 +190,7 @@ describe('FlowChatManager initialization', () => {
     };
 
     const manager = FlowChatManager.getInstance();
-    const initialize = manager.initialize('D:/workspace/BitFun');
+    const initialize = manager.initialize('D:/workspace/Halo');
 
     await flushAsyncWork();
     manager.destroy();
@@ -227,8 +227,8 @@ describe('FlowChatManager initialization', () => {
     };
 
     const manager = FlowChatManager.getInstance();
-    const firstInitialize = manager.initialize('D:/workspace/BitFun');
-    const secondInitialize = manager.initialize('D:/workspace/BitFun');
+    const firstInitialize = manager.initialize('D:/workspace/Halo');
+    const secondInitialize = manager.initialize('D:/workspace/Halo');
 
     await flushAsyncWork();
 
@@ -284,12 +284,12 @@ describe('FlowChatManager initialization', () => {
     };
 
     const manager = FlowChatManager.getInstance();
-    const initialize = manager.initialize('D:/workspace/BitFun');
+    const initialize = manager.initialize('D:/workspace/Halo');
 
     await flushAsyncWork();
     expect(storeMocks.store.loadSessionHistory).toHaveBeenCalledWith(
       'history-1',
-      'D:/workspace/BitFun',
+      'D:/workspace/Halo',
       undefined,
       undefined,
       undefined,
@@ -336,7 +336,7 @@ describe('FlowChatManager initialization', () => {
     };
 
     const manager = FlowChatManager.getInstance();
-    const initialize = manager.initialize('D:/workspace/BitFun');
+    const initialize = manager.initialize('D:/workspace/Halo');
 
     await flushAsyncWork();
     activeSessionId = 'other-1';
@@ -353,7 +353,7 @@ describe('FlowChatManager initialization', () => {
   });
 
   it('does not let an older workspace initialization switch after a newer workspace initialize starts', async () => {
-    const bitfunHistoryRestore = createDeferred<void>();
+    const haloHistoryRestore = createDeferred<void>();
     const sessions = new Map<string, any>([
       ['history-1', createHistoricalSession()],
       ['other-1', createHistoricalSession({
@@ -372,7 +372,7 @@ describe('FlowChatManager initialization', () => {
         workspacePath: string,
       ) => ({
         sessions: [],
-        totalTopLevelCount: workspacePath === 'D:/workspace/BitFun' ? 1 : 0,
+        totalTopLevelCount: workspacePath === 'D:/workspace/Halo' ? 1 : 0,
         hasMore: false,
       })),
       getState: vi.fn(() => ({
@@ -381,7 +381,7 @@ describe('FlowChatManager initialization', () => {
       })),
       loadSessionHistory: vi.fn((sessionId: string) => {
         if (sessionId === 'history-1') {
-          return bitfunHistoryRestore.promise;
+          return haloHistoryRestore.promise;
         }
         return Promise.resolve();
       }),
@@ -391,13 +391,13 @@ describe('FlowChatManager initialization', () => {
     };
 
     const manager = FlowChatManager.getInstance();
-    const bitfunInitialize = manager.initialize('D:/workspace/BitFun');
+    const haloInitialize = manager.initialize('D:/workspace/Halo');
 
     await flushAsyncWork();
     await expect(manager.initialize('D:/workspace/Other')).resolves.toBe(true);
 
-    bitfunHistoryRestore.resolve();
-    await expect(bitfunInitialize).resolves.toBe(true);
+    haloHistoryRestore.resolve();
+    await expect(haloInitialize).resolves.toBe(true);
 
     expect(storeMocks.store.switchSession).toHaveBeenCalledWith('other-1');
     expect(storeMocks.store.switchSession).not.toHaveBeenCalledWith('history-1');
@@ -414,7 +414,7 @@ describe('FlowChatManager initialization', () => {
         historyState: 'ready',
         createdAt: 10,
         lastFinishedAt: 30,
-        workspacePath: 'D:/workspace/BitFun',
+        workspacePath: 'D:/workspace/Halo',
         sessionKind: 'normal',
       })],
       ['subagent-1', createHistoricalSession({
@@ -424,7 +424,7 @@ describe('FlowChatManager initialization', () => {
         historyState: 'ready',
         createdAt: 40,
         lastFinishedAt: undefined,
-        workspacePath: 'D:/workspace/BitFun',
+        workspacePath: 'D:/workspace/Halo',
         sessionKind: 'subagent',
         parentSessionId: 'parent-1',
         mode: 'Explore',
@@ -450,7 +450,7 @@ describe('FlowChatManager initialization', () => {
     };
 
     const manager = FlowChatManager.getInstance();
-    await expect(manager.initialize('D:/workspace/BitFun')).resolves.toBe(true);
+    await expect(manager.initialize('D:/workspace/Halo')).resolves.toBe(true);
 
     expect(storeMocks.store.switchSession).toHaveBeenCalledTimes(1);
     expect(storeMocks.store.switchSession).toHaveBeenCalledWith('parent-1');

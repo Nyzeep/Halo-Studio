@@ -1,4 +1,4 @@
-.bitfun-acp-plan {
+.halo-acp-plan {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -47,7 +47,7 @@
     &--completed {
       color: var(--color-text-muted);
 
-      .bitfun-acp-plan__content {
+      .halo-acp-plan__content {
         text-decoration: line-through;
       }
     }
@@ -67,7 +67,7 @@
 
     &--active {
       color: var(--color-accent-500);
-      animation: bitfun-acp-plan-spin 1.2s linear infinite;
+      animation: halo-acp-plan-spin 1.2s linear infinite;
     }
 
     &--pending {
@@ -81,7 +81,7 @@
   }
 }
 
-@keyframes bitfun-acp-plan-spin {
+@keyframes halo-acp-plan-spin {
   from {
     transform: rotate(0deg);
   }

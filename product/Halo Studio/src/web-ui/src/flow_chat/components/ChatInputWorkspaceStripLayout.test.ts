@@ -56,7 +56,7 @@ describe('ChatInputWorkspaceStrip layout styles', () => {
     const component = readWorkspaceStripComponent();
     const pickerStylesheet = readDispatchPickerStylesheet();
     const actionsStart = component.indexOf(
-      '<div className="bitfun-chat-input-workspace-strip__actions">',
+      '<div className="halo-chat-input-workspace-strip__actions">',
     );
     const dispatchIndex = component.indexOf('<DispatchTargetPicker', actionsStart);
     const permissionIndex = component.indexOf('{showPermission ? (', actionsStart);

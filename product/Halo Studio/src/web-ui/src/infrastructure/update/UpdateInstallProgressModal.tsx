@@ -58,7 +58,7 @@ export const UpdateInstallProgressModal: React.FC<UpdateInstallProgressModalProp
         type="error"
         message={errorMessage}
         showIcon
-        className="bitfun-update-progress__alert"
+        className="halo-update-progress__alert"
       />
     );
   } else if (installed) {
@@ -68,9 +68,9 @@ export const UpdateInstallProgressModal: React.FC<UpdateInstallProgressModalProp
           type="success"
           message={t('update.installedMessage')}
           showIcon
-          className="bitfun-update-progress__alert"
+          className="halo-update-progress__alert"
         />
-        <div className="bitfun-update-progress__actions">
+        <div className="halo-update-progress__actions">
           <Button variant="secondary" size="medium" onClick={onCloseInstalled}>
             {t('update.restartLater')}
           </Button>
@@ -84,7 +84,7 @@ export const UpdateInstallProgressModal: React.FC<UpdateInstallProgressModalProp
     body = (
       <>
         <div
-          className="bitfun-update-progress__bar"
+          className="halo-update-progress__bar"
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
@@ -94,18 +94,18 @@ export const UpdateInstallProgressModal: React.FC<UpdateInstallProgressModalProp
           <div
             className={
               pct != null
-                ? 'bitfun-update-progress__fill'
-                : 'bitfun-update-progress__fill bitfun-update-progress__fill--indeterminate'
+                ? 'halo-update-progress__fill'
+                : 'halo-update-progress__fill halo-update-progress__fill--indeterminate'
             }
             style={pct != null ? { width: `${pct}%` } : undefined}
           />
         </div>
-        <p className="bitfun-update-progress__hint">
+        <p className="halo-update-progress__hint">
           {pct != null
             ? t('update.progressPercent', { percent: String(pct) })
             : t('update.progressUnknown')}
         </p>
-        <p className="bitfun-update-progress__restart">{t('update.restartHint')}</p>
+        <p className="halo-update-progress__restart">{t('update.restartHint')}</p>
       </>
     );
   }
@@ -118,7 +118,7 @@ export const UpdateInstallProgressModal: React.FC<UpdateInstallProgressModalProp
       showCloseButton={!!error || !!installed}
       size="small"
     >
-      <div className="bitfun-update-progress">
+      <div className="halo-update-progress">
         {body}
       </div>
     </Modal>

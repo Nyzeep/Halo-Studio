@@ -5,7 +5,7 @@
 
 import type * as monaco from 'monaco-editor';
 import { monacoApi, requireMonaco } from './monacoRuntime';
-import { BitFunDarkTheme, BitFunDarkThemeMetadata } from '../themes/bitfun-dark.theme';
+import { HaloDarkTheme, HaloDarkThemeMetadata } from '../themes/halo-dark.theme';
 import { createLogger } from '@/shared/utils/logger';
 
 const log = createLogger('ThemeManager');
@@ -21,7 +21,7 @@ class ThemeManager {
   private static instance: ThemeManager;
   
   private registeredThemes = new Set<string>();
-  private currentThemeId: string = BitFunDarkThemeMetadata.id;
+  private currentThemeId: string = HaloDarkThemeMetadata.id;
   private listeners: ThemeChangeListener[] = [];
   private initialized = false;
   
@@ -42,7 +42,7 @@ class ThemeManager {
       return;
     }
     
-    this.registerTheme(BitFunDarkThemeMetadata.id, BitFunDarkTheme);
+    this.registerTheme(HaloDarkThemeMetadata.id, HaloDarkTheme);
     this.syncWithThemeService();
     
     this.initialized = true;
@@ -108,7 +108,7 @@ class ThemeManager {
   }
   
   public getDefaultThemeId(): string {
-    return BitFunDarkThemeMetadata.id;
+    return HaloDarkThemeMetadata.id;
   }
   
   public isThemeRegistered(id: string): boolean {
@@ -141,8 +141,8 @@ class ThemeManager {
       
       if (currentTheme) {
         this.currentThemeId = monacoThemeSync.attachMonaco(requireMonaco(), currentTheme);
-        this.registeredThemes.add('bitfun-dark');
-        this.registeredThemes.add('bitfun-light');
+        this.registeredThemes.add('halo-dark');
+        this.registeredThemes.add('halo-light');
         if (currentTheme.monaco) {
           this.registeredThemes.add(currentTheme.id);
         }

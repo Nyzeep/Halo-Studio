@@ -34,7 +34,7 @@
   }
 
   &__textarea {
-    .bitfun-textarea__field {
+    .halo-textarea__field {
       min-height: 96px;
       resize: vertical;
       font-family: var(--font-family-mono);
@@ -42,7 +42,7 @@
       line-height: 1.5;
     }
 
-    &--masked .bitfun-textarea__field {
+    &--masked .halo-textarea__field {
       -webkit-text-security: disc;
     }
   }
@@ -52,11 +52,11 @@
     flex-wrap: wrap;
     gap: 12px;
 
-    .bitfun-checkbox__label {
+    .halo-checkbox__label {
       color: var(--color-text-primary);
     }
 
-    .bitfun-checkbox__description {
+    .halo-checkbox__description {
       color: var(--color-text-secondary);
     }
   }

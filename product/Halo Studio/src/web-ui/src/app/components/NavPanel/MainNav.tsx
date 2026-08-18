@@ -303,13 +303,13 @@ const MainNav: React.FC<MainNavProps> = ({
   const workspaceMenuPortal = workspaceMenuOpen ? createPortal(
     <div
       ref={workspaceMenuRef}
-      className={`bitfun-nav-panel__workspace-menu${workspaceMenuClosing ? ' is-closing' : ''}`}
+      className={`halo-nav-panel__workspace-menu${workspaceMenuClosing ? ' is-closing' : ''}`}
       role="menu"
       style={{ top: workspaceMenuPos.top, left: workspaceMenuPos.left }}
     >
       <button
         type="button"
-        className="bitfun-nav-panel__workspace-menu-item"
+        className="halo-nav-panel__workspace-menu-item"
         role="menuitem"
         onClick={() => { closeWorkspaceMenu(); void handleOpenProject(); }}
       >
@@ -318,31 +318,31 @@ const MainNav: React.FC<MainNavProps> = ({
       </button>
       <button
         type="button"
-        className="bitfun-nav-panel__workspace-menu-item"
+        className="halo-nav-panel__workspace-menu-item"
         role="menuitem"
         onClick={() => { closeWorkspaceMenu(); handleNewProject(); }}
       >
         <FolderPlus size={13} />
         <span>{t('header.newProject')}</span>
       </button>
-      <div className="bitfun-nav-panel__workspace-menu-divider" role="separator" />
-      <div className="bitfun-nav-panel__workspace-menu-section-title">
+      <div className="halo-nav-panel__workspace-menu-divider" role="separator" />
+      <div className="halo-nav-panel__workspace-menu-section-title">
         <History size={12} aria-hidden="true" />
         <span>{t('header.recentWorkspaces')}</span>
       </div>
       {localRecentWorkspaces.length === 0 ? (
-        <div className="bitfun-nav-panel__workspace-menu-empty">
+        <div className="halo-nav-panel__workspace-menu-empty">
           <span>{t('header.noRecentWorkspaces')}</span>
         </div>
       ) : (
-        <div className="bitfun-nav-panel__workspace-menu-workspaces">
+        <div className="halo-nav-panel__workspace-menu-workspaces">
           {localRecentWorkspaces.map((workspace) => {
             const { hostPrefix, folderLabel, tooltip } = getRecentWorkspaceLineParts(workspace);
             return (
               <button
                 key={workspace.id}
                 type="button"
-                className="bitfun-nav-panel__workspace-menu-item bitfun-nav-panel__workspace-menu-item--workspace"
+                className="halo-nav-panel__workspace-menu-item halo-nav-panel__workspace-menu-item--workspace"
                 role="menuitem"
                 title={tooltip}
                 onClick={() => { void handleSwitchWorkspace(workspace.id); }}
@@ -350,16 +350,16 @@ const MainNav: React.FC<MainNavProps> = ({
                 data-workspace-id={workspace.id}
               >
                 <FolderOpen size={13} aria-hidden="true" />
-                <span className="bitfun-nav-panel__workspace-menu-item-main">
+                <span className="halo-nav-panel__workspace-menu-item-main">
                   {hostPrefix ? (
                     <>
-                      <span className="bitfun-nav-panel__workspace-menu-item-host">{hostPrefix}</span>
-                      <span className="bitfun-nav-panel__workspace-menu-item-host-sep" aria-hidden>
+                      <span className="halo-nav-panel__workspace-menu-item-host">{hostPrefix}</span>
+                      <span className="halo-nav-panel__workspace-menu-item-host-sep" aria-hidden>
                         {' / '}
                       </span>
                     </>
                   ) : null}
-                  <span className="bitfun-nav-panel__workspace-menu-item-name">{folderLabel}</span>
+                  <span className="halo-nav-panel__workspace-menu-item-name">{folderLabel}</span>
                 </span>
                 {workspace.id === currentWorkspace?.id ? <Check size={12} aria-hidden="true" /> : null}
               </button>
@@ -377,22 +377,22 @@ const MainNav: React.FC<MainNavProps> = ({
   return (
     <>
       {legacyNavigationEnabled ? (
-        <div className="bitfun-nav-panel__brand-header">
-          <div className="bitfun-nav-panel__brand-search">
+        <div className="halo-nav-panel__brand-header">
+          <div className="halo-nav-panel__brand-search">
             <Tooltip content={t('nav.search.triggerTooltip')} placement="right" followCursor>
               <button
                 type="button"
-                className="bitfun-nav-panel__search-trigger"
+                className="halo-nav-panel__search-trigger"
                 onClick={() => setSearchOpen(true)}
                 aria-label={t('nav.search.triggerTooltip')}
                 data-testid="nav-search-trigger"
               >
-                <span className="bitfun-nav-panel__search-trigger__icon" aria-hidden="true">
-                  <span className="bitfun-nav-panel__search-trigger__icon-inner">
+                <span className="halo-nav-panel__search-trigger__icon" aria-hidden="true">
+                  <span className="halo-nav-panel__search-trigger__icon-inner">
                     <Search size={13} />
                   </span>
                 </span>
-                <span className="bitfun-nav-panel__search-trigger__label">
+                <span className="halo-nav-panel__search-trigger__label">
                   {t('nav.search.triggerPlaceholder')}
                 </span>
               </button>
@@ -404,17 +404,17 @@ const MainNav: React.FC<MainNavProps> = ({
         </div>
       ) : null}
 
-      <div className="bitfun-nav-panel__top-actions">
+      <div className="halo-nav-panel__top-actions">
         <Tooltip content={createCodeTooltip} placement="right" followCursor>
           <button
             type="button"
-            className="bitfun-nav-panel__top-action-btn"
+            className="halo-nav-panel__top-action-btn"
             onClick={() => { void handleCreateCodeSession(); }}
             disabled={!legacyNavigationEnabled && !canOpenWorkbenchSession}
             aria-label={createCodeTooltip}
             data-testid="nav-new-code-session-btn"
           >
-            <span className="bitfun-nav-panel__top-action-icon-circle" aria-hidden="true">
+            <span className="halo-nav-panel__top-action-icon-circle" aria-hidden="true">
               <Plus size={12} />
             </span>
             <span>{t('shared:agents.code')}</span>
@@ -424,12 +424,12 @@ const MainNav: React.FC<MainNavProps> = ({
         <Tooltip content={t('shared:features.files')} placement="right" followCursor>
           <button
             type="button"
-            className={`bitfun-nav-panel__top-action-btn${activeTabId === 'file-viewer' ? ' is-active' : ''}`}
+            className={`halo-nav-panel__top-action-btn${activeTabId === 'file-viewer' ? ' is-active' : ''}`}
             onClick={handleOpenFiles}
             aria-label={t('shared:features.files')}
             data-testid="nav-file-viewer-btn"
           >
-            <span className="bitfun-nav-panel__top-action-icon-slot" aria-hidden="true">
+            <span className="halo-nav-panel__top-action-icon-slot" aria-hidden="true">
               <FileCode2 size={15} />
             </span>
             <span>{t('shared:features.files')}</span>
@@ -439,12 +439,12 @@ const MainNav: React.FC<MainNavProps> = ({
         <Tooltip content="Git" placement="right" followCursor>
           <button
             type="button"
-            className={`bitfun-nav-panel__top-action-btn${activeTabId === 'git' ? ' is-active' : ''}`}
+            className={`halo-nav-panel__top-action-btn${activeTabId === 'git' ? ' is-active' : ''}`}
             onClick={handleOpenGit}
             aria-label="Git"
             data-testid="nav-git-btn"
           >
-            <span className="bitfun-nav-panel__top-action-icon-slot" aria-hidden="true">
+            <span className="halo-nav-panel__top-action-icon-slot" aria-hidden="true">
               <GitBranch size={15} />
             </span>
             <span>Git</span>
@@ -452,17 +452,17 @@ const MainNav: React.FC<MainNavProps> = ({
         </Tooltip>
       </div>
 
-      <div className="bitfun-nav-panel__sections" data-testid="nav-sections">
-        <div className="bitfun-nav-panel__section">
+      <div className="halo-nav-panel__sections" data-testid="nav-sections">
+        <div className="halo-nav-panel__section">
           <SectionHeader
             label={t('nav.items.sessions')}
             collapsible
             isOpen={expandedSections.has('sessions')}
             onToggle={() => toggleSection('sessions')}
           />
-          <div className={`bitfun-nav-panel__collapsible${expandedSections.has('sessions') ? '' : ' is-collapsed'}`}>
-            <div className="bitfun-nav-panel__collapsible-inner">
-              <div className="bitfun-nav-panel__items bitfun-nav-panel__items--session-blocks">
+          <div className={`halo-nav-panel__collapsible${expandedSections.has('sessions') ? '' : ' is-collapsed'}`}>
+            <div className="halo-nav-panel__collapsible-inner">
+              <div className="halo-nav-panel__items halo-nav-panel__items--session-blocks">
                 {localProjectWorkspaces.map(workspace => (
                   legacyNavigationEnabled ? (
                     <Suspense key={workspace.id} fallback={null}>
@@ -488,19 +488,19 @@ const MainNav: React.FC<MainNavProps> = ({
           </div>
         </div>
 
-        <div className="bitfun-nav-panel__section">
+        <div className="halo-nav-panel__section">
           <SectionHeader
             label={t('shared:features.workspace')}
             collapsible
             isOpen={expandedSections.has('workspace')}
             onToggle={() => toggleSection('workspace')}
             actions={
-              <div className="bitfun-nav-panel__workspace-action-wrap">
+              <div className="halo-nav-panel__workspace-action-wrap">
                 <Tooltip content={addWorkspaceTooltip} placement="right" followCursor disabled={workspaceMenuOpen}>
                   <button
                     ref={workspaceMenuButtonRef}
                     type="button"
-                    className={`bitfun-nav-panel__section-action${workspaceMenuOpen ? ' is-active' : ''}`}
+                    className={`halo-nav-panel__section-action${workspaceMenuOpen ? ' is-active' : ''}`}
                     aria-label={addWorkspaceTooltip}
                     aria-expanded={workspaceMenuOpen}
                     onClick={toggleWorkspaceMenu}
@@ -512,9 +512,9 @@ const MainNav: React.FC<MainNavProps> = ({
               </div>
             }
           />
-          <div className={`bitfun-nav-panel__collapsible${expandedSections.has('workspace') ? '' : ' is-collapsed'}`}>
-            <div className="bitfun-nav-panel__collapsible-inner">
-              <div className="bitfun-nav-panel__items">
+          <div className={`halo-nav-panel__collapsible${expandedSections.has('workspace') ? '' : ' is-collapsed'}`}>
+            <div className="halo-nav-panel__collapsible-inner">
+              <div className="halo-nav-panel__items">
                 <WorkspaceListSection variant="projects" />
               </div>
             </div>

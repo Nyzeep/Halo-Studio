@@ -230,33 +230,33 @@ export const ChatInputWorkspaceStrip: React.FC<ChatInputWorkspaceStripProps> = (
   return (
     <div
       className={[
-        'bitfun-chat-input-workspace-strip',
-        split && 'bitfun-chat-input-workspace-strip--split',
-        actionsOnly && 'bitfun-chat-input-workspace-strip--actions-only',
+        'halo-chat-input-workspace-strip',
+        split && 'halo-chat-input-workspace-strip--split',
+        actionsOnly && 'halo-chat-input-workspace-strip--actions-only',
       ]
         .filter(Boolean)
         .join(' ')}
       data-testid="chat-input-workspace-strip"
     >
       {label ? (
-        <div className="bitfun-chat-input-workspace-strip__main">
+        <div className="halo-chat-input-workspace-strip__main">
           <Tooltip content={workspaceTooltipContent} placement="top">
-            <span className="bitfun-chat-input-workspace-strip__chip bitfun-chat-input-workspace-strip__chip--workspace">
-              <span className="bitfun-chat-input-workspace-strip__workspace">{label}</span>
+            <span className="halo-chat-input-workspace-strip__chip halo-chat-input-workspace-strip__chip--workspace">
+              <span className="halo-chat-input-workspace-strip__workspace">{label}</span>
             </span>
           </Tooltip>
-          <span className="bitfun-chat-input-workspace-strip__sep" aria-hidden>
+          <span className="halo-chat-input-workspace-strip__sep" aria-hidden>
             {' / '}
           </span>
           <Tooltip content={branchTooltipContent} placement="top">
-            <span className="bitfun-chat-input-workspace-strip__chip bitfun-chat-input-workspace-strip__chip--branch">
+            <span className="halo-chat-input-workspace-strip__chip halo-chat-input-workspace-strip__chip--branch">
               <GitBranch
-                className="bitfun-chat-input-workspace-strip__branch-icon"
+                className="halo-chat-input-workspace-strip__branch-icon"
                 size={11}
                 strokeWidth={2}
                 aria-hidden
               />
-              <span className="bitfun-chat-input-workspace-strip__branch">{branchLabel}</span>
+              <span className="halo-chat-input-workspace-strip__branch">{branchLabel}</span>
             </span>
           </Tooltip>
           {showWorktreeToggle ? (
@@ -267,9 +267,9 @@ export const ChatInputWorkspaceStrip: React.FC<ChatInputWorkspaceStripProps> = (
                 aria-checked={worktreeEnabled}
                 aria-label={tWorktrees('strip.toggleLabel')}
                 className={[
-                  'bitfun-chat-input-workspace-strip__chip',
-                  'bitfun-chat-input-workspace-strip__chip--worktree',
-                  worktreeEnabled && 'bitfun-chat-input-workspace-strip__chip--worktree-on',
+                  'halo-chat-input-workspace-strip__chip',
+                  'halo-chat-input-workspace-strip__chip--worktree',
+                  worktreeEnabled && 'halo-chat-input-workspace-strip__chip--worktree-on',
                 ]
                   .filter(Boolean)
                   .join(' ')}
@@ -281,14 +281,14 @@ export const ChatInputWorkspaceStrip: React.FC<ChatInputWorkspaceStripProps> = (
               >
                 {worktreeEnabled ? (
                   <SquareCheck
-                    className="bitfun-chat-input-workspace-strip__worktree-icon"
+                    className="halo-chat-input-workspace-strip__worktree-icon"
                     size={11}
                     strokeWidth={2}
                     aria-hidden
                   />
                 ) : (
                   <Square
-                    className="bitfun-chat-input-workspace-strip__worktree-icon"
+                    className="halo-chat-input-workspace-strip__worktree-icon"
                     size={11}
                     strokeWidth={2}
                     aria-hidden
@@ -302,7 +302,7 @@ export const ChatInputWorkspaceStrip: React.FC<ChatInputWorkspaceStripProps> = (
       ) : null}
 
       {showRightActions ? (
-        <div className="bitfun-chat-input-workspace-strip__actions">
+        <div className="halo-chat-input-workspace-strip__actions">
           {dispatchControl ? (
             <DispatchTargetPicker
               target={dispatchControl.target}
@@ -314,15 +314,15 @@ export const ChatInputWorkspaceStrip: React.FC<ChatInputWorkspaceStripProps> = (
           {showPermission ? (
             <div
               ref={permissionRootRef}
-              className="bitfun-chat-input-workspace-strip__permission"
+              className="halo-chat-input-workspace-strip__permission"
             >
               <Tooltip content={permissionTooltip} placement="top">
                 <button
                   type="button"
                   className={[
-                    'bitfun-chat-input-workspace-strip__permission-trigger',
-                    `bitfun-chat-input-workspace-strip__permission-trigger--${permissionMode}`,
-                    permissionMenuOpen && 'bitfun-chat-input-workspace-strip__permission-trigger--open',
+                    'halo-chat-input-workspace-strip__permission-trigger',
+                    `halo-chat-input-workspace-strip__permission-trigger--${permissionMode}`,
+                    permissionMenuOpen && 'halo-chat-input-workspace-strip__permission-trigger--open',
                   ]
                     .filter(Boolean)
                     .join(' ')}
@@ -339,7 +339,7 @@ export const ChatInputWorkspaceStrip: React.FC<ChatInputWorkspaceStripProps> = (
                 >
                   <PermissionIcon size={12} strokeWidth={2} aria-hidden />
                   {showPermissionLabel ? (
-                    <span className="bitfun-chat-input-workspace-strip__permission-label">
+                    <span className="halo-chat-input-workspace-strip__permission-label">
                       {permissionModeLabel}
                     </span>
                   ) : null}
@@ -348,16 +348,16 @@ export const ChatInputWorkspaceStrip: React.FC<ChatInputWorkspaceStripProps> = (
 
               {permissionMenuOpen && permissionMode !== 'acp' ? (
                 <div
-                  className="bitfun-chat-input-workspace-strip__permission-menu"
+                  className="halo-chat-input-workspace-strip__permission-menu"
                   role="menu"
                   aria-label={t('chatInput.permissionMode.menuLabel')}
                   data-testid="chat-input-permission-menu"
                 >
-                  <div className="bitfun-chat-input-workspace-strip__permission-menu-header">
+                  <div className="halo-chat-input-workspace-strip__permission-menu-header">
                     <span>{t('chatInput.permissionMode.menuLabel')}</span>
                     <span>{t('chatInput.permissionMode.globalScope')}</span>
                   </div>
-                  <div className="bitfun-chat-input-workspace-strip__permission-options">
+                  <div className="halo-chat-input-workspace-strip__permission-options">
                     {NATIVE_PERMISSION_MODES.map(mode => {
                       const selected = permissionMode === mode;
                       const copy = permissionCopy[mode];
@@ -368,8 +368,8 @@ export const ChatInputWorkspaceStrip: React.FC<ChatInputWorkspaceStripProps> = (
                           role="menuitemradio"
                           aria-checked={selected}
                           className={[
-                            'bitfun-chat-input-workspace-strip__permission-option',
-                            selected && 'bitfun-chat-input-workspace-strip__permission-option--selected',
+                            'halo-chat-input-workspace-strip__permission-option',
+                            selected && 'halo-chat-input-workspace-strip__permission-option--selected',
                           ]
                             .filter(Boolean)
                             .join(' ')}
@@ -383,11 +383,11 @@ export const ChatInputWorkspaceStrip: React.FC<ChatInputWorkspaceStripProps> = (
                             }
                           }}
                         >
-                          <span className="bitfun-chat-input-workspace-strip__permission-option-copy">
-                            <span className="bitfun-chat-input-workspace-strip__permission-option-label">
+                          <span className="halo-chat-input-workspace-strip__permission-option-copy">
+                            <span className="halo-chat-input-workspace-strip__permission-option-label">
                               {copy.label}
                             </span>
-                            <span className="bitfun-chat-input-workspace-strip__permission-option-description">
+                            <span className="halo-chat-input-workspace-strip__permission-option-description">
                               {copy.description}
                             </span>
                           </span>
@@ -398,11 +398,11 @@ export const ChatInputWorkspaceStrip: React.FC<ChatInputWorkspaceStripProps> = (
                   </div>
                   {permissionControl.onHide ? (
                     <>
-                      <div className="bitfun-chat-input-workspace-strip__permission-menu-divider" role="separator" />
+                      <div className="halo-chat-input-workspace-strip__permission-menu-divider" role="separator" />
                       <button
                         type="button"
                         role="menuitem"
-                        className="bitfun-chat-input-workspace-strip__permission-visibility-action"
+                        className="halo-chat-input-workspace-strip__permission-visibility-action"
                         data-testid="chat-input-permission-hide-control"
                         onClick={event => {
                           event.stopPropagation();
@@ -428,7 +428,7 @@ export const ChatInputWorkspaceStrip: React.FC<ChatInputWorkspaceStripProps> = (
           {showUsage ? (
             <Tooltip content={t('usage.runtime.tooltip')}>
               <IconButton
-                className="bitfun-chat-input-workspace-strip__usage-btn"
+                className="halo-chat-input-workspace-strip__usage-btn"
                 variant="ghost"
                 size="xs"
                 type="button"

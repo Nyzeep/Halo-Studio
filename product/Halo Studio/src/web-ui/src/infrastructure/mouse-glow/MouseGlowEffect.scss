@@ -1,6 +1,6 @@
 @use '../../component-library/styles/tokens' as tokens;
 
-.bitfun-mouse-glow-overlay {
+.halo-mouse-glow-overlay {
   --mouse-glow-size: 220px;
   --mouse-glow-border-width: 1px;
   --mouse-glow-core: color-mix(
@@ -61,8 +61,8 @@
   }
 }
 
-:root[data-theme-type='light'] .bitfun-mouse-glow-overlay,
-[data-theme-type='light'] .bitfun-mouse-glow-overlay {
+:root[data-theme-type='light'] .halo-mouse-glow-overlay,
+[data-theme-type='light'] .halo-mouse-glow-overlay {
   --mouse-glow-border-width: 1.5px;
   --mouse-glow-core: color-mix(
     in srgb,
@@ -97,7 +97,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-mouse-glow-overlay {
+  .halo-mouse-glow-overlay {
     display: none;
   }
 }

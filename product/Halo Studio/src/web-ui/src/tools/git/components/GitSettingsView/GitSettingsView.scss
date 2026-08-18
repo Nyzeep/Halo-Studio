@@ -5,7 +5,7 @@ $size-radius-xs: 4px !default;
 $opacity-secondary: 0.7 !default;
 $opacity-high: 0.8 !default;
 
-.bitfun-git-settings-view {
+.halo-git-settings-view {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -288,7 +288,7 @@ $opacity-high: 0.8 !default;
   }
 
   &__loading-spinner {
-    animation: bitfun-git-settings-view-spin 1s linear infinite;
+    animation: halo-git-settings-view-spin 1s linear infinite;
   }
 
   &__error-message {
@@ -323,7 +323,7 @@ $opacity-high: 0.8 !default;
   }
 }
 
-@keyframes bitfun-git-settings-view-spin {
+@keyframes halo-git-settings-view-spin {
   from {
     transform: rotate(0deg);
   }
@@ -333,7 +333,7 @@ $opacity-high: 0.8 !default;
 }
 
 @media (max-width: 768px) {
-  .bitfun-git-settings-view {
+  .halo-git-settings-view {
     &__header {
       flex-direction: column;
       gap: $size-gap-2;

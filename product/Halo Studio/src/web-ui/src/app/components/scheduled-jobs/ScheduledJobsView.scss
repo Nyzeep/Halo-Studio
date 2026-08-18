@@ -355,12 +355,12 @@
     white-space: nowrap;
     min-width: 126px;
 
-    .bitfun-switch {
+    .halo-switch {
       align-items: center;
       gap: 0;
     }
 
-    .bitfun-switch__wrapper {
+    .halo-switch__wrapper {
       margin-top: 0;
     }
   }
@@ -428,14 +428,14 @@
     position: relative;
     gap: 0;
 
-    .bitfun-textarea__field {
+    .halo-textarea__field {
       min-height: 92px;
       padding: 10px 12px 24px;
       border-radius: $size-radius-base;
       background: color-mix(in srgb, var(--element-bg-base) 82%, transparent);
     }
 
-    .bitfun-textarea__footer {
+    .halo-textarea__footer {
       position: absolute;
       right: 10px;
       bottom: 6px;
@@ -444,11 +444,11 @@
       pointer-events: none;
     }
 
-    .bitfun-textarea__hint-wrapper {
+    .halo-textarea__hint-wrapper {
       display: none;
     }
 
-    .bitfun-textarea__count {
+    .halo-textarea__count {
       padding: 1px 5px;
       border-radius: $size-radius-sm;
       background: color-mix(in srgb, var(--element-bg-base) 88%, transparent);

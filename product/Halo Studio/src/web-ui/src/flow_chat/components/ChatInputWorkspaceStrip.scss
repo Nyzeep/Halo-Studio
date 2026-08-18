@@ -6,7 +6,7 @@
 
 @use '../../component-library/styles/tokens' as *;
 
-.bitfun-chat-input-workspace-strip {
+.halo-chat-input-workspace-strip {
   position: absolute;
   bottom: 0;
   z-index: 4;
@@ -25,7 +25,7 @@
     justify-content: flex-end;
   }
   /* Room for descenders (g, y, p) */
-  /* Collapsed capsule uses 18px horizontal padding on `.bitfun-chat-input__box`; match so strip text lines up with pill content */
+  /* Collapsed capsule uses 18px horizontal padding on `.halo-chat-input__box`; match so strip text lines up with pill content */
   padding: 3px 18px 4px;
   font-family: var(--font-family-sans);
   font-size: var(--flowchat-font-size-xxs);
@@ -124,7 +124,7 @@
       color: var(--color-success);
 
       &:hover:not(:disabled),
-      &.bitfun-chat-input-workspace-strip__permission-trigger--open {
+      &.halo-chat-input-workspace-strip__permission-trigger--open {
         border-color: color-mix(in srgb, var(--color-success) 62%, transparent);
         background: color-mix(in srgb, var(--color-success) 17%, transparent);
         color: var(--color-success);
@@ -137,7 +137,7 @@
       color: var(--color-warning);
 
       &:hover:not(:disabled),
-      &.bitfun-chat-input-workspace-strip__permission-trigger--open {
+      &.halo-chat-input-workspace-strip__permission-trigger--open {
         border-color: color-mix(in srgb, var(--color-warning) 62%, transparent);
         background: color-mix(in srgb, var(--color-warning) 17%, transparent);
         color: var(--color-warning);
@@ -150,7 +150,7 @@
       color: var(--color-error);
 
       &:hover:not(:disabled),
-      &.bitfun-chat-input-workspace-strip__permission-trigger--open {
+      &.halo-chat-input-workspace-strip__permission-trigger--open {
         border-color: color-mix(in srgb, var(--color-error) 56%, transparent);
         background: color-mix(in srgb, var(--color-error) 15%, transparent);
         color: var(--color-error);
@@ -451,7 +451,7 @@
     color: inherit;
 
     &.is-spinning {
-      animation: bitfun-chat-input-workspace-strip-spin 0.9s linear infinite;
+      animation: halo-chat-input-workspace-strip-spin 0.9s linear infinite;
     }
   }
 
@@ -496,7 +496,7 @@
 }
 
 @media (max-width: 560px) {
-  .bitfun-chat-input-workspace-strip {
+  .halo-chat-input-workspace-strip {
     &__permission-trigger--auto,
     &__permission-trigger--full_access {
       width: 18px;
@@ -509,7 +509,7 @@
   }
 }
 
-@keyframes bitfun-chat-input-workspace-strip-spin {
+@keyframes halo-chat-input-workspace-strip-spin {
   to {
     transform: rotate(360deg);
   }

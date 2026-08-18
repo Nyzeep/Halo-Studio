@@ -32,7 +32,7 @@ const createSession = (overrides: Partial<Session> = {}): Session => ({
   todos: [],
   maxContextTokens: 128128,
   mode: 'agentic',
-  workspacePath: 'D:/workspace/BitFun',
+  workspacePath: 'D:/workspace/Halo',
   isTransient: false,
   ...overrides,
 });
@@ -44,7 +44,7 @@ const usageReport = (overrides: Partial<SessionUsageReport> = {}): SessionUsageR
   generatedAt: 100,
   workspace: {
     kind: 'local',
-    pathLabel: 'D:/workspace/BitFun',
+    pathLabel: 'D:/workspace/Halo',
   },
   scope: {
     kind: 'entire_session',
@@ -158,7 +158,7 @@ describe('runUsageReportCommand', () => {
     });
     expect(sessionApiMocks.getSessionUsageReport).toHaveBeenCalledWith({
       sessionId: 'session-1',
-      workspacePath: 'D:/workspace/BitFun',
+      workspacePath: 'D:/workspace/Halo',
       remoteConnectionId: undefined,
       remoteSshHost: undefined,
       includeHiddenSubagents: true,

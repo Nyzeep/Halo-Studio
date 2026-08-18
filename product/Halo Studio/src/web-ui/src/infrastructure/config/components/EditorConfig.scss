@@ -1,6 +1,6 @@
 @use '../../../component-library/styles/tokens' as *;
 
-.bitfun-editor-config {
+.halo-editor-config {
   &__content {
     display: flex;
     flex-direction: column;
@@ -23,7 +23,7 @@
 }
 
 @container config-panel (max-width: 520px) {
-  .bitfun-editor-config {
+  .halo-editor-config {
     &__actions {
       justify-content: flex-start;
       flex-wrap: wrap;

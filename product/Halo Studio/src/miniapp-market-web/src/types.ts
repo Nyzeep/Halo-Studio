@@ -50,7 +50,7 @@ export interface MarketRelease {
   releaseId: string;
   listingId: string;
   releaseNumber: number;
-  minBitfunVersion: string;
+  minHaloVersion: string;
   changelog: string;
   packageSha256: string;
   packageSize: number;
@@ -70,7 +70,7 @@ export interface MarketListingSummary {
   tags: string[];
   owner: MarketUser;
   latestRelease: number;
-  minBitfunVersion: string;
+  minHaloVersion: string;
   permissions: MiniAppPermissions;
   screenshotUrls: string[];
   ratingAverage: number;
@@ -107,7 +107,7 @@ export interface MarketSubmission {
   icon: string;
   category: string;
   tags: string[];
-  minBitfunVersion: string;
+  minHaloVersion: string;
   changelog: string;
   license: { spdxExpression?: string; customUrl?: string };
   repositoryUrl?: string;

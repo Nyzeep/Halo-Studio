@@ -76,7 +76,7 @@ const RECOGNIZED_PROJECT_ROOTS = new Set([
   'packages',
   'apps',
   'crates',
-  'bitfun-installer',
+  'halo-installer',
 ]);
 
 export function isDeepReviewSlashCommand(commandText: string): boolean {

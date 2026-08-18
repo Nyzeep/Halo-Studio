@@ -1,4 +1,4 @@
-.bitfun-workbench-session-scene {
+.halo-workbench-session-scene {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -9,7 +9,7 @@
   color: var(--color-text-primary);
 
   &--entering {
-    animation: bitfun-workbench-session-enter 140ms ease-out;
+    animation: halo-workbench-session-enter 140ms ease-out;
   }
 
   &__header {
@@ -181,13 +181,13 @@
   }
 }
 
-@keyframes bitfun-workbench-session-enter {
+@keyframes halo-workbench-session-enter {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-workbench-session-scene--entering {
+  .halo-workbench-session-scene--entering {
     animation: none;
   }
 }

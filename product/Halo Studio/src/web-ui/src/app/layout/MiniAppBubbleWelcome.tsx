@@ -32,23 +32,23 @@ export const MiniAppBubbleWelcome: React.FC<MiniAppBubbleWelcomeProps> = ({
   const suggestions = welcome?.suggestions || [];
 
   return (
-    <section className="bitfun-fmc__miniapp-welcome">
+    <section className="halo-fmc__miniapp-welcome">
       <div
-        className="bitfun-fmc__miniapp-welcome-icon"
+        className="halo-fmc__miniapp-welcome-icon"
         aria-hidden="true"
       >
         {renderMiniAppIcon(appIcon, 28)}
       </div>
 
       {title !== appName && (
-        <div className="bitfun-fmc__miniapp-welcome-eyebrow">{appName}</div>
+        <div className="halo-fmc__miniapp-welcome-eyebrow">{appName}</div>
       )}
       <h2>{title}</h2>
-      {description && <p className="bitfun-fmc__miniapp-welcome-description">{description}</p>}
+      {description && <p className="halo-fmc__miniapp-welcome-description">{description}</p>}
 
       {workspaceLabel && workspacePath && (
         <div
-          className="bitfun-fmc__miniapp-workspace"
+          className="halo-fmc__miniapp-workspace"
           title={workspacePath}
           data-workspace-path={workspacePath}
         >
@@ -58,18 +58,18 @@ export const MiniAppBubbleWelcome: React.FC<MiniAppBubbleWelcomeProps> = ({
       )}
 
       {suggestions.length > 0 && (
-        <div className="bitfun-fmc__miniapp-suggestions">
+        <div className="halo-fmc__miniapp-suggestions">
           {welcome?.suggestionsLabel && (
-            <div className="bitfun-fmc__miniapp-suggestions-label">
+            <div className="halo-fmc__miniapp-suggestions-label">
               {welcome.suggestionsLabel}
             </div>
           )}
-          <div className="bitfun-fmc__miniapp-suggestions-list">
+          <div className="halo-fmc__miniapp-suggestions-list">
             {suggestions.map((suggestion, index) => (
               <button
                 key={`${suggestion.label}:${index}`}
                 type="button"
-                className="bitfun-fmc__miniapp-suggestion"
+                className="halo-fmc__miniapp-suggestion"
                 title={suggestion.prompt}
                 onClick={() => onSuggestion(suggestion.prompt)}
               >

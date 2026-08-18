@@ -12,10 +12,10 @@ const compiledHtml = `<!DOCTYPE html>
 <body>
   <script>legacy runtime</script>
   <script type="module" data-revision="rev_test">
-const { Stack } = window.BitfunCanvasSDK;
-const { h } = window.BitfunCanvasRuntime;
+const { Stack } = window.HaloCanvasSDK;
+const { h } = window.HaloCanvasRuntime;
 function Canvas() { return h(Stack, null, 'Hello'); }
-window.BitfunCanvasRuntime.mount(Canvas);
+window.HaloCanvasRuntime.mount(Canvas);
   </script>
 </body>
 </html>`;
@@ -24,7 +24,7 @@ async function runCanvasHtml(html: string) {
   const dom = new JSDOM(html, {
     pretendToBeVisual: true,
     runScripts: 'outside-only',
-    url: 'https://bitfun-canvas.local/',
+    url: 'https://halo-canvas.local/',
   });
   const messages: unknown[] = [];
 
@@ -68,10 +68,10 @@ describe('React Canvas runtime bridge', () => {
     expect(script).toEqual({
       revision: 'rev_test',
       code: [
-        'const { Stack } = window.BitfunCanvasSDK;',
-        'const { h } = window.BitfunCanvasRuntime;',
+        'const { Stack } = window.HaloCanvasSDK;',
+        'const { h } = window.HaloCanvasRuntime;',
         "function Canvas() { return h(Stack, null, 'Hello'); }",
-        'window.BitfunCanvasRuntime.mount(Canvas);',
+        'window.HaloCanvasRuntime.mount(Canvas);',
       ].join('\n'),
     });
   });
@@ -83,11 +83,11 @@ describe('React Canvas runtime bridge', () => {
     expect(result.runtime).toBe('react');
     expect(result.revision).toBe('rev_test');
     expect(html).toContain('<title>Canvas &lt;Test&gt;</title>');
-    expect(html).toContain('window.BitfunCanvasSDK');
-    expect(html).toContain('window.BitfunCanvasRuntime');
-    expect(html).toContain('window.BitfunCanvasSDKAdapters');
+    expect(html).toContain('window.HaloCanvasSDK');
+    expect(html).toContain('window.HaloCanvasRuntime');
+    expect(html).toContain('window.HaloCanvasSDKAdapters');
     expect(html).toContain('ReactDOM.createRoot');
-    expect(html).toContain('<meta name="bitfun-canvas-revision" content="rev_test">');
+    expect(html).toContain('<meta name="halo-canvas-revision" content="rev_test">');
     expect(html).toContain("function Canvas() { return h(Stack, null, 'Hello'); }");
     expect(html).not.toContain('process.env.NODE_ENV');
     expect(html).not.toContain('jsxDEV');
@@ -99,7 +99,7 @@ describe('React Canvas runtime bridge', () => {
     const html = buildReactCanvasHtml(compiledHtml, { title: 'Standalone' });
 
     expect(html).toContain('color-scheme:light');
-    expect(html).toContain('--bitfun-canvas-bg: Canvas');
+    expect(html).toContain('--halo-canvas-bg: Canvas');
     expect(html).toContain('.bf-canvas-stack{max-width:min(100%,980px);margin-inline:auto}');
   });
 
@@ -135,8 +135,8 @@ describe('React Canvas runtime bridge', () => {
   it('exposes semantic theme tokens through useHostTheme().tokens', async () => {
     const html = buildReactCanvasHtml(`<!DOCTYPE html>
 <script type="module" data-revision="rev_tokens">
-const { useHostTheme } = window.BitfunCanvasSDK;
-const { h } = window.BitfunCanvasRuntime;
+const { useHostTheme } = window.HaloCanvasSDK;
+const { h } = window.HaloCanvasRuntime;
 function Canvas() {
   const { tokens } = useHostTheme();
   return h('svg', null,
@@ -144,19 +144,19 @@ function Canvas() {
     h('text', { 'data-testid': 'label', fill: tokens.text.primary }, 'Node')
   );
 }
-window.BitfunCanvasRuntime.mount(Canvas);
+window.HaloCanvasRuntime.mount(Canvas);
 </script>`, { title: 'Theme tokens' });
 
     const { dom, messages } = await runCanvasHtml(html ?? '');
 
     try {
-      expect(messages).toContainEqual(expect.objectContaining({ type: 'bitfun-canvas-ready' }));
-      expect(messages).not.toContainEqual(expect.objectContaining({ type: 'bitfun-canvas-runtime-error' }));
+      expect(messages).toContainEqual(expect.objectContaining({ type: 'halo-canvas-ready' }));
+      expect(messages).not.toContainEqual(expect.objectContaining({ type: 'halo-canvas-runtime-error' }));
       expect(dom.window.document.querySelector('[data-testid="node"]')?.getAttribute('fill')).toBe(
-        'var(--bitfun-canvas-panel)',
+        'var(--halo-canvas-panel)',
       );
       expect(dom.window.document.querySelector('[data-testid="label"]')?.getAttribute('fill')).toBe(
-        'var(--bitfun-canvas-fg)',
+        'var(--halo-canvas-fg)',
       );
     } finally {
       dom.window.close();
@@ -175,17 +175,17 @@ window.BitfunCanvasRuntime.mount(Canvas);
     const html = `<!DOCTYPE html>
 <script>legacy runtime</script>
 <script type="module" data-revision="rev_chart">
-const { BarChart } = window.BitfunCanvasSDK;
-const { h } = window.BitfunCanvasRuntime;
+const { BarChart } = window.HaloCanvasSDK;
+const { h } = window.HaloCanvasRuntime;
 function Canvas() { return h(BarChart, { data: [1, 2] }); }
-window.BitfunCanvasRuntime.mount(Canvas);
+window.HaloCanvasRuntime.mount(Canvas);
     </script>`;
     const wrapped = buildReactCanvasHtml(html, { title: 'Chart' });
 
-    expect(wrapped).toContain('window.BitfunCanvasSDKAdapters');
+    expect(wrapped).toContain('window.HaloCanvasSDKAdapters');
     expect(wrapped).toContain('BarChart:');
     expect(wrapped).not.toContain('function BarChart(props = {})');
-    expect(wrapped).toContain('<meta name="bitfun-canvas-revision" content="rev_chart">');
+    expect(wrapped).toContain('<meta name="halo-canvas-revision" content="rev_chart">');
     expect(wrapped).toContain('ReactDOM.createRoot');
     expect(wrapped).not.toContain('legacy runtime');
   });
@@ -194,17 +194,17 @@ window.BitfunCanvasRuntime.mount(Canvas);
     const html = `<!DOCTYPE html>
 <script>legacy runtime</script>
 <script type="module" data-revision="rev_diff">
-const { DiffStats, DiffView } = window.BitfunCanvasSDK;
-const { h } = window.BitfunCanvasRuntime;
+const { DiffStats, DiffView } = window.HaloCanvasSDK;
+const { h } = window.HaloCanvasRuntime;
 const diffLines = '+added\\n-removed\\n unchanged';
 function Canvas() {
   return h('div', null, h(DiffStats, { additions: 1, deletions: -1 }), h(DiffView, { lines: diffLines }));
 }
-window.BitfunCanvasRuntime.mount(Canvas);
+window.HaloCanvasRuntime.mount(Canvas);
     </script>`;
     const wrapped = buildReactCanvasHtml(html, { title: 'Diff' });
 
-    expect(wrapped).toContain('window.BitfunCanvasSDKAdapters');
+    expect(wrapped).toContain('window.HaloCanvasSDKAdapters');
     expect(wrapped).toContain('normalizeDiffLines:');
     expect(wrapped).not.toContain('function normalizeDiffLines(lines)');
     expect(wrapped).not.toContain('legacy runtime');
@@ -213,8 +213,8 @@ window.BitfunCanvasRuntime.mount(Canvas);
   it('smoke-renders bundled SDK components in the iframe shell', async () => {
     const html = buildReactCanvasHtml(`<!DOCTYPE html>
 <script type="module" data-revision="rev_smoke">
-const { Stack, Card, CardHeader, CardBody, BarChart, CollapsibleSection, DependencyGraph, Empty, FlowDiagram, Input, Tabs, Text } = window.BitfunCanvasSDK;
-const { h } = window.BitfunCanvasRuntime;
+const { Stack, Card, CardHeader, CardBody, BarChart, CollapsibleSection, DependencyGraph, Empty, FlowDiagram, Input, Tabs, Text } = window.HaloCanvasSDK;
+const { h } = window.HaloCanvasRuntime;
 function Canvas() {
   return h(Stack, { gap: 8 },
     h(Card, null,
@@ -236,23 +236,23 @@ function Canvas() {
     )
   );
 }
-window.BitfunCanvasRuntime.mount(Canvas);
+window.HaloCanvasRuntime.mount(Canvas);
 </script>`, { title: 'Smoke' });
 
     expect(html).toBeTruthy();
     const { dom, messages } = await runCanvasHtml(html ?? '');
 
     try {
-      expect(messages).toContainEqual(expect.objectContaining({ type: 'bitfun-canvas-module-started' }));
-      expect(messages).toContainEqual(expect.objectContaining({ type: 'bitfun-canvas-ready' }));
-      expect(messages).not.toContainEqual(expect.objectContaining({ type: 'bitfun-canvas-runtime-error' }));
+      expect(messages).toContainEqual(expect.objectContaining({ type: 'halo-canvas-module-started' }));
+      expect(messages).toContainEqual(expect.objectContaining({ type: 'halo-canvas-ready' }));
+      expect(messages).not.toContainEqual(expect.objectContaining({ type: 'halo-canvas-runtime-error' }));
       expect(dom.window.document.body.textContent).toContain('Runtime smoke');
       expect(dom.window.document.querySelector('.bf-chart')).toBeTruthy();
       expect(dom.window.document.querySelector('.bf-collapsible-section')).toBeTruthy();
       expect(dom.window.document.querySelector('.bf-diagram')).toBeTruthy();
-      expect(dom.window.document.querySelector('.bitfun-tabs')).toBeTruthy();
-      expect(dom.window.document.querySelector('.bitfun-input-wrapper')).toBeTruthy();
-      expect(dom.window.document.querySelector('.bitfun-empty')).toBeTruthy();
+      expect(dom.window.document.querySelector('.halo-tabs')).toBeTruthy();
+      expect(dom.window.document.querySelector('.halo-input-wrapper')).toBeTruthy();
+      expect(dom.window.document.querySelector('.halo-empty')).toBeTruthy();
     } finally {
       dom.window.close();
     }

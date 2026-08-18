@@ -1,5 +1,5 @@
-const SEARCH_HIGHLIGHT_CURRENT_NAME = 'bitfun-flowchat-search-current';
-const SEARCH_HIGHLIGHT_MATCH_NAME = 'bitfun-flowchat-search-match';
+const SEARCH_HIGHLIGHT_CURRENT_NAME = 'halo-flowchat-search-current';
+const SEARCH_HIGHLIGHT_MATCH_NAME = 'halo-flowchat-search-match';
 
 type HighlightRegistryLike = {
   set: (name: string, highlight: unknown) => void;

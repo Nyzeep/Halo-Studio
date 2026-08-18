@@ -21,11 +21,11 @@
     "description": "Hook 宣告在 hooks.json 檔案中，不在本設定文件裡。兩個層級是疊加關係，使用者層優先執行。修改後無需重新啟動 Halo Studio。",
     "userFile": {
       "label": "使用者 Hook 檔案",
-      "description": "Halo Studio 使用者設定目錄下的 config/hooks.json（Linux 為 ~/.config/bitfun，macOS 為 ~/Library/Application Support/bitfun，Windows 為 %APPDATA%\\bitfun）。"
+      "description": "Halo Studio 使用者設定目錄下的 config/hooks.json（Linux 為 ~/.config/Halo Studio，macOS 為 ~/Library/Application Support/Halo Studio，Windows 為 %APPDATA%\\halo）。"
     },
     "projectFile": {
       "label": "專案 Hook 檔案",
-      "description": "工作區內的 .bitfun/config/hooks.json。僅在開啟「啟用專案 Hook 檔案」時讀取。"
+      "description": "工作區內的 .halo-studio/config/hooks.json。僅在開啟「啟用專案 Hook 檔案」時讀取。"
     }
   },
   "imports": {

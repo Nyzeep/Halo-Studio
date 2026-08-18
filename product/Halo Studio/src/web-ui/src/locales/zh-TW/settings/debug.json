@@ -17,8 +17,8 @@
   "settings": {
     "logPath": {
       "label": "日誌檔案路徑",
-      "description": "Debug日誌儲存路徑（相對於工作區根目錄），默認為 .bitfun/debug.log",
-      "placeholder": ".bitfun/debug.log",
+      "description": "Debug日誌儲存路徑（相對於工作區根目錄），默認為 .halo-studio/debug.log",
+      "placeholder": ".halo-studio/debug.log",
       "browse": "瀏覽"
     },
     "ingestPort": {

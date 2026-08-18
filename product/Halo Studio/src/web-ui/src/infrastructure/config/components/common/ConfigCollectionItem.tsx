@@ -45,22 +45,22 @@ export const ConfigCollectionItem: React.FC<ConfigCollectionItemProps> = ({
   return (
     <div
       {...rootProps}
-      className={`bitfun-collection-item ${isExpanded ? 'is-expanded' : ''} ${disabled ? 'is-disabled' : ''} ${className}`}
+      className={`halo-collection-item ${isExpanded ? 'is-expanded' : ''} ${disabled ? 'is-disabled' : ''} ${className}`}
     >
-      <div className="bitfun-config-page-row bitfun-config-page-row--center bitfun-collection-item__row">
-        <div className="bitfun-config-page-row__meta">
+      <div className="halo-config-page-row halo-config-page-row--center halo-collection-item__row">
+        <div className="halo-config-page-row__meta">
           <div
-            className={`bitfun-config-page-row__label bitfun-collection-item__label ${
-              badgePlacement === 'below' ? 'bitfun-collection-item__label--stacked' : ''
+            className={`halo-config-page-row__label halo-collection-item__label ${
+              badgePlacement === 'below' ? 'halo-collection-item__label--stacked' : ''
             }`}
           >
-            <span id={labelId} className="bitfun-collection-item__name">{label}</span>
+            <span id={labelId} className="halo-collection-item__name">{label}</span>
             {badge && (
               <span
-                className={`bitfun-collection-item__badges ${
+                className={`halo-collection-item__badges ${
                   badgePlacement === 'below'
-                    ? 'bitfun-collection-item__badges--stacked'
-                    : 'bitfun-collection-item__badges--inline'
+                    ? 'halo-collection-item__badges--stacked'
+                    : 'halo-collection-item__badges--inline'
                 }`}
               >
                 {badge}
@@ -68,13 +68,13 @@ export const ConfigCollectionItem: React.FC<ConfigCollectionItemProps> = ({
             )}
           </div>
         </div>
-        <div className="bitfun-config-page-row__control">
-          <div className="bitfun-collection-item__control">
+        <div className="halo-config-page-row__control">
+          <div className="halo-collection-item__control">
             {control}
             {hasDetails ? (
               <button
                 type="button"
-                className="bitfun-collection-btn bitfun-collection-item__details-toggle"
+                className="halo-collection-btn halo-collection-item__details-toggle"
                 onClick={toggleDetails}
                 disabled={disabled}
                 aria-labelledby={labelId}
@@ -89,7 +89,7 @@ export const ConfigCollectionItem: React.FC<ConfigCollectionItemProps> = ({
       </div>
 
       {isExpanded && details && (
-        <div id={detailsId} className="bitfun-collection-item__details">{details}</div>
+        <div id={detailsId} className="halo-collection-item__details">{details}</div>
       )}
     </div>
   );

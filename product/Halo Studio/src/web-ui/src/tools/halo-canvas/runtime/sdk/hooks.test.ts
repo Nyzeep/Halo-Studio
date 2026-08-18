@@ -15,10 +15,10 @@ function withWindow<T>(run: () => T): T {
   }
 }
 
-describe('BitFun Canvas hook adapters', () => {
+describe('Halo Canvas hook adapters', () => {
   it('delegates host theme access to runtime hooks', () => {
     withWindow(() => {
-      window.BitfunCanvasRuntimeHooks = {
+      window.HaloCanvasRuntimeHooks = {
         useHostTheme: () => ({ type: 'dark' }),
       };
 
@@ -29,7 +29,7 @@ describe('BitFun Canvas hook adapters', () => {
   it('delegates canvas actions to runtime hooks', async () => {
     await withWindow(async () => {
       const action = vi.fn(async () => 'done');
-      window.BitfunCanvasRuntimeHooks = {
+      window.HaloCanvasRuntimeHooks = {
         useCanvasAction: () => action,
       };
 

@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { versionInjectionPlugin } from "./vite.config.version-plugin";
-import { bitfunCanvasRuntimeBundlePlugin } from "./vite.config.canvas-runtime-plugin";
+import { haloCanvasRuntimeBundlePlugin } from "./vite.config.canvas-runtime-plugin";
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -19,7 +19,7 @@ function warnIfNativeWatchUnreliable(): void {
     cwd.startsWith("\\\\") || /^\/mnt\/[a-z]\//i.test(cwd);
   if (looksLikeNetworkOrWslMount) {
     console.warn(
-      `[bitfun] Project path "${cwd}" looks like a network share or WSL mount; ` +
+      `[halo] Project path "${cwd}" looks like a network share or WSL mount; ` +
         "native file watching may miss changes here. " +
         "Set VITE_USE_POLLING=1 to restore polling-based HMR.",
     );
@@ -37,7 +37,7 @@ export default defineConfig(({ mode, command }) => {
   return {
     plugins: [
       react(),
-      bitfunCanvasRuntimeBundlePlugin(),
+      haloCanvasRuntimeBundlePlugin(),
       versionInjectionPlugin()
     ],
 

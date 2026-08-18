@@ -280,7 +280,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
         const { pickWorkspaceDirectory } = await import(
           '@/infrastructure/peer-device/pickWorkspaceDirectory'
         );
-        unlistenFns.push(await listen('bitfun_menu_open_project', async () => {
+        unlistenFns.push(await listen('halo_menu_open_project', async () => {
           try {
             const selected = await pickWorkspaceDirectory({
               title: t('header.selectProjectDirectory'),
@@ -288,8 +288,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
             if (selected) await openWorkspace(selected);
           } catch {}
         }));
-        unlistenFns.push(await listen('bitfun_menu_new_project', () => handleNewProject()));
-        unlistenFns.push(await listen('bitfun_menu_about', () => handleShowAbout()));
+        unlistenFns.push(await listen('halo_menu_new_project', () => handleNewProject()));
+        unlistenFns.push(await listen('halo_menu_about', () => handleShowAbout()));
       } catch {}
     })();
     return () => { unlistenFns.forEach(fn => fn()); unlistenFns = []; };
@@ -306,10 +306,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
 
       try {
         const explicitPreferredMode =
-          sessionStorage.getItem('bitfun:flowchat:preferredMode') ||
+          sessionStorage.getItem('halo:flowchat:preferredMode') ||
           undefined;
         if (explicitPreferredMode) {
-          sessionStorage.removeItem('bitfun:flowchat:preferredMode');
+          sessionStorage.removeItem('halo:flowchat:preferredMode');
         }
 
         const { FlowChatManager } = await import('../../flow_chat/services/FlowChatManager');
@@ -438,7 +438,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
           }
         };
 
-        unlistenFn = await listen('bitfun_main_window_close_requested', async () => {
+        unlistenFn = await listen('halo_main_window_close_requested', async () => {
           if (handlingClose) return;
           handlingClose = true;
 
@@ -567,11 +567,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
   }, []);
 
   const containerClassName = [
-    'bitfun-app-layout',
-    isMacOS ? 'bitfun-app-layout--macos' : '',
+    'halo-app-layout',
+    isMacOS ? 'halo-app-layout--macos' : '',
     className,
-    isFullscreen ? 'bitfun-app-layout--window-fullscreen' : '',
-    isTransitioning ? 'bitfun-app-layout--transitioning' : '',
+    isFullscreen ? 'halo-app-layout--window-fullscreen' : '',
+    isTransitioning ? 'halo-app-layout--transitioning' : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -581,17 +581,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
         {windowModeHint && (
           <div
             key={windowModeHint.id}
-            className="bitfun-window-mode-hint"
+            className="halo-window-mode-hint"
             role="status"
             aria-live="polite"
           >
-            <span className="bitfun-window-mode-hint__title">{windowModeHint.title}</span>
-            <span className="bitfun-window-mode-hint__detail">{windowModeHint.detail}</span>
+            <span className="halo-window-mode-hint__title">{windowModeHint.title}</span>
+            <span className="halo-window-mode-hint__detail">{windowModeHint.detail}</span>
           </div>
         )}
 
         {/* Main content — always render WorkspaceBody; WelcomeScene in viewport handles no-workspace state */}
-        <main className="bitfun-app-main-workspace" data-testid="app-main-content">
+        <main className="halo-app-main-workspace" data-testid="app-main-content">
           <WorkspaceBody
             onMinimize={canUseNativeWindowControls && !isMacOS ? handleMinimize : undefined}
             onMaximize={canUseNativeWindowControls ? handleMaximize : undefined}

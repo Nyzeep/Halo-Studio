@@ -108,8 +108,8 @@ const GenerativeWidgetPanel = React.lazy(() =>
   import('@/tools/generative-widget/GenerativeWidgetPanel')
 );
 
-const BitfunCanvasPanel = React.lazy(() =>
-  import('@/tools/bitfun-canvas/BitfunCanvasPanel')
+const HaloCanvasPanel = React.lazy(() =>
+  import('@/tools/halo-canvas/HaloCanvasPanel')
 );
 
 const TaskDetailPanel = React.lazy(() => 
@@ -253,7 +253,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
   }, [content]);
 
   const renderEditorLoading = () => (
-    <div className="bitfun-flexible-panel__loading">
+    <div className="halo-flexible-panel__loading">
       {t('select.loading')}
     </div>
   );
@@ -267,8 +267,8 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
   const renderContent = () => {
     if (!content || content.type === 'empty') {
       return (
-        <div className="bitfun-flexible-panel__empty-content">
-          <div className="bitfun-flexible-panel__empty-icon">
+        <div className="halo-flexible-panel__empty-content">
+          <div className="halo-flexible-panel__empty-icon">
             {getContentIcon('empty')}
           </div>
           <h3>{t('flexiblePanel.empty.title')}</h3>
@@ -283,7 +283,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
         const hasFixNeeded = previewData.migrationContext?.hasUpgradePoints || previewData.needsFix || false;
         
         return (
-          <div className={`bitfun-flexible-panel__code-content ${hasFixNeeded ? 'needs-fix' : ''}`}>
+          <div className={`halo-flexible-panel__code-content ${hasFixNeeded ? 'needs-fix' : ''}`}>
             <pre><code>{typeof content.data === 'string' ? content.data : t('flexiblePanel.fallback.noCodeContent')}</code></pre>
           </div>
         );
@@ -291,7 +291,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
 
       case 'markdown-viewer':
         return (
-          <div className="bitfun-flexible-panel__markdown-content">
+          <div className="halo-flexible-panel__markdown-content">
             <MarkdownRenderer content={typeof content.data === 'string' ? content.data : ''} />
           </div>
         );
@@ -306,7 +306,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
         const markdownJumpToColumn = markdownEditorData.jumpToColumn;
 
         return (
-          <div className="bitfun-flexible-panel__markdown-editor">
+          <div className="halo-flexible-panel__markdown-editor">
             {markdownFilePath || markdownInitialContent !== undefined ? (
               renderLazyEditor(
                 <MarkdownEditor
@@ -332,7 +332,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
                 />
               )
             ) : (
-              <div className="bitfun-flexible-panel__error-message">
+              <div className="halo-flexible-panel__error-message">
                 <AlertCircle size={20} />
                 <p>{t('flexiblePanel.errors.markdownEditorMissingPath')}</p>
               </div>
@@ -344,7 +344,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
 
       case 'text-viewer':
         return (
-          <div className="bitfun-flexible-panel__text-content">
+          <div className="halo-flexible-panel__text-content">
             <pre>{typeof content.data === 'string' ? content.data : 'No text content available'}</pre>
           </div>
         );
@@ -352,10 +352,10 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
       case 'file-viewer': {
         const fileViewerData = content.data || {};
         const fileNeedsFix = fileViewerData.migrationContext?.hasUpgradePoints || fileViewerData.needsFix || false;
-        const fileViewerClass = `bitfun-flexible-panel__panel-code-viewer ${fileNeedsFix ? 'needs-fix' : ''}`;
+        const fileViewerClass = `halo-flexible-panel__panel-code-viewer ${fileNeedsFix ? 'needs-fix' : ''}`;
         
         return (
-          <div className="bitfun-flexible-panel__code-viewer-container">
+          <div className="halo-flexible-panel__code-viewer-container">
             {renderLazyEditor(
               <CodeEditor
                 filePath={fileViewerData.filePath || ''}
@@ -377,13 +377,13 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
         const imageViewerData = content.data || {};
         
         return (
-          <div className="bitfun-flexible-panel__image-viewer-container">
+          <div className="halo-flexible-panel__image-viewer-container">
             {renderLazyEditor(
               <ImageViewer
                 filePath={imageViewerData.filePath || ''}
                 fileName={content.title}
                 workspacePath={workspacePath}
-                className="bitfun-flexible-panel__image-viewer"
+                className="halo-flexible-panel__image-viewer"
               />
             )}
           </div>
@@ -396,8 +396,8 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
         const needsFix = migrationContext.hasUpgradePoints || codeData.needsFix || false;
         
         return (
-          <div className="bitfun-flexible-panel__code-viewer-container">
-            <div className={`bitfun-flexible-panel__code-content ${needsFix ? 'needs-fix' : ''}`}>
+          <div className="halo-flexible-panel__code-viewer-container">
+            <div className={`halo-flexible-panel__code-content ${needsFix ? 'needs-fix' : ''}`}>
               {renderLazyEditor(
                 <CodeEditor
                   filePath={codeData.filePath || ''}
@@ -721,7 +721,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
       case 'task-detail': {
         const taskDetailData = content.data || {};
         return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">{t('flexiblePanel.loading.taskDetail')}</div>}>
+          <React.Suspense fallback={<div className="halo-flexible-panel__loading">{t('flexiblePanel.loading.taskDetail')}</div>}>
             <TaskDetailPanel data={taskDetailData} />
           </React.Suspense>
         );
@@ -737,7 +737,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
         
         if (!planFilePath) {
           return (
-            <div className="bitfun-flexible-panel__error-message">
+            <div className="halo-flexible-panel__error-message">
               <AlertCircle size={20} />
               <p>{t('flexiblePanel.errors.planViewerMissingPath')}</p>
             </div>
@@ -745,7 +745,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
         }
         
         return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">{t('flexiblePanel.loading.planViewer')}</div>}>
+          <React.Suspense fallback={<div className="halo-flexible-panel__loading">{t('flexiblePanel.loading.planViewer')}</div>}>
             <PlanViewer
               filePath={planFilePath}
               fileName={planFileName}
@@ -764,7 +764,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
         
         if (!sessionId) {
           return (
-            <div className="bitfun-flexible-panel__error-message">
+            <div className="halo-flexible-panel__error-message">
               <AlertCircle size={20} />
               <p>{t('flexiblePanel.errors.terminalMissingSessionId')}</p>
             </div>
@@ -772,8 +772,8 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
         }
         
         return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">{t('flexiblePanel.loading.terminal')}</div>}>
-            <div className="bitfun-flexible-panel__terminal-container">
+          <React.Suspense fallback={<div className="halo-flexible-panel__loading">{t('flexiblePanel.loading.terminal')}</div>}>
+            <div className="halo-flexible-panel__terminal-container">
               <TerminalTabPanel
                 key={sessionId}
                 sessionId={sessionId}
@@ -787,7 +787,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
 
       case 'btw-session':
         return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">{t('flexiblePanel.loading.taskDetail')}</div>}>
+          <React.Suspense fallback={<div className="halo-flexible-panel__loading">{t('flexiblePanel.loading.taskDetail')}</div>}>
             <BtwSessionPanel
               childSessionId={content.data?.childSessionId}
               parentSessionId={content.data?.parentSessionId}
@@ -800,7 +800,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
 
       case 'session-usage':
         return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">{t('flexiblePanel.loading.taskDetail')}</div>}>
+          <React.Suspense fallback={<div className="halo-flexible-panel__loading">{t('flexiblePanel.loading.taskDetail')}</div>}>
             <SessionUsagePanel
               report={content.data?.report}
               markdown={content.data?.markdown}
@@ -813,21 +813,21 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
 
       case 'background-command-output':
         return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">{t('flexiblePanel.loading.terminal')}</div>}>
+          <React.Suspense fallback={<div className="halo-flexible-panel__loading">{t('flexiblePanel.loading.terminal')}</div>}>
             <BackgroundCommandOutputPanel data={content.data} />
           </React.Suspense>
         );
 
       case 'review-platform':
         return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading pull requests...</div>}>
+          <React.Suspense fallback={<div className="halo-flexible-panel__loading">Loading pull requests...</div>}>
             <ReviewPlatformPanel workspacePath={content.data?.workspacePath || workspacePath} />
           </React.Suspense>
         );
 
       case 'review-platform-pr-detail':
         return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading pull request...</div>}>
+          <React.Suspense fallback={<div className="halo-flexible-panel__loading">Loading pull request...</div>}>
             <ReviewPlatformPanel
               workspacePath={content.data?.workspacePath || workspacePath}
               initialRemoteId={content.data?.remoteId}
@@ -840,7 +840,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
 
       case 'browser':
         return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">{t('flexiblePanel.loading.terminal')}</div>}>
+          <React.Suspense fallback={<div className="halo-flexible-panel__loading">{t('flexiblePanel.loading.terminal')}</div>}>
             <BrowserPanel
               isActive={isActive}
               initialUrl={content.data?.url}
@@ -850,7 +850,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
 
       case 'generative-widget':
         return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading widget preview...</div>}>
+          <React.Suspense fallback={<div className="halo-flexible-panel__loading">Loading widget preview...</div>}>
             <GenerativeWidgetPanel
               title={content.title}
               widgetId={content.data?.widgetId}
@@ -929,10 +929,10 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
           </React.Suspense>
         );
 
-      case 'bitfun-canvas':
+      case 'halo-canvas':
         return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading Canvas preview...</div>}>
-            <BitfunCanvasPanel
+          <React.Suspense fallback={<div className="halo-flexible-panel__loading">Loading Canvas preview...</div>}>
+            <HaloCanvasPanel
               title={content.title}
               artifactReference={content.data?.artifactReference}
               html={content.data?.html}
@@ -948,13 +948,13 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
 
       default:
         return (
-          <div className="bitfun-flexible-panel__unknown-content">
-            <div className="bitfun-flexible-panel__unknown-icon">
+          <div className="halo-flexible-panel__unknown-content">
+            <div className="halo-flexible-panel__unknown-icon">
               <AlertCircle size={48} />
             </div>
             <h3>{t('flexiblePanel.unknownContent.title')}</h3>
             <p>{t('flexiblePanel.unknownContent.description')}</p>
-            <div className="bitfun-flexible-panel__unknown-meta">
+            <div className="halo-flexible-panel__unknown-meta">
               <code>{t('flexiblePanel.unknownContent.contentType', { type: content.type })}</code>
             </div>
           </div>
@@ -965,24 +965,24 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
   const showHeader = content && shouldShowHeader(content.type);
 
   return (
-    <div className={`bitfun-flexible-panel ${className}`}>
+    <div className={`halo-flexible-panel ${className}`}>
       {showHeader && (
-        <div className="bitfun-flexible-panel__header">
-          <div className="bitfun-flexible-panel__header-left">
-            <div className="bitfun-flexible-panel__content-icon">
+        <div className="halo-flexible-panel__header">
+          <div className="halo-flexible-panel__header-left">
+            <div className="halo-flexible-panel__content-icon">
               {getContentIcon(content.type)}
             </div>
-            <div className="bitfun-flexible-panel__content-info">
-              <span className="bitfun-flexible-panel__content-title">
+            <div className="halo-flexible-panel__content-info">
+              <span className="halo-flexible-panel__content-title">
                 {content.title || getContentTypeName(content.type)}
               </span>
-              <span className="bitfun-flexible-panel__content-type">
+              <span className="halo-flexible-panel__content-type">
                 {getContentTypeName(content.type)}
               </span>
             </div>
           </div>
 
-          <div className="bitfun-flexible-panel__header-right">
+          <div className="halo-flexible-panel__header-right">
             {content && content.type !== 'empty' && (
               <>
                 <IconButton
@@ -1015,7 +1015,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
         </div>
       )}
 
-      <div className="bitfun-flexible-panel__content">
+      <div className="halo-flexible-panel__content">
         {renderContent()}
       </div>
     </div>

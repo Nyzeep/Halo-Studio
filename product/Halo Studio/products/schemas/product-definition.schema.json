@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://openbitfun.com/schemas/product-definition-v1.json",
-  "title": "BitFun product definition C0a",
+  "title": "Halo Studio product definition C0a",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "localeRoot", "members"],

@@ -58,7 +58,7 @@ describe('SessionsSection layout styles', () => {
     expect(actionsBlock).toContain('visibility: hidden;');
     expect(actionsBlock).toContain('opacity: 0;');
     expect(actionsBlock).toContain('pointer-events: none;');
-    expect(actionsBlock).toContain('.bitfun-nav-panel__inline-item:hover &');
+    expect(actionsBlock).toContain('.halo-nav-panel__inline-item:hover &');
     expect(actionsBlock).toContain('&.is-open');
     expect(actionsBlock).toContain('visibility: visible;');
   });
@@ -100,7 +100,7 @@ describe('SessionsSection layout styles', () => {
     expect(backgroundSubagentIconBlock).toContain('place-self: center;');
     expect(backgroundSubagentIconBlock).toContain('display: block;');
     expect(backgroundSubagentIconBlock).toContain('transform-origin: center center;');
-    expect(stylesheet).not.toContain('--bitfun-subagent-bot-optical-y');
-    expect(stylesheet).not.toContain('translateY(var(--bitfun-subagent-bot-optical-y))');
+    expect(stylesheet).not.toContain('--halo-subagent-bot-optical-y');
+    expect(stylesheet).not.toContain('translateY(var(--halo-subagent-bot-optical-y))');
   });
 });

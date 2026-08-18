@@ -180,7 +180,7 @@ describe('FileOperationToolCard', () => {
   });
 
   it('does not trigger passive git refresh while historical restore is pending', async () => {
-    mocks.currentWorkspace = { rootPath: 'D:/workspace/BitFun' };
+    mocks.currentWorkspace = { rootPath: 'D:/workspace/Halo' };
     const toolItem: FlowToolItem = {
       id: 'tool-history',
       type: 'tool',
@@ -224,7 +224,7 @@ describe('FileOperationToolCard', () => {
     });
 
     expect(mocks.useGitState).toHaveBeenCalledWith(expect.objectContaining({
-      repositoryPath: 'D:/workspace/BitFun',
+      repositoryPath: 'D:/workspace/Halo',
       isActive: false,
       refreshOnMount: false,
       refreshOnActive: false,
@@ -234,7 +234,7 @@ describe('FileOperationToolCard', () => {
   });
 
   it('keeps passive git refresh enabled for normal active sessions', async () => {
-    mocks.currentWorkspace = { rootPath: 'D:/workspace/BitFun' };
+    mocks.currentWorkspace = { rootPath: 'D:/workspace/Halo' };
     const toolItem: FlowToolItem = {
       id: 'tool-active',
       type: 'tool',
@@ -277,7 +277,7 @@ describe('FileOperationToolCard', () => {
     });
 
     expect(mocks.useGitState).toHaveBeenCalledWith(expect.objectContaining({
-      repositoryPath: 'D:/workspace/BitFun',
+      repositoryPath: 'D:/workspace/Halo',
       isActive: true,
       refreshOnMount: true,
       refreshOnActive: false,
@@ -294,7 +294,7 @@ describe('FileOperationToolCard', () => {
   });
 
   it('does not trigger passive git refresh during history open transition', async () => {
-    mocks.currentWorkspace = { rootPath: 'D:/workspace/BitFun' };
+    mocks.currentWorkspace = { rootPath: 'D:/workspace/Halo' };
     dispatchHistorySessionOpenIntent('history-session', 'History');
     const toolItem: FlowToolItem = {
       id: 'tool-transition',
@@ -339,7 +339,7 @@ describe('FileOperationToolCard', () => {
     });
 
     expect(mocks.useGitState).toHaveBeenCalledWith(expect.objectContaining({
-      repositoryPath: 'D:/workspace/BitFun',
+      repositoryPath: 'D:/workspace/Halo',
       isActive: false,
       refreshOnMount: false,
       refreshOnActive: false,

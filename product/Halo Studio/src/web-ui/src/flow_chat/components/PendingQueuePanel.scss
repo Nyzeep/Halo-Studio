@@ -1,4 +1,4 @@
-@keyframes bitfun-pending-queue-fade-in {
+@keyframes halo-pending-queue-fade-in {
   from {
     opacity: 0;
     transform: translateY(4px);
@@ -9,13 +9,13 @@
   }
 }
 
-@keyframes bitfun-pending-queue-spin {
+@keyframes halo-pending-queue-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-.bitfun-pending-queue-panel {
+.halo-pending-queue-panel {
   box-sizing: border-box;
   width: 100%;
   display: flex;
@@ -32,7 +32,7 @@
   max-height: 260px;
   overflow-y: auto;
   scrollbar-width: thin;
-  animation: bitfun-pending-queue-fade-in 180ms ease-out;
+  animation: halo-pending-queue-fade-in 180ms ease-out;
 
   &::-webkit-scrollbar {
     width: 6px;
@@ -93,7 +93,7 @@
     border: none;
     box-shadow: none;
     transition: opacity 140ms ease;
-    animation: bitfun-pending-queue-fade-in 160ms ease-out;
+    animation: halo-pending-queue-fade-in 160ms ease-out;
     position: relative;
 
     &:hover {
@@ -101,7 +101,7 @@
       border: none;
       box-shadow: none;
 
-      .bitfun-pending-queue-panel__actions {
+      .halo-pending-queue-panel__actions {
         opacity: 1;
       }
     }
@@ -112,7 +112,7 @@
       border: none;
       box-shadow: none;
 
-      .bitfun-pending-queue-panel__actions {
+      .halo-pending-queue-panel__actions {
         opacity: 1;
       }
     }
@@ -165,7 +165,7 @@
     font-weight: 500;
 
     svg {
-      animation: bitfun-pending-queue-spin 720ms linear infinite;
+      animation: halo-pending-queue-spin 720ms linear infinite;
     }
   }
 
@@ -215,7 +215,7 @@
   }
 
   /* Compact targets: default IconButton --small is 28px and dominates row height. */
-  .bitfun-pending-queue-panel__btn.icon-btn {
+  .halo-pending-queue-panel__btn.icon-btn {
     width: 22px;
     height: 22px;
     min-width: 22px;

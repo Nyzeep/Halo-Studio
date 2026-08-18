@@ -41,17 +41,17 @@
     border-radius: 999px;
     background: color-mix(in srgb, var(--element-bg-soft) 72%, transparent);
 
-    .bitfun-checkbox__wrapper {
+    .halo-checkbox__wrapper {
       margin-top: 0;
     }
 
-    .bitfun-checkbox__label {
+    .halo-checkbox__label {
       color: var(--color-text-secondary);
       font-size: var(--flowchat-font-size-xs);
       font-weight: 500;
     }
 
-    &:hover .bitfun-checkbox__label {
+    &:hover .halo-checkbox__label {
       color: var(--color-text-primary);
     }
   }
@@ -180,7 +180,7 @@
   }
 
   &__input-textarea {
-    .bitfun-textarea__field {
+    .halo-textarea__field {
       min-height: 74px;
       max-height: 180px;
       resize: vertical;
@@ -189,7 +189,7 @@
       line-height: 1.5;
     }
 
-    &--masked .bitfun-textarea__field {
+    &--masked .halo-textarea__field {
       -webkit-text-security: disc;
     }
   }
@@ -208,12 +208,12 @@
   }
 
   &__input-option {
-    .bitfun-checkbox__label {
+    .halo-checkbox__label {
       color: var(--color-text-secondary);
       font-size: var(--flowchat-font-size-xs);
     }
 
-    &:hover .bitfun-checkbox__label {
+    &:hover .halo-checkbox__label {
       color: var(--color-text-primary);
     }
   }

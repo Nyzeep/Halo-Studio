@@ -37,7 +37,7 @@
           }
         };
         function resolveLocale() {
-          var injected = window.__BITFUN_BOOTSTRAP_LOCALE__;
+          var injected = window.__HALO_BOOTSTRAP_LOCALE__;
           var lang = typeof injected === 'string' && injected ? injected : navigator.language;
           if (/^zh-(tw|hk|mo|hant)/i.test(lang)) return 'zh-TW';
           if (/^en/i.test(lang)) return 'en-US';
@@ -45,12 +45,12 @@
         }
         function resolveMessages() {
           var locale = resolveLocale();
-          var injected = window.__BITFUN_BOOTSTRAP_MESSAGES__;
+          var injected = window.__HALO_BOOTSTRAP_MESSAGES__;
           return Object.assign({}, fallbackMessages[locale], injected || {});
         }
-        window.__BITFUN_RESOLVE_BOOTSTRAP_MESSAGES__ = resolveMessages;
-        window.__BITFUN_RESOLVE_BOOTSTRAP_LOCALE__ = resolveLocale;
-        window.__BITFUN_STARTUP_OVERLAY_STARTED_AT__ = performance.now();
+        window.__HALO_RESOLVE_BOOTSTRAP_MESSAGES__ = resolveMessages;
+        window.__HALO_RESOLVE_BOOTSTRAP_LOCALE__ = resolveLocale;
+        window.__HALO_STARTUP_OVERLAY_STARTED_AT__ = performance.now();
         root.setAttribute('lang', resolveLocale());
         var bg = root.style.backgroundColor || (m && m.matches ? dark : light);
         root.style.setProperty('--color-bg-primary', bg);
@@ -94,18 +94,18 @@
       }
 
       #root,
-      #bitfun-startup-overlay {
+      #halo-startup-overlay {
         width: 100%;
         height: 100%;
       }
 
-      #bitfun-startup-overlay {
+      #halo-startup-overlay {
         position: fixed;
         inset: 0;
         z-index: 9999;
       }
 
-      .bitfun-sr-only {
+      .halo-sr-only {
         position: absolute;
         width: 1px;
         height: 1px;
@@ -130,11 +130,11 @@
         pointer-events: none;
       }
 
-      #bitfun-startup-overlay.bitfun-startup-overlay--exiting {
-        animation: bitfun-startup-overlay-exit 0.24s ease-in-out both;
+      #halo-startup-overlay.halo-startup-overlay--exiting {
+        animation: halo-startup-overlay-exit 0.24s ease-in-out both;
       }
 
-      .bitfun-startup-window-controls {
+      .halo-startup-window-controls {
         position: fixed;
         top: 8px;
         right: 10px;
@@ -146,11 +146,11 @@
         pointer-events: auto;
       }
 
-      .bitfun-startup-window-controls[hidden] {
+      .halo-startup-window-controls[hidden] {
         display: none;
       }
 
-      .bitfun-startup-window-controls__btn {
+      .halo-startup-window-controls__btn {
         width: 28px;
         height: 28px;
         display: grid;
@@ -164,23 +164,23 @@
         transition: background 0.15s ease, color 0.15s ease;
       }
 
-      .bitfun-startup-window-controls__btn:hover {
+      .halo-startup-window-controls__btn:hover {
         background: rgba(143, 143, 153, 0.12);
         color: rgba(143, 143, 153, 1);
       }
 
-      .bitfun-startup-window-controls__btn--close:hover {
+      .halo-startup-window-controls__btn--close:hover {
         color: #ef4444;
       }
 
-      .bitfun-startup-window-controls__glyph {
+      .halo-startup-window-controls__glyph {
         position: relative;
         width: 12px;
         height: 12px;
         display: block;
       }
 
-      .bitfun-startup-window-controls__glyph--minimize::before {
+      .halo-startup-window-controls__glyph--minimize::before {
         content: "";
         position: absolute;
         left: 2px;
@@ -191,7 +191,7 @@
         background: currentColor;
       }
 
-      .bitfun-startup-window-controls__glyph--maximize::before {
+      .halo-startup-window-controls__glyph--maximize::before {
         content: "";
         position: absolute;
         inset: 2px;
@@ -199,8 +199,8 @@
         border-radius: 2px;
       }
 
-      .bitfun-startup-window-controls__glyph--close::before,
-      .bitfun-startup-window-controls__glyph--close::after {
+      .halo-startup-window-controls__glyph--close::before,
+      .halo-startup-window-controls__glyph--close::after {
         content: "";
         position: absolute;
         left: 2px;
@@ -211,11 +211,11 @@
         background: currentColor;
       }
 
-      .bitfun-startup-window-controls__glyph--close::before {
+      .halo-startup-window-controls__glyph--close::before {
         transform: rotate(45deg);
       }
 
-      .bitfun-startup-window-controls__glyph--close::after {
+      .halo-startup-window-controls__glyph--close::after {
         transform: rotate(-45deg);
       }
 
@@ -234,7 +234,7 @@
       }
 
       .splash-screen__logo,
-      .bitfun-preload__logo {
+      .halo-preload__logo {
         display: block;
         width: 96px;
         height: 96px;
@@ -275,7 +275,7 @@
         }
       }
 
-      @keyframes bitfun-startup-overlay-exit {
+      @keyframes halo-startup-overlay-exit {
         from {
           opacity: 1;
         }
@@ -298,15 +298,15 @@
         }
       }
 
-      .bitfun-pet-preload-body {
+      .halo-pet-preload-body {
         background: transparent !important;
       }
 
-      .bitfun-pet-preload-body #root {
+      .halo-pet-preload-body #root {
         background: transparent;
       }
 
-      .bitfun-pet-preload {
+      .halo-pet-preload {
         width: 100%;
         height: 100%;
         display: grid;
@@ -315,15 +315,15 @@
         pointer-events: none;
       }
 
-      .bitfun-pet-preload__sprite {
+      .halo-pet-preload__sprite {
         position: relative;
         width: 48px;
         height: 48px;
         transform-origin: center bottom;
-        animation: bitfun-pet-preload-breathe 1.8s ease-in-out infinite;
+        animation: halo-pet-preload-breathe 1.8s ease-in-out infinite;
       }
 
-      @keyframes bitfun-pet-preload-breathe {
+      @keyframes halo-pet-preload-breathe {
         0%, 100% {
           opacity: 0.58;
           transform: scale(0.96);
@@ -335,7 +335,7 @@
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .bitfun-pet-preload__sprite {
+        .halo-pet-preload__sprite {
           animation: none;
         }
       }
@@ -345,23 +345,23 @@
   <body>
     <script type="module" src="/src/main.tsx"></script>
     <div id="root"></div>
-    <div id="bitfun-startup-overlay">
+    <div id="halo-startup-overlay">
       <div class="splash-screen" aria-hidden="true">
-        <div class="bitfun-startup-window-controls" data-startup-window-controls hidden>
-          <button class="bitfun-startup-window-controls__btn" type="button" data-startup-window-action="minimize">
-            <span class="bitfun-startup-window-controls__glyph bitfun-startup-window-controls__glyph--minimize" aria-hidden="true"></span>
+        <div class="halo-startup-window-controls" data-startup-window-controls hidden>
+          <button class="halo-startup-window-controls__btn" type="button" data-startup-window-action="minimize">
+            <span class="halo-startup-window-controls__glyph halo-startup-window-controls__glyph--minimize" aria-hidden="true"></span>
           </button>
-          <button class="bitfun-startup-window-controls__btn" type="button" data-startup-window-action="toggle_maximize">
-            <span class="bitfun-startup-window-controls__glyph bitfun-startup-window-controls__glyph--maximize" aria-hidden="true"></span>
+          <button class="halo-startup-window-controls__btn" type="button" data-startup-window-action="toggle_maximize">
+            <span class="halo-startup-window-controls__glyph halo-startup-window-controls__glyph--maximize" aria-hidden="true"></span>
           </button>
-          <button class="bitfun-startup-window-controls__btn bitfun-startup-window-controls__btn--close" type="button" data-startup-window-action="close">
-            <span class="bitfun-startup-window-controls__glyph bitfun-startup-window-controls__glyph--close" aria-hidden="true"></span>
+          <button class="halo-startup-window-controls__btn halo-startup-window-controls__btn--close" type="button" data-startup-window-action="close">
+            <span class="halo-startup-window-controls__glyph halo-startup-window-controls__glyph--close" aria-hidden="true"></span>
           </button>
         </div>
         <div class="splash-screen__center">
           <div class="splash-screen__logo-wrap">
             <img
-              class="bitfun-preload__logo"
+              class="halo-preload__logo"
               src="/halo-icon.svg"
               alt=""
               draggable="false"
@@ -376,23 +376,23 @@
     <script>
       (function () {
         var params = new URLSearchParams(window.location.search);
-        var isPetWindow = params.get('bitfunWindow') === 'agent-companion';
-        var messages = window.__BITFUN_RESOLVE_BOOTSTRAP_MESSAGES__
-          ? window.__BITFUN_RESOLVE_BOOTSTRAP_MESSAGES__()
+        var isPetWindow = params.get('haloWindow') === 'agent-companion';
+        var messages = window.__HALO_RESOLVE_BOOTSTRAP_MESSAGES__
+          ? window.__HALO_RESOLVE_BOOTSTRAP_MESSAGES__()
           : { loadingApp: 'Starting Halo Studio...', minimize: 'Minimize', maximize: 'Maximize', close: 'Close', petLoading: 'Loading companion...' };
-        var locale = window.__BITFUN_RESOLVE_BOOTSTRAP_LOCALE__
-          ? window.__BITFUN_RESOLVE_BOOTSTRAP_LOCALE__()
+        var locale = window.__HALO_RESOLVE_BOOTSTRAP_LOCALE__
+          ? window.__HALO_RESOLVE_BOOTSTRAP_LOCALE__()
           : 'en-US';
         document.documentElement.setAttribute('lang', locale);
 
         if (isPetWindow) {
-          document.body.classList.add('bitfun-pet-preload-body');
-          var startupOverlay = document.getElementById('bitfun-startup-overlay');
+          document.body.classList.add('halo-pet-preload-body');
+          var startupOverlay = document.getElementById('halo-startup-overlay');
           if (startupOverlay) startupOverlay.remove();
           var root = document.getElementById('root');
           if (root) {
-            root.innerHTML = '<div class="bitfun-pet-preload"><div class="bitfun-pet-preload__sprite" aria-hidden="true"></div><span class="bitfun-sr-only"></span></div>';
-            var petStatus = root.querySelector('.bitfun-sr-only');
+            root.innerHTML = '<div class="halo-pet-preload"><div class="halo-pet-preload__sprite" aria-hidden="true"></div><span class="halo-sr-only"></span></div>';
+            var petStatus = root.querySelector('.halo-sr-only');
             if (petStatus) petStatus.textContent = messages.petLoading;
           }
           return;
@@ -407,7 +407,7 @@
         }
 
         var controls = document.querySelector('[data-startup-window-controls]');
-        if (controls && window.__BITFUN_SHOW_STARTUP_WINDOW_CONTROLS__) {
+        if (controls && window.__HALO_SHOW_STARTUP_WINDOW_CONTROLS__) {
           controls.hidden = false;
           var labels = {
             minimize: messages.minimize,

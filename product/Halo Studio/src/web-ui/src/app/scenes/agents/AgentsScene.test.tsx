@@ -218,7 +218,7 @@ describeWithJsdom('AgentsScene', () => {
     });
 
     expect(container.querySelector('[data-testid="create-agent-page"]')).toBeTruthy();
-    expect(container.querySelector('.bitfun-agents-scene--page')).toBeTruthy();
+    expect(container.querySelector('.halo-agents-scene--page')).toBeTruthy();
   }, 10_000);
 
   it('keeps agent subpages stretched across the active scene viewport', () => {

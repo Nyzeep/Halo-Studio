@@ -17,9 +17,9 @@ import {
   isPeerDeviceModeActive,
   PEER_MODE_CANVAS_POLL_MS,
 } from '@/infrastructure/peer-device/peerModeFlag';
-import './BitfunCanvasPanel.scss';
+import './HaloCanvasPanel.scss';
 
-const log = createLogger('BitfunCanvasPanel');
+const log = createLogger('HaloCanvasPanel');
 
 const CanvasSourceCodeEditor = React.lazy(() =>
   import('@/tools/editor/components/CodeEditor').then(module => ({
@@ -27,7 +27,7 @@ const CanvasSourceCodeEditor = React.lazy(() =>
   })),
 );
 
-export interface BitfunCanvasDiagnostic {
+export interface HaloCanvasDiagnostic {
   severity?: string;
   category?: string;
   message?: string;
@@ -36,13 +36,13 @@ export interface BitfunCanvasDiagnostic {
   column?: number;
 }
 
-export interface BitfunCanvasPanelProps {
+export interface HaloCanvasPanelProps {
   title?: string;
   artifactReference?: string;
   html?: string;
   source?: string;
   status?: string;
-  diagnostics?: BitfunCanvasDiagnostic[];
+  diagnostics?: HaloCanvasDiagnostic[];
   workspacePath?: string;
   remoteConnectionId?: string;
   remoteSshHost?: string;
@@ -116,7 +116,7 @@ function positiveInteger(value: unknown): number | undefined {
 
 function sessionIdFromCanvasArtifactReference(artifactReference?: string): string | null {
   if (!artifactReference) return null;
-  const match = /^bitfun-canvas:\/\/session\/([^/]+)\/canvas\/[^/]+$/.exec(artifactReference);
+  const match = /^halo-canvas:\/\/session\/([^/]+)\/canvas\/[^/]+$/.exec(artifactReference);
   return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
@@ -234,7 +234,7 @@ function canvasSnapshotSignature(canvas: CanvasSnapshotValue | null | undefined)
   ].join('\u0000');
 }
 
-export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
+export const HaloCanvasPanel: React.FC<HaloCanvasPanelProps> = ({
   title,
   artifactReference,
   html,
@@ -321,11 +321,11 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
   }, []);
 
   const postThemeToIframe = useCallback(() => {
-    postToIframe({ type: 'bitfun-canvas-theme', theme: readHostThemePayload() });
+    postToIframe({ type: 'halo-canvas-theme', theme: readHostThemePayload() });
   }, [postToIframe]);
 
   const postDesignModeToIframe = useCallback((enabled: boolean) => {
-    postToIframe({ type: 'bitfun-canvas-design-mode', enabled });
+    postToIframe({ type: 'halo-canvas-design-mode', enabled });
   }, [postToIframe]);
 
   const applyLoadedCanvas = useCallback((canvas: CanvasSnapshotValue | null, reason: string) => {
@@ -519,7 +519,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
     postDesignModeToIframe(designMode);
     if (artifactReference) {
       const state = await loadState();
-      postToIframe({ type: 'bitfun-canvas-state', state });
+      postToIframe({ type: 'halo-canvas-state', state });
     }
   }, [
     artifactReference,
@@ -701,7 +701,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
       const data = event.data;
       if (!data || typeof data !== 'object') return;
       const maybeType = (data as { type?: unknown }).type;
-      if (typeof maybeType !== 'string' || !maybeType.startsWith('bitfun-canvas-')) return;
+      if (typeof maybeType !== 'string' || !maybeType.startsWith('halo-canvas-')) return;
       if (!iframeWindow) return;
       if (event.source !== iframeWindow) {
         log.warn('Canvas iframe message source mismatch; ignoring message', {
@@ -723,7 +723,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
 
       try {
         switch (message.type) {
-          case 'bitfun-canvas-boot-started': {
+          case 'halo-canvas-boot-started': {
             iframeStatusRef.current.bootStarted = true;
             log.info('Canvas iframe boot script started', {
               artifactReference,
@@ -732,7 +732,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
             });
             break;
           }
-          case 'bitfun-canvas-react-loaded': {
+          case 'halo-canvas-react-loaded': {
             log.info('Canvas iframe React loaded', {
               artifactReference,
               runtime: renderedCanvas.runtime,
@@ -741,7 +741,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
             });
             break;
           }
-          case 'bitfun-canvas-react-dom-loaded': {
+          case 'halo-canvas-react-dom-loaded': {
             log.info('Canvas iframe ReactDOM loaded', {
               artifactReference,
               runtime: renderedCanvas.runtime,
@@ -751,7 +751,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
             });
             break;
           }
-          case 'bitfun-canvas-early-error': {
+          case 'halo-canvas-early-error': {
             iframeStatusRef.current.runtimeError = true;
             log.warn('Canvas iframe early runtime error', {
               artifactReference,
@@ -766,7 +766,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
             void reportRuntimeError(data);
             break;
           }
-          case 'bitfun-canvas-ready': {
+          case 'halo-canvas-ready': {
             iframeStatusRef.current.ready = true;
             log.info('Canvas iframe reported ready', {
               artifactReference,
@@ -776,7 +776,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
             await initializeIframe('ready');
             break;
           }
-          case 'bitfun-canvas-module-started': {
+          case 'halo-canvas-module-started': {
             iframeStatusRef.current.moduleStarted = true;
             log.info('Canvas iframe module started', {
               artifactReference,
@@ -785,16 +785,16 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
             });
             break;
           }
-          case 'bitfun-canvas-load-state': {
+          case 'halo-canvas-load-state': {
             const state = await loadState();
             postToIframe({
-              type: 'bitfun-canvas-load-state-result',
+              type: 'halo-canvas-load-state-result',
               requestId: message.requestId,
               state,
             });
             break;
           }
-          case 'bitfun-canvas-save-state': {
+          case 'halo-canvas-save-state': {
             const response = await canvasAPI.saveState({
               artifactReference,
               sourceRevisionSeen: message.sourceRevisionSeen,
@@ -805,22 +805,22 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
               remoteSshHost,
             });
             postToIframe({
-              type: 'bitfun-canvas-save-state-result',
+              type: 'halo-canvas-save-state-result',
               requestId: message.requestId,
               state: response.state ?? null,
             });
             break;
           }
-          case 'bitfun-canvas-action': {
+          case 'halo-canvas-action': {
             const result = await handleCanvasAction(message.action);
             postToIframe({
-              type: 'bitfun-canvas-action-result',
+              type: 'halo-canvas-action-result',
               requestId: message.requestId,
               result,
             });
             break;
           }
-          case 'bitfun-canvas-runtime-error': {
+          case 'halo-canvas-runtime-error': {
             iframeStatusRef.current.runtimeError = true;
             log.warn('Canvas runtime error', {
               artifactReference,
@@ -833,7 +833,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
             void reportRuntimeError(data);
             break;
           }
-          case 'bitfun-canvas-element-selected': {
+          case 'halo-canvas-element-selected': {
             setDesignMode(false);
             if (message.reference) {
               globalEventBus.emit(
@@ -841,7 +841,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
                 {
                   context: createCanvasElementContext(message.reference, artifactReference, resolvedTitle),
                 },
-                'BitfunCanvasPanel',
+                'HaloCanvasPanel',
               );
             }
             break;
@@ -853,9 +853,9 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
         log.error('Canvas iframe message handling failed', { type: message.type, error });
         if (message.requestId) {
           postToIframe({
-            type: message.type === 'bitfun-canvas-action'
-              ? 'bitfun-canvas-action-result'
-              : 'bitfun-canvas-error',
+            type: message.type === 'halo-canvas-action'
+              ? 'halo-canvas-action-result'
+              : 'halo-canvas-error',
             requestId: message.requestId,
             error: error instanceof Error ? error.message : String(error),
           });
@@ -975,8 +975,8 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
 
   if (!hasHtml) {
     return (
-      <div className="bitfun-canvas-panel bitfun-canvas-panel--empty">
-        <div className="bitfun-canvas-panel__message">
+      <div className="halo-canvas-panel halo-canvas-panel--empty">
+        <div className="halo-canvas-panel__message">
           <AlertTriangle size={18} />
           <div>
             <h3>{resolvedTitle}</h3>
@@ -985,7 +985,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
           </div>
         </div>
         {resolvedDiagnostics.length > 0 && (
-          <ul className="bitfun-canvas-panel__diagnostics">
+          <ul className="halo-canvas-panel__diagnostics">
             {resolvedDiagnostics.map((diagnostic, index) => (
               <li key={`${diagnostic.code || diagnostic.message || 'diagnostic'}-${index}`}>
                 {diagnostic.message || diagnostic.code || 'Canvas diagnostic'}
@@ -993,17 +993,17 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
             ))}
           </ul>
         )}
-        {sourcePreview && <pre className="bitfun-canvas-panel__source">{sourcePreview}</pre>}
+        {sourcePreview && <pre className="halo-canvas-panel__source">{sourcePreview}</pre>}
       </div>
     );
   }
 
   return (
-    <div className="bitfun-canvas-panel">
-      <div className="bitfun-canvas-panel__toolbar">
+    <div className="halo-canvas-panel">
+      <div className="halo-canvas-panel__toolbar">
         <button
           type="button"
-          className={`bitfun-canvas-panel__toolbar-button${sourceVisible ? ' bitfun-canvas-panel__toolbar-button--active' : ''}`}
+          className={`halo-canvas-panel__toolbar-button${sourceVisible ? ' halo-canvas-panel__toolbar-button--active' : ''}`}
           aria-pressed={sourceVisible}
           aria-label={sourceVisible ? 'Hide Canvas source' : 'Show Canvas source'}
           title={sourceVisible ? 'Hide Canvas source' : 'Show Canvas source'}
@@ -1014,7 +1014,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
         </button>
         <button
           type="button"
-          className={`bitfun-canvas-panel__toolbar-button${designMode ? ' bitfun-canvas-panel__toolbar-button--active' : ''}`}
+          className={`halo-canvas-panel__toolbar-button${designMode ? ' halo-canvas-panel__toolbar-button--active' : ''}`}
           aria-pressed={designMode}
           title="Select Canvas element"
           onClick={() => setDesignMode(value => !value)}
@@ -1023,20 +1023,20 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
         </button>
         <button
           type="button"
-          className="bitfun-canvas-panel__toolbar-button"
+          className="halo-canvas-panel__toolbar-button"
           title="Export HTML"
           aria-label="Export Canvas HTML"
           disabled={exportingHtml}
           onClick={handleExportHtml}
         >
-          {exportingHtml ? <Loader2 size={15} className="bitfun-canvas-panel__toolbar-icon--spin" /> : <Download size={15} />}
+          {exportingHtml ? <Loader2 size={15} className="halo-canvas-panel__toolbar-icon--spin" /> : <Download size={15} />}
         </button>
       </div>
       {isFrameReady && (
         <iframe
           key={frameDocumentKey}
           ref={iframeRef}
-          className="bitfun-canvas-panel__frame"
+          className="halo-canvas-panel__frame"
           title={resolvedTitle}
           src="about:blank"
           sandbox="allow-scripts allow-same-origin"
@@ -1054,10 +1054,10 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
         />
       )}
       {sourceVisible && (
-        <div className="bitfun-canvas-panel__source-overlay" role="dialog" aria-modal="true">
-          <div className="bitfun-canvas-panel__source-dialog">
-            <div className="bitfun-canvas-panel__source-editor">
-              <Suspense fallback={<div className="bitfun-canvas-panel__source-loading">Loading editor...</div>}>
+        <div className="halo-canvas-panel__source-overlay" role="dialog" aria-modal="true">
+          <div className="halo-canvas-panel__source-dialog">
+            <div className="halo-canvas-panel__source-editor">
+              <Suspense fallback={<div className="halo-canvas-panel__source-loading">Loading editor...</div>}>
                 <CanvasSourceCodeEditor
                   key={sourceDialogKey}
                   filePath={sourceDialogFilePath}
@@ -1070,7 +1070,7 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
                   showMinimap
                   enableLsp={false}
                   isActiveTab={sourceVisible}
-                  className="bitfun-canvas-panel__source-code-editor"
+                  className="halo-canvas-panel__source-code-editor"
                 />
               </Suspense>
             </div>
@@ -1081,4 +1081,4 @@ export const BitfunCanvasPanel: React.FC<BitfunCanvasPanelProps> = ({
   );
 };
 
-export default BitfunCanvasPanel;
+export default HaloCanvasPanel;

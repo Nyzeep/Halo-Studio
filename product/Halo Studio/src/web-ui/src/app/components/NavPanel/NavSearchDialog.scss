@@ -1,7 +1,7 @@
 @use '../../../component-library/styles/tokens.scss' as *;
 @use '../../styles/nav-panel-font-scope.scss' as nav-font;
 
-.bitfun-nav-search-dialog__overlay {
+.halo-nav-search-dialog__overlay {
   @include nav-font.nav-panel-font-token-scope;
 
   position: fixed;
@@ -14,9 +14,9 @@
   padding-top: 80px;
 }
 
-// ── Card — matches .bitfun-scene-viewport surface (--color-bg-scene)
+// ── Card — matches .halo-scene-viewport surface (--color-bg-scene)
 
-.bitfun-nav-search-dialog__card {
+.halo-nav-search-dialog__card {
   width: 520px;
   max-width: calc(100vw - 32px);
   background: var(--color-bg-scene);
@@ -32,14 +32,14 @@
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 120px);
-  animation: bitfun-nav-search-card-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: halo-nav-search-card-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-:root[data-theme-type='light'] .bitfun-nav-search-dialog__card {
+:root[data-theme-type='light'] .halo-nav-search-dialog__card {
   border-color: var(--border-medium);
 }
 
-:root[data-theme-type='dark'] .bitfun-nav-search-dialog__card {
+:root[data-theme-type='dark'] .halo-nav-search-dialog__card {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--color-static-white) 6%, transparent),
     0 1px 0 color-mix(in srgb, var(--color-static-white) 5%, transparent),
@@ -48,7 +48,7 @@
     0 40px 72px -20px rgba(var(--color-static-black-rgb), 0.45);
 }
 
-@keyframes bitfun-nav-search-card-in {
+@keyframes halo-nav-search-card-in {
   from {
     opacity: 0;
     transform: translateY(-12px) scale(0.982);
@@ -61,7 +61,7 @@
 
 // ── Input row ────────────────────────────────────────────────────────────────
 
-.bitfun-nav-search-dialog__input-row {
+.halo-nav-search-dialog__input-row {
   padding: $size-gap-2;
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
@@ -69,7 +69,7 @@
 }
 
 // Real search field in dialog (capsule). Nav trigger is a plain button — styles differ on purpose.
-.bitfun-nav-search-dialog__search {
+.halo-nav-search-dialog__search {
   width: 100%;
 
   .search__wrapper {
@@ -109,7 +109,7 @@
   }
 }
 
-@keyframes bitfun-nav-search-fade-rise {
+@keyframes halo-nav-search-fade-rise {
   from {
     opacity: 0;
     transform: translateY(5px);
@@ -122,7 +122,7 @@
 
 // ── Results ──────────────────────────────────────────────────────────────────
 
-.bitfun-nav-search-dialog__results {
+.halo-nav-search-dialog__results {
   overflow-y: auto;
   flex: 1;
   padding: $size-gap-1 $size-gap-2 $size-gap-2;
@@ -141,18 +141,18 @@
   }
 }
 
-.bitfun-nav-search-dialog__empty {
+.halo-nav-search-dialog__empty {
   padding: $size-gap-4 $size-gap-2;
   text-align: center;
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
-  animation: bitfun-nav-search-fade-rise 0.32s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both;
+  animation: halo-nav-search-fade-rise 0.32s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both;
 }
 
 // ── Groups ───────────────────────────────────────────────────────────────────
 
-.bitfun-nav-search-dialog__group {
-  animation: bitfun-nav-search-fade-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+.halo-nav-search-dialog__group {
+  animation: halo-nav-search-fade-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
 
   &:nth-of-type(1) {
     animation-delay: 0.04s;
@@ -173,7 +173,7 @@
   }
 }
 
-.bitfun-nav-search-dialog__group-label {
+.halo-nav-search-dialog__group-label {
   padding: $size-gap-1 $size-gap-1 $size-gap-1 2px;
   font-size: var(--font-size-xxs);
   font-weight: 700;
@@ -185,7 +185,7 @@
 }
 
 // Default (no query): sessions column — label only, no rows; hint below label.
-.bitfun-nav-search-dialog__session-hint {
+.halo-nav-search-dialog__session-hint {
   padding: $size-gap-2 $size-gap-2 $size-gap-1 2px;
   font-size: var(--font-size-xs);
   line-height: 1.45;
@@ -195,7 +195,7 @@
 
 // ── Result item ──────────────────────────────────────────────────────────────
 
-.bitfun-nav-search-dialog__item {
+.halo-nav-search-dialog__item {
   display: flex;
   align-items: center;
   gap: $size-gap-2;
@@ -218,7 +218,7 @@
   }
 }
 
-.bitfun-nav-search-dialog__item-icon {
+.halo-nav-search-dialog__item-icon {
   color: var(--color-text-primary);
   display: flex;
   align-items: center;
@@ -226,13 +226,13 @@
   opacity: 0.82;
   transition: opacity 0.2s ease;
 
-  .bitfun-nav-search-dialog__item:hover &,
-  .bitfun-nav-search-dialog__item--active & {
+  .halo-nav-search-dialog__item:hover &,
+  .halo-nav-search-dialog__item--active & {
     opacity: 1;
   }
 }
 
-.bitfun-nav-search-dialog__item-content {
+.halo-nav-search-dialog__item-content {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -240,7 +240,7 @@
   gap: 1px;
 }
 
-.bitfun-nav-search-dialog__item-label {
+.halo-nav-search-dialog__item-label {
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
   white-space: nowrap;
@@ -248,7 +248,7 @@
   text-overflow: ellipsis;
 }
 
-.bitfun-nav-search-dialog__item-sublabel {
+.halo-nav-search-dialog__item-sublabel {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   white-space: nowrap;
@@ -257,9 +257,9 @@
 }
 
 // ── Trigger button (NavPanel brand-header) ───────────────────────────────────
-// Opens the search dialog — capsule + scene surface (matches .bitfun-scene-viewport / dialog search).
+// Opens the search dialog — capsule + scene surface (matches .halo-scene-viewport / dialog search).
 
-.bitfun-nav-panel__search-trigger {
+.halo-nav-panel__search-trigger {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -322,7 +322,7 @@
   }
 }
 
-.bitfun-nav-panel__search-trigger__label {
+.halo-nav-panel__search-trigger__label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -332,33 +332,33 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-nav-search-dialog__card,
-  .bitfun-nav-search-dialog__group,
-  .bitfun-nav-search-dialog__empty {
+  .halo-nav-search-dialog__card,
+  .halo-nav-search-dialog__group,
+  .halo-nav-search-dialog__empty {
     animation: none !important;
   }
 
-  .bitfun-nav-search-dialog__group {
+  .halo-nav-search-dialog__group {
     animation-delay: 0s !important;
     opacity: 1;
     transform: none;
   }
 
-  .bitfun-nav-search-dialog__empty {
+  .halo-nav-search-dialog__empty {
     opacity: 1;
     transform: none;
   }
 
-  .bitfun-nav-search-dialog__item {
+  .halo-nav-search-dialog__item {
     transition: background 0.12s ease;
   }
 
-  .bitfun-nav-panel__search-trigger {
+  .halo-nav-panel__search-trigger {
     transition:
       background 0.15s ease,
       color 0.15s ease;
 
-    &:hover .bitfun-nav-panel__search-trigger__icon {
+    &:hover .halo-nav-panel__search-trigger__icon {
       transform: none;
     }
   }

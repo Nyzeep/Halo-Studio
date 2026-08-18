@@ -4,13 +4,13 @@
 @use './config-page-layout.tokens' as configLayout;
 
 
-.bitfun-config-page-header {
+.halo-config-page-header {
   flex-shrink: 0;
   padding: 48px 0 0;
   margin-bottom: var(--size-gap-6);
 }
 
-.bitfun-config-page-header__inner {
+.halo-config-page-header__inner {
   width: min(
     calc(100% - (2 * #{configLayout.$config-page-content-inline-padding})),
     #{configLayout.$config-page-content-max-width}
@@ -22,7 +22,7 @@
   gap: var(--size-gap-4);
 }
 
-.bitfun-config-page-header__left {
+.halo-config-page-header__left {
   display: flex;
   align-items: center;
   gap: var(--size-gap-4);
@@ -30,12 +30,12 @@
   min-width: 0;
 }
 
-.bitfun-config-page-header__info {
+.halo-config-page-header__info {
   flex: 1;
   min-width: 0;
 }
 
-.bitfun-config-page-header__title {
+.halo-config-page-header__title {
   margin: 0 0 4px 0;
   font-size: calc(var(--font-size-xl) * 1.5);
   font-weight: var(--font-weight-semibold);
@@ -44,7 +44,7 @@
   font-family: var(--font-family-sans);
 }
 
-.bitfun-config-page-header__subtitle {
+.halo-config-page-header__subtitle {
   margin: 0;
   margin-top: 2px;
   font-size: var(--font-size-sm);
@@ -54,7 +54,7 @@
   max-width: 100%;
 }
 
-.bitfun-config-page-header__extra {
+.halo-config-page-header__extra {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -62,37 +62,37 @@
 }
 
 @media (max-width: 768px) {
-  .bitfun-config-page-header__inner {
+  .halo-config-page-header__inner {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .bitfun-config-page-header__left {
+  .halo-config-page-header__left {
     width: 100%;
   }
 
-  .bitfun-config-page-header__extra {
+  .halo-config-page-header__extra {
     width: 100%;
     justify-content: flex-end;
   }
 }
 
 @media (max-width: 600px) {
-  .bitfun-config-page-header__left {
+  .halo-config-page-header__left {
     gap: var(--size-gap-3);
   }
 
-  .bitfun-config-page-header__title {
+  .halo-config-page-header__title {
     font-size: calc(var(--font-size-lg) * 1.5);
   }
 
-  .bitfun-config-page-header__subtitle {
+  .halo-config-page-header__subtitle {
     font-size: var(--font-size-xs);
   }
 }
 
 
-.bitfun-config-page-header-divider {
+.halo-config-page-header-divider {
   flex-shrink: 0;
   height: 1px;
   background: var(--border-subtle);
@@ -105,11 +105,11 @@
 }
 
 @container config-panel (max-width: 900px) {
-  .bitfun-config-page-header__inner {
+  .halo-config-page-header__inner {
     width: calc(100% - (2 * var(--size-gap-4)));
   }
 
-  .bitfun-config-page-header-divider {
+  .halo-config-page-header-divider {
     width: calc(100% - (2 * var(--size-gap-4)));
   }
 }
@@ -118,27 +118,27 @@
 
 
 @container config-panel (max-width: 520px) {
-  .bitfun-config-page-header {
+  .halo-config-page-header {
     padding-top: var(--size-gap-5);
   }
 
-  .bitfun-config-page-header__inner {
+  .halo-config-page-header__inner {
     gap: var(--size-gap-3);
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .bitfun-config-page-header__left {
+  .halo-config-page-header__left {
     gap: var(--size-gap-3);
     width: 100%;
   }
 
-  .bitfun-config-page-header__title {
+  .halo-config-page-header__title {
     font-size: calc(var(--font-size-lg) * 1.5);
     margin-bottom: 2px;
   }
 
-  .bitfun-config-page-header__subtitle {
+  .halo-config-page-header__subtitle {
     font-size: var(--font-size-xs);
     max-width: 100%;
     overflow: hidden;
@@ -146,13 +146,13 @@
     white-space: nowrap;
   }
 
-  .bitfun-config-page-header__extra {
+  .halo-config-page-header__extra {
     width: 100%;
     justify-content: flex-start;
     margin-top: var(--size-gap-2);
   }
 
-  .bitfun-config-page-header-divider {
+  .halo-config-page-header-divider {
     margin: var(--size-gap-3) auto;
   }
 }

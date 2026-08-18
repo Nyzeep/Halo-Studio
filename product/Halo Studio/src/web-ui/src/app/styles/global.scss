@@ -1,5 +1,5 @@
 /**
- * BitFun global styles entry point.
+ * Halo global styles entry point.
  * Uses component library design tokens.
  */
 
@@ -269,7 +269,7 @@ html::before {
 /* Hide top-right floating debug info */
 div[style*="position: fixed"][style*="top"][style*="right"],
 div[style*="position:fixed"][style*="top"][style*="right"] {
-  &:not(.bitfun-notification-container):not(.bitfun-notification-center):not([class*="bitfun"]) {
+  &:not(.halo-notification-container):not(.halo-notification-center):not([class*="halo"]) {
     display: none !important;
   }
 }

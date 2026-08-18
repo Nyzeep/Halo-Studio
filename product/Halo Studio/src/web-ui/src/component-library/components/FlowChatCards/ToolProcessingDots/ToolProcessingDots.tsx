@@ -18,12 +18,12 @@ export const ToolProcessingDots: React.FC<ToolProcessingDotsProps> = ({
   className = '',
 }) => (
   <span
-    className={`bitfun-tool-processing-dots bitfun-tool-processing-dots--s${size} ${className}`.trim()}
+    className={`halo-tool-processing-dots halo-tool-processing-dots--s${size} ${className}`.trim()}
     aria-hidden
     role="presentation"
   >
-    <span className="bitfun-tool-processing-dots__dot" />
-    <span className="bitfun-tool-processing-dots__dot" />
-    <span className="bitfun-tool-processing-dots__dot" />
+    <span className="halo-tool-processing-dots__dot" />
+    <span className="halo-tool-processing-dots__dot" />
+    <span className="halo-tool-processing-dots__dot" />
   </span>
 );

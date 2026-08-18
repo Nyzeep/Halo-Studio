@@ -5,7 +5,7 @@ $size-radius-xs: 4px !default;
 $opacity-secondary: 0.7 !default;
 $opacity-high: 0.8 !default;
 
-.bitfun-git-diff-view {
+.halo-git-diff-view {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -169,7 +169,7 @@ $opacity-high: 0.8 !default;
     border: 3px solid var(--border-base);
     border-top-color: var(--color-accent-500);
     border-radius: $size-radius-full;
-    animation: bitfun-git-diff-view-spin 1s linear infinite;
+    animation: halo-git-diff-view-spin 1s linear infinite;
     margin-bottom: $size-gap-4;
   }
 
@@ -310,7 +310,7 @@ $opacity-high: 0.8 !default;
         background: color-mix(in srgb, var(--git-color-added) 15%, transparent);
       }
 
-      .bitfun-git-diff-view__line-content {
+      .halo-git-diff-view__line-content {
         color: var(--git-color-added);
       }
     }
@@ -322,7 +322,7 @@ $opacity-high: 0.8 !default;
         background: color-mix(in srgb, var(--git-color-deleted) 15%, transparent);
       }
 
-      .bitfun-git-diff-view__line-content {
+      .halo-git-diff-view__line-content {
         color: var(--git-color-deleted);
       }
     }
@@ -338,7 +338,7 @@ $opacity-high: 0.8 !default;
       border-top: 1px solid var(--border-base);
       border-bottom: 1px solid var(--border-base);
 
-      .bitfun-git-diff-view__line-content {
+      .halo-git-diff-view__line-content {
         color: var(--color-accent-500);
         font-weight: $font-weight-medium;
       }
@@ -377,7 +377,7 @@ $opacity-high: 0.8 !default;
     background: rgba(var(--color-static-black-rgb), 0.6);
     z-index: $z-modal;
     backdrop-filter: blur(4px);
-    animation: bitfun-git-diff-view-fade-in 0.2s ease-out;
+    animation: halo-git-diff-view-fade-in 0.2s ease-out;
   }
 
   &__commit-dialog {
@@ -388,7 +388,7 @@ $opacity-high: 0.8 !default;
     min-width: 500px;
     max-width: 600px;
     box-shadow: 0 20px 25px -5px var(--color-overlay-black-50), 0 10px 10px -5px var(--color-overlay-black-40);
-    animation: bitfun-git-diff-view-scale-in 0.2s ease-out;
+    animation: halo-git-diff-view-scale-in 0.2s ease-out;
   }
 
   &__commit-header {
@@ -418,7 +418,7 @@ $opacity-high: 0.8 !default;
     border: 2px solid rgba(var(--color-static-white-rgb), 0.3);
     border-top-color: currentColor;
     border-radius: 50%;
-    animation: bitfun-git-diff-view-spin 0.8s linear infinite;
+    animation: halo-git-diff-view-spin 0.8s linear infinite;
   }
 
   &__ai-error {
@@ -432,7 +432,7 @@ $opacity-high: 0.8 !default;
     border-radius: $size-radius-base;
     color: var(--color-error);
     font-size: var(--font-size-sm);
-    animation: bitfun-git-diff-view-shake 0.4s ease-in-out;
+    animation: halo-git-diff-view-shake 0.4s ease-in-out;
   }
 
   &__dialog-form {
@@ -492,7 +492,7 @@ $opacity-high: 0.8 !default;
     background: color-mix(in srgb, var(--color-accent-500) 5%, transparent);
     border: 1px solid color-mix(in srgb, var(--color-accent-500) 20%, transparent);
     border-radius: $size-radius-base;
-    animation: bitfun-git-diff-view-slide-up 0.3s ease-out;
+    animation: halo-git-diff-view-slide-up 0.3s ease-out;
   }
 
   &__ai-info-item {
@@ -607,7 +607,7 @@ $opacity-high: 0.8 !default;
   }
 }
 
-@keyframes bitfun-git-diff-view-spin {
+@keyframes halo-git-diff-view-spin {
   from {
     transform: rotate(0deg);
   }
@@ -616,7 +616,7 @@ $opacity-high: 0.8 !default;
   }
 }
 
-@keyframes bitfun-git-diff-view-fade-in {
+@keyframes halo-git-diff-view-fade-in {
   from {
     opacity: 0;
   }
@@ -625,7 +625,7 @@ $opacity-high: 0.8 !default;
   }
 }
 
-@keyframes bitfun-git-diff-view-scale-in {
+@keyframes halo-git-diff-view-scale-in {
   from {
     opacity: 0;
     transform: scale(0.95) translateY(-10px);
@@ -636,7 +636,7 @@ $opacity-high: 0.8 !default;
   }
 }
 
-@keyframes bitfun-git-diff-view-slide-up {
+@keyframes halo-git-diff-view-slide-up {
   from {
     opacity: 0;
     transform: translateY(10px);
@@ -647,7 +647,7 @@ $opacity-high: 0.8 !default;
   }
 }
 
-@keyframes bitfun-git-diff-view-shake {
+@keyframes halo-git-diff-view-shake {
   0%, 100% {
     transform: translateX(0);
   }
@@ -660,7 +660,7 @@ $opacity-high: 0.8 !default;
 }
 
 @media (max-width: 768px) {
-  .bitfun-git-diff-view {
+  .halo-git-diff-view {
     &__header {
       flex-direction: column;
       gap: $size-gap-3;

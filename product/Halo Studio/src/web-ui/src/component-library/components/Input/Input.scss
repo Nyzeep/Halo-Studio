@@ -3,51 +3,51 @@
  */
 @use '../../styles/tokens.scss' as tokens;
 
-.bitfun-input-wrapper {
+.halo-input-wrapper {
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
 
   &--small {
-    .bitfun-input-container {
+    .halo-input-container {
       height: 28px;
       font-size: 13px;
     }
 
-    .bitfun-input-prefix,
-    .bitfun-input-suffix {
+    .halo-input-prefix,
+    .halo-input-suffix {
       font-size: 13px;
     }
   }
 
   &--medium {
-    .bitfun-input-container {
+    .halo-input-container {
       height: 36px;
       font-size: 14px;
     }
   }
 
   &--large {
-    .bitfun-input-container {
+    .halo-input-container {
       height: 44px;
       font-size: 15px;
     }
   }
 
   &--default {
-    .bitfun-input-container {
+    .halo-input-container {
       background: transparent;
       border: 1px solid var(--border-base);
     }
   }
 
   &--filled {
-    .bitfun-input-container {
+    .halo-input-container {
       background: var(--element-bg-subtle);
       border: 1px solid transparent;
 
-      &:hover:not(.bitfun-input-wrapper--disabled &) {
+      &:hover:not(.halo-input-wrapper--disabled &) {
         background: var(--element-bg-soft);
         border-color: var(--border-base);
       }
@@ -64,17 +64,17 @@
   }
 
   &--outlined {
-    .bitfun-input-container {
+    .halo-input-container {
       background: transparent;
       border: 1px solid var(--border-medium);
     }
   }
 
   &--error {
-    .bitfun-input-container {
+    .halo-input-container {
       border-color: var(--color-error-border) !important;
 
-      &:hover:not(.bitfun-input-wrapper--disabled &) {
+      &:hover:not(.halo-input-wrapper--disabled &) {
         border-color: var(--color-error) !important;
       }
 
@@ -88,20 +88,20 @@
     opacity: var(--opacity-disabled);
     cursor: default;
 
-    .bitfun-input-container {
+    .halo-input-container {
       background: transparent;
     }
   }
 }
 
-.bitfun-input-label {
+.halo-input-label {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
   letter-spacing: 0.2px;
 }
 
-.bitfun-input-container {
+.halo-input-container {
   display: flex;
   align-items: center;
   gap: var(--size-gap-2);
@@ -112,7 +112,7 @@
   min-width: 0;
   overflow: hidden;
 
-  &:hover:not(.bitfun-input-wrapper--disabled &) {
+  &:hover:not(.halo-input-wrapper--disabled &) {
     background: var(--element-bg-subtle);
     border-color: var(--border-strong);
   }
@@ -124,7 +124,7 @@
   }
 }
 
-.bitfun-input {
+.halo-input {
   flex: 1;
   min-width: 0;
   height: 100%;
@@ -165,8 +165,8 @@
   }
 }
 
-.bitfun-input-prefix,
-.bitfun-input-suffix {
+.halo-input-prefix,
+.halo-input-suffix {
   color: var(--color-text-muted);
   display: flex;
   align-items: center;
@@ -175,7 +175,7 @@
   z-index: 1;
 }
 
-.bitfun-input-toggle {
+.halo-input-toggle {
   background: none;
   border: none;
   padding: 2px;
@@ -192,7 +192,7 @@
   }
 }
 
-.bitfun-input-error-message {
+.halo-input-error-message {
   font-size: var(--font-size-xs);
   color: var(--color-error);
   margin-top: -2px;

@@ -32,7 +32,7 @@ export type PanelContentType =
   | 'review-platform-pr-detail'
   | 'terminal'
   | 'generative-widget'
-  | 'bitfun-canvas'
+  | 'halo-canvas'
   | 'browser';
 
 export interface PanelContent {

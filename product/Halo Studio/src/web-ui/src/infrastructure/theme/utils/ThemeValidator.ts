@@ -1,4 +1,4 @@
-import { bitfunLightTheme } from '../presets/light-theme';
+import { haloLightTheme } from '../presets/light-theme';
 import type { ThemeConfig, ThemeValidationResult } from '../types';
 
 const REQUIRED_SCHEMA_ROOTS = ['colors', 'effects', 'motion', 'typography'] as const;
@@ -109,7 +109,7 @@ export class ThemeValidator {
       this.validateSchemaValue(
         root,
         (theme as unknown as Record<string, unknown>)[root],
-        (bitfunLightTheme as unknown as Record<string, unknown>)[root],
+        (haloLightTheme as unknown as Record<string, unknown>)[root],
         errors,
       );
     });

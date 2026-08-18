@@ -219,7 +219,7 @@ export class SystemAPI {
     }
   }
 
-  /** Desktop only: whether BitFun should keep the local computer awake. */
+  /** Desktop only: whether Halo should keep the local computer awake. */
   async getPreventSleepEnabled(): Promise<boolean> {
     try {
       return await api.invoke('get_prevent_sleep_enabled', {

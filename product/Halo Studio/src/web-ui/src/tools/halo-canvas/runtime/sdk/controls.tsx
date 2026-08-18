@@ -1,8 +1,8 @@
-import { Checkbox as BitFunCheckbox } from '@/component-library/components/Checkbox/Checkbox';
-import { IconButton as BitFunIconButton } from '@/component-library/components/IconButton/IconButton';
-import { Input as BitFunInput } from '@/component-library/components/Input/Input';
-import { Switch as BitFunSwitch } from '@/component-library/components/Switch/Switch';
-import { Textarea as BitFunTextarea } from '@/component-library/components/Textarea/Textarea';
+import { Checkbox as HaloCheckbox } from '@/component-library/components/Checkbox/Checkbox';
+import { IconButton as HaloIconButton } from '@/component-library/components/IconButton/IconButton';
+import { Input as HaloInput } from '@/component-library/components/Input/Input';
+import { Switch as HaloSwitch } from '@/component-library/components/Switch/Switch';
+import { Textarea as HaloTextarea } from '@/component-library/components/Textarea/Textarea';
 import type {
   CanvasCheckboxProps,
   CanvasIconButtonProps,
@@ -33,7 +33,7 @@ function normalizeOption(option: string | number | CanvasSelectOption): CanvasSe
 
 export function Toggle({ onChange, size, ...props }: CanvasToggleProps) {
   return (
-    <BitFunSwitch
+    <HaloSwitch
       {...props}
       size={controlSize(size)}
       onChange={event => onChange?.(event.target.checked)}
@@ -43,7 +43,7 @@ export function Toggle({ onChange, size, ...props }: CanvasToggleProps) {
 
 export function Checkbox({ onChange, size, ...props }: CanvasCheckboxProps) {
   return (
-    <BitFunCheckbox
+    <HaloCheckbox
       {...props}
       size={controlSize(size)}
       onChange={event => onChange?.(event.target.checked)}
@@ -84,7 +84,7 @@ export function Select({
 
 export function TextInput({ onChange, size, ...props }: CanvasTextInputProps) {
   return (
-    <BitFunInput
+    <HaloInput
       {...props}
       size={controlSize(size)}
       onChange={event => onChange?.(event.target.value)}
@@ -94,7 +94,7 @@ export function TextInput({ onChange, size, ...props }: CanvasTextInputProps) {
 
 export function TextArea({ onChange, ...props }: CanvasTextAreaProps) {
   return (
-    <BitFunTextarea
+    <HaloTextarea
       {...props}
       onChange={event => onChange?.(event.target.value)}
     />
@@ -103,7 +103,7 @@ export function TextArea({ onChange, ...props }: CanvasTextAreaProps) {
 
 export function IconButton({ size, title, tooltip, ...props }: CanvasIconButtonProps) {
   return (
-    <BitFunIconButton
+    <HaloIconButton
       {...props}
       size={controlSize(size)}
       tooltip={tooltip ?? title}

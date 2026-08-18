@@ -13,7 +13,7 @@
   z-index: 260;
   animation: fadeIn 0.2s ease;
 
-  // Beat `.bitfun-app-layout *:focus-visible` (same specificity as a single-class :focus-visible; load order can win).
+  // Beat `.halo-app-layout *:focus-visible` (same specificity as a single-class :focus-visible; load order can win).
   .remote-file-browser__path-input:focus,
   .remote-file-browser__path-input:focus-visible {
     outline: none !important;

@@ -147,25 +147,25 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   }, []);
 
   return (
-    <div className={`bitfun-image-viewer ${className} ${isFullscreen ? 'fullscreen' : ''}`}>
-      <div className="bitfun-image-viewer__toolbar">
-        <div className="bitfun-image-viewer__info">
-          <span className="bitfun-image-viewer__filename">{fileName || filePath.split(/[/\\]/).pop()}</span>
+    <div className={`halo-image-viewer ${className} ${isFullscreen ? 'fullscreen' : ''}`}>
+      <div className="halo-image-viewer__toolbar">
+        <div className="halo-image-viewer__info">
+          <span className="halo-image-viewer__filename">{fileName || filePath.split(/[/\\]/).pop()}</span>
           {imageDimensions && (
-            <span className="bitfun-image-viewer__dimensions">
+            <span className="halo-image-viewer__dimensions">
               {imageDimensions.width} × {imageDimensions.height}
             </span>
           )}
           {fileSize > 0 && (
-            <span className="bitfun-image-viewer__filesize">
+            <span className="halo-image-viewer__filesize">
               {formatFileSize(fileSize)}
             </span>
           )}
         </div>
-        <div className="bitfun-image-viewer__controls">
+        <div className="halo-image-viewer__controls">
           <Tooltip content={t('editor.imageViewer.zoomOut')} placement="top">
             <button
-              className="bitfun-image-viewer__btn"
+              className="halo-image-viewer__btn"
               onClick={handleZoomOut}
               disabled={zoom <= 25}
             >
@@ -174,7 +174,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
           </Tooltip>
           <Tooltip content={t('editor.imageViewer.zoomReset')} placement="top">
             <button
-              className="bitfun-image-viewer__btn bitfun-image-viewer__btn--zoom-display"
+              className="halo-image-viewer__btn halo-image-viewer__btn--zoom-display"
               onClick={handleZoomReset}
             >
               {zoom}%
@@ -182,17 +182,17 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
           </Tooltip>
           <Tooltip content={t('editor.imageViewer.zoomIn')} placement="top">
             <button
-              className="bitfun-image-viewer__btn"
+              className="halo-image-viewer__btn"
               onClick={handleZoomIn}
               disabled={zoom >= 500}
             >
               <ZoomIn size={14} />
             </button>
           </Tooltip>
-          <div className="bitfun-image-viewer__divider" />
+          <div className="halo-image-viewer__divider" />
           <Tooltip content={t('editor.imageViewer.rotate90')} placement="top">
             <button
-              className="bitfun-image-viewer__btn"
+              className="halo-image-viewer__btn"
               onClick={handleRotate}
             >
               <RotateCw size={14} />
@@ -200,7 +200,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
           </Tooltip>
           <Tooltip content={t('editor.imageViewer.download')} placement="top">
             <button
-              className="bitfun-image-viewer__btn"
+              className="halo-image-viewer__btn"
               onClick={handleDownload}
             >
               <Download size={14} />
@@ -211,7 +211,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
             placement="top"
           >
             <button
-              className="bitfun-image-viewer__btn"
+              className="halo-image-viewer__btn"
               onClick={handleToggleFullscreen}
             >
               <Maximize2 size={14} />
@@ -220,27 +220,27 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
         </div>
       </div>
 
-      <div className="bitfun-image-viewer__container">
+      <div className="halo-image-viewer__container">
         {loading && (
-          <div className="bitfun-image-viewer__loading">
-            <div className="bitfun-image-viewer__spinner" />
+          <div className="halo-image-viewer__loading">
+            <div className="halo-image-viewer__spinner" />
             <p>{t('editor.common.loading')}</p>
           </div>
         )}
 
         {error && (
-          <div className="bitfun-image-viewer__error">
+          <div className="halo-image-viewer__error">
             <p>{error}</p>
-            <p className="bitfun-image-viewer__error-path">{filePath}</p>
+            <p className="halo-image-viewer__error-path">{filePath}</p>
           </div>
         )}
 
         {!loading && !error && imageUrl && (
-          <div className="bitfun-image-viewer__image-wrapper">
+          <div className="halo-image-viewer__image-wrapper">
             <img
               src={imageUrl}
               alt={fileName || filePath}
-              className="bitfun-image-viewer__image"
+              className="halo-image-viewer__image"
               style={{
                 transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
               }}
@@ -251,7 +251,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
         )}
         
         {!loading && !error && !imageUrl && (
-          <div className="bitfun-image-viewer__error">
+          <div className="halo-image-viewer__error">
             <p>{t('editor.imageViewer.imageUrlEmpty')}</p>
           </div>
         )}

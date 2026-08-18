@@ -42,7 +42,7 @@ const restoreFocusedEditable = (snapshot: FocusSnapshot) => {
 };
 
 const focusAppRootForKeyboardShortcuts = () => {
-  const appRoot = document.querySelector('.bitfun-app-layout');
+  const appRoot = document.querySelector('.halo-app-layout');
   if (!(appRoot instanceof HTMLElement)) {
     window.focus();
     return;

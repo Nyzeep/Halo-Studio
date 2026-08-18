@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { BitFunDarkTheme } from './bitfun-dark.theme';
+import { HaloDarkTheme } from './halo-dark.theme';
 
-describe('BitFunDarkTheme color roles', () => {
-  const colors = BitFunDarkTheme.colors;
+describe('HaloDarkTheme color roles', () => {
+  const colors = HaloDarkTheme.colors;
 
   it('keeps editor surface roles output-equivalent', () => {
     expect(colors['editor.background']).toBe('#121214');
@@ -14,7 +14,7 @@ describe('BitFunDarkTheme color roles', () => {
     expect(colors['diffEditor.unchangedCodeBackground']).toBe('#121214');
   });
 
-  it('keeps BitFun accent roles output-equivalent', () => {
+  it('keeps Halo accent roles output-equivalent', () => {
     expect(colors['editorCursor.foreground']).toBe('#E1AB80');
     expect(colors['editor.selectionBackground']).toBe('#E1AB8040');
     expect(colors['editor.inactiveSelectionBackground']).toBe('#E1AB8020');

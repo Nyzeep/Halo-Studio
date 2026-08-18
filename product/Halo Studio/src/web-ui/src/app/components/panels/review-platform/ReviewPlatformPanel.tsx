@@ -76,7 +76,7 @@ const CI_PAGE_SIZE = 20;
 const CHANGE_PAGE_SIZE = 15;
 const COMMIT_PAGE_SIZE = 30;
 const REVIEW_PAGE_SIZE = 20;
-const REMOTE_STORAGE_PREFIX = 'bitfun:review-platform:last-remote:';
+const REMOTE_STORAGE_PREFIX = 'halo:review-platform:last-remote:';
 const MAX_LINKED_REVIEW_SESSIONS = 6;
 
 interface SnapshotCacheEntry {
@@ -2233,7 +2233,7 @@ export const ReviewPlatformPanel: React.FC<ReviewPlatformPanelProps> = ({
                   </div>
                 </div>
                 <div className="review-platform__fact-row">
-                  <span className="review-platform__fact-label"><Sparkles size={14} /> BitFun Review</span>
+                  <span className="review-platform__fact-label"><Sparkles size={14} /> Halo Review</span>
                   <div className="review-platform__fact-value review-platform__fact-value--review">
                     <span>{reviewStatusText}</span>
                     {(latestCurrentReview || latestStaleReview || latestUnknownReview) && (

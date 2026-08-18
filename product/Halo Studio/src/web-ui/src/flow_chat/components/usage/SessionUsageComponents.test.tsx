@@ -133,7 +133,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
         'usage.help.legacyModel': 'Older sessions did not store per-round model names.',
         'usage.help.inferredModel': 'Inferred from the session model setting.',
         'usage.help.filesUnavailable': 'No file snapshot or file-edit tool record was found for this session.',
-        'usage.help.filesNoRecordedChanges': 'BitFun did not detect file changes in this session. This is expected when the agent did not edit files.',
+        'usage.help.filesNoRecordedChanges': 'Halo did not detect file changes in this session. This is expected when the agent did not edit files.',
         'usage.help.filesRemoteUnavailable': 'No remote snapshot summary was found for this session. File rows can still appear from recognized file-edit tool records.',
         'usage.help.filesNotTracked': 'No local snapshot or identifiable file-edit tool record was found for this session.',
         'usage.help.fileDiffUnavailable': 'Diff links require a snapshot-backed file row and a visible file path.',
@@ -348,7 +348,7 @@ function usageReport(overrides: Partial<SessionUsageReport> = {}): SessionUsageR
     generatedAt: Date.UTC(2026, 4, 10, 8, 0),
     workspace: {
       kind: 'local',
-      pathLabel: 'D:/workspace/bitfun',
+      pathLabel: 'D:/workspace/halo',
     },
     scope: {
       kind: 'entire_session',
@@ -754,7 +754,7 @@ describe('Session usage report UI components', () => {
     const report = usageReport({
       workspace: {
         kind: 'local',
-        pathLabel: 'D:/workspace/bitfun',
+        pathLabel: 'D:/workspace/halo',
       },
       files: {
         scope: 'snapshot_summary',
@@ -782,7 +782,7 @@ describe('Session usage report UI components', () => {
           report={report}
           markdown="## Session Usage"
           sessionId="session-1"
-          workspacePath="D:/workspace/bitfun"
+          workspacePath="D:/workspace/halo"
           initialTab="files"
         />
       </>
@@ -795,7 +795,7 @@ describe('Session usage report UI components', () => {
     expect(redactionInputs.every(input => input.checked)).toBe(true);
     expect(container.textContent).toContain('[redacted path]');
     expect(container.textContent).toContain('secret.ts');
-    expect(container.textContent).not.toContain('D:/workspace/bitfun');
+    expect(container.textContent).not.toContain('D:/workspace/halo');
     expect(container.textContent).not.toContain('src/private/secret.ts');
     expect(container.querySelector('[data-tooltip="[redacted path]/secret.ts"]')).not.toBeNull();
 
@@ -807,7 +807,7 @@ describe('Session usage report UI components', () => {
       `input[aria-label="Redact paths"]`
     ));
     expect(updatedInputs.every(input => input.checked)).toBe(false);
-    expect(container.textContent).toContain('D:/workspace/bitfun');
+    expect(container.textContent).toContain('D:/workspace/halo');
     expect(container.querySelector('[data-tooltip="src/private/secret.ts"]')).not.toBeNull();
   });
 
@@ -1266,7 +1266,7 @@ describe('Session usage report UI components', () => {
         report={report}
         markdown="## Session Usage"
         sessionId="session-1"
-        workspacePath="D:/workspace/bitfun"
+        workspacePath="D:/workspace/halo"
       />
     );
 
@@ -1328,7 +1328,7 @@ describe('Session usage report UI components', () => {
         report={report}
         markdown="## Session Usage"
         sessionId="session-1"
-        workspacePath="D:/workspace/bitfun"
+        workspacePath="D:/workspace/halo"
       />
     );
 
@@ -1352,7 +1352,7 @@ describe('Session usage report UI components', () => {
 
   it('opens snapshot-backed file diffs from the detail panel', async () => {
     snapshotApiMocks.getOperationDiff.mockResolvedValue({
-      filePath: 'D:/workspace/bitfun/src/main.rs',
+      filePath: 'D:/workspace/halo/src/main.rs',
       originalContent: 'before',
       modifiedContent: 'after',
       anchorLine: 42,
@@ -1382,7 +1382,7 @@ describe('Session usage report UI components', () => {
         report={report}
         markdown="## Session Usage"
         sessionId="session-1"
-        workspacePath="D:/workspace/bitfun"
+        workspacePath="D:/workspace/halo"
       />
     );
 
@@ -1401,18 +1401,18 @@ describe('Session usage report UI components', () => {
 
     expect(snapshotApiMocks.getOperationDiff).toHaveBeenCalledWith(
       'session-1',
-      'D:/workspace/bitfun/src/main.rs',
+      'D:/workspace/halo/src/main.rs',
       'operation-1',
-      'D:/workspace/bitfun',
+      'D:/workspace/halo',
     );
     expect(tabUtilsMocks.createDiffEditorTab).toHaveBeenCalledWith(
-      'D:/workspace/bitfun/src/main.rs',
+      'D:/workspace/halo/src/main.rs',
       'main.rs',
       'before',
       'after',
       true,
       'agent',
-      'D:/workspace/bitfun',
+      'D:/workspace/halo',
       42,
       undefined,
       {

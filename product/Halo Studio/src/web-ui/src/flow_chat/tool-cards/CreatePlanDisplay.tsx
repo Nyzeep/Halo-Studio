@@ -284,7 +284,7 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
       return;
     }
 
-    const projectPlansDirectory = joinPath(currentWorkspace.rootPath, '.bitfun/plans');
+    const projectPlansDirectory = joinPath(currentWorkspace.rootPath, '.halo-studio/plans');
     const projectPlanPath = joinPath(projectPlansDirectory, basenamePath(planFilePath));
     if (saveSuccessTimerRef.current) {
       clearTimeout(saveSuccessTimerRef.current);

@@ -1,7 +1,7 @@
 /**
  * Main-window element inspector for desktop debugging.
  *
- * Injected into the main BitFun webview to provide interactive element
+ * Injected into the main Halo webview to provide interactive element
  * inspection without relying on external DevTools.
  *
  * Activation:  Cmd/Ctrl + Shift + I  (or programmatic via toggleInspector())
@@ -18,11 +18,11 @@ import { INSPECTOR_OVERLAY_THEME } from '@/shared/inspector/inspectorOverlayThem
 
 const INSPECTOR_SCRIPT_BODY = /* js */ `
 (function () {
-  if (window.__bitfun_main_inspector_active) {
-    window.__bitfun_main_inspector_cancel && window.__bitfun_main_inspector_cancel();
+  if (window.__halo_main_inspector_active) {
+    window.__halo_main_inspector_cancel && window.__halo_main_inspector_cancel();
     return;
   }
-  window.__bitfun_main_inspector_active = true;
+  window.__halo_main_inspector_active = true;
 
   // ── overlay elements ─────────────────────────────────────────────────────
   var overlay = document.createElement('div');
@@ -244,8 +244,8 @@ const INSPECTOR_SCRIPT_BODY = /* js */ `
     try { overlay.parentNode && overlay.parentNode.removeChild(overlay); } catch (e) {}
     try { tooltip.parentNode && tooltip.parentNode.removeChild(tooltip); } catch (e) {}
     try { sizeLabel.parentNode && sizeLabel.parentNode.removeChild(sizeLabel); } catch (e) {}
-    delete window.__bitfun_main_inspector_active;
-    delete window.__bitfun_main_inspector_cancel;
+    delete window.__halo_main_inspector_active;
+    delete window.__halo_main_inspector_cancel;
   }
 
   // ── event handlers ───────────────────────────────────────────────────────
@@ -297,7 +297,7 @@ const INSPECTOR_SCRIPT_BODY = /* js */ `
     }
   }
 
-  window.__bitfun_main_inspector_cancel = cleanup;
+  window.__halo_main_inspector_cancel = cleanup;
 
   document.addEventListener('mouseover', onMouseOver, true);
   document.addEventListener('click', onClick, true);
@@ -312,8 +312,8 @@ export function createMainWindowInspectorScript(): string {
 
 /** Script to cancel an active inspector session. */
 export const CANCEL_MAIN_WINDOW_INSPECTOR_SCRIPT =
-  `if (window.__bitfun_main_inspector_cancel) { window.__bitfun_main_inspector_cancel(); }`;
+  `if (window.__halo_main_inspector_cancel) { window.__halo_main_inspector_cancel(); }`;
 
 /** Check whether the inspector is currently active in the page. */
 export const IS_INSPECTOR_ACTIVE_SCRIPT =
-  `typeof window.__bitfun_main_inspector_active !== 'undefined' && window.__bitfun_main_inspector_active`;
+  `typeof window.__halo_main_inspector_active !== 'undefined' && window.__halo_main_inspector_active`;

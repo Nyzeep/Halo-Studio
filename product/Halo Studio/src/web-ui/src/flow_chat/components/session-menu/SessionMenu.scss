@@ -5,12 +5,12 @@
 
 $session-menu-timing: cubic-bezier(0.4, 0, 0.2, 1);
 
-.bitfun-session-menu {
+.halo-session-menu {
   position: relative;
   pointer-events: auto;
 }
 
-.bitfun-session-menu__trigger {
+.halo-session-menu__trigger {
   flex-shrink: 0;
   width: 22px;
   height: 22px;
@@ -46,7 +46,7 @@ $session-menu-timing: cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-.bitfun-session-menu__dropdown {
+.halo-session-menu__dropdown {
   position: absolute;
   top: 100%;
   left: 0;
@@ -65,20 +65,20 @@ $session-menu-timing: cubic-bezier(0.4, 0, 0.2, 1);
   animation: session-menu-appear 0.2s $session-menu-timing;
   transform-origin: top left;
 
-  .bitfun-session-menu__actions .bitfun-session-menu__item--new:first-of-type {
+  .halo-session-menu__actions .halo-session-menu__item--new:first-of-type {
     border-radius: 7px 7px 0 0;
   }
 
-  .bitfun-session-menu__scroll .bitfun-session-menu__item:last-child {
+  .halo-session-menu__scroll .halo-session-menu__item:last-child {
     border-radius: 0 0 7px 7px;
   }
 }
 
-.bitfun-session-menu__actions {
+.halo-session-menu__actions {
   flex: 0 0 auto;
 }
 
-.bitfun-session-menu__scroll {
+.halo-session-menu__scroll {
   flex: 1 1 auto;
   min-height: 0;
   /* Only the list is height-capped, so the actions stay pinned. */
@@ -106,7 +106,7 @@ $session-menu-timing: cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-.bitfun-session-menu__item {
+.halo-session-menu__item {
   display: block;
   width: 100%;
   box-sizing: border-box;
@@ -140,7 +140,7 @@ $session-menu-timing: cubic-bezier(0.4, 0, 0.2, 1);
     font-weight: var(--font-weight-medium);
     color: var(--color-text-primary);
 
-    &:hover .bitfun-session-menu__item-icon {
+    &:hover .halo-session-menu__item-icon {
       background: var(--color-accent-300);
       color: var(--color-accent-500);
     }
@@ -148,7 +148,7 @@ $session-menu-timing: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Round plus badge on the "new session" rows, matching the sidebar header. */
-.bitfun-session-menu__item-icon {
+.halo-session-menu__item-icon {
   flex-shrink: 0;
   width: 20px;
   height: 20px;
@@ -161,7 +161,7 @@ $session-menu-timing: cubic-bezier(0.4, 0, 0.2, 1);
   transition: background 0.1s ease, color 0.1s ease;
 }
 
-.bitfun-session-menu__item-label {
+.halo-session-menu__item-label {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -169,7 +169,7 @@ $session-menu-timing: cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
 }
 
-.bitfun-session-menu__divider {
+.halo-session-menu__divider {
   height: 1px;
   margin: 4px 8px;
   background: var(--border-subtle);

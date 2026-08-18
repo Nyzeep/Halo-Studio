@@ -163,11 +163,11 @@ function App() {
         <footer>
           <div className="footer-brand">
             <CubeFocus weight="duotone" aria-hidden="true" />
-            <span>BitFun MiniApp Market</span>
+            <span>Halo MiniApp Market</span>
           </div>
           <span className="footer-note">{t('footerNote')}</span>
           <a href="https://openbitfun.com/" target="_blank" rel="noreferrer">
-            {t('bitfunHome')}
+            {t('haloHome')}
             <ArrowSquareOut aria-hidden="true" />
           </a>
         </footer>
@@ -238,7 +238,7 @@ function Header({
             <CubeFocus size={25} weight="duotone" aria-hidden="true" />
           </span>
           <span className="brand-copy">
-            <strong>BitFun</strong>
+            <strong>Halo</strong>
             <span>{t('market')}</span>
           </span>
         </button>
@@ -577,7 +577,7 @@ function AppCard({
       <div className="card-body">
         <div className="card-topline">
           <span className="category-chip">{categoryLabel(app.category, t)}</span>
-          <span>BitFun {app.minBitfunVersion}+</span>
+          <span>Halo {app.minHaloVersion}+</span>
         </div>
         <div className="card-heading">
           <span className="app-icon">
@@ -789,7 +789,7 @@ function DetailPage({
           <p className="prose">{app.changelog}</p>
         </div>
         <aside className="facts-panel">
-          <Fact label={t('requires')} value={`v${app.minBitfunVersion}+`} />
+          <Fact label={t('requires')} value={`v${app.minHaloVersion}+`} />
           <Fact
             label={t('downloadsLabel')}
             value={formatCompactNumber(app.downloadCount, locale)}
@@ -939,7 +939,7 @@ function SubmitPage({
                 .split(',')
                 .map((tag) => tag.trim())
                 .filter(Boolean),
-              minBitfunVersion: String(form.get('minBitfunVersion')),
+              minHaloVersion: String(form.get('minHaloVersion')),
               changelog: String(form.get('changelog')),
               license:
                 licenseKind === 'spdx'
@@ -999,8 +999,8 @@ function SubmitPage({
         <fieldset>
           <legend>{t('releaseSection')}</legend>
           <div className="form-grid">
-            <Field label={t('minBitfunVersionLabel')}>
-              <input name="minBitfunVersion" required defaultValue="0.2.14" />
+            <Field label={t('minHaloVersionLabel')}>
+              <input name="minHaloVersion" required defaultValue="0.2.14" />
             </Field>
             <Field label={t('publicRepositoryOptional')}>
               <input name="repositoryUrl" type="url" placeholder="https://github.com/…" />
@@ -1221,8 +1221,8 @@ function AdminPage({
               <div className="review-evidence-grid">
                 <Fact label={t('releaseLabel')} value={`v${selected.submission.releaseNumber}`} />
                 <Fact
-                  label={t('minimumBitfunLabel')}
-                  value={selected.submission.minBitfunVersion}
+                  label={t('minimumHaloLabel')}
+                  value={selected.submission.minHaloVersion}
                 />
                 <Fact
                   label={t('licenseLabel')}

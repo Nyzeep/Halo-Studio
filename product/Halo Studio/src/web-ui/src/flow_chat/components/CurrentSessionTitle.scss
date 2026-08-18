@@ -5,7 +5,7 @@
 
 @use '../../component-library/styles/tokens' as *;
 
-.bitfun-current-session-title {
+.halo-current-session-title {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -62,11 +62,11 @@
   }
 
   &:hover {
-    .bitfun-current-session-title__text {
+    .halo-current-session-title__text {
       color: var(--color-text-primary);
     }
 
-    .bitfun-current-session-title__create-btn {
+    .halo-current-session-title__create-btn {
       color: var(--color-text-secondary);
     }
   }

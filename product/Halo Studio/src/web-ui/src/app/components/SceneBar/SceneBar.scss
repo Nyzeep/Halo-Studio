@@ -6,7 +6,7 @@
 
 $_tab-v-margin: 6px;   // symmetric top/bottom gap inside SceneBar
 
-.bitfun-scene-bar {
+.halo-scene-bar {
   display: flex;
   align-items: stretch;
   height: 40px;
@@ -38,17 +38,17 @@ $_tab-v-margin: 6px;   // symmetric top/bottom gap inside SceneBar
 
 // macOS only (Windows always renders WindowControls on the right).
 // Keep the tabs flush with the SceneViewport edge below — symmetric with the left side.
-.bitfun-scene-bar--no-controls {
+.halo-scene-bar--no-controls {
   padding-right: 0;
 
-  .bitfun-scene-bar__tabs {
+  .halo-scene-bar__tabs {
     padding-right: 2px;
   }
 }
 
 // ── Individual tab ──────────────────────────────────────
 
-.bitfun-scene-tab {
+.halo-scene-tab {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -83,23 +83,23 @@ $_tab-v-margin: 6px;   // symmetric top/bottom gap inside SceneBar
     color: var(--color-text-secondary);
     background: color-mix(in srgb, var(--color-bg-secondary) 68%, var(--color-bg-primary));
 
-    .bitfun-scene-tab__close {
+    .halo-scene-tab__close {
       opacity: 1;
     }
   }
 
-  // Active state — same fill as .bitfun-nav-panel__item.is-active (no left rail on horizontal tabs)
+  // Active state — same fill as .halo-nav-panel__item.is-active (no left rail on horizontal tabs)
   &--active {
     color: var(--color-text-primary);
     font-weight: 500;
     background: var(--element-bg-soft);
 
-    .bitfun-scene-tab__icon {
+    .halo-scene-tab__icon {
       color: var(--color-text-primary);
       opacity: 1;
     }
 
-    &:hover .bitfun-scene-tab__close {
+    &:hover .halo-scene-tab__close {
       opacity: 1;
     }
   }
@@ -115,7 +115,7 @@ $_tab-v-margin: 6px;   // symmetric top/bottom gap inside SceneBar
       color: var(--color-text-secondary);
     }
 
-    &.bitfun-scene-tab--active {
+    &.halo-scene-tab--active {
       background: transparent;
       box-shadow: none;
 
@@ -235,12 +235,12 @@ $_tab-v-margin: 6px;   // symmetric top/bottom gap inside SceneBar
   }
 }
 
-[data-theme='bitfun-slate'] .bitfun-scene-tab__icon {
+[data-theme='halo-slate'] .halo-scene-tab__icon {
   opacity: 0.94;
 }
 
 // Light themes: inactive = former active (soft tint on chrome); active = former inactive (lifted pill + edge).
-:root[data-theme-type='light'] .bitfun-scene-tab {
+:root[data-theme-type='light'] .halo-scene-tab {
   background: var(--element-bg-soft);
   color: var(--color-text-primary);
   box-shadow: none;
@@ -251,7 +251,7 @@ $_tab-v-margin: 6px;   // symmetric top/bottom gap inside SceneBar
     box-shadow: none;
   }
 
-  .bitfun-scene-tab__icon {
+  .halo-scene-tab__icon {
     opacity: 1;
   }
 
@@ -266,11 +266,11 @@ $_tab-v-margin: 6px;   // symmetric top/bottom gap inside SceneBar
       box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-subtle) 48%, transparent);
     }
 
-    .bitfun-scene-tab__icon {
+    .halo-scene-tab__icon {
       color: inherit;
     }
 
-    .bitfun-scene-tab__subtitle {
+    .halo-scene-tab__subtitle {
       color: var(--color-text-muted);
     }
   }
@@ -285,7 +285,7 @@ $_tab-v-margin: 6px;   // symmetric top/bottom gap inside SceneBar
       color: color-mix(in srgb, var(--color-text-primary) 90%, var(--color-text-muted));
     }
 
-    &.bitfun-scene-tab--active {
+    &.halo-scene-tab--active {
       background: transparent;
       box-shadow: none;
       color: var(--color-text-primary);
@@ -298,7 +298,7 @@ $_tab-v-margin: 6px;   // symmetric top/bottom gap inside SceneBar
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-scene-tab {
+  .halo-scene-tab {
     transition: none;
     transform: none;
 

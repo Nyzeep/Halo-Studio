@@ -31,13 +31,13 @@ const lightInk = (alpha: number | string) => rgbaFromHex(LIGHT_INK, alpha);
 const lightAccent = (alpha: number | string) => rgbaFromHex(LIGHT_ACCENT, alpha);
 const lightAccentHover = (alpha: number | string) => rgbaFromHex(LIGHT_ACCENT_HOVER, alpha);
 
-export const bitfunLightTheme: ThemeConfig = {
+export const haloLightTheme: ThemeConfig = {
 
-  id: 'bitfun-light',
+  id: 'halo-light',
   name: 'Light',
   type: 'light',
   description: 'Light theme - Neutral gray surfaces, black primary actions',
-  author: 'BitFun Team',
+  author: 'Halo Studio Team',
   version: '2.3.0',
 
   layout: {

@@ -4,7 +4,7 @@
 
 
 
-.bitfun-context-drop-zone {
+.halo-context-drop-zone {
   position: relative;
   width: 100%;
   
@@ -38,7 +38,7 @@
     
     pointer-events: none;
     
-    animation: bitfun-drop-zone-pulse 1.5s ease-in-out infinite;
+    animation: halo-drop-zone-pulse 1.5s ease-in-out infinite;
   }
   
   &__indicator {
@@ -53,7 +53,7 @@
   &__icon {
     color: var(--color-accent-500);
     filter: drop-shadow(0 0 12px color-mix(in srgb, var(--color-accent-500) 60%, transparent));
-    animation: bitfun-drop-zone-scale 1.5s ease-in-out infinite;
+    animation: halo-drop-zone-scale 1.5s ease-in-out infinite;
     
     &--disabled {
       color: var(--color-text-disabled);
@@ -81,7 +81,7 @@
 
 
 
-@keyframes bitfun-drop-zone-pulse {
+@keyframes halo-drop-zone-pulse {
   0%, 100% {
     opacity: 1;
   }
@@ -90,7 +90,7 @@
   }
 }
 
-@keyframes bitfun-drop-zone-scale {
+@keyframes halo-drop-zone-scale {
   0%, 100% {
     transform: scale(1);
   }

@@ -35,7 +35,7 @@
   "connectionMethods": {
     "lan": "局域网",
     "ngrok": "Ngrok",
-    "bitfunServer": "Halo Studio Server",
+    "haloServer": "Halo Studio Server",
     "customServer": "自定义服务器",
     "botFeishu": "飞书机器人",
     "botTelegram": "Telegram Bot",
