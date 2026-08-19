@@ -447,10 +447,10 @@ const ConnectedTerminal: React.FC<ConnectedTerminalProps> = memo(({
 
   if (isLoading) {
     return (
-      <div className={`bitfun-terminal ${className}`} data-testid="shell-command-list">
-        <div className="bitfun-terminal__loading" data-testid="shell-command-status" data-command-status="loading">
-          <div className="bitfun-terminal__loading-spinner" />
-          <span className="bitfun-terminal__loading-text">Connecting to terminal...</span>
+      <div className={`halo-terminal ${className}`} data-testid="shell-command-list">
+        <div className="halo-terminal__loading" data-testid="shell-command-status" data-command-status="loading">
+          <div className="halo-terminal__loading-spinner" />
+          <span className="halo-terminal__loading-text">Connecting to terminal...</span>
         </div>
       </div>
     );
@@ -458,12 +458,12 @@ const ConnectedTerminal: React.FC<ConnectedTerminalProps> = memo(({
 
   if (error) {
     return (
-      <div className={`bitfun-terminal ${className}`} data-testid="shell-command-list">
-        <div className="bitfun-terminal__error" data-testid="shell-command-status" data-command-status="error">
-          <AlertCircle className="bitfun-terminal__error-icon" size={32} />
-          <span className="bitfun-terminal__error-message">{error}</span>
+      <div className={`halo-terminal ${className}`} data-testid="shell-command-list">
+        <div className="halo-terminal__error" data-testid="shell-command-status" data-command-status="error">
+          <AlertCircle className="halo-terminal__error-icon" size={32} />
+          <span className="halo-terminal__error-message">{error}</span>
           <button 
-            className="bitfun-terminal__error-retry"
+            className="halo-terminal__error-retry"
             onClick={handleRetry}
             data-testid="shell-command-rerun"
           >
@@ -477,25 +477,25 @@ const ConnectedTerminal: React.FC<ConnectedTerminalProps> = memo(({
 
   return (
     <div
-      className={`bitfun-terminal ${className}`}
+      className={`halo-terminal ${className}`}
       data-testid="shell-command-list"
       data-command-id={sessionId}
       data-command-status={isExited ? 'exited' : 'running'}
     >
       {showToolbar && (
-        <div className="bitfun-terminal__toolbar">
-          <div className="bitfun-terminal__toolbar-left">
+        <div className="halo-terminal__toolbar">
+          <div className="halo-terminal__toolbar-left">
             <TerminalIcon size={14} />
-            <span className="bitfun-terminal__toolbar-title" data-testid="shell-panel-title">
+            <span className="halo-terminal__toolbar-title" data-testid="shell-panel-title">
               {title}
               {session && (
                 <span className="shell-type">({session.shellType})</span>
               )}
             </span>
           </div>
-          <div className="bitfun-terminal__toolbar-right">
+          <div className="halo-terminal__toolbar-right">
             <button
-              className="bitfun-terminal__toolbar-btn"
+              className="halo-terminal__toolbar-btn"
               onClick={handleSendCtrlC}
               title="Send Ctrl+C"
               data-testid="shell-command-rerun"
@@ -503,7 +503,7 @@ const ConnectedTerminal: React.FC<ConnectedTerminalProps> = memo(({
               <span style={{ fontSize: 10, fontWeight: 'bold' }}>^C</span>
             </button>
             <button
-              className="bitfun-terminal__toolbar-btn bitfun-terminal__toolbar-btn--danger"
+              className="halo-terminal__toolbar-btn halo-terminal__toolbar-btn--danger"
               onClick={handleClose}
               title="Close terminal"
               data-testid="shell-panel-close"
@@ -531,33 +531,33 @@ const ConnectedTerminal: React.FC<ConnectedTerminalProps> = memo(({
       />
 
       {showStatusBar && session && (
-        <div className={`bitfun-terminal__statusbar ${
-          isExited ? 'bitfun-terminal__statusbar--exited' : ''
+        <div className={`halo-terminal__statusbar ${
+          isExited ? 'halo-terminal__statusbar--exited' : ''
         } ${
-          error ? 'bitfun-terminal__statusbar--error' : ''
+          error ? 'halo-terminal__statusbar--error' : ''
         }`}>
-          <div className="bitfun-terminal__statusbar-left">
+          <div className="halo-terminal__statusbar-left">
             <span
-              className="bitfun-terminal__statusbar-item"
+              className="halo-terminal__statusbar-item"
               data-testid="shell-command-status"
               data-command-status={isExited ? 'exited' : 'running'}
             >
               {session.shellType}
             </span>
-            <span className="bitfun-terminal__statusbar-item">
+            <span className="halo-terminal__statusbar-item">
               PID: {session.pid || '-'}
             </span>
-            <span className="bitfun-terminal__statusbar-item">
+            <span className="halo-terminal__statusbar-item">
               {session.cwd}
             </span>
           </div>
-          <div className="bitfun-terminal__statusbar-right">
-            <span className="bitfun-terminal__statusbar-item">
+          <div className="halo-terminal__statusbar-right">
+            <span className="halo-terminal__statusbar-item">
               {session.cols}×{session.rows}
             </span>
             {isExited && exitCode !== null && (
               <span
-                className="bitfun-terminal__statusbar-item"
+                className="halo-terminal__statusbar-item"
                 data-testid="shell-command-exit-code"
                 data-exit-code={exitCode}
                 data-status={exitCode === 0 ? 'success' : 'failed'}

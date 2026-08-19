@@ -64,10 +64,10 @@ describe('WorkspaceLspManager', () => {
       return undefined;
     });
 
-    const manager = WorkspaceLspManager.getOrCreate('D:\\workspace\\BitFun');
+    const manager = WorkspaceLspManager.getOrCreate('D:\\workspace\\Halo');
 
     const result = await manager.openDocument(
-      'file:///D:/workspace/BitFun/src/main.rs',
+      'file:///D:/workspace/Halo/src/main.rs',
       'rust',
       'fn main() {}'
     );
@@ -95,10 +95,10 @@ describe('WorkspaceLspManager', () => {
       return undefined;
     });
 
-    const manager = WorkspaceLspManager.getOrCreate('D:\\workspace\\BitFun');
+    const manager = WorkspaceLspManager.getOrCreate('D:\\workspace\\Halo');
 
     const result = await manager.openDocument(
-      'file:///D:/workspace/BitFun/src/main.rs',
+      'file:///D:/workspace/Halo/src/main.rs',
       'rust',
       'fn main() {}'
     );
@@ -106,8 +106,8 @@ describe('WorkspaceLspManager', () => {
     expect(result).toEqual({ language: 'rust', opened: true });
     expect(invokeMock).toHaveBeenCalledWith('lsp_open_document', {
       request: {
-        workspacePath: 'D:\\workspace\\BitFun',
-        uri: 'file:///D:/workspace/BitFun/src/main.rs',
+        workspacePath: 'D:\\workspace\\Halo',
+        uri: 'file:///D:/workspace/Halo/src/main.rs',
         language: 'rust',
         content: 'fn main() {}'
       }
@@ -128,18 +128,18 @@ describe('WorkspaceLspManager', () => {
       return undefined;
     });
 
-    const manager = WorkspaceLspManager.getOrCreate('D:\\workspace\\BitFun');
+    const manager = WorkspaceLspManager.getOrCreate('D:\\workspace\\Halo');
 
-    await manager.openDocument('file:///D:/workspace/BitFun/src/main.rs', 'rust', 'fn main() {}');
-    await manager.openDocument('file:///D:/workspace/BitFun/src/lib.rs', 'rust', 'pub fn lib() {}');
+    await manager.openDocument('file:///D:/workspace/Halo/src/main.rs', 'rust', 'fn main() {}');
+    await manager.openDocument('file:///D:/workspace/Halo/src/lib.rs', 'rust', 'pub fn lib() {}');
 
     expect(invokeMock).toHaveBeenCalledTimes(2);
     expect(invokeMock).toHaveBeenCalledWith('lsp_open_workspace', {
-      request: { workspacePath: 'D:\\workspace\\BitFun' }
+      request: { workspacePath: 'D:\\workspace\\Halo' }
     });
     expect(invokeMock).toHaveBeenCalledWith('lsp_get_server_state', {
       request: {
-        workspacePath: 'D:\\workspace\\BitFun',
+        workspacePath: 'D:\\workspace\\Halo',
         language: 'rust'
       }
     });

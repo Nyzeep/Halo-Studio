@@ -66,35 +66,35 @@ describe('ChatInputWorkspaceStrip git refresh behavior', () => {
     await act(async () => {
       root.render(
         <ChatInputWorkspaceStrip
-          repositoryPath="D:/workspace/BitFun"
-          workspaceLabel="BitFun"
+          repositoryPath="D:/workspace/Halo"
+          workspaceLabel="Halo"
           deferPassiveGitRefresh
         />
       );
     });
 
     expect(mocks.useGitState).toHaveBeenCalledWith(expect.objectContaining({
-      repositoryPath: 'D:/workspace/BitFun',
+      repositoryPath: 'D:/workspace/Halo',
       layers: ['basic'],
       isActive: false,
       refreshOnMount: false,
       refreshOnActive: false,
     }));
-    expect(container.textContent).toContain('BitFun');
+    expect(container.textContent).toContain('Halo');
   });
 
   it('keeps passive git refresh enabled for normal sessions', async () => {
     await act(async () => {
       root.render(
         <ChatInputWorkspaceStrip
-          repositoryPath="D:/workspace/BitFun"
-          workspaceLabel="BitFun"
+          repositoryPath="D:/workspace/Halo"
+          workspaceLabel="Halo"
         />
       );
     });
 
     expect(mocks.useGitState).toHaveBeenCalledWith(expect.objectContaining({
-      repositoryPath: 'D:/workspace/BitFun',
+      repositoryPath: 'D:/workspace/Halo',
       isActive: true,
       refreshOnMount: true,
       refreshOnActive: false,
@@ -147,8 +147,8 @@ describe('ChatInputWorkspaceStrip git refresh behavior', () => {
     await act(async () => {
       root.render(
         <ChatInputWorkspaceStrip
-          repositoryPath="D:/workspace/BitFun"
-          workspaceLabel="BitFun"
+          repositoryPath="D:/workspace/Halo"
+          workspaceLabel="Halo"
           permissionControl={{ mode: 'acp' }}
         />
       );
@@ -233,7 +233,7 @@ describe('ChatInputWorkspaceStrip git refresh behavior', () => {
             worktreeId: 'wt-1',
             rootPath: '/worktrees/wt-1',
             baseCommit: '0123456789abcdef',
-            branch: 'bitfun/isolated',
+            branch: 'halo/isolated',
             lifecycle: 'managed',
           }}
           worktreeControl={{ enabled: true, locked: false, onChange }}
@@ -243,7 +243,7 @@ describe('ChatInputWorkspaceStrip git refresh behavior', () => {
 
     const toggle = container.querySelector<HTMLButtonElement>('[data-testid="chat-input-worktree-toggle"]');
     expect(toggle?.dataset.worktreeEnabled).toBe('true');
-    expect(container.textContent).toContain('bitfun/isolated');
+    expect(container.textContent).toContain('halo/isolated');
 
     await act(async () => {
       toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

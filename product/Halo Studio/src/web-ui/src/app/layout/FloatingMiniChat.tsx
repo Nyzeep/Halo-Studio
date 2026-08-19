@@ -348,18 +348,18 @@ export const FloatingMiniChat: React.FC = () => {
   );
 
   const panelClassName = [
-    'bitfun-fmc__panel',
-    isOpen && 'bitfun-fmc__panel--open',
-    isStreaming && 'bitfun-fmc__panel--processing',
+    'halo-fmc__panel',
+    isOpen && 'halo-fmc__panel--open',
+    isStreaming && 'halo-fmc__panel--processing',
   ]
     .filter(Boolean)
     .join(' ');
 
   return (
     <div className={[
-      'bitfun-fmc',
-      isOpen && 'bitfun-fmc--open',
-      shouldAvoidMiniAppCustomizer && 'bitfun-fmc--miniapp-customizing',
+      'halo-fmc',
+      isOpen && 'halo-fmc--open',
+      shouldAvoidMiniAppCustomizer && 'halo-fmc--miniapp-customizing',
     ].filter(Boolean).join(' ')}>
       {/* Fullscreen backdrop to catch outside clicks. It stays inert until the
           panel has finished scaling up: until then the panel's hit area is
@@ -369,7 +369,7 @@ export const FloatingMiniChat: React.FC = () => {
           scene underneath. */}
       {isOpen && (
         <div
-          className="bitfun-fmc__backdrop"
+          className="halo-fmc__backdrop"
           onMouseDown={phase === 'open' ? handleClose : undefined}
         />
       )}
@@ -380,9 +380,9 @@ export const FloatingMiniChat: React.FC = () => {
       <button
         type="button"
         className={[
-          'bitfun-fmc__button',
-          activeComposerClaim && 'bitfun-fmc__button--miniapp',
-          isMiniAppSessionExecuting && 'bitfun-fmc__button--processing',
+          'halo-fmc__button',
+          activeComposerClaim && 'halo-fmc__button--miniapp',
+          isMiniAppSessionExecuting && 'halo-fmc__button--processing',
         ].filter(Boolean).join(' ')}
         onPointerDown={handleTriggerPointerDown}
         onClick={handleOpen}
@@ -392,13 +392,13 @@ export const FloatingMiniChat: React.FC = () => {
       >
         {isMiniAppSessionExecuting && (
           <span
-            className="bitfun-fmc__button-activity"
+            className="halo-fmc__button-activity"
             aria-hidden="true"
           />
         )}
         {activeComposerClaim ? (
           <span
-            className="bitfun-fmc__miniapp-trigger-icon"
+            className="halo-fmc__miniapp-trigger-icon"
             aria-hidden="true"
           >
             {renderMiniAppIcon(activeMiniAppIcon, 20)}
@@ -418,10 +418,10 @@ export const FloatingMiniChat: React.FC = () => {
         {/* Header — normal chat keeps the shared SessionMenu. A claimed
             MiniApp bubble replaces that switcher with app identity so the user
             cannot navigate the dedicated composer back into a normal chat. */}
-        <div className="bitfun-fmc__header">
+        <div className="halo-fmc__header">
           {activeComposerClaim ? (
             <div
-              className="bitfun-fmc__miniapp-session-icon"
+              className="halo-fmc__miniapp-session-icon"
               aria-hidden="true"
             >
               {renderMiniAppIcon(activeMiniAppIcon, 14)}
@@ -430,9 +430,9 @@ export const FloatingMiniChat: React.FC = () => {
             <SessionMenu />
           )}
 
-          <div className="bitfun-fmc__title-wrapper">
-            <div className="bitfun-fmc__title-display" title={displayedTitle}>
-              <span className="bitfun-fmc__title-text">{displayedTitle}</span>
+          <div className="halo-fmc__title-wrapper">
+            <div className="halo-fmc__title-display" title={displayedTitle}>
+              <span className="halo-fmc__title-text">{displayedTitle}</span>
             </div>
           </div>
 
@@ -440,7 +440,7 @@ export const FloatingMiniChat: React.FC = () => {
               surface (permission panel above ChatInput, ChatInput stop button),
               so the header only owns bubble chrome. */}
           <Tooltip content={t('planner.cancel')}>
-            <button type="button" className="bitfun-fmc__header-btn bitfun-fmc__header-btn--close" onClick={handleClose}>
+            <button type="button" className="halo-fmc__header-btn halo-fmc__header-btn--close" onClick={handleClose}>
               <X size={14} />
             </button>
           </Tooltip>
@@ -449,7 +449,7 @@ export const FloatingMiniChat: React.FC = () => {
         {/* Main window session surface, reused as-is. Only mounted while the
             panel is open to avoid running a second VirtualMessageList and store
             sync in the background while the agent streams in another scene. */}
-        <div className="bitfun-fmc__body">
+        <div className="halo-fmc__body">
           {surfaceMounted && (!activeComposerClaim || isMiniAppSessionReady) && (
             <ChatPane
               width={0}
@@ -475,9 +475,9 @@ export const FloatingMiniChat: React.FC = () => {
             />
           )}
           {surfaceMounted && activeComposerClaim && !isMiniAppSessionReady && (
-            <div className="bitfun-fmc__miniapp-session-pending">
+            <div className="halo-fmc__miniapp-session-pending">
               <div
-                className="bitfun-fmc__miniapp-session-pending-icon"
+                className="halo-fmc__miniapp-session-pending-icon"
                 aria-hidden="true"
               >
                 {renderMiniAppIcon(activeMiniAppIcon, 22)}

@@ -96,8 +96,8 @@ export const GenerativeWidgetPanel: React.FC<GenerativeWidgetPanelProps> = ({
 
   if (!draftCode) {
     return (
-      <div className="bitfun-generative-widget-panel bitfun-generative-widget-panel--empty">
-        <div className="bitfun-generative-widget-panel__empty-copy">
+      <div className="halo-generative-widget-panel halo-generative-widget-panel--empty">
+        <div className="halo-generative-widget-panel__empty-copy">
           {t('toolCards.generativeUI.empty')}
         </div>
       </div>
@@ -105,17 +105,17 @@ export const GenerativeWidgetPanel: React.FC<GenerativeWidgetPanelProps> = ({
   }
 
   return (
-    <div className="bitfun-generative-widget-panel">
-      <div className="bitfun-generative-widget-panel__toolbar">
-        <div className="bitfun-generative-widget-panel__toolbar-meta">
-          <span className={`bitfun-generative-widget-panel__save-state bitfun-generative-widget-panel__save-state--${saveState}`}>
+    <div className="halo-generative-widget-panel">
+      <div className="halo-generative-widget-panel__toolbar">
+        <div className="halo-generative-widget-panel__toolbar-meta">
+          <span className={`halo-generative-widget-panel__save-state halo-generative-widget-panel__save-state--${saveState}`}>
             {saveLabel}
           </span>
         </div>
-        <div className="bitfun-generative-widget-panel__toolbar-actions">
+        <div className="halo-generative-widget-panel__toolbar-actions">
           <button
             type="button"
-            className="bitfun-generative-widget-panel__button"
+            className="halo-generative-widget-panel__button"
             onClick={handleReset}
             disabled={draftCode === savedCodeRef.current}
           >
@@ -124,7 +124,7 @@ export const GenerativeWidgetPanel: React.FC<GenerativeWidgetPanelProps> = ({
           </button>
           <button
             type="button"
-            className="bitfun-generative-widget-panel__button bitfun-generative-widget-panel__button--primary"
+            className="halo-generative-widget-panel__button halo-generative-widget-panel__button--primary"
             onClick={handleSaveNow}
             disabled={saveState === 'saving' || draftCode === savedCodeRef.current}
           >
@@ -134,16 +134,16 @@ export const GenerativeWidgetPanel: React.FC<GenerativeWidgetPanelProps> = ({
         </div>
       </div>
 
-      <div className="bitfun-generative-widget-panel__workspace">
-        <section className="bitfun-generative-widget-panel__pane bitfun-generative-widget-panel__pane--editor">
-          <div className="bitfun-generative-widget-panel__pane-header">
-            <span className="bitfun-generative-widget-panel__pane-title">
+      <div className="halo-generative-widget-panel__workspace">
+        <section className="halo-generative-widget-panel__pane halo-generative-widget-panel__pane--editor">
+          <div className="halo-generative-widget-panel__pane-header">
+            <span className="halo-generative-widget-panel__pane-title">
               <Code2 size={14} />
               <span>{t('toolCards.generativeUI.source')}</span>
             </span>
           </div>
           <textarea
-            className="bitfun-generative-widget-panel__editor"
+            className="halo-generative-widget-panel__editor"
             value={draftCode}
             onChange={(event) => {
               setDraftCode(event.target.value);
@@ -159,7 +159,7 @@ export const GenerativeWidgetPanel: React.FC<GenerativeWidgetPanelProps> = ({
       </div>
 
       {saveError && (
-        <div className="bitfun-generative-widget-panel__error">
+        <div className="halo-generative-widget-panel__error">
           {saveError}
         </div>
       )}

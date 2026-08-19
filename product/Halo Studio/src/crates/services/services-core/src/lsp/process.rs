@@ -17,7 +17,7 @@ use tokio::time::{timeout, Duration};
 use crate::lsp::protocol::{
     create_notification, create_request, extract_result, read_message, write_message,
 };
-use bitfun_core_types::lsp::{
+use halo_core_types::lsp::{
     ClientCapabilities, InitializeParams, InitializeResult, JsonRpcError, JsonRpcMessage,
     JsonRpcResponse, RuntimeType, ServerConfig, WorkspaceFolder,
 };
@@ -1088,7 +1088,7 @@ impl Drop for LspServerProcess {
 #[cfg(test)]
 mod tests {
     use super::LspServerProcess;
-    use bitfun_core_types::lsp::{RuntimeType, ServerConfig};
+    use halo_core_types::lsp::{RuntimeType, ServerConfig};
     use std::collections::HashMap;
     use std::path::PathBuf;
 

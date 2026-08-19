@@ -72,7 +72,7 @@ impl IsolationManager {
                 .any(|&forbidden| file_name_str.starts_with(forbidden))
             {
                 return Err(SnapshotError::GitIsolationFailure(format!(
-                    "Found Git-related file in .bitfun directory: {}",
+                    "Found Git-related file in .halo-studio directory: {}",
                     file_name_str
                 )));
             }
@@ -126,7 +126,7 @@ impl IsolationManager {
     }
 
     /// Returns the snapshot runtime directory path.
-    pub fn get_bitfun_dir(&self) -> &Path {
+    pub fn get_halo_dir(&self) -> &Path {
         &self.runtime_context.runtime_root
     }
 
@@ -256,7 +256,7 @@ mod tests {
         let alias = aliased_workspace(workspace.path());
         let file = workspace.path().join("tracked.txt");
         std::fs::write(&file, "tracked").expect("tracked file");
-        let manager = manager(workspace_root, workspace.path().join(".bitfun"));
+        let manager = manager(workspace_root, workspace.path().join(".halo-studio"));
 
         assert!(manager.is_path_safe_for_modification(&alias.join("tracked.txt")));
     }
@@ -266,7 +266,7 @@ mod tests {
         let workspace = tempfile::tempdir().expect("workspace");
         let workspace_root = dunce::canonicalize(workspace.path()).expect("canonical workspace");
         let alias = aliased_workspace(workspace.path());
-        let manager = manager(workspace_root, workspace.path().join(".bitfun"));
+        let manager = manager(workspace_root, workspace.path().join(".halo-studio"));
 
         assert!(manager.is_path_safe_for_modification(&alias.join("new/deep/file.txt")));
     }
@@ -276,7 +276,7 @@ mod tests {
         let workspace = tempfile::tempdir().expect("workspace");
         let workspace_root = dunce::canonicalize(workspace.path()).expect("canonical workspace");
         let alias = aliased_workspace(workspace.path());
-        let runtime_root = alias.join(".bitfun");
+        let runtime_root = alias.join(".halo-studio");
         std::fs::create_dir_all(&runtime_root).expect("runtime root");
         let manager = manager(workspace_root, runtime_root.clone());
 
@@ -288,7 +288,7 @@ mod tests {
     fn rejects_case_variant_missing_git_directory() {
         let workspace = tempfile::tempdir().expect("workspace");
         let workspace_root = dunce::canonicalize(workspace.path()).expect("canonical workspace");
-        let manager = manager(workspace_root, workspace.path().join(".bitfun"));
+        let manager = manager(workspace_root, workspace.path().join(".halo-studio"));
 
         assert!(!manager.is_path_safe_for_modification(&workspace.path().join(".GIT/config")));
     }
@@ -304,7 +304,7 @@ mod tests {
         std::fs::write(metadata.join("config"), "config").expect("git config");
         symlink(&metadata, workspace.path().join(".git")).expect("git symlink");
         let workspace_root = dunce::canonicalize(workspace.path()).expect("canonical workspace");
-        let manager = manager(workspace_root, workspace.path().join(".bitfun"));
+        let manager = manager(workspace_root, workspace.path().join(".halo-studio"));
 
         assert!(!manager.is_path_safe_for_modification(&workspace.path().join(".git/config")));
     }
@@ -319,7 +319,7 @@ mod tests {
         std::fs::write(outside.path().join("outside.txt"), "outside").expect("outside file");
         symlink(outside.path(), workspace.path().join("escape")).expect("escape symlink");
         let workspace_root = dunce::canonicalize(workspace.path()).expect("canonical workspace");
-        let manager = manager(workspace_root, workspace.path().join(".bitfun"));
+        let manager = manager(workspace_root, workspace.path().join(".halo-studio"));
 
         assert!(
             !manager.is_path_safe_for_modification(&workspace.path().join("escape/outside.txt"))

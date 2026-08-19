@@ -43,7 +43,7 @@ function layerForManifest(manifestPath, { root, crateLayoutRules }) {
   }
   const cratePath = repoManifestPath.replace(/\/Cargo\.toml$/, '');
 
-  if (cratePath.startsWith('src/apps/') || cratePath === 'BitFun-Installer/src-tauri') {
+  if (cratePath.startsWith('src/apps/') || cratePath === 'Halo-Installer/src-tauri') {
     return 'apps';
   }
 

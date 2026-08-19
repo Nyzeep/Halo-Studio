@@ -1,19 +1,19 @@
 [package]
-name = "bitfun-sdk-host"
+name = "halo-sdk-host"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Versioned local SDK Host adapter for the BitFun Agent Runtime"
+description = "Versioned local SDK Host adapter for the Halo Agent Runtime"
 
 [lib]
-name = "bitfun_sdk_host"
+name = "halo_sdk_host"
 
 [dependencies]
 async-trait = { workspace = true }
-bitfun-agent-runtime = { path = "../../execution/agent-runtime" }
-bitfun-core-types = { path = "../../contracts/core-types" }
-bitfun-events = { path = "../../contracts/events" }
-bitfun-runtime-ports = { path = "../../contracts/runtime-ports" }
+halo-agent-runtime = { path = "../../execution/agent-runtime" }
+halo-core-types = { path = "../../contracts/core-types" }
+halo-events = { path = "../../contracts/events" }
+halo-runtime-ports = { path = "../../contracts/runtime-ports" }
 futures-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

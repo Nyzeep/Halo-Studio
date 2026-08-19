@@ -1,4 +1,4 @@
-# BitFun 编译/构建性能审阅报告
+# Halo Studio 编译/构建性能审阅报告
 
 - 审阅日期:2026-07-26
 - 审阅范围:Rust workspace(36 个 crate + 5 个 app,约 57.8 万行 Rust)、前端 pnpm workspace(web-ui 1676 个 TS/TSX 文件、约 36.7 万行)、构建脚本(scripts/)、CI(.github/workflows)
@@ -13,7 +13,7 @@
 |---|------|------|---------|---------|
 | F1 | Monaco 被"双份打包":ESM 全量打进主 JS chunk,同时又以 AMD 形式复制到 public 运行时加载 | 前端 | 高 | `src/web-ui/src/tools/editor/core/MonacoEditorCore.tsx:11` 等 10+ 处 value import;`dist/assets/index-DwMxiWtW.js`(5.4MB)含 monaco 核心签名 |
 | F2 | `build:web` 串行 type-check(366k 行、无 incremental),打包 CI 还重复执行一次 | 前端/CI | 高 | `package.json:49`、`src/web-ui/tsconfig.json`(无 incremental)、`.github/workflows/desktop-package.yml:225` |
-| F3 | `bitfun-core` 巨石 crate(202k 行 / 469 文件),任何改动触发整 crate + 下游全量重编 | Rust | 高 | `src/crates/assembly/core`(LOC 统计) |
+| F3 | `halo-core` 巨石 crate(202k 行 / 469 文件),任何改动触发整 crate + 下游全量重编 | Rust | 高 | `src/crates/assembly/core`(LOC 统计) |
 | F4 | release profile 全量 LTO + codegen-units=1 用于所有平台打包,仅 Linux aarch64 例外用了 thin | Rust/CI | 高 | `Cargo.toml:282-286`、`.github/workflows/desktop-package.yml:106` |
 | F5 | 本地 dev 构建:全量 debuginfo + MSVC 默认链接器,`tauri dev` 路径未套用 dev.cjs 的加速环境变量 | Rust | 高 | `Cargo.toml:279-280`、`scripts/dev.cjs:346-351` vs `scripts/dev.cjs:749-767`、无 `.cargo/config.toml` |
 | F6 | Cargo.lock 被 gitignore,CI 每次 `cargo generate-lockfile` → 依赖漂移 + rust-cache 频繁失效 | Rust/CI | 中-高 | `.gitignore:26`、`.github/workflows/ci.yml:47-48,136-137` |
@@ -22,7 +22,7 @@
 | F9 | 依赖树重复严重:1177 个包中 112 个名字存在多版本(image、thiserror、rand×3、getrandom×4、windows-sys×6、phf×6 等) | Rust | 中 | Cargo.lock 解析;`src/apps/desktop/Cargo.toml:85`(image 0.24 vs workspace 0.25) |
 | F10 | reqwest 同时启用 native-tls + rustls,双 TLS 栈都参与编译 | Rust | 中 | `Cargo.toml:121` |
 | F11 | Vite dev watcher 强制 usePolling + 100ms 轮询,Windows 上 CPU 高、拖慢 HMR | 前端 | 中 | `src/web-ui/vite.config.ts:68-74` |
-| F12 | prompts/公告 md 内嵌进 bitfun-core 的 build.rs 生成代码,改一个提示词 = 重编 202k 行 core + 下游 | Rust | 中 | `src/crates/assembly/core/build.rs:110-183,343-401` |
+| F12 | prompts/公告 md 内嵌进 halo-core 的 build.rs 生成代码,改一个提示词 = 重编 202k 行 core + 下游 | Rust | 中 | `src/crates/assembly/core/build.rs:110-183,343-401` |
 | F13 | beforeBuildCommand 内 web 构建与 mobile-web 构建纯串行;dev.cjs 准备步骤也全串行 | 脚本 | 中 | `src/apps/desktop/tauri.conf.json`(build 块)、`scripts/dev.cjs:668-737` |
 | F14 | tokio 全 workspace 开 `full` feature;tauri 开 `unstable`;个别重依赖(oxc、rquickjs、git2 vendored、sherpa-onnx)集中于少数 feature | Rust | 低-中 | `Cargo.toml:72,149,178-180,183,248` |
 | F15 | tsconfig(web-ui/mobile-web)未启用 incremental;type-check 每次冷启动 | 前端 | 低-中 | `src/web-ui/tsconfig.json`(全文无 incremental) |
@@ -64,12 +64,12 @@ vite.config.ts 没有为 `monaco-editor` 做 alias/external 处理,Rollup 会解
 **优化方案**
 1. `build:web` 改为并行:`concurrently "pnpm run type-check:web" "pnpm --dir src/web-ui build"`(或用 `npm-run-all --parallel`),verify 放最后。
 2. `src/web-ui/tsconfig.json` 增加 `"incremental": true, "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo"`(noEmit + incremental 在 TS 5.x 合法)。
-3. desktop-package.yml 中二选一:删除 225 行独立 type-check,或给 desktop:build 提供跳过 type-check 的入口(例如 `BITFUN_SKIP_TYPECHECK=1` 时 build:web 只跑 vite build)。
+3. desktop-package.yml 中二选一:删除 225 行独立 type-check,或给 desktop:build 提供跳过 type-check 的入口(例如 `HALO_SKIP_TYPECHECK=1` 时 build:web 只跑 vite build)。
 
-### F3(高)bitfun-core 巨石 crate 是 Rust 增量编译瓶颈
+### F3(高)halo-core 巨石 crate 是 Rust 增量编译瓶颈
 
 **问题描述**
-LOC 统计(只算各 crate `src/`):`src/crates/assembly/core` **202,735 行 / 469 文件**,是第二名(services-integrations 72k)的近 3 倍;bitfun-desktop 依赖它(`src/apps/desktop/Cargo.toml:22`)。rustc 的编译单元是 crate:core 内任何一行改动都会重新编译整个 202k 行 crate(增量编译可缓解 codegen,但 MIR/借用检查/单体化与下游 `bitfun-desktop`(63k 行)的重编译+重链接不可避免)。相比之下 workspace 其他 crate 拆分粒度合理(contracts/adapters/execution 层多为 1-20k 行)。此外 core 的 `Cargo.toml` 显示它同时聚合了 sqlite(`rusqlite bundled`)、MCP 客户端、调试 HTTP 服务器、git2 等,大量子域仍在一个编译单元内。
+LOC 统计(只算各 crate `src/`):`src/crates/assembly/core` **202,735 行 / 469 文件**,是第二名(services-integrations 72k)的近 3 倍;halo-desktop 依赖它(`src/apps/desktop/Cargo.toml:22`)。rustc 的编译单元是 crate:core 内任何一行改动都会重新编译整个 202k 行 crate(增量编译可缓解 codegen,但 MIR/借用检查/单体化与下游 `halo-desktop`(63k 行)的重编译+重链接不可避免)。相比之下 workspace 其他 crate 拆分粒度合理(contracts/adapters/execution 层多为 1-20k 行)。此外 core 的 `Cargo.toml` 显示它同时聚合了 sqlite(`rusqlite bundled`)、MCP 客户端、调试 HTTP 服务器、git2 等,大量子域仍在一个编译单元内。
 
 **预期收益**:高(日常增量编译;长期工程)。
 
@@ -93,7 +93,7 @@ LOC 统计(只算各 crate `src/`):`src/crates/assembly/core` **202,735 行 / 46
 ### F5(高)本地 dev 循环:全量 debuginfo + 默认 MSVC 链接器
 
 **问题描述**
-`[profile.dev]` 只有 `incremental = true`(`Cargo.toml:279-280`,本身是默认值),debuginfo 为默认 full。Windows 上每次增量构建的大头是 link.exe 重链 bitfun-desktop(数百依赖 + 63k 行 app crate)并重写巨型 PDB。dev.cjs 已经意识到这一点——`rebuildDesktopDebugBinary()` 设置 `CARGO_PROFILE_DEV_DEBUG=0、CODEGEN_UNITS=256`(`scripts/dev.cjs:346-351`),**但只作用于 desktop-preview 路径**;最常用的 `desktop:dev`(`tauri dev`,`scripts/dev.cjs:749-767`)与 `desktop:dev:raw` 完全没有这些环境变量,仍是全量 debuginfo。仓库也没有 `.cargo/config.toml`,未启用任何链接器优化(rust-lld)或编译缓存(sccache)。
+`[profile.dev]` 只有 `incremental = true`(`Cargo.toml:279-280`,本身是默认值),debuginfo 为默认 full。Windows 上每次增量构建的大头是 link.exe 重链 halo-desktop(数百依赖 + 63k 行 app crate)并重写巨型 PDB。dev.cjs 已经意识到这一点——`rebuildDesktopDebugBinary()` 设置 `CARGO_PROFILE_DEV_DEBUG=0、CODEGEN_UNITS=256`(`scripts/dev.cjs:346-351`),**但只作用于 desktop-preview 路径**;最常用的 `desktop:dev`(`tauri dev`,`scripts/dev.cjs:749-767`)与 `desktop:dev:raw` 完全没有这些环境变量,仍是全量 debuginfo。仓库也没有 `.cargo/config.toml`,未启用任何链接器优化(rust-lld)或编译缓存(sccache)。
 
 **预期收益**:高(日常 Rust 改动的"改一行到重启应用"时间,链接期通常可减 30-60%)。
 
@@ -111,7 +111,7 @@ LOC 统计(只算各 crate `src/`):`src/crates/assembly/core` **202,735 行 / 46
 **预期收益**:中-高(CI 稳定性与缓存命中率;偶发的"上游发版导致全量重编/编译失败"归零)。
 
 **优化方案**
-1. 从 .gitignore 移除 Cargo.lock 并提交(根 workspace 与 BitFun-Installer/src-tauri 各一份);CI 删除 `cargo generate-lockfile` 步骤,直接 `--locked`。
+1. 从 .gitignore 移除 Cargo.lock 并提交(根 workspace 与 Halo-Installer/src-tauri 各一份);CI 删除 `cargo generate-lockfile` 步骤,直接 `--locked`。
 2. 依赖更新改为显式动作(Renovate/Dependabot 或定期 `cargo update` PR),届时可逐步解除 `=` 钉版。
 3. 风险:改变现行"自动吃最新补丁版本"策略,需团队确认;属流程变更而非代码变更。
 
@@ -169,10 +169,10 @@ Cargo.lock 共 1177 个包,其中 112 个名字存在 2 个以上版本(解析�
 **优化方案**
 - 默认关闭 `usePolling`(删除该配置),仅当 `process.env.VITE_USE_POLLING` 显式设置时启用轮询作为逃生口;若必须保留轮询,interval 提到 ≥1000ms。
 
-### F12(中)提示词/公告内容内嵌进 bitfun-core,内容改动触发核心重编
+### F12(中)提示词/公告内容内嵌进 halo-core,内容改动触发核心重编
 
 **问题描述**
-`src/crates/assembly/core/build.rs` 把 `src/agentic/**/prompts` 与 announcement 的 md/txt 全文生成为巨型 `map.insert(r###"..."###, ...)` Rust 源码(110-183、343-401 行),并对目录逐文件 `rerun-if-changed`。改动任何一个提示词 md → build.rs 重跑 → 生成文件变化 → **202k 行的 bitfun-core 全量重编 + 下游 desktop 重编重链**。提示词是高频改动内容,与代码逻辑无关。
+`src/crates/assembly/core/build.rs` 把 `src/agentic/**/prompts` 与 announcement 的 md/txt 全文生成为巨型 `map.insert(r###"..."###, ...)` Rust 源码(110-183、343-401 行),并对目录逐文件 `rerun-if-changed`。改动任何一个提示词 md → build.rs 重跑 → 生成文件变化 → **202k 行的 halo-core 全量重编 + 下游 desktop 重编重链**。提示词是高频改动内容,与代码逻辑无关。
 
 **预期收益**:中(提示词迭代场景的编译时间从"分钟级"降到"秒级")。
 
@@ -218,7 +218,7 @@ Cargo.lock 共 1177 个包,其中 112 个名字存在 2 个以上版本(解析�
 ### F17(低)pnpm/workspace 结构小问题
 
 - `tests/e2e` 已列入 `pnpm-workspace.yaml`,根 `pnpm install` 已装依赖,但仍保留 `e2e:install`(package.json:92)单独 install 入口,易造成双份状态;website 不在 workspace(独立 install),属有意隔离可保留。
-- `BitFun-Installer/src-tauri` 是独立 Rust workspace(根 Cargo.toml:40-42 exclude),与主 workspace 各自维护 target,Tauri 全家桶在本地要编两份。可评估共享 `CARGO_TARGET_DIR`(风险:两个 workspace 依赖版本不同会互相踩缓存,需先对齐版本)或接受现状。
+- `Halo-Installer/src-tauri` 是独立 Rust workspace(根 Cargo.toml:40-42 exclude),与主 workspace 各自维护 target,Tauri 全家桶在本地要编两份。可评估共享 `CARGO_TARGET_DIR`(风险:两个 workspace 依赖版本不同会互相踩缓存,需先对齐版本)或接受现状。
 
 ### F18(低)build.rs 生成代码不可复现
 
@@ -242,14 +242,14 @@ Cargo.lock 共 1177 个包,其中 112 个名字存在 2 个以上版本(解析�
 | T3 | release 改 thin LTO(F4):`Cargo.toml` `[profile.release]` `lto = "thin"`;删除 desktop-package.yml:106 的 `CARGO_PROFILE_RELEASE_LTO=thin` 特例。验收:三平台打包成功,二进制体积增幅 <5%,`e2e:test:perf:release-fast` 基线无回退(注意 release-fast 继承 release 后 `lto=false` 覆盖不受影响)。 | `Cargo.toml:284`、`.github/workflows/desktop-package.yml:106` | 中(需一轮打包验证 + 性能基线对比) |
 | T4 | dev 构建 debuginfo 裁剪(F5/F19):`Cargo.toml` `[profile.dev]` 增加 `debug = "line-tables-only"`,删除冗余 `incremental = true`;在 `scripts/dev.cjs` 的 `desktop:dev`(tauri dev)路径注入与 preview 相同的 `CARGO_PROFILE_DEV_CODEGEN_UNITS=256`(允许 env 覆盖)。文档注明"需要断点调试时 `set CARGO_PROFILE_DEV_DEBUG=2`"。验收:改动一个 desktop crate 文件后的增量重链时间下降;panic 栈仍含行号。 | `Cargo.toml:279-280`、`scripts/dev.cjs:749-767` | 低(调试体验有权衡,需在 README/AGENTS 说明) |
 | T5 | mobile-web 构建短路(F8):在 `scripts/mobile-web-build.cjs` 增加输入 mtime 检测(参考 `dev.cjs:420-456` 的实现),dist 新于全部输入时跳过 clean/install/build;`--force`/env 逃生口;dev.cjs 与 lint:rs:desktop 路径自动受益。验收:连续两次 `desktop:dev` 第二次跳过 mobile-web 构建;修改 mobile-web 源码后正确重建。 | `scripts/mobile-web-build.cjs`、`scripts/dev.cjs` | 低 |
-| T6 | 修复 image 双版本(F9):`src/apps/desktop/Cargo.toml:85` 改为 `image = { workspace = true }`,如 API 不兼容则升级调用点到 0.25。验收:Cargo.lock 中 image 仅剩 0.25.x;`cargo check -p bitfun-desktop` 通过。 | `src/apps/desktop/Cargo.toml:85` | 低 |
+| T6 | 修复 image 双版本(F9):`src/apps/desktop/Cargo.toml:85` 改为 `image = { workspace = true }`,如 API 不兼容则升级调用点到 0.25。验收:Cargo.lock 中 image 仅剩 0.25.x;`cargo check -p halo-desktop` 通过。 | `src/apps/desktop/Cargo.toml:85` | 低 |
 | T7 | CI 拓扑并行化(F7):拆分 ci.yml 的 frontend-build 为 `frontend-checks`(lint/audit/test,不阻塞他人)与 `frontend-dist`(install + build:web + build:mobile-web + upload);`rust-build-check` 改 `needs: frontend-dist`。进一步验证 `cargo check/test` 是否只需 dist 目录存在——若是,用 mkdir 打桩彻底解除 needs。验收:PR 上 Rust job 提前开始,总流水线时长下降。 | `.github/workflows/ci.yml` | 中(改 CI 拓扑,需观察 1-2 个 PR) |
 | T8 | 提交 Cargo.lock(F6):从 `.gitignore:26` 移除并提交根与 installer 两份 lockfile;CI 删除 `cargo generate-lockfile` 步骤;建立定期依赖更新流程后逐步解除 `Cargo.toml:98-107` 的 `=` 钉版。验收:rust-cache 命中率上升,CI 不再因上游发版突然变慢/失败。 | `.gitignore`、`.github/workflows/*.yml`、`Cargo.toml` | 中(流程变更,需团队确认依赖更新策略) |
 | T9 | Vite watch 去轮询(F11):删除 `src/web-ui/vite.config.ts:68-74` 的 `usePolling/interval`,保留 ignored 列表;以 `VITE_USE_POLLING=1` 环境变量作为网络盘用户逃生口。验收:dev server 空闲 CPU 占用明显下降,HMR 正常。 | `src/web-ui/vite.config.ts` | 低(个别特殊文件系统需逃生口) |
 | T10 | build.rs 确定性输出(F18):`assembly/core/build.rs` 与 `src/apps/cli/build.rs` 生成代码前对 key 排序(HashMap→BTreeMap)。验收:连续两次 clean build 生成的 OUT_DIR 文件字节一致。 | `src/crates/assembly/core/build.rs`、`src/apps/cli/build.rs` | 低 |
 | T11 | reqwest TLS 单栈(F10):审计 `use_native_tls/use_rustls` 调用点后,从 `Cargo.toml:121` 移除 `native-tls` feature,统一 rustls-tls-native-roots;回归远端连接/订阅鉴权/代理场景;评估 Windows OpenSSL bootstrap 链能否随之精简。验收:Cargo.lock 无 native-tls/openssl-sys(git2 除外),网络功能回归通过。 | `Cargo.toml:121`、相关调用点 | 高(TLS 行为变化,企业代理/自签证书场景需重点回归;可放最后) |
 | T12 | beforeBuildCommand 并行(F13):新增 `scripts/frontend-build-all.mjs` 并行跑 build:web 与 prepare:mobile-web,tauri.conf.json / tauri.dev.conf.json 的 beforeBuildCommand 指向它;dev.cjs 准备步骤改 Promise.all。验收:desktop:build 前端阶段时长≈max(两者) 而非 sum。 | `src/apps/desktop/tauri.conf.json`、`tauri.dev.conf.json`、`scripts/dev.cjs`、新脚本 | 低 |
-| T13 | bitfun-core 拆分启动(F3,长期):先跑 `cargo build --timings` 与 `cargo tree -d` 存档基线;选 1-2 个低耦合子域(如 announcement、debug-log server)试点拆出独立 crate 并保留 re-export;结合 F12 的"dev 运行时读取提示词"改造。验收:改动试点子域后 `cargo build -p bitfun-desktop` 的重编 crate 数与耗时下降。 | `src/crates/assembly/core/**`、根 `Cargo.toml` members | 中-高(架构改动,分多个 PR 渐进) |
+| T13 | halo-core 拆分启动(F3,长期):先跑 `cargo build --timings` 与 `cargo tree -d` 存档基线;选 1-2 个低耦合子域(如 announcement、debug-log server)试点拆出独立 crate 并保留 re-export;结合 F12 的"dev 运行时读取提示词"改造。验收:改动试点子域后 `cargo build -p halo-desktop` 的重编 crate 数与耗时下降。 | `src/crates/assembly/core/**`、根 `Cargo.toml` members | 中-高(架构改动,分多个 PR 渐进) |
 | T14 | 可选工具链增强(F5):提交 `.cargo/config.toml` 模板(注释形式提供 rust-lld 与 sccache 配置,默认不启用),团队自选开启;CI 冷构建可评估 sccache-action。验收:提供文档,默认行为不变。 | 新增 `.cargo/config.toml`、文档 | 低(默认关闭) |
 
 ### 快速收益组合(建议第一批实施)
@@ -260,7 +260,7 @@ T2 + T4 + T5 + T6 + T9 + T10 + T12:全部低风险,合计可显著改善日常 d
 ## 附:数据快照
 
 - Rust workspace:36 members + installer 独立 workspace;总计约 577,903 行 Rust。Top crate:assembly/core 202,735 行、services-integrations 72,251、desktop 63,887、cli 53,976。本地 `target/` 实测 **98GB**(cargo-target-gc 存在的原因;F5 的 debuginfo 裁剪与 F9 去重也能显著降低该体积)。
-- `BitFun-Installer/src-tauri/Cargo.toml:61-65` 的 release profile 同样是 `lto=true + codegen-units=1`(opt-level="z"),T3 的 thin LTO 评估可一并覆盖。
+- `Halo-Installer/src-tauri/Cargo.toml:61-65` 的 release profile 同样是 `lto=true + codegen-units=1`(opt-level="z"),T3 的 thin LTO 评估可一并覆盖。
 - Cargo.lock:1177 个包,112 个存在多版本(windows-sys ×6、phf ×6、getrandom ×4、nix ×4、rand ×3、quick-xml ×4 等)。
 - 前端:web-ui 1676 个 TS/TSX、366,580 行;dist 共 872 个 asset,JS 总量 14.3MB,入口 chunk 5.4MB(含 Monaco 内核);public/monaco-editor 14MB/103 文件。
 - 现有良好实践(保持):release-fast profile(Cargo.toml:288-293)、cargo-target-gc 缓存清理、Windows 预编译 OpenSSL、sherpa-onnx prebuilt、CI CARGO_INCREMENTAL=0 + debug=0(ci.yml:74-77)、swatinem/rust-cache、pnpm store 缓存、workspace.dependencies 统一版本声明。

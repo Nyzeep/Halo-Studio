@@ -1,4 +1,4 @@
-use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_sources::{
     EcosystemId, ExternalMcpDiscoveryInput, ExternalMcpProviderIdentity,
     ExternalMcpProviderSnapshot, ExternalMcpServerDefinition, ExternalMcpSourceProvider,
     ExternalMcpStaticStatus, ExternalMcpTransportKind, ExternalSourceAssetKind,
@@ -7,7 +7,7 @@ use bitfun_product_domains::external_sources::{
     PreparedExternalMcpImportServer, PreparedExternalMcpImportTransport, PreparedExternalMcpServer,
     PreparedExternalMcpTransport, SecretValue, SourceKey, SourceQualifiedMcpServerId,
 };
-use bitfun_static_hook_support::{read_bounded_text, BoundedTextRead};
+use halo_static_hook_support::{read_bounded_text, BoundedTextRead};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -438,7 +438,7 @@ struct MaterializedServer {
 
 fn materialize_server(
     context: &ExternalSourceContext,
-    revision_key: &bitfun_product_domains::external_sources::ExternalMcpRevisionKey,
+    revision_key: &halo_product_domains::external_sources::ExternalMcpRevisionKey,
     effective_source: SourceKey,
     provenance: Vec<SourceKey>,
     name: String,
@@ -605,7 +605,7 @@ fn materialize_local_server(
             provenance,
             name,
             transport: ExternalMcpTransportKind::LocalStdio,
-            command_preview: Some(bitfun_static_hook_support::redacted_executable_preview(
+            command_preview: Some(halo_static_hook_support::redacted_executable_preview(
                 &command,
             )),
             argument_count: args.len(),
@@ -1053,7 +1053,7 @@ struct ParsedConfigLayer {
 }
 
 fn parse_config_layer(
-    revision_key: &bitfun_product_domains::external_sources::ExternalMcpRevisionKey,
+    revision_key: &halo_product_domains::external_sources::ExternalMcpRevisionKey,
     path: &Path,
 ) -> ParsedConfigLayer {
     match read_bounded_text(path, MAX_CONFIG_FILE_BYTES) {
@@ -1161,7 +1161,7 @@ fn deep_merge(current: &mut Value, patch: Value) {
 }
 
 fn behavior_version(
-    revision_key: &bitfun_product_domains::external_sources::ExternalMcpRevisionKey,
+    revision_key: &halo_product_domains::external_sources::ExternalMcpRevisionKey,
     name: &str,
     value: &Value,
 ) -> String {
@@ -1173,7 +1173,7 @@ fn behavior_version(
 }
 
 fn content_version(
-    revision_key: &bitfun_product_domains::external_sources::ExternalMcpRevisionKey,
+    revision_key: &halo_product_domains::external_sources::ExternalMcpRevisionKey,
     path: &Path,
     content: &[u8],
 ) -> String {

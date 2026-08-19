@@ -4,7 +4,7 @@ use crate::service::search::{
     workspace_search_feature_enabled, workspace_search_runtime_available, ContentSearchOutputMode,
     ContentSearchRequest, WorkspaceSearchHit, WorkspaceSearchLine,
 };
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -100,15 +100,15 @@ impl GrepTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let ws_shell = context
             .ws_shell()
-            .ok_or_else(|| BitFunError::tool("Workspace shell not available".to_string()))?;
+            .ok_or_else(|| HaloError::tool("Workspace shell not available".to_string()))?;
 
         let pattern = input
             .get("pattern")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| BitFunError::tool("pattern is required".to_string()))?;
+            .ok_or_else(|| HaloError::tool("pattern is required".to_string()))?;
 
         let search_path = input.get("path").and_then(|v| v.as_str()).unwrap_or(".");
         let resolved = context.resolve_tool_path(search_path)?;
@@ -122,7 +122,7 @@ impl GrepTool {
             .and_then(|v| v.as_str())
             .unwrap_or("files_with_matches");
         let output_mode_enum =
-            OutputMode::from_str(output_mode).map_err(|e| BitFunError::tool(e.to_string()))?;
+            OutputMode::from_str(output_mode).map_err(|e| HaloError::tool(e.to_string()))?;
         let show_line_numbers = input
             .get("-n")
             .and_then(|v| v.as_bool())
@@ -158,7 +158,7 @@ impl GrepTool {
         let (stdout, _stderr, _exit_code) = ws_shell
             .exec(&full_cmd, Some(30_000))
             .await
-            .map_err(|e| BitFunError::tool(format!("Remote grep failed: {}", e)))?;
+            .map_err(|e| HaloError::tool(format!("Remote grep failed: {}", e)))?;
 
         let total_matches = count_remote_grep_matches(&stdout);
         let display_base = Self::display_base(context);
@@ -183,11 +183,11 @@ impl GrepTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<GrepOptions> {
+    ) -> HaloResult<GrepOptions> {
         let pattern = input
             .get("pattern")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| BitFunError::tool("pattern is required".to_string()))?;
+            .ok_or_else(|| HaloError::tool("pattern is required".to_string()))?;
 
         let search_path = input.get("path").and_then(|v| v.as_str()).unwrap_or(".");
         let resolved = context.resolve_tool_path(search_path)?;
@@ -203,7 +203,7 @@ impl GrepTool {
             .and_then(|v| v.as_str())
             .unwrap_or("files_with_matches");
         let output_mode =
-            OutputMode::from_str(output_mode_str).map_err(|e| BitFunError::tool(e.to_string()))?;
+            OutputMode::from_str(output_mode_str).map_err(|e| HaloError::tool(e.to_string()))?;
         let show_line_numbers = input
             .get("-n")
             .and_then(|v| v.as_bool())
@@ -266,17 +266,17 @@ impl GrepTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<(ContentSearchRequest, String, bool, usize, Option<usize>)> {
+    ) -> HaloResult<(ContentSearchRequest, String, bool, usize, Option<usize>)> {
         let workspace_root = context
             .workspace
             .as_ref()
             .map(|workspace| PathBuf::from(workspace.root_path_string()))
-            .ok_or_else(|| BitFunError::tool("Workspace is required for Grep".to_string()))?;
+            .ok_or_else(|| HaloError::tool("Workspace is required for Grep".to_string()))?;
 
         let pattern = input
             .get("pattern")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| BitFunError::tool("pattern is required".to_string()))?;
+            .ok_or_else(|| HaloError::tool("pattern is required".to_string()))?;
         let search_path = input.get("path").and_then(|v| v.as_str()).unwrap_or(".");
         let resolved_path = context.resolve_workspace_tool_path(search_path)?;
         let resolved_path_buf = PathBuf::from(&resolved_path);
@@ -467,7 +467,7 @@ impl Tool for GrepTool {
         "Grep"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(r#"A powerful search tool built on ripgrep
 
 Usage:
@@ -477,7 +477,7 @@ Usage:
 - A common workflow is `output_mode: "files_with_matches"` to locate candidate files, followed by `output_mode: "content"` with `-n` and small context when exact lines are needed.
 - Supports full regex syntax (e.g., "log.*Error", "function\s+\w+")
 - Filter files with glob parameter (e.g., "*.js", "**/*.tsx") or type parameter (e.g., "js", "py", "rust")
-- The path parameter may be workspace-relative, an absolute path inside the current workspace, or an exact `bitfun://...` URI returned by another tool
+- The path parameter may be workspace-relative, an absolute path inside the current workspace, or an exact `halo://...` URI returned by another tool
 - Omit path to search the current workspace. Do not search host roots or placeholder paths such as `/workspace`.
 - Output modes: "content" shows matching lines, "files_with_matches" shows only file paths (default), "count" shows match counts
 - Use Task tool for open-ended searches requiring multiple rounds
@@ -499,7 +499,7 @@ Usage:
                 },
                 "path": {
                     "type": "string",
-                    "description": "File or directory to search in. Omit to search the current workspace. If provided, use a workspace-relative path, an absolute path inside the current workspace, or an exact bitfun:// URI."
+                    "description": "File or directory to search in. Omit to search the current workspace. If provided, use a workspace-relative path, an absolute path inside the current workspace, or an exact halo:// URI."
                 },
                 "glob": {
                     "type": "string",
@@ -576,7 +576,7 @@ Usage:
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         // Remote workspace: use shell-based grep/rg
         let search_path = input.get("path").and_then(|v| v.as_str()).unwrap_or(".");
         let resolved = context.resolve_tool_path(search_path)?;
@@ -607,12 +607,12 @@ Usage:
                     let search_service =
                         remote_workspace_search_service_for_path(&repo_root, preferred_connection_id)
                             .await
-                            .map_err(BitFunError::tool)?;
+                            .map_err(HaloError::tool)?;
                     let search_started_at = Instant::now();
                     let search_result = search_service
                         .search_content(request)
                         .await
-                        .map_err(BitFunError::tool)?;
+                        .map_err(HaloError::tool)?;
                     let display_base = Self::display_base(context);
                     let (result_text, file_count, total_matches) =
                         self.format_workspace_search_output(
@@ -644,7 +644,7 @@ Usage:
                         workspace_search_elapsed_ms,
                     );
 
-                    Ok::<Vec<ToolResult>, BitFunError>(vec![ToolResult::Result {
+                    Ok::<Vec<ToolResult>, HaloError>(vec![ToolResult::Result {
                         data: json!({
                             "pattern": pattern,
                             "path": path,
@@ -804,8 +804,8 @@ Usage:
             applied_offset,
         } = match search_result {
             Ok(Ok(result)) => result,
-            Ok(Err(e)) => return Err(BitFunError::tool(e)),
-            Err(e) => return Err(BitFunError::tool(format!("grep search failed: {}", e))),
+            Ok(Err(e)) => return Err(HaloError::tool(e)),
+            Err(e) => return Err(HaloError::tool(format!("grep search failed: {}", e))),
         };
 
         Ok(vec![ToolResult::Result {
@@ -992,10 +992,10 @@ mod tests {
             repo_status: WorkspaceSearchRepoStatus {
                 repo_id: "repo".to_string(),
                 repo_path: "/repo".to_string(),
-                storage_root: "/repo/.bitfun/search/flashgrep-index".to_string(),
-                base_snapshot_root: "/repo/.bitfun/search/flashgrep-index/base-snapshot"
+                storage_root: "/repo/.halo-studio/search/flashgrep-index".to_string(),
+                base_snapshot_root: "/repo/.halo-studio/search/flashgrep-index/base-snapshot"
                     .to_string(),
-                workspace_overlay_root: "/repo/.bitfun/search/flashgrep-index/workspace-overlay"
+                workspace_overlay_root: "/repo/.halo-studio/search/flashgrep-index/workspace-overlay"
                     .to_string(),
                 phase: WorkspaceSearchRepoPhase::Ready,
                 snapshot_key: None,
@@ -1065,10 +1065,10 @@ mod tests {
             repo_status: WorkspaceSearchRepoStatus {
                 repo_id: "repo".to_string(),
                 repo_path: "/repo".to_string(),
-                storage_root: "/repo/.bitfun/search/flashgrep-index".to_string(),
-                base_snapshot_root: "/repo/.bitfun/search/flashgrep-index/base-snapshot"
+                storage_root: "/repo/.halo-studio/search/flashgrep-index".to_string(),
+                base_snapshot_root: "/repo/.halo-studio/search/flashgrep-index/base-snapshot"
                     .to_string(),
-                workspace_overlay_root: "/repo/.bitfun/search/flashgrep-index/workspace-overlay"
+                workspace_overlay_root: "/repo/.halo-studio/search/flashgrep-index/workspace-overlay"
                     .to_string(),
                 phase: WorkspaceSearchRepoPhase::Ready,
                 snapshot_key: None,

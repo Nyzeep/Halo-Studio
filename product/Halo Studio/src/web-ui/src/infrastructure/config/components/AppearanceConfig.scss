@@ -1,6 +1,6 @@
 ﻿@use '../../../component-library/styles/tokens.scss' as *;
 
-.bitfun-appearance-config__content {
+.halo-appearance-config__content {
   display: flex;
   flex-direction: column;
   gap: $size-gap-6;
@@ -384,7 +384,7 @@
 
 
 .theme-preview-tooltip {
-  .bitfun-tooltip__content {
+  .halo-tooltip__content {
     padding: 0 !important;
     background: transparent !important;
     border: none !important;

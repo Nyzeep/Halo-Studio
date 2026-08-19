@@ -13,7 +13,7 @@ path = "src/main.rs"
 tauri-build.workspace = true
 
 [dependencies]
-bitfun-desktop = { path = "../desktop", default-features = false, features = ["halo-local-coding"] }
+halo-desktop = { path = "../desktop", default-features = false, features = ["halo-local-coding"] }
 serde_json.workspace = true
 tauri.workspace = true
 tauri-plugin-autostart.workspace = true
@@ -30,4 +30,4 @@ tokio.workspace = true
 [features]
 default = []
 custom-protocol = ["tauri/custom-protocol"]
-devtools = ["tauri/devtools", "bitfun-desktop/devtools"]
+devtools = ["tauri/devtools", "halo-desktop/devtools"]

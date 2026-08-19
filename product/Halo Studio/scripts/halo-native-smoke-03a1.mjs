@@ -12,7 +12,7 @@ const artifactRoot = path.join(
   repoRoot,
   'docs',
   'requirements',
-  'bitfun-tauri-product-migration',
+  'halo-tauri-product-migration',
   'artifacts',
 );
 const exePath = path.join(productRoot, 'target', 'release-fast', 'halo-studio.exe');
@@ -28,7 +28,7 @@ const e2eHomeRoot = path.join(os.tmpdir(), `${baseName}-home`);
 const smokeWorkspace = path.join(os.tmpdir(), `${baseName}-workspace`);
 const logDir = path.join(artifactRoot, `${baseName}-logs`);
 const haloLogRoot = path.join(appDataDir, 'Halo Studio', 'logs');
-const bitfunLogRoot = path.join(appDataDir, 'bitfun', 'logs');
+const haloLogRoot = path.join(appDataDir, 'halo', 'logs');
 const keepFailureArtifacts = process.env.HALO_SMOKE_KEEP_FAILURE_ARTIFACTS === '1';
 
 fs.mkdirSync(artifactRoot, { recursive: true });
@@ -69,11 +69,10 @@ const child = spawn(exePath, [], {
     ...process.env,
     APPDATA: appDataDir,
     LOCALAPPDATA: appDataDir,
-    BITFUN_E2E_STORAGE_GUARD: '1',
+    HALO_E2E_STORAGE_GUARD: '1',
     HALO_USER_ROOT: e2eUserRoot,
     HALO_HOME: e2eHomeRoot,
-    BITFUN_E2E_LOG_DIR: logDir,
-    BITFUN_LOG_DIR: logDir,
+    HALO_E2E_LOG_DIR: logDir,
     HALO_LOG_DIR: haloLogRoot,
     WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
   },
@@ -193,12 +192,12 @@ try {
         }
 
         workspaceButton.click();
-        const menu = await waitFor(() => document.querySelector('.bitfun-nav-panel__workspace-menu'), 5000);
+        const menu = await waitFor(() => document.querySelector('.halo-nav-panel__workspace-menu'), 5000);
         if (!menu) {
           return { ok: false, stage: 'open-workspace-menu', error: 'Workspace menu did not open' };
         }
 
-        const openProjectItem = [...menu.querySelectorAll('.bitfun-nav-panel__workspace-menu-item')]
+        const openProjectItem = [...menu.querySelectorAll('.halo-nav-panel__workspace-menu-item')]
           .find((element) => /open|鎵撳紑|椤圭洰/i.test(element.textContent || ''));
         if (!openProjectItem) {
           return { ok: false, stage: 'find-open-project-item', error: 'Open project menu item is unavailable' };
@@ -246,10 +245,10 @@ try {
         }
         return false;
       };
-      await waitFor(() => document.querySelector('.bitfun-file-explorer__tree'), 5000);
+      await waitFor(() => document.querySelector('.halo-file-explorer__tree'), 5000);
       const fileNodes = () => [
         ...document.querySelectorAll(
-          '.bitfun-file-explorer__node-content[data-file="true"][data-is-directory="false"]',
+          '.halo-file-explorer__node-content[data-file="true"][data-is-directory="false"]',
         ),
       ];
       const fileNode = fileNodes().find((node) =>
@@ -270,7 +269,7 @@ try {
         document.querySelector('.canvas-tab[data-tab-title="main.ts"][data-tab-type="code-editor"]')
           || document.querySelector('.code-editor-tool[data-monaco-editor="true"][data-file-path$="main.ts"]')
           || document.querySelector('.canvas-tab[data-tab-title="README.md"][data-tab-type="markdown-editor"]')
-          || document.querySelector('.bitfun-markdown-editor'),
+          || document.querySelector('.halo-markdown-editor'),
         6000,
       );
       await waitFor(() => {
@@ -304,7 +303,7 @@ try {
           && /(?:^|\\/)main\\.ts$|(?:^|\\/)README\\.md$/i.test(tab.pathSuffix)
       );
       const codeEditor = document.querySelector('.code-editor-tool[data-monaco-editor="true"][data-file-path$="main.ts"]');
-      const markdownEditor = document.querySelector('.bitfun-markdown-editor');
+      const markdownEditor = document.querySelector('.halo-markdown-editor');
       const visibleText = document.body.innerText || '';
       const monacoText = [...document.querySelectorAll('.monaco-editor .view-line')]
         .map((line) => line.textContent || '')
@@ -318,9 +317,9 @@ try {
       const monacoModels = globalThis.monaco?.editor?.getModels?.() || [];
       return {
         activeScene: activeSceneId(),
-        fileViewerScene: !!document.querySelector('.bitfun-file-viewer-scene'),
-        fileExplorer: !!document.querySelector('.bitfun-file-explorer'),
-        fileTree: !!document.querySelector('.bitfun-file-explorer__tree'),
+        fileViewerScene: !!document.querySelector('.halo-file-viewer-scene'),
+        fileExplorer: !!document.querySelector('.halo-file-explorer'),
+        fileTree: !!document.querySelector('.halo-file-explorer__tree'),
         fileNodeClicked: !!fileNode,
         clickedFile,
         tabs,
@@ -356,9 +355,9 @@ try {
       await sleep(1000);
       return {
         activeScene: activeSceneId(),
-        gitScene: !!document.querySelector('.bitfun-git-scene'),
+        gitScene: !!document.querySelector('.halo-git-scene'),
         gitInitOrStatus:
-          !!document.querySelector('.bitfun-git-scene__init-card, [data-shortcut-scope="git"], .git-status, .git-panel'),
+          !!document.querySelector('.halo-git-scene__init-card, [data-shortcut-scope="git"], .git-status, .git-panel'),
       };
     })()
   `);
@@ -383,7 +382,7 @@ try {
         codeSessionButton: !!document.querySelector('[data-testid="nav-new-code-session-btn"]'),
         sessionScene: !!document.querySelector('[data-scene-id="session"]'),
         notificationVisible:
-          !!document.querySelector('[role="alert"], .notification, .bitfun-notification, .toast'),
+          !!document.querySelector('[role="alert"], .notification, .halo-notification, .toast'),
       };
     })()
   `);
@@ -394,9 +393,9 @@ try {
       await sleep(500);
       return {
         workspaceAddButton: !!document.querySelector('[data-testid="nav-workspace-add-btn"]'),
-        workspaceMenu: !!document.querySelector('.bitfun-nav-panel__workspace-menu'),
+        workspaceMenu: !!document.querySelector('.halo-nav-panel__workspace-menu'),
         openProjectMenuItem:
-          !![...document.querySelectorAll('.bitfun-nav-panel__workspace-menu-item')]
+          !![...document.querySelectorAll('.halo-nav-panel__workspace-menu-item')]
             .find((el) => /open|打开|项目/.test(el.textContent || '')),
       };
     })()
@@ -417,7 +416,7 @@ try {
   const narrowAfter = captureWindow(child.pid, narrowAfterPath, 1120, 720);
   await sleep(500);
   const haloLogFiles = listLogFiles(haloLogRoot);
-  const bitfunLogFiles = listLogFiles(bitfunLogRoot);
+  const haloLogFiles = listLogFiles(haloLogRoot);
   const forbiddenFallbackLogFiles = listLogFiles(logDir);
 
   finalSummary = {
@@ -435,7 +434,7 @@ try {
       lang: afterDom.lang,
       haloScope: afterDom.haloScope,
       productId: afterDom.productId,
-      bitfunSelectorsPresent: afterDom.bitfunSelectorsPresent,
+      haloSelectorsPresent: afterDom.haloSelectorsPresent,
       oldHaloWorkbenchAbsent: afterDom.oldHaloWorkbenchAbsent,
       visibleBrandLeaks: afterDom.visibleBrandLeaks,
       scriptSourcesContainHaloWorkbench: afterDom.scriptSourcesContainHaloWorkbench,
@@ -473,8 +472,8 @@ try {
     diagnostics: {
       haloLogRoot: redactPath(haloLogRoot),
       haloLogFiles: haloLogFiles.map(redactPath),
-      bitfunLogRoot: redactPath(bitfunLogRoot),
-      bitfunLogFiles: bitfunLogFiles.map(redactPath),
+      haloLogRoot: redactPath(haloLogRoot),
+      haloLogFiles: haloLogFiles.map(redactPath),
       forbiddenFallbackLogDir: redactPath(logDir),
       forbiddenFallbackLogFiles: forbiddenFallbackLogFiles.map(redactPath),
     },
@@ -486,21 +485,21 @@ try {
     wideAfter.visible && wideAfter.nonEmpty,
     narrowAfter.visible && narrowAfter.nonEmpty,
     /Halo Studio/.test(wideBefore.title),
-    !/BitFun|Agent Companion/.test(wideBefore.title),
+    !/Halo|Agent Companion/.test(wideBefore.title),
     afterDom.haloScope === 'local-coding',
     afterDom.productId === 'halo-studio',
-    afterDom.bitfunSelectorsPresent.navPanel,
-    afterDom.bitfunSelectorsPresent.sceneViewport,
-    afterDom.bitfunSelectorsPresent.appLayout,
+    afterDom.haloSelectorsPresent.navPanel,
+    afterDom.haloSelectorsPresent.sceneViewport,
+    afterDom.haloSelectorsPresent.appLayout,
     afterDom.oldHaloWorkbenchAbsent,
-    !afterDom.visibleBrandLeaks.bitfunText,
+    !afterDom.visibleBrandLeaks.haloText,
     !afterDom.visibleBrandLeaks.rawI18nKeys,
     !afterDom.visibleBrandLeaks.updateDialog,
     windowInteraction.ok
       && windowInteraction.afterMaximize === true
       && windowInteraction.afterRestore === false,
     haloLogFiles.length > 0,
-    bitfunLogFiles.length === 0,
+    haloLogFiles.length === 0,
     forbiddenFallbackLogFiles.length === 0,
     Boolean(workspaceResult.ok),
     workspaceDom.workspaceVisible,
@@ -540,8 +539,8 @@ try {
     diagnostics: {
       haloLogRoot: redactPath(haloLogRoot),
       haloLogFiles: listLogFiles(haloLogRoot).map(redactPath),
-      bitfunLogRoot: redactPath(bitfunLogRoot),
-      bitfunLogFiles: listLogFiles(bitfunLogRoot).map(redactPath),
+      haloLogRoot: redactPath(haloLogRoot),
+      haloLogFiles: listLogFiles(haloLogRoot).map(redactPath),
       forbiddenFallbackLogDir: redactPath(logDir),
       forbiddenFallbackLogFiles: listLogFiles(logDir).map(redactPath),
       cdpTarget: cdpTargetDiagnostics,
@@ -596,14 +595,14 @@ function domProbeExpression() {
         haloScope: document.documentElement.dataset.haloScope || null,
         productId: document.documentElement.dataset.productId || null,
         activeScene: active?.getAttribute('data-scene-id') || null,
-        bitfunSelectorsPresent: {
+        haloSelectorsPresent: {
           appLayout: !!document.querySelector('[data-testid="app-layout"]'),
-          workspaceBody: !!document.querySelector('.bitfun-workspace-body'),
-          navPanel: !!document.querySelector('[data-testid="nav-panel"].bitfun-nav-panel, .bitfun-nav-panel'),
-          sceneViewport: !!document.querySelector('[data-testid="scene-viewport"].bitfun-scene-viewport, .bitfun-scene-viewport'),
-          sceneBar: !!document.querySelector('.bitfun-scene-bar'),
-          fileViewer: !!document.querySelector('.bitfun-file-viewer-scene'),
-          gitScene: !!document.querySelector('.bitfun-git-scene'),
+          workspaceBody: !!document.querySelector('.halo-workspace-body'),
+          navPanel: !!document.querySelector('[data-testid="nav-panel"].halo-nav-panel, .halo-nav-panel'),
+          sceneViewport: !!document.querySelector('[data-testid="scene-viewport"].halo-scene-viewport, .halo-scene-viewport'),
+          sceneBar: !!document.querySelector('.halo-scene-bar'),
+          fileViewer: !!document.querySelector('.halo-file-viewer-scene'),
+          gitScene: !!document.querySelector('.halo-git-scene'),
           shellPanel: !!document.querySelector('[data-testid="shell-panel"]'),
         },
         oldHaloWorkbenchAbsent:
@@ -611,7 +610,7 @@ function domProbeExpression() {
           && !/HALO WORKBENCH|halo-workbench/i.test(document.body.innerText || ''),
         scriptSourcesContainHaloWorkbench: scriptSources.some((src) => /halo-workbench/i.test(src)),
         visibleBrandLeaks: {
-          bitfunText: /欢迎使用 BitFun|BitFun Workspace|Starting BitFun|正在启动 BitFun|BitFun Agent Companion/.test(visibleText),
+          haloText: /欢迎使用 Halo|Halo Workspace|Starting Halo|正在启动 Halo|Halo Agent Companion/.test(visibleText),
           rawI18nKeys: /features\\.files|nav\\.sections\\.sessions/.test(visibleText),
           updateDialog: /发现新版本|下载并安装|跳过此版本/.test(visibleText),
         },
@@ -650,7 +649,7 @@ function pickDomBooleans(dom) {
   return {
     activeScene: dom.activeScene,
     navEntries: dom.navEntries,
-    bitfunSelectorsPresent: dom.bitfunSelectorsPresent,
+    haloSelectorsPresent: dom.haloSelectorsPresent,
     oldHaloWorkbenchAbsent: dom.oldHaloWorkbenchAbsent,
     visibleBrandLeaks: dom.visibleBrandLeaks,
   };

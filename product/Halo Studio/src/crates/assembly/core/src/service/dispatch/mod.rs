@@ -4,7 +4,7 @@ mod target;
 
 use std::path::{Path, PathBuf};
 
-use bitfun_services_core::json_store::{JsonFileStore, JsonFileStoreError};
+use halo_services_core::json_store::{JsonFileStore, JsonFileStoreError};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -76,7 +76,7 @@ pub enum DispatchStoreError {
     Json(#[from] JsonFileStoreError),
 }
 
-/// Durable observer-only index for jobs submitted to other BitFun processes.
+/// Durable observer-only index for jobs submitted to other Halo processes.
 ///
 /// This store intentionally lives outside every workspace/session directory.
 /// Writing a record here must never acquire runtime ownership or create a local
@@ -91,7 +91,7 @@ impl OutboundDispatchStore {
     pub fn new(path_manager: &PathManager) -> Self {
         Self::from_root(
             path_manager
-                .bitfun_home_dir()
+                .halo_home_dir()
                 .join("dispatch")
                 .join("outbound"),
         )

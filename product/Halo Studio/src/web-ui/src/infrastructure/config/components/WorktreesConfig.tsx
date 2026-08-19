@@ -53,8 +53,8 @@ const AUTO_DELETE_LIMIT_MAX = 100;
 const WORKTREE_REMOVE_ANIMATION_MS = 180;
 
 const DEFAULT_SETTINGS: WorktreeSettings = {
-  rootPath: '~/.bitfun/worktrees',
-  branchPrefix: 'bitfun/',
+  rootPath: '~/.halo-studio/worktrees',
+  branchPrefix: 'halo/',
   copyLocalChanges: false,
   autoDeleteEnabled: true,
   autoDeleteLimit: 15,
@@ -188,7 +188,7 @@ const WorktreesConfig: React.FC = () => {
 
   const captureScrollSnapshot = useCallback((): ScrollSnapshot | null => {
     const anchor = projectsResultsRef.current;
-    const scrollContainer = anchor?.closest<HTMLElement>('.bitfun-config-page-layout');
+    const scrollContainer = anchor?.closest<HTMLElement>('.halo-config-page-layout');
     if (!anchor || !scrollContainer) {
       return null;
     }
@@ -490,7 +490,7 @@ const WorktreesConfig: React.FC = () => {
             />
           </ConfigPageRow>
         </ConfigPageSection>
-        <div className="bitfun-worktrees-config__actions">
+        <div className="halo-worktrees-config__actions">
           <Button
             variant="ghost"
             size="small"
@@ -548,18 +548,18 @@ const WorktreesConfig: React.FC = () => {
     return (
       <article
         className={[
-          'bitfun-worktrees-config__worktree',
+          'halo-worktrees-config__worktree',
           removingWorktreeId === worktree.worktreeId
-            && 'bitfun-worktrees-config__worktree--removing',
+            && 'halo-worktrees-config__worktree--removing',
         ].filter(Boolean).join(' ')}
         key={worktree.worktreeId}
         data-worktree-id={worktree.worktreeId}
       >
-        <div className="bitfun-worktrees-config__worktree-main">
-          <div className="bitfun-worktrees-config__worktree-copy">
-            <div className="bitfun-worktrees-config__worktree-heading">
-              <h5 className="bitfun-worktrees-config__worktree-title">{branchLabel}</h5>
-              <div className="bitfun-worktrees-config__metadata">
+        <div className="halo-worktrees-config__worktree-main">
+          <div className="halo-worktrees-config__worktree-copy">
+            <div className="halo-worktrees-config__worktree-heading">
+              <h5 className="halo-worktrees-config__worktree-title">{branchLabel}</h5>
+              <div className="halo-worktrees-config__metadata">
                 {worktree.lifecycle !== 'managed' && <span>{lifecycleLabel}</span>}
                 {worktree.dirty && <span>{t('management.state.dirty')}</span>}
                 {worktree.hasUnpublishedCommits && (
@@ -569,12 +569,12 @@ const WorktreesConfig: React.FC = () => {
                 {worktree.missing && <span>{t('management.state.missing')}</span>}
               </div>
             </div>
-            <code className="bitfun-worktrees-config__path" title={worktree.path}>
+            <code className="halo-worktrees-config__path" title={worktree.path}>
               {worktree.path}
             </code>
             {worktree.associatedSessionCount > 0 && (
               <div
-                className="bitfun-worktrees-config__sessions-summary"
+                className="halo-worktrees-config__sessions-summary"
                 title={sessionNames}
               >
                 <MessageSquareText size={13} aria-hidden />
@@ -583,12 +583,12 @@ const WorktreesConfig: React.FC = () => {
                     count: worktree.associatedSessionCount,
                   })}
                 </span>
-                <span className="bitfun-worktrees-config__session-links">
+                <span className="halo-worktrees-config__session-links">
                   {worktree.sessions.map(session => (
                     <button
                       key={session.sessionId}
                       type="button"
-                      className="bitfun-worktrees-config__session-link"
+                      className="halo-worktrees-config__session-link"
                       disabled={openingSessionId !== null}
                       title={t('management.sessions.openLabel', {
                         name: session.sessionName,
@@ -600,14 +600,14 @@ const WorktreesConfig: React.FC = () => {
                     >
                       {openingSessionId === session.sessionId && (
                         <LoaderCircle
-                          className="bitfun-worktrees-config__session-link-spinner"
+                          className="halo-worktrees-config__session-link-spinner"
                           size={12}
                           aria-hidden
                         />
                       )}
                       <span>{session.sessionName}</span>
                       {session.archived && (
-                        <span className="bitfun-worktrees-config__session-link-state">
+                        <span className="halo-worktrees-config__session-link-state">
                           {t('management.sessions.status.archived')}
                         </span>
                       )}
@@ -617,7 +617,7 @@ const WorktreesConfig: React.FC = () => {
               </div>
             )}
           </div>
-          <div className="bitfun-worktrees-config__delete-control">
+          <div className="halo-worktrees-config__delete-control">
             <IconButton
               variant="danger"
               size="small"
@@ -640,17 +640,17 @@ const WorktreesConfig: React.FC = () => {
   };
 
   const renderProjectsSkeleton = () => (
-    <div className="bitfun-worktrees-config__skeleton">
-      <span className="bitfun-sr-only" role="status">
+    <div className="halo-worktrees-config__skeleton">
+      <span className="halo-sr-only" role="status">
         {t('management.loading')}
       </span>
-      <div className="bitfun-worktrees-config__skeleton-header" aria-hidden="true">
+      <div className="halo-worktrees-config__skeleton-header" aria-hidden="true">
         <span />
         <span />
       </div>
-      <div className="bitfun-worktrees-config__skeleton-list" aria-hidden="true">
+      <div className="halo-worktrees-config__skeleton-list" aria-hidden="true">
         {[0, 1, 2].map(index => (
-          <div className="bitfun-worktrees-config__skeleton-row" key={index}>
+          <div className="halo-worktrees-config__skeleton-row" key={index}>
             <span />
             <span />
             <span />
@@ -666,7 +666,7 @@ const WorktreesConfig: React.FC = () => {
     }
     if (projects.length === 0 && !projectsMessage) {
       return (
-        <div className="bitfun-worktrees-config__empty">
+        <div className="halo-worktrees-config__empty">
           <FolderGit2 size={22} aria-hidden />
           <div>
             <h4>{t('management.empty.title')}</h4>
@@ -680,14 +680,14 @@ const WorktreesConfig: React.FC = () => {
     }
 
     return (
-      <div className="bitfun-worktrees-config__projects">
+      <div className="halo-worktrees-config__projects">
         {projects.map(project => (
           <section
-            className="bitfun-worktrees-config__project"
+            className="halo-worktrees-config__project"
             key={project.projectWorkspacePath}
           >
-            <header className="bitfun-worktrees-config__project-header">
-              <div className="bitfun-worktrees-config__project-identity">
+            <header className="halo-worktrees-config__project-header">
+              <div className="halo-worktrees-config__project-identity">
                 <h4>{workspaceName(project.projectWorkspacePath)}</h4>
                 <code title={project.projectWorkspacePath}>
                   {project.projectWorkspacePath}
@@ -697,7 +697,7 @@ const WorktreesConfig: React.FC = () => {
                 {t('management.worktreeCount', { count: project.worktrees.length })}
               </span>
             </header>
-            <div className="bitfun-worktrees-config__worktree-list">
+            <div className="halo-worktrees-config__worktree-list">
               {project.worktrees.map(worktree => renderWorktree(project, worktree))}
             </div>
           </section>
@@ -724,7 +724,7 @@ const WorktreesConfig: React.FC = () => {
   })();
 
   return (
-    <ConfigPageLayout className="bitfun-worktrees-config">
+    <ConfigPageLayout className="halo-worktrees-config">
       <ConfigPageHeader
         icon={<GitBranch size={20} aria-hidden />}
         title={t('settings.title')}
@@ -733,7 +733,7 @@ const WorktreesConfig: React.FC = () => {
       <ConfigPageContent>
         {renderSettings()}
         <ConfigPageSection
-          className="bitfun-worktrees-config__management-section"
+          className="halo-worktrees-config__management-section"
           mouseGlowSurface={false}
           title={t('management.title')}
           description={t('management.description')}
@@ -759,22 +759,22 @@ const WorktreesConfig: React.FC = () => {
           <div
             ref={projectsResultsRef}
             className={[
-              'bitfun-worktrees-config__results',
+              'halo-worktrees-config__results',
               projectsLoading
                 && projectsInitialized
-                && 'bitfun-worktrees-config__results--refreshing',
+                && 'halo-worktrees-config__results--refreshing',
             ].filter(Boolean).join(' ')}
             aria-busy={projectsLoading}
           >
             {projectsLoading && projectsInitialized && (
               <>
                 <div
-                  className="bitfun-worktrees-config__refresh-progress"
+                  className="halo-worktrees-config__refresh-progress"
                   aria-hidden="true"
                 >
                   <span />
                 </div>
-                <span className="bitfun-sr-only" role="status">
+                <span className="halo-sr-only" role="status">
                   {t('management.loading')}
                 </span>
               </>

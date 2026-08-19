@@ -1,12 +1,12 @@
-use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_sources::{
     EcosystemId, ExpandedPromptCommand, ExternalSourceAssetKind, ExternalSourceContext,
     ExternalSourceDiagnostic, ExternalSourceHealth, ExternalSourceProviderError,
     ExternalSourceRecord, ExternalSourceScope, ExternalWatchRoot, PromptCommandAvailability,
     PromptCommandDefinition, PromptCommandProviderIdentity, PromptCommandProviderSnapshot,
     PromptCommandSourceProvider, SourceKey, SourceQualifiedCommandId,
 };
-use bitfun_services_core::markdown::FrontMatterMarkdown;
-use bitfun_static_hook_support::{
+use halo_services_core::markdown::FrontMatterMarkdown;
+use halo_static_hook_support::{
     collect_bounded_regular_files, read_bounded_text, BoundedDirectoryWalkError,
     BoundedDirectoryWalkLimits, BoundedTextRead,
 };

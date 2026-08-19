@@ -43,7 +43,7 @@ describe('L1 Terminal', () => {
 
       const selectors = [
         '[data-terminal-id]',
-        '.bitfun-terminal',
+        '.halo-terminal',
         '.xterm',
         '[class*="terminal"]',
       ];
@@ -120,7 +120,7 @@ describe('L1 Terminal', () => {
         return;
       }
 
-      const terminal = await $('.bitfun-terminal');
+      const terminal = await $('.halo-terminal');
       const exists = await terminal.isExisting();
 
       if (exists) {
@@ -142,7 +142,7 @@ describe('L1 Terminal', () => {
         return;
       }
 
-      const terminal = await $('.bitfun-terminal, .xterm');
+      const terminal = await $('.halo-terminal, .xterm');
       const exists = await terminal.isExisting();
 
       if (!exists) {
@@ -163,7 +163,7 @@ describe('L1 Terminal', () => {
         return;
       }
 
-      const terminal = await $('.bitfun-terminal, .xterm');
+      const terminal = await $('.halo-terminal, .xterm');
       const exists = await terminal.isExisting();
 
       if (!exists) {
@@ -191,7 +191,7 @@ describe('L1 Terminal', () => {
         return;
       }
 
-      const terminal = await $('.bitfun-terminal');
+      const terminal = await $('.halo-terminal');
       const exists = await terminal.isExisting();
 
       if (!exists) {
@@ -234,7 +234,7 @@ describe('L1 Terminal', () => {
         return;
       }
 
-      const terminal = await $('.bitfun-terminal');
+      const terminal = await $('.halo-terminal');
       const exists = await terminal.isExisting();
 
       if (!exists) {
@@ -243,7 +243,7 @@ describe('L1 Terminal', () => {
       }
 
       const bgColor = await browser.execute(() => {
-        const terminal = document.querySelector('.bitfun-terminal, .xterm');
+        const terminal = document.querySelector('.halo-terminal, .xterm');
         if (!terminal) return null;
 
         const styles = window.getComputedStyle(terminal);

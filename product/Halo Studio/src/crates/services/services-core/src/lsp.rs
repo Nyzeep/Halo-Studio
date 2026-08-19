@@ -14,8 +14,8 @@ pub mod process;
 pub mod project_detector;
 pub mod protocol;
 
-use bitfun_core_types::lsp::LspPlugin;
-pub use bitfun_core_types::lsp::{
+use halo_core_types::lsp::LspPlugin;
+pub use halo_core_types::lsp::{
     resolve_lsp_plugin_command_for_target as resolve_plugin_command_for_target,
     LspPluginRuntimeArch, LspPluginRuntimePlatform, LspPluginRuntimeTarget,
 };

@@ -1,7 +1,7 @@
 //! Versioned JSON-RPC contracts for the local SDK Host.
 
-use bitfun_core_types::SessionExecutionTarget;
-use bitfun_runtime_ports::AgentSessionCreateResult;
+use halo_core_types::SessionExecutionTarget;
+use halo_runtime_ports::AgentSessionCreateResult;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -496,8 +496,8 @@ fn empty_object() -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::{SessionCreateResult, SessionLifetime};
-    use bitfun_core_types::SessionExecutionTarget;
-    use bitfun_runtime_ports::AgentSessionCreateResult;
+    use halo_core_types::SessionExecutionTarget;
+    use halo_runtime_ports::AgentSessionCreateResult;
 
     #[test]
     fn session_create_result_preserves_runtime_placement_facts() {

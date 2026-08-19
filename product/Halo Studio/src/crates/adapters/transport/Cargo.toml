@@ -1,16 +1,16 @@
 [package]
-name = "bitfun-transport"
+name = "halo-transport"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "BitFun Transport Layer - Cross-platform communication adapters"
+description = "Halo Transport Layer - Cross-platform communication adapters"
 
 [lib]
-name = "bitfun_transport"
+name = "halo_transport"
 
 [dependencies]
 # Events layer
-bitfun-events = { path = "../../contracts/events" }
+halo-events = { path = "../../contracts/events" }
 
 # Inherited from workspace
 async-trait = { workspace = true }

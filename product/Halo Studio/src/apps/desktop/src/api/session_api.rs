@@ -7,18 +7,18 @@ use crate::runtime::{
     UiSessionMetadataField,
 };
 use crate::startup_trace::DesktopStartupTrace;
-use bitfun_core::agentic::coordination::get_global_scheduler;
-use bitfun_core::agentic::persistence::{
+use halo_core::agentic::coordination::get_global_scheduler;
+use halo_core::agentic::persistence::{
     PersistenceManager, SessionBranchResult, SessionMetadataPage,
 };
-use bitfun_core::infrastructure::PathManager;
-use bitfun_core::service::remote_ssh::normalize_remote_workspace_path;
-use bitfun_core::service::session::{
+use halo_core::infrastructure::PathManager;
+use halo_core::service::remote_ssh::normalize_remote_workspace_path;
+use halo_core::service::session::{
     DialogTurnData, SessionKind, SessionMetadata, SessionStatus, SessionTranscriptExport,
     SessionTranscriptExportOptions,
 };
-use bitfun_core::service::session_usage::SessionUsageReport;
-use bitfun_core::service::workspace::WorkspaceKind;
+use halo_core::service::session_usage::SessionUsageReport;
+use halo_core::service::workspace::WorkspaceKind;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;

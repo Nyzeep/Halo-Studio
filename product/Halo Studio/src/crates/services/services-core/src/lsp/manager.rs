@@ -12,7 +12,7 @@ use crate::lsp::process::{
     CrashCallback, DiagnosticsCallback, LspServerProcess, ProgressCallback, TokenCreateCallback,
 };
 use crate::lsp::{LspSupportedExtensions, PluginRegistry};
-use bitfun_core_types::lsp::{CompletionItem, CompletionList, InlayHint, LspPlugin};
+use halo_core_types::lsp::{CompletionItem, CompletionList, InlayHint, LspPlugin};
 
 /// LSP protocol-layer manager (stateless, pure protocol implementation).
 pub struct LspManager {

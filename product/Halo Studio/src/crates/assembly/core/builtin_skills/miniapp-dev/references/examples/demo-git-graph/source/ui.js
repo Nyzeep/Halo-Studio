@@ -137,7 +137,7 @@
 
   /** Node stroke color (contrast with background). */
   window.__GG.getNodeStroke = function () {
-    return getComputed('--graph-node-stroke') || getComputed('--bitfun-bg') || getComputed('--bg') || '#0d1117';
+    return getComputed('--graph-node-stroke') || getComputed('--halo-bg') || getComputed('--bg') || '#0d1117';
   };
 
   /** Uncommitted / WIP line and node color. */

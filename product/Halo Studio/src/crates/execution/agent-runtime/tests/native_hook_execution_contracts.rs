@@ -8,7 +8,7 @@
 //! Unix-only: the fixtures are `sh` one-liners.
 #![cfg(unix)]
 
-use bitfun_agent_runtime::native_hooks::{
+use halo_agent_runtime::native_hooks::{
     AgentHookEngine, AgentHookEventPayload, AgentHookOutcome, AgentHookPayload,
     AgentHookPayloadCommon, AgentHookPermissionMode, AgentHookPermissionOutcome, AgentHookScope,
     AgentHookSettings, AgentHookSettingsLayer, MAX_HOOK_MODEL_OUTPUT_BYTES,

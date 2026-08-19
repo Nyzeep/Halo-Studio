@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     PortResult, ScriptToolDescriptor, ScriptToolExpectedExport, ScriptToolInvokeRequest,
     ScriptToolInvokeResponse, ScriptToolLoadRequest, ScriptToolLoadResponse, ScriptToolRuntime,
     ScriptToolRuntimeAvailability,

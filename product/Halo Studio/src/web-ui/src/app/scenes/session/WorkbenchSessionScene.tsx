@@ -39,33 +39,33 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
   return (
     <section
       className={[
-        'bitfun-workbench-session-scene',
-        isEntering && 'bitfun-workbench-session-scene--entering',
+        'halo-workbench-session-scene',
+        isEntering && 'halo-workbench-session-scene--entering',
       ].filter(Boolean).join(' ')}
       aria-hidden={!isActive}
       data-testid="workbench-session-scene"
       data-runtime-phase={snapshot?.phase ?? 'disconnected'}
     >
-      <header className="bitfun-workbench-session-scene__header">
-        <div className="bitfun-workbench-session-scene__heading">
-          <span className="bitfun-workbench-session-scene__workspace">
+      <header className="halo-workbench-session-scene__header">
+        <div className="halo-workbench-session-scene__heading">
+          <span className="halo-workbench-session-scene__workspace">
             {snapshot?.workspace?.displayName ?? t('nav.items.sessions')}
           </span>
           {snapshot?.workspace?.rootPath ? (
-            <code className="bitfun-workbench-session-scene__root-path">
+            <code className="halo-workbench-session-scene__root-path">
               {snapshot.workspace.rootPath}
             </code>
           ) : null}
-          <span className="bitfun-workbench-session-scene__phase">
+          <span className="halo-workbench-session-scene__phase">
             {t(runtimePhaseMessageKey)}
           </span>
         </div>
-        <span className="bitfun-workbench-session-scene__adapter">
+        <span className="halo-workbench-session-scene__adapter">
           {snapshot?.adapter.identity ?? 'pi-rpc-p0'}
         </span>
       </header>
 
-      <div className="bitfun-workbench-session-scene__body" aria-live="polite">
+      <div className="halo-workbench-session-scene__body" aria-live="polite">
         <PiConfigurationPanel
           version={snapshot?.adapter.readiness?.version.version}
           profile={snapshot?.adapter.readiness?.version.profile}
@@ -87,28 +87,28 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
         <WorkbenchManagedTaskComposer newRunVersion={newRunVersion} />
 
         {isSyncing && !snapshot ? (
-          <div className="bitfun-workbench-session-scene__state" role="status">
+          <div className="halo-workbench-session-scene__state" role="status">
             <Loader2 size={16} aria-hidden="true" />
             <span>{t('nav.sessions.loading')}</span>
           </div>
         ) : null}
 
         {runtimeState.syncStatus === 'failed' ? (
-          <div className="bitfun-workbench-session-scene__state is-error" role="alert">
+          <div className="halo-workbench-session-scene__state is-error" role="alert">
             <AlertCircle size={16} aria-hidden="true" />
             <span>{t(selectWorkbenchRuntimeErrorMessageKey(runtimeState))}</span>
           </div>
         ) : null}
 
         {snapshot?.error ? (
-          <div className="bitfun-workbench-session-scene__state is-error" role="alert">
+          <div className="halo-workbench-session-scene__state is-error" role="alert">
             <AlertCircle size={16} aria-hidden="true" />
             <span>{t('nav.sessions.workbenchRuntime.error')}</span>
           </div>
         ) : null}
 
         {snapshot && snapshot.sessions.length === 0 ? (
-          <div className="bitfun-workbench-session-scene__state">
+          <div className="halo-workbench-session-scene__state">
             <span>{t('nav.sessions.noSessions')}</span>
           </div>
         ) : null}
@@ -116,24 +116,24 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
         {snapshot?.sessions.map((session, index) => (
           <article
             key={session.sessionId}
-            className="bitfun-workbench-session-scene__session"
+            className="halo-workbench-session-scene__session"
             data-session-id={session.sessionId}
             data-session-phase={session.phase}
           >
             <CircleDot size={15} aria-hidden="true" />
-            <span className="bitfun-workbench-session-scene__session-name">
+            <span className="halo-workbench-session-scene__session-name">
               {t('nav.sessions.newSession')} {index + 1}
             </span>
-            <span className="bitfun-workbench-session-scene__session-mode">
+            <span className="halo-workbench-session-scene__session-mode">
               {session.mode === 'managed'
                 ? t('nav.sessions.workbenchRuntime.sessionMode.managed')
                 : t('nav.sessions.workbenchRuntime.sessionMode.standard')}
             </span>
-            <span className="bitfun-workbench-session-scene__session-phase">
+            <span className="halo-workbench-session-scene__session-phase">
               {t(selectWorkbenchRuntimeSessionPhaseMessageKey(session.phase))}
             </span>
             {session.baseline?.canonicalRoot ? (
-              <div className="bitfun-workbench-session-scene__baseline">
+              <div className="halo-workbench-session-scene__baseline">
                 <span>{t('nav.sessions.workbenchRuntime.baseline.root')}</span>
                 <code>{session.baseline.canonicalRoot}</code>
                 <span>
@@ -144,13 +144,13 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
               </div>
             ) : null}
             {(session.messages ?? []).length > 0 ? (
-              <div className="bitfun-workbench-session-scene__messages">
+              <div className="halo-workbench-session-scene__messages">
                 {(session.messages ?? []).map((message, messageIndex) => (
                   <div
                     key={`${session.sessionId}-message-${messageIndex}`}
-                    className={`bitfun-workbench-session-scene__message is-${message.role}`}
+                    className={`halo-workbench-session-scene__message is-${message.role}`}
                   >
-                    <span className="bitfun-workbench-session-scene__message-role">
+                    <span className="halo-workbench-session-scene__message-role">
                       {t(message.role === 'user'
                         ? 'nav.sessions.workbenchRuntime.messageRole.user'
                         : 'nav.sessions.workbenchRuntime.messageRole.assistant')}
@@ -161,11 +161,11 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
               </div>
             ) : null}
             {(session.activities ?? []).length > 0 ? (
-              <div className="bitfun-workbench-session-scene__activities">
+              <div className="halo-workbench-session-scene__activities">
                 {(session.activities ?? []).map(activity => (
                   <div
                     key={`${session.sessionId}-${activity.activityId}`}
-                    className={`bitfun-workbench-session-scene__activity${activity.isError ? ' is-error' : ''}`}
+                    className={`halo-workbench-session-scene__activity${activity.isError ? ' is-error' : ''}`}
                   >
                     <span>{activity.label}</span>
                     <span>
@@ -191,7 +191,7 @@ const WorkbenchSessionScene: React.FC<WorkbenchSessionSceneProps> = ({
               onStartNewRun={() => setNewRunVersion(version => version + 1)}
             />
             {session.phase === 'interrupted' || session.error ? (
-              <div className="bitfun-workbench-session-scene__session-error" role="alert">
+              <div className="halo-workbench-session-scene__session-error" role="alert">
                 <AlertCircle size={14} aria-hidden="true" />
                 <span
                   data-testid={session.phase === 'interrupted' ? 'workbench-interruption-reason' : undefined}

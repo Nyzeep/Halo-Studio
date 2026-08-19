@@ -1,18 +1,18 @@
 [package]
-name = "bitfun-miniapp-market-service"
+name = "halo-miniapp-market-service"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "BitFun MiniApp marketplace service"
+description = "Halo MiniApp marketplace service"
 
 [lib]
-name = "bitfun_miniapp_market_service"
+name = "halo_miniapp_market_service"
 
 [dependencies]
 anyhow = { workspace = true }
 axum = { workspace = true }
 base64 = { workspace = true }
-bitfun-product-domains = { path = "../../contracts/product-domains", features = ["miniapp"] }
+halo-product-domains = { path = "../../contracts/product-domains", features = ["miniapp"] }
 chrono = { workspace = true }
 hex = { workspace = true }
 image = { workspace = true }

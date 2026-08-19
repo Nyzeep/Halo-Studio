@@ -27,7 +27,7 @@
 
 #![allow(dead_code)]
 
-use bitfun_core::util::errors::{BitFunError, BitFunResult};
+use halo_core::util::errors::{HaloError, HaloResult};
 use core_graphics::event::{CGEvent, CGEventFlags, CGEventType, CGMouseButton, ScrollEventUnit};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 use core_graphics::geometry::CGPoint;
@@ -187,9 +187,9 @@ fn accessibility_is_trusted() -> bool {
     unsafe { AXIsProcessTrustedWithOptions(std::ptr::null()) }
 }
 
-fn private_source(label: &str) -> BitFunResult<CGEventSource> {
+fn private_source(label: &str) -> HaloResult<CGEventSource> {
     CGEventSource::new(CGEventSourceStateID::Private)
-        .map_err(|_| BitFunError::tool(format!("CGEventSource::Private failed ({})", label)))
+        .map_err(|_| HaloError::tool(format!("CGEventSource::Private failed ({})", label)))
 }
 
 /// Compose modifier flags for a chord.
@@ -300,7 +300,7 @@ pub(super) fn bg_click(
     button: BgMouseButton,
     click_count: u32,
     modifiers: &[BgModifier],
-) -> BitFunResult<()> {
+) -> HaloResult<()> {
     if click_count == 0 {
         return Ok(());
     }
@@ -344,7 +344,7 @@ pub(super) fn bg_click(
     // hit-testing in the target app sees the right coordinates. Does NOT
     // move the user's real cursor because we post pid-scoped, not global.
     let mv = CGEvent::new_mouse_event(src.clone(), CGEventType::MouseMoved, pt, button.cg())
-        .map_err(|_| BitFunError::tool("CGEvent MouseMoved failed".to_string()))?;
+        .map_err(|_| HaloError::tool("CGEvent MouseMoved failed".to_string()))?;
     if !flags.is_empty() {
         mv.set_flags(flags);
     }
@@ -352,7 +352,7 @@ pub(super) fn bg_click(
 
     for i in 1..=click_count {
         let down = CGEvent::new_mouse_event(src.clone(), button.down(), pt, button.cg())
-            .map_err(|_| BitFunError::tool("CGEvent MouseDown failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEvent MouseDown failed".to_string()))?;
         // Click count field lets the target app recognise double / triple
         // clicks within its own quench-time window.
         down.set_integer_value_field(
@@ -365,7 +365,7 @@ pub(super) fn bg_click(
         post_both_mouse(pid, &down);
 
         let up = CGEvent::new_mouse_event(src.clone(), button.up(), pt, button.cg())
-            .map_err(|_| BitFunError::tool("CGEvent MouseUp failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEvent MouseUp failed".to_string()))?;
         up.set_integer_value_field(
             core_graphics::event::EventField::MOUSE_EVENT_CLICK_STATE,
             i as i64,
@@ -425,7 +425,7 @@ pub(super) fn frontmost_pid_macos() -> Option<i32> {
 ///
 /// Returns `Ok(true)` when activation succeeded, `Ok(false)` when the app
 /// could not be found, and `Err(_)` on AppKit FFI failures.
-pub(super) fn activate_pid_macos(pid: i32) -> BitFunResult<bool> {
+pub(super) fn activate_pid_macos(pid: i32) -> HaloResult<bool> {
     // Without a window_id we can't use the focus-without-raise SPI.
     // Fall through to the public API.
     activate_pid_macos_with_window(pid, None)
@@ -436,7 +436,7 @@ pub(super) fn activate_pid_macos(pid: i32) -> BitFunResult<bool> {
 pub(super) fn activate_pid_macos_with_window(
     pid: i32,
     window_id: Option<u32>,
-) -> BitFunResult<bool> {
+) -> HaloResult<bool> {
     // Try focus-without-raise first when we have a window id.
     if let Some(wid) = window_id {
         if super::macos_skylight::is_focus_without_raise_available() {
@@ -492,7 +492,7 @@ pub(super) fn activate_pid_macos_with_window(
 /// Pixel-delta scroll inside the focused scroll container of the target
 /// pid's frontmost window. Positive `dy` scrolls content down (matches
 /// trackpad / `wheel1>0` direction).
-pub(super) fn bg_scroll(pid: i32, dx: i32, dy: i32) -> BitFunResult<()> {
+pub(super) fn bg_scroll(pid: i32, dx: i32, dy: i32) -> HaloResult<()> {
     info!(
         target: "computer_use::bg_input",
         "bg_scroll.enter pid={} dx={} dy={}",
@@ -503,7 +503,7 @@ pub(super) fn bg_scroll(pid: i32, dx: i32, dy: i32) -> BitFunResult<()> {
     // Sign convention matches the system trackpad (positive dy = content
     // moves down on screen, i.e. user is looking further into the document).
     let ev = CGEvent::new_scroll_event(src, ScrollEventUnit::PIXEL, 2, dy, dx, 0)
-        .map_err(|_| BitFunError::tool("CGEventCreateScrollWheelEvent2 failed".to_string()))?;
+        .map_err(|_| HaloError::tool("CGEventCreateScrollWheelEvent2 failed".to_string()))?;
     post_both_mouse(pid, &ev);
     Ok(())
 }
@@ -512,7 +512,7 @@ pub(super) fn bg_scroll(pid: i32, dx: i32, dy: i32) -> BitFunResult<()> {
 /// `kCGEventKeyboardEventUnicodeString` field. This bypasses keymap
 /// translation entirely, so it correctly handles emoji, CJK and other
 /// non-Latin input without touching the system IME.
-pub(super) fn bg_type_text(pid: i32, text: &str) -> BitFunResult<()> {
+pub(super) fn bg_type_text(pid: i32, text: &str) -> HaloResult<()> {
     if text.is_empty() {
         return Ok(());
     }
@@ -533,13 +533,13 @@ pub(super) fn bg_type_text(pid: i32, text: &str) -> BitFunResult<()> {
     for ch in text.chars() {
         // Keycode 0 is irrelevant when the unicode string field is set.
         let ev = CGEvent::new_keyboard_event(src.clone(), 0, true)
-            .map_err(|_| BitFunError::tool("CGEventCreateKeyboardEvent failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEventCreateKeyboardEvent failed".to_string()))?;
         let buf: Vec<u16> = ch.encode_utf16(&mut [0u16; 2]).to_vec();
         ev.set_string_from_utf16_unchecked(&buf);
         post_both_keyboard(pid, &ev);
         // Match keyup so the target app sees a complete keystroke.
         let ev2 = CGEvent::new_keyboard_event(src.clone(), 0, false)
-            .map_err(|_| BitFunError::tool("CGEventCreateKeyboardEvent (up) failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEventCreateKeyboardEvent (up) failed".to_string()))?;
         ev2.set_string_from_utf16_unchecked(&buf);
         post_both_keyboard(pid, &ev2);
         // 8ms inter-key gap matches Codex / native typing rates and avoids
@@ -554,7 +554,7 @@ pub(super) fn bg_type_text(pid: i32, text: &str) -> BitFunResult<()> {
 /// Send a key chord (modifier+key combo) to the target pid using the
 /// private event source. `key` is the AX / Carbon virtual keycode; callers
 /// can use `keycode_for_char` for ASCII letters or pass a literal keycode.
-pub(super) fn bg_key_chord(pid: i32, modifiers: &[BgModifier], key: u16) -> BitFunResult<()> {
+pub(super) fn bg_key_chord(pid: i32, modifiers: &[BgModifier], key: u16) -> HaloResult<()> {
     info!(
         target: "computer_use::bg_input",
         "bg_key_chord.enter pid={} keycode={} modifiers={:?}",
@@ -568,27 +568,27 @@ pub(super) fn bg_key_chord(pid: i32, modifiers: &[BgModifier], key: u16) -> BitF
     // Press modifiers.
     for m in modifiers {
         let ev = CGEvent::new_keyboard_event(src.clone(), m.keycode(), true)
-            .map_err(|_| BitFunError::tool("CGEvent ModDown failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEvent ModDown failed".to_string()))?;
         ev.set_flags(flags);
         post_both_keyboard(pid, &ev);
     }
     // Press main key.
     {
         let ev = CGEvent::new_keyboard_event(src.clone(), key, true)
-            .map_err(|_| BitFunError::tool("CGEvent KeyDown failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEvent KeyDown failed".to_string()))?;
         ev.set_flags(flags);
         post_both_keyboard(pid, &ev);
     }
     {
         let ev = CGEvent::new_keyboard_event(src.clone(), key, false)
-            .map_err(|_| BitFunError::tool("CGEvent KeyUp failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEvent KeyUp failed".to_string()))?;
         ev.set_flags(flags);
         post_both_keyboard(pid, &ev);
     }
     // Release modifiers in reverse press order.
     for m in modifiers.iter().rev() {
         let ev = CGEvent::new_keyboard_event(src.clone(), m.keycode(), false)
-            .map_err(|_| BitFunError::tool("CGEvent ModUp failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEvent ModUp failed".to_string()))?;
         // Drop this modifier from the flag set as we release it.
         let remaining = modifiers
             .iter()
@@ -625,7 +625,7 @@ pub(super) fn bg_click_chromium(
     wid: u32,
     click_count: u32,
     modifiers: &[BgModifier],
-) -> BitFunResult<()> {
+) -> HaloResult<()> {
     use std::time::{SystemTime, UNIX_EPOCH};
     if click_count == 0 {
         return Ok(());
@@ -682,7 +682,7 @@ pub(super) fn bg_click_chromium(
         target,
         CGMouseButton::Left,
     )
-    .map_err(|_| BitFunError::tool("Chromium click: mouseMoved creation failed".to_string()))?;
+    .map_err(|_| HaloError::tool("Chromium click: mouseMoved creation failed".to_string()))?;
     stamp(&move_ev, win_local, 0, 2);
     post(&move_ev);
     thread::sleep(Duration::from_millis(15));
@@ -694,7 +694,7 @@ pub(super) fn bg_click_chromium(
         off_screen,
         CGMouseButton::Left,
     )
-    .map_err(|_| BitFunError::tool("Chromium click: primer down failed".to_string()))?;
+    .map_err(|_| HaloError::tool("Chromium click: primer down failed".to_string()))?;
     stamp(&primer_down, off_local, 1, 1);
     post(&primer_down);
     thread::sleep(Duration::from_millis(1));
@@ -705,7 +705,7 @@ pub(super) fn bg_click_chromium(
         off_screen,
         CGMouseButton::Left,
     )
-    .map_err(|_| BitFunError::tool("Chromium click: primer up failed".to_string()))?;
+    .map_err(|_| HaloError::tool("Chromium click: primer up failed".to_string()))?;
     stamp(&primer_up, off_local, 1, 2);
     post(&primer_up);
     // ≥1 frame so Chromium sees primer + target as separate gestures.
@@ -720,7 +720,7 @@ pub(super) fn bg_click_chromium(
             target,
             CGMouseButton::Left,
         )
-        .map_err(|_| BitFunError::tool("Chromium click: target down failed".to_string()))?;
+        .map_err(|_| HaloError::tool("Chromium click: target down failed".to_string()))?;
         stamp(&down, win_local, click_state, 3);
         post(&down);
         thread::sleep(Duration::from_millis(1));
@@ -731,7 +731,7 @@ pub(super) fn bg_click_chromium(
             target,
             CGMouseButton::Left,
         )
-        .map_err(|_| BitFunError::tool("Chromium click: target up failed".to_string()))?;
+        .map_err(|_| HaloError::tool("Chromium click: target up failed".to_string()))?;
         stamp(&up, win_local, click_state, 3);
         post(&up);
 
@@ -806,7 +806,7 @@ pub(super) fn bg_drag(
     steps: usize,
     modifiers: &[BgModifier],
     button: BgDragButton,
-) -> BitFunResult<()> {
+) -> HaloResult<()> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let src = private_source("drag")?;
     let flags = flags_from(modifiers);
@@ -832,7 +832,7 @@ pub(super) fn bg_drag(
         y: from_y,
     };
     let down = CGEvent::new_mouse_event(src.clone(), button.down(), from_pt, cg_button)
-        .map_err(|_| BitFunError::tool("drag: mouseDown failed".to_string()))?;
+        .map_err(|_| HaloError::tool("drag: mouseDown failed".to_string()))?;
     if flags != CGEventFlags::CGEventFlagNull {
         down.set_flags(flags);
     }
@@ -850,7 +850,7 @@ pub(super) fn bg_drag(
             .map(|((fx, fy), (tx, ty))| (fx + (tx - fx) * t, fy + (ty - fy) * t));
         let drag_pt = CGPoint { x: ix, y: iy };
         let drag = CGEvent::new_mouse_event(src.clone(), button.dragged(), drag_pt, cg_button)
-            .map_err(|_| BitFunError::tool("drag: mouseDragged failed".to_string()))?;
+            .map_err(|_| HaloError::tool("drag: mouseDragged failed".to_string()))?;
         if flags != CGEventFlags::CGEventFlagNull {
             drag.set_flags(flags);
         }
@@ -864,7 +864,7 @@ pub(super) fn bg_drag(
     // MouseUp at end.
     let to_pt = CGPoint { x: to_x, y: to_y };
     let up = CGEvent::new_mouse_event(src.clone(), button.up(), to_pt, cg_button)
-        .map_err(|_| BitFunError::tool("drag: mouseUp failed".to_string()))?;
+        .map_err(|_| HaloError::tool("drag: mouseUp failed".to_string()))?;
     if flags != CGEventFlags::CGEventFlagNull {
         up.set_flags(flags);
     }
@@ -890,7 +890,7 @@ pub(super) fn bg_key_chord_no_auth(
     pid: i32,
     modifiers: &[BgModifier],
     key: u16,
-) -> BitFunResult<()> {
+) -> HaloResult<()> {
     info!(
         target: "computer_use::bg_input",
         "bg_key_chord_no_auth.enter pid={} keycode={} modifiers={:?}",
@@ -901,25 +901,25 @@ pub(super) fn bg_key_chord_no_auth(
 
     for m in modifiers {
         let ev = CGEvent::new_keyboard_event(src.clone(), m.keycode(), true)
-            .map_err(|_| BitFunError::tool("CGEvent ModDown (no_auth) failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEvent ModDown (no_auth) failed".to_string()))?;
         ev.set_flags(flags);
         post_both_keyboard_no_auth(pid, &ev);
     }
     {
         let ev = CGEvent::new_keyboard_event(src.clone(), key, true)
-            .map_err(|_| BitFunError::tool("CGEvent KeyDown (no_auth) failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEvent KeyDown (no_auth) failed".to_string()))?;
         ev.set_flags(flags);
         post_both_keyboard_no_auth(pid, &ev);
     }
     {
         let ev = CGEvent::new_keyboard_event(src.clone(), key, false)
-            .map_err(|_| BitFunError::tool("CGEvent KeyUp (no_auth) failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEvent KeyUp (no_auth) failed".to_string()))?;
         ev.set_flags(flags);
         post_both_keyboard_no_auth(pid, &ev);
     }
     for m in modifiers.iter().rev() {
         let ev = CGEvent::new_keyboard_event(src.clone(), m.keycode(), false)
-            .map_err(|_| BitFunError::tool("CGEvent ModUp (no_auth) failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEvent ModUp (no_auth) failed".to_string()))?;
         let remaining = modifiers
             .iter()
             .copied()
@@ -936,7 +936,7 @@ pub(super) fn bg_right_click(
     pid: i32,
     point: (f64, f64),
     modifiers: &[BgModifier],
-) -> BitFunResult<()> {
+) -> HaloResult<()> {
     let src = private_source("right_click")?;
     let pt = CGPoint {
         x: point.0,
@@ -950,7 +950,7 @@ pub(super) fn bg_right_click(
         pt,
         CGMouseButton::Right,
     )
-    .map_err(|_| BitFunError::tool("CGEvent RightMouseDown failed".to_string()))?;
+    .map_err(|_| HaloError::tool("CGEvent RightMouseDown failed".to_string()))?;
     if flags != CGEventFlags::CGEventFlagNull {
         down.set_flags(flags);
     }
@@ -964,7 +964,7 @@ pub(super) fn bg_right_click(
         pt,
         CGMouseButton::Right,
     )
-    .map_err(|_| BitFunError::tool("CGEvent RightMouseUp failed".to_string()))?;
+    .map_err(|_| HaloError::tool("CGEvent RightMouseUp failed".to_string()))?;
     if flags != CGEventFlags::CGEventFlagNull {
         up.set_flags(flags);
     }
@@ -978,7 +978,7 @@ pub(super) fn bg_middle_click(
     pid: i32,
     point: (f64, f64),
     modifiers: &[BgModifier],
-) -> BitFunResult<()> {
+) -> HaloResult<()> {
     let src = private_source("middle_click")?;
     let pt = CGPoint {
         x: point.0,
@@ -992,7 +992,7 @@ pub(super) fn bg_middle_click(
         pt,
         CGMouseButton::Center,
     )
-    .map_err(|_| BitFunError::tool("CGEvent OtherMouseDown failed".to_string()))?;
+    .map_err(|_| HaloError::tool("CGEvent OtherMouseDown failed".to_string()))?;
     if flags != CGEventFlags::CGEventFlagNull {
         down.set_flags(flags);
     }
@@ -1006,7 +1006,7 @@ pub(super) fn bg_middle_click(
         pt,
         CGMouseButton::Center,
     )
-    .map_err(|_| BitFunError::tool("CGEvent OtherMouseUp failed".to_string()))?;
+    .map_err(|_| HaloError::tool("CGEvent OtherMouseUp failed".to_string()))?;
     if flags != CGEventFlags::CGEventFlagNull {
         up.set_flags(flags);
     }
@@ -1018,16 +1018,16 @@ pub(super) fn bg_middle_click(
 /// Parse a key spec the dispatch layer might pass us, of the form
 /// `"command+shift+p"` / `"return"` / `"escape"` / `"a"`. Returns the
 /// modifier list and the resolved keycode.
-pub(super) fn parse_key_spec(spec: &str) -> BitFunResult<(Vec<BgModifier>, u16)> {
+pub(super) fn parse_key_spec(spec: &str) -> HaloResult<(Vec<BgModifier>, u16)> {
     let mut mods = Vec::new();
     let parts: Vec<&str> = spec.split('+').map(str::trim).collect();
     if parts.is_empty() {
-        return Err(BitFunError::tool("empty key spec".to_string()));
+        return Err(HaloError::tool("empty key spec".to_string()));
     }
     let (last, head) = parts.split_last().unwrap();
     for p in head {
         let m = BgModifier::from_str(p)
-            .ok_or_else(|| BitFunError::tool(format!("unknown modifier in key spec: {}", p)))?;
+            .ok_or_else(|| HaloError::tool(format!("unknown modifier in key spec: {}", p)))?;
         mods.push(m);
     }
     let kc = keycode_for_named(last)
@@ -1040,15 +1040,15 @@ pub(super) fn parse_key_spec(spec: &str) -> BitFunResult<(Vec<BgModifier>, u16)>
             }
             keycode_for_char(c)
         })
-        .ok_or_else(|| BitFunError::tool(format!("unknown key in key spec: {}", last)))?;
+        .ok_or_else(|| HaloError::tool(format!("unknown key in key spec: {}", last)))?;
     Ok((mods, kc))
 }
 
 /// Parse the ControlHub/Codex chord shape: `["command", "shift", "p"]`,
 /// `["command+shift+p"]`, or `["return"]`.
-pub(super) fn parse_key_sequence(keys: &[String]) -> BitFunResult<(Vec<BgModifier>, u16)> {
+pub(super) fn parse_key_sequence(keys: &[String]) -> HaloResult<(Vec<BgModifier>, u16)> {
     if keys.is_empty() {
-        return Err(BitFunError::tool("empty key sequence".to_string()));
+        return Err(HaloError::tool("empty key sequence".to_string()));
     }
     if keys.len() == 1 {
         return parse_key_spec(&keys[0]);
@@ -1058,7 +1058,7 @@ pub(super) fn parse_key_sequence(keys: &[String]) -> BitFunResult<(Vec<BgModifie
     let mut mods = Vec::with_capacity(head.len());
     for p in head {
         let m = BgModifier::from_str(p)
-            .ok_or_else(|| BitFunError::tool(format!("unknown modifier in key sequence: {}", p)))?;
+            .ok_or_else(|| HaloError::tool(format!("unknown modifier in key sequence: {}", p)))?;
         mods.push(m);
     }
     let kc = keycode_for_named(last)
@@ -1070,7 +1070,7 @@ pub(super) fn parse_key_sequence(keys: &[String]) -> BitFunResult<(Vec<BgModifie
             }
             keycode_for_char(c)
         })
-        .ok_or_else(|| BitFunError::tool(format!("unknown key in key sequence: {}", last)))?;
+        .ok_or_else(|| HaloError::tool(format!("unknown key in key sequence: {}", last)))?;
     Ok((mods, kc))
 }
 
@@ -1252,7 +1252,7 @@ pub(super) fn is_terminal_emulator(pid: i32) -> bool {
 ///
 /// Only works for ASCII characters that have direct keycodes. Non-ASCII text
 /// (CJK, emoji) should use `bg_type_text` (Unicode string) or `paste` instead.
-pub(super) fn bg_type_text_terminal_safe(pid: i32, text: &str) -> BitFunResult<()> {
+pub(super) fn bg_type_text_terminal_safe(pid: i32, text: &str) -> HaloResult<()> {
     if text.is_empty() {
         return Ok(());
     }
@@ -1275,7 +1275,7 @@ pub(super) fn bg_type_text_terminal_safe(pid: i32, text: &str) -> BitFunResult<(
         if let Some(kc) = kc {
             // Use key events for mappable ASCII characters.
             let down = CGEvent::new_keyboard_event(src.clone(), kc, true)
-                .map_err(|_| BitFunError::tool("terminal type: keydown failed".to_string()))?;
+                .map_err(|_| HaloError::tool("terminal type: keydown failed".to_string()))?;
             if flags != CGEventFlags::CGEventFlagNull {
                 down.set_flags(flags);
             }
@@ -1283,7 +1283,7 @@ pub(super) fn bg_type_text_terminal_safe(pid: i32, text: &str) -> BitFunResult<(
             thread::sleep(Duration::from_millis(8));
 
             let up = CGEvent::new_keyboard_event(src.clone(), kc, false)
-                .map_err(|_| BitFunError::tool("terminal type: keyup failed".to_string()))?;
+                .map_err(|_| HaloError::tool("terminal type: keyup failed".to_string()))?;
             if flags != CGEventFlags::CGEventFlagNull {
                 up.set_flags(flags);
             }
@@ -1293,13 +1293,13 @@ pub(super) fn bg_type_text_terminal_safe(pid: i32, text: &str) -> BitFunResult<(
             // Fallback to Unicode string for non-ASCII characters.
             let buf: Vec<u16> = ch.encode_utf16(&mut [0u16; 2]).to_vec();
             let down = CGEvent::new_keyboard_event(src.clone(), 0, true)
-                .map_err(|_| BitFunError::tool("terminal type: unicode down failed".to_string()))?;
+                .map_err(|_| HaloError::tool("terminal type: unicode down failed".to_string()))?;
             down.set_string_from_utf16_unchecked(&buf);
             post_both_keyboard(pid, &down);
             thread::sleep(Duration::from_millis(8));
 
             let up = CGEvent::new_keyboard_event(src.clone(), 0, false)
-                .map_err(|_| BitFunError::tool("terminal type: unicode up failed".to_string()))?;
+                .map_err(|_| HaloError::tool("terminal type: unicode up failed".to_string()))?;
             up.set_string_from_utf16_unchecked(&buf);
             post_both_keyboard(pid, &up);
             thread::sleep(Duration::from_millis(8));
@@ -1311,7 +1311,7 @@ pub(super) fn bg_type_text_terminal_safe(pid: i32, text: &str) -> BitFunResult<(
 /// Type text with automatic terminal detection: routes to
 /// `bg_type_text_terminal_safe` when the target is a terminal emulator,
 /// otherwise uses the standard `bg_type_text` (Unicode string injection).
-pub(super) fn bg_type_text_auto(pid: i32, text: &str) -> BitFunResult<()> {
+pub(super) fn bg_type_text_auto(pid: i32, text: &str) -> HaloResult<()> {
     if is_terminal_emulator(pid) {
         debug!(
             target: "computer_use::bg_input",

@@ -15,7 +15,7 @@ OS/network capabilities.
 | `services-integrations` | Concrete MCP, git, remote, file-watch, MiniApp runtime, review-platform provider service, product-domain port implementations, and platform-neutral Remote Connect primitives | [AGENTS.md](services-integrations/AGENTS.md) |
 | `miniapp-market-service` | Concrete SQLite, artifact storage, GitHub OAuth, package validation, and HTTP behavior for the MiniApp market | [README.md](miniapp-market-service/README.md) |
 | `relay-service` | Reusable Remote Connect relay state, storage, and HTTP/WebSocket routes shared by standalone and embedded hosts | [AGENTS.md](relay-service/AGENTS.md) |
-| `page-function-runtime` | Embedded JS Page Function runtime (rquickjs) for BitFun Pages | [AGENTS.md](page-function-runtime/AGENTS.md) |
+| `page-function-runtime` | Embedded JS Page Function runtime (rquickjs) for Halo Studio Pages | [AGENTS.md](page-function-runtime/AGENTS.md) |
 | `terminal` | PTY, shell integration, and terminal session infrastructure | [AGENTS.md](terminal/AGENTS.md) |
 
 ## Placement Rules

@@ -9,7 +9,7 @@ fn native_hook_help_text() -> String {
         "",
         "Usage: /hooks [refresh | import <source-number> [--confirm] | update <import-number> [--confirm] | enable <import-number> | disable <import-number> | remove <import-number> --confirm | reset <user|project> --confirm]",
         "",
-        "Shows native BitFun Hooks plus compatible Claude Code and Codex command Hooks.",
+        "Shows native Halo Hooks plus compatible Claude Code and Codex command Hooks.",
         "Import and update are preview-only until the exact reviewed plan is confirmed. Source files are never edited.",
         "Compatibility aliases: /hooks_external and /hooks-external.",
         "",
@@ -47,8 +47,8 @@ fn native_hook_rule_line(rule: &NativeHookRuleView) -> String {
 
 fn render_native_hook_overview(overview: &NativeHookOverview) -> String {
     let mut lines = vec![
-        "Hooks (BitFun)".to_string(),
-        "Commands BitFun runs at agent lifecycle events. Nothing was executed to build this view."
+        "Hooks (Halo)".to_string(),
+        "Commands Halo runs at agent lifecycle events. Nothing was executed to build this view."
             .to_string(),
         String::new(),
     ];

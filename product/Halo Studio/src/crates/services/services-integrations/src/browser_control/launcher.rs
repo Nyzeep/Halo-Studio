@@ -1,7 +1,7 @@
 //! Detect and launch the user's default browser with CDP debug port enabled.
 
 use anyhow::{anyhow, Result};
-use bitfun_services_core::process_manager;
+use halo_services_core::process_manager;
 #[allow(unused_imports)]
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
@@ -329,7 +329,7 @@ impl BrowserLauncher {
         dirs::data_local_dir()
             .or_else(dirs::data_dir)
             .unwrap_or_else(std::env::temp_dir)
-            .join("BitFun")
+            .join("Halo")
     }
 
     fn ensure_managed_user_data_dir(kind: &BrowserKind, root: &Path) -> Result<PathBuf> {
@@ -776,7 +776,7 @@ impl BrowserLauncher {
     <key>CFBundleExecutable</key>
     <string>launch</string>
     <key>CFBundleIdentifier</key>
-    <string>com.bitfun.browser-debug-launcher</string>
+    <string>com.halostudio.browser-debug-launcher</string>
 </dict>
 </plist>"#,
             app_name
@@ -836,7 +836,7 @@ mod tests {
 
     #[test]
     fn managed_user_data_dir_sanitizes_unknown_browser_name() {
-        let root = PathBuf::from("/tmp/bitfun-test");
+        let root = PathBuf::from("/tmp/halo-test");
         let dir = BrowserLauncher::managed_user_data_dir(
             &root,
             &BrowserKind::Unknown("Custom Browser!".to_string()),

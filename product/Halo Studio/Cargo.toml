@@ -43,7 +43,7 @@ members = [
 ]
 
 exclude = [
-    "BitFun-Installer/src-tauri",
+    "Halo-Installer/src-tauri",
 ]
 
 resolver = "2"
@@ -51,7 +51,7 @@ resolver = "2"
 # Shared package metadata — single source of truth for version
 [workspace.package]
 version = "0.2.14" # x-release-please-version
-authors = ["BitFun Team"]
+authors = ["Halo Studio Team"]
 edition = "2021"
 
 [workspace.lints.rust]

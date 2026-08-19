@@ -9,19 +9,19 @@ fn doctor_reports_the_validated_cli_runtime_assembly() {
     let config_root = temp.path().join("host-config");
     std::fs::create_dir_all(&workspace).expect("create workspace");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_bitfun"))
+    let output = Command::new(env!("CARGO_BIN_EXE_halo"))
         .arg("doctor")
         .current_dir(&workspace)
-        .env_remove("BITFUN_USER_ROOT")
-        .env_remove("BITFUN_HOME")
-        .env("BITFUN_E2E_STORAGE_GUARD", "1")
-        .env("BITFUN_E2E_USER_ROOT", &user_root)
-        .env("BITFUN_E2E_HOME", &home_root)
+        .env_remove("HALO_USER_ROOT")
+        .env_remove("HALO_HOME")
+        .env("HALO_E2E_STORAGE_GUARD", "1")
+        .env("HALO_E2E_USER_ROOT", &user_root)
+        .env("HALO_E2E_HOME", &home_root)
         .env("APPDATA", &config_root)
         .env("XDG_CONFIG_HOME", &config_root)
         .env("HOME", &home_root)
         .output()
-        .expect("run bitfun doctor");
+        .expect("run halo doctor");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -35,7 +35,7 @@ fn doctor_reports_the_validated_cli_runtime_assembly() {
         "{stdout}"
     );
     assert!(
-        stdout.contains("[info] Execution owner: bitfun-core compatibility"),
+        stdout.contains("[info] Execution owner: halo-core compatibility"),
         "{stdout}"
     );
     assert!(
@@ -57,19 +57,19 @@ fn health_reports_assembly_and_compatibility_boundaries() {
     let config_root = temp.path().join("host-config");
     std::fs::create_dir_all(&workspace).expect("create workspace");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_bitfun"))
+    let output = Command::new(env!("CARGO_BIN_EXE_halo"))
         .arg("health")
         .current_dir(&workspace)
-        .env_remove("BITFUN_USER_ROOT")
-        .env_remove("BITFUN_HOME")
-        .env("BITFUN_E2E_STORAGE_GUARD", "1")
-        .env("BITFUN_E2E_USER_ROOT", &user_root)
-        .env("BITFUN_E2E_HOME", &home_root)
+        .env_remove("HALO_USER_ROOT")
+        .env_remove("HALO_HOME")
+        .env("HALO_E2E_STORAGE_GUARD", "1")
+        .env("HALO_E2E_USER_ROOT", &user_root)
+        .env("HALO_E2E_HOME", &home_root)
         .env("APPDATA", &config_root)
         .env("XDG_CONFIG_HOME", &config_root)
         .env("HOME", &home_root)
         .output()
-        .expect("run bitfun health");
+        .expect("run halo health");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -83,7 +83,7 @@ fn health_reports_assembly_and_compatibility_boundaries() {
         "{stdout}"
     );
     assert!(
-        stdout.contains("Execution owner: bitfun-core compatibility"),
+        stdout.contains("Execution owner: halo-core compatibility"),
         "{stdout}"
     );
     assert!(
@@ -104,32 +104,32 @@ fn doctor_rejects_incomplete_e2e_storage_roots() {
         let config_root = temp.path().join("host-config");
         std::fs::create_dir_all(&workspace).expect("create workspace");
 
-        let mut command = Command::new(env!("CARGO_BIN_EXE_bitfun"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_halo"));
         command
             .arg("doctor")
             .current_dir(&workspace)
-            .env_remove("BITFUN_USER_ROOT")
-            .env_remove("BITFUN_E2E_USER_ROOT")
-            .env_remove("BITFUN_HOME")
-            .env_remove("BITFUN_E2E_HOME")
-            .env("BITFUN_E2E_STORAGE_GUARD", "1")
+            .env_remove("HALO_USER_ROOT")
+            .env_remove("HALO_E2E_USER_ROOT")
+            .env_remove("HALO_HOME")
+            .env_remove("HALO_E2E_HOME")
+            .env("HALO_E2E_STORAGE_GUARD", "1")
             .env("APPDATA", &config_root)
             .env("XDG_CONFIG_HOME", &config_root)
             .env("HOME", &home_root);
         if provide_user_root {
-            command.env("BITFUN_E2E_USER_ROOT", &user_root);
+            command.env("HALO_E2E_USER_ROOT", &user_root);
         }
         if provide_home_root {
-            command.env("BITFUN_E2E_HOME", &home_root);
+            command.env("HALO_E2E_HOME", &home_root);
         }
 
-        let output = command.output().expect("run bitfun doctor");
+        let output = command.output().expect("run halo doctor");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!output.status.success(), "{case_name}: {stderr}");
         assert!(
-            stderr.contains("BITFUN_E2E_STORAGE_GUARD requires isolated")
-                && stderr.contains("BITFUN_E2E_USER_ROOT")
-                && stderr.contains("BITFUN_E2E_HOME"),
+            stderr.contains("HALO_E2E_STORAGE_GUARD requires isolated")
+                && stderr.contains("HALO_E2E_USER_ROOT")
+                && stderr.contains("HALO_E2E_HOME"),
             "{case_name}: {stderr}"
         );
         assert!(
@@ -314,7 +314,7 @@ fn interactive_tui_agent_operations_stay_behind_cli_runtime_client() {
     const CLI_CARGO: &str = include_str!("../Cargo.toml");
 
     assert!(
-        !STARTUP_PAGE.contains("bitfun_agent_runtime::sdk::AgentRuntime"),
+        !STARTUP_PAGE.contains("halo_agent_runtime::sdk::AgentRuntime"),
         "the startup controller must use the existing CLI runtime client instead of AgentRuntime"
     );
     assert!(
@@ -336,7 +336,7 @@ fn interactive_tui_agent_operations_stay_behind_cli_runtime_client() {
         "interactive chat must retain the existing app-private runtime client facade"
     );
     assert!(
-        !CLI_CARGO.contains("bitfun-sdk-host") && CLI_CARGO.contains("bitfun-agent-runtime-ipc"),
+        !CLI_CARGO.contains("halo-sdk-host") && CLI_CARGO.contains("halo-agent-runtime-ipc"),
         "Shared TUI must use the private Runtime IPC adapter without making CLI depend on SDK Host"
     );
     assert!(

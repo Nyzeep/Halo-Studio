@@ -15,17 +15,17 @@ use crate::api::search_api::{
 };
 use crate::api::workspace_activation::spawn_workspace_background_warmup;
 use crate::startup_trace::DesktopStartupTrace;
-use bitfun_core::infrastructure::{
+use halo_core::infrastructure::{
     BatchedFileSearchProgressSink, FileSearchOutcome, FileSearchProgressSink, FileSearchResult,
     FileSearchResultGroup, FileTreeNode, SearchMatchType,
 };
-use bitfun_core::service::file_watch;
-use bitfun_core::service::remote_ssh::get_remote_workspace_manager;
-use bitfun_core::service::remote_ssh::workspace_state::is_remote_path;
-use bitfun_core::service::remote_ssh::{
+use halo_core::service::file_watch;
+use halo_core::service::remote_ssh::get_remote_workspace_manager;
+use halo_core::service::remote_ssh::workspace_state::is_remote_path;
+use halo_core::service::remote_ssh::{
     shell_quote_posix, RemoteDirEntry, RemoteFileService, RemoteWorkspaceEntry,
 };
-use bitfun_core::service::workspace::{
+use halo_core::service::workspace::{
     ScanOptions, WorkspaceInfo, WorkspaceKind, WorkspaceOpenOptions,
 };
 use log::{debug, error, info, warn};
@@ -68,7 +68,7 @@ fn remote_workspace_from_info(info: &WorkspaceInfo) -> Option<crate::api::Remote
         .and_then(|v| v.as_str())
         .unwrap_or(&cid)
         .to_string();
-    let rp = bitfun_core::service::remote_ssh::normalize_remote_workspace_path(
+    let rp = halo_core::service::remote_ssh::normalize_remote_workspace_path(
         &info.root_path.to_string_lossy(),
     );
     let ssh_host = info
@@ -365,7 +365,7 @@ struct SearchCommandResponse {
 }
 
 fn serialize_search_response(
-    outcome: bitfun_core::infrastructure::FileSearchOutcome,
+    outcome: halo_core::infrastructure::FileSearchOutcome,
     limit: usize,
     search_metadata: Option<SearchMetadataResponse>,
 ) -> serde_json::Value {
@@ -449,17 +449,17 @@ pub struct UpdateWorkspaceInfoRequest {
     pub description: Option<String>,
     pub tags: Option<Vec<String>>,
     #[serde(default)]
-    pub related_paths: Option<Vec<bitfun_core::service::workspace::RelatedPath>>,
+    pub related_paths: Option<Vec<halo_core::service::workspace::RelatedPath>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TestAIConfigConnectionRequest {
-    pub config: bitfun_core::service::config::types::AIModelConfig,
+    pub config: halo_core::service::config::types::AIModelConfig,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ListAIModelsByConfigRequest {
-    pub config: bitfun_core::service::config::types::AIModelConfig,
+    pub config: halo_core::service::config::types::AIModelConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -977,7 +977,7 @@ async fn clear_active_workspace_context(
 async fn apply_active_workspace_context(
     state: &State<'_, AppState>,
     app: &AppHandle,
-    workspace_info: &bitfun_core::service::workspace::manager::WorkspaceInfo,
+    workspace_info: &halo_core::service::workspace::manager::WorkspaceInfo,
     startup_trace: Option<&DesktopStartupTrace>,
 ) {
     #[cfg(not(target_os = "macos"))]
@@ -1138,7 +1138,7 @@ pub async fn test_ai_connection(state: State<'_, AppState>) -> Result<bool, Stri
 #[tauri::command]
 pub async fn initialize_ai(state: State<'_, AppState>) -> Result<String, String> {
     let config_service = &state.config_service;
-    let global_config: bitfun_core::service::config::GlobalConfig = config_service
+    let global_config: halo_core::service::config::GlobalConfig = config_service
         .get_config(None)
         .await
         .map_err(|e| format!("Failed to get configuration: {}", e))?;
@@ -1156,14 +1156,14 @@ pub async fn initialize_ai(state: State<'_, AppState>) -> Result<String, String>
         .iter()
         .find(|m| m.id == primary_model_id)
         .ok_or_else(|| format!("Primary model '{}' does not exist", primary_model_id))?;
-    let stream_options = bitfun_core::infrastructure::ai::build_stream_options_for_model(
+    let stream_options = halo_core::infrastructure::ai::build_stream_options_for_model(
         &global_config.ai,
         Some(model_config),
     );
 
-    let ai_config = bitfun_core::util::types::AIConfig::try_from(model_config.clone())
+    let ai_config = halo_core::util::types::AIConfig::try_from(model_config.clone())
         .map_err(|e| format!("Failed to convert AI configuration: {}", e))?;
-    let ai_client = bitfun_core::infrastructure::ai::AIClient::new_with_runtime_options(
+    let ai_client = halo_core::infrastructure::ai::AIClient::new_with_runtime_options(
         ai_config,
         None,
         stream_options,
@@ -1183,25 +1183,25 @@ pub async fn initialize_ai(state: State<'_, AppState>) -> Result<String, String>
 
 async fn create_transient_ai_client_for_config(
     state: &State<'_, AppState>,
-    model_config: bitfun_core::service::config::types::AIModelConfig,
-) -> Result<bitfun_core::infrastructure::ai::AIClient, String> {
+    model_config: halo_core::service::config::types::AIModelConfig,
+) -> Result<halo_core::infrastructure::ai::AIClient, String> {
     let auth = model_config.auth.clone();
 
-    let global_config: bitfun_core::service::config::GlobalConfig = state
+    let global_config: halo_core::service::config::GlobalConfig = state
         .config_service
         .get_config(None)
         .await
         .map_err(|e| format!("Failed to get configuration: {}", e))?;
-    let stream_options = bitfun_core::infrastructure::ai::build_stream_options_for_model(
+    let stream_options = halo_core::infrastructure::ai::build_stream_options_for_model(
         &global_config.ai,
         Some(&model_config),
     );
 
-    let mut ai_config: bitfun_core::util::types::AIConfig = model_config
+    let mut ai_config: halo_core::util::types::AIConfig = model_config
         .try_into()
         .map_err(|e| format!("Failed to convert configuration: {}", e))?;
 
-    bitfun_core::infrastructure::ai::client_factory::apply_subscription_auth(&auth, &mut ai_config)
+    halo_core::infrastructure::ai::client_factory::apply_subscription_auth(&auth, &mut ai_config)
         .await
         .map_err(|e| format!("Failed to resolve subscription auth: {}", e))?;
 
@@ -1212,7 +1212,7 @@ async fn create_transient_ai_client_for_config(
     };
 
     Ok(
-        bitfun_core::infrastructure::ai::AIClient::new_with_runtime_options(
+        halo_core::infrastructure::ai::AIClient::new_with_runtime_options(
             ai_config,
             proxy_config,
             stream_options,
@@ -1224,16 +1224,16 @@ async fn create_transient_ai_client_for_config(
 pub async fn test_ai_config_connection(
     state: State<'_, AppState>,
     request: TestAIConfigConnectionRequest,
-) -> Result<bitfun_core::util::types::ConnectionTestResult, String> {
+) -> Result<halo_core::util::types::ConnectionTestResult, String> {
     let model_name = request.config.name.clone();
     let supports_image_input = request.config.capabilities.iter().any(|cap| {
         matches!(
             cap,
-            bitfun_core::service::config::types::ModelCapability::ImageUnderstanding
+            halo_core::service::config::types::ModelCapability::ImageUnderstanding
         )
     }) || matches!(
         request.config.category,
-        bitfun_core::service::config::types::ModelCategory::Multimodal
+        halo_core::service::config::types::ModelCategory::Multimodal
     );
 
     let ai_client = create_transient_ai_client_for_config(&state, request.config)
@@ -1260,7 +1260,7 @@ pub async fn test_ai_config_connection(
                             result.response_time_ms + image_result.response_time_ms;
 
                         if !image_result.success {
-                            let merged = bitfun_core::util::types::ConnectionTestResult {
+                            let merged = halo_core::util::types::ConnectionTestResult {
                                 success: false,
                                 response_time_ms,
                                 model_response: image_result
@@ -1276,7 +1276,7 @@ pub async fn test_ai_config_connection(
                             return Ok(merged);
                         }
 
-                        let merged = bitfun_core::util::types::ConnectionTestResult {
+                        let merged = halo_core::util::types::ConnectionTestResult {
                             success: true,
                             response_time_ms,
                             model_response: image_result.model_response.or(result.model_response),
@@ -1319,7 +1319,7 @@ pub async fn test_ai_config_connection(
 pub async fn list_ai_models_by_config(
     state: State<'_, AppState>,
     request: ListAIModelsByConfigRequest,
-) -> Result<Vec<bitfun_core::util::types::RemoteModelInfo>, String> {
+) -> Result<Vec<halo_core::util::types::RemoteModelInfo>, String> {
     let config_name = request.config.name.clone();
     let ai_client = create_transient_ai_client_for_config(&state, request.config).await?;
 
@@ -1416,9 +1416,9 @@ pub async fn open_remote_workspace(
     request: OpenRemoteWorkspaceRequest,
 ) -> Result<WorkspaceInfoDto, String> {
     close_halo_workbench_before_workspace_transition(&app).await?;
-    use bitfun_core::service::remote_ssh::normalize_remote_workspace_path;
-    use bitfun_core::service::remote_ssh::workspace_state::remote_workspace_stable_id;
-    use bitfun_core::service::workspace::WorkspaceCreateOptions;
+    use halo_core::service::remote_ssh::normalize_remote_workspace_path;
+    use halo_core::service::remote_ssh::workspace_state::remote_workspace_stable_id;
+    use halo_core::service::workspace::WorkspaceCreateOptions;
 
     let remote_path = normalize_remote_workspace_path(&request.remote_path);
 
@@ -1768,7 +1768,7 @@ pub async fn reset_assistant_workspace(
 
     clear_directory_contents(&workspace_info.root_path).await?;
 
-    bitfun_core::service::reset_workspace_persona_files_to_default(&workspace_info.root_path)
+    halo_core::service::reset_workspace_persona_files_to_default(&workspace_info.root_path)
         .await
         .map_err(|e| format!("Failed to restore assistant workspace persona files: {}", e))?;
 
@@ -1923,7 +1923,7 @@ pub async fn update_workspace_info(
     app: tauri::AppHandle,
     request: UpdateWorkspaceInfoRequest,
 ) -> Result<WorkspaceInfoDto, String> {
-    let updates = bitfun_core::service::workspace::WorkspaceInfoUpdates {
+    let updates = halo_core::service::workspace::WorkspaceInfoUpdates {
         name: request.name,
         description: request.description,
         tags: request.tags,
@@ -2344,7 +2344,7 @@ pub async fn scan_workspace_info(
 }
 
 async fn ensure_directory_request_path(path: &str) -> Result<(), String> {
-    use bitfun_core::service::remote_ssh::workspace_state::is_remote_path;
+    use halo_core::service::remote_ssh::workspace_state::is_remote_path;
     use std::path::Path;
 
     if is_remote_path(path).await {
@@ -2904,7 +2904,7 @@ pub async fn reset_workspace_persona_files(
         ));
     }
 
-    bitfun_core::service::reset_workspace_persona_files_to_default(&workspace_path)
+    halo_core::service::reset_workspace_persona_files_to_default(&workspace_path)
         .await
         .map_err(|e| {
             error!(
@@ -3592,7 +3592,7 @@ if [ -L "$dest_path" ] || {{ [ -e "$dest_path" ] && [ ! -d "$dest_path" ]; }}; t
     echo "Extraction destination is not a directory: $dest_path" >&2
     exit 1
 fi
-stage=$(mktemp -d './.bitfun-extract.XXXXXXXX') || exit 1
+stage=$(mktemp -d './.halo-extract.XXXXXXXX') || exit 1
 {extract_command}
 status=$?
 if [ "$status" -ne 0 ]; then
@@ -3679,7 +3679,7 @@ struct ExtractionStagingDirectory {
 
 impl ExtractionStagingDirectory {
     fn create(parent: &Path) -> Result<Self, String> {
-        let path = parent.join(format!(".bitfun-extract-{}", uuid::Uuid::new_v4().simple()));
+        let path = parent.join(format!(".halo-extract-{}", uuid::Uuid::new_v4().simple()));
         std::fs::create_dir(&path)
             .map_err(|e| format!("Failed to create extraction staging directory: {}", e))?;
         Ok(Self { path })
@@ -4170,7 +4170,7 @@ mod archive_tests {
             Some(&legacy_wrapper),
         );
 
-        assert!(command.contains("mktemp -d './.bitfun-extract.XXXXXXXX'"));
+        assert!(command.contains("mktemp -d './.halo-extract.XXXXXXXX'"));
         assert!(command.contains("legacy_wrapper_rel=home/developer/project"));
         assert!(command.contains(r#"if [ "$relative_chain" = "$legacy_wrapper_rel" ]"#));
         assert!(command.contains(r#"cp -a "$source_root"/. "$dest_path"/"#));
@@ -4424,13 +4424,13 @@ pub(crate) fn reveal_local_path_in_explorer(
     {
         if is_directory {
             let normalized_path = path_str.replace("/", "\\");
-            bitfun_core::util::process_manager::create_command("explorer")
+            halo_core::util::process_manager::create_command("explorer")
                 .arg(&normalized_path)
                 .spawn()
                 .map_err(|e| format!("Failed to open explorer: {}", e))?;
         } else {
             let normalized_path = path_str.replace("/", "\\");
-            bitfun_core::util::process_manager::create_command("explorer")
+            halo_core::util::process_manager::create_command("explorer")
                 .arg(format!("/select,{}", normalized_path))
                 .spawn()
                 .map_err(|e| format!("Failed to open explorer: {}", e))?;
@@ -4440,12 +4440,12 @@ pub(crate) fn reveal_local_path_in_explorer(
     #[cfg(target_os = "macos")]
     {
         if is_directory {
-            bitfun_core::util::process_manager::create_command("open")
+            halo_core::util::process_manager::create_command("open")
                 .arg(&path_str)
                 .spawn()
                 .map_err(|e| format!("Failed to open finder: {}", e))?;
         } else {
-            bitfun_core::util::process_manager::create_command("open")
+            halo_core::util::process_manager::create_command("open")
                 .args(["-R", &path_str])
                 .spawn()
                 .map_err(|e| format!("Failed to open finder: {}", e))?;
@@ -4455,7 +4455,7 @@ pub(crate) fn reveal_local_path_in_explorer(
     #[cfg(target_os = "linux")]
     {
         if is_directory {
-            bitfun_core::util::process_manager::create_command("xdg-open")
+            halo_core::util::process_manager::create_command("xdg-open")
                 .arg(&path_str)
                 .spawn()
                 .map_err(|e| format!("Failed to open file manager: {}", e))?;
@@ -4474,7 +4474,7 @@ pub(crate) fn reveal_local_path_in_explorer(
                 .collect::<Vec<_>>()
                 .join("/");
             let file_uri = format!("file://{}", encoded_path);
-            let dbus_ok = match bitfun_core::util::process_manager::create_command("dbus-send")
+            let dbus_ok = match halo_core::util::process_manager::create_command("dbus-send")
                 .args([
                     "--session",
                     "--print-reply",
@@ -4494,7 +4494,7 @@ pub(crate) fn reveal_local_path_in_explorer(
                 let parent = path
                     .parent()
                     .ok_or_else(|| "Failed to get parent directory".to_string())?;
-                bitfun_core::util::process_manager::create_command("xdg-open")
+                halo_core::util::process_manager::create_command("xdg-open")
                     .arg(parent)
                     .spawn()
                     .map_err(|e| format!("Failed to open file manager: {}", e))?;
@@ -4510,7 +4510,7 @@ pub async fn search_files(
     state: State<'_, AppState>,
     request: SearchFilesRequest,
 ) -> Result<serde_json::Value, String> {
-    use bitfun_core::service::filesystem::FileSearchOptions;
+    use halo_core::service::filesystem::FileSearchOptions;
 
     let search_id = request.search_id.clone();
     let cancel_flag = register_search(&state, search_id.as_deref());
@@ -4648,7 +4648,7 @@ pub async fn search_filenames(
     state: State<'_, AppState>,
     request: SearchFilenamesRequest,
 ) -> Result<serde_json::Value, String> {
-    use bitfun_core::service::filesystem::FileSearchOptions;
+    use halo_core::service::filesystem::FileSearchOptions;
 
     let search_id = request.search_id.clone();
     let cancel_flag = register_search(&state, search_id.as_deref());
@@ -4682,8 +4682,8 @@ pub async fn search_filenames(
                 progress_sink: None,
             })
             .await
-            .map_err(bitfun_core::util::errors::BitFunError::service),
-            Err(error) => Err(bitfun_core::util::errors::BitFunError::service(format!(
+            .map_err(halo_core::util::errors::HaloError::service),
+            Err(error) => Err(halo_core::util::errors::HaloError::service(format!(
                 "Remote file service not available: {}",
                 error
             ))),
@@ -4694,7 +4694,7 @@ pub async fn search_filenames(
                 .search_file_names(&request.root_path, &request.pattern, options, cancel_flag)
                 .await
         }
-        Err(error) => Err(bitfun_core::util::errors::BitFunError::service(error)),
+        Err(error) => Err(halo_core::util::errors::HaloError::service(error)),
     };
     unregister_search(&state, search_id.as_deref());
 
@@ -4725,7 +4725,7 @@ pub async fn search_file_contents(
     state: State<'_, AppState>,
     request: SearchFileContentsRequest,
 ) -> Result<serde_json::Value, String> {
-    use bitfun_core::service::filesystem::FileSearchOptions;
+    use halo_core::service::filesystem::FileSearchOptions;
 
     let search_id = request.search_id.clone();
     let cancel_flag = register_search(&state, search_id.as_deref());
@@ -4793,7 +4793,7 @@ pub async fn start_search_filenames_stream(
     state: State<'_, AppState>,
     request: SearchFilenamesRequest,
 ) -> Result<serde_json::Value, String> {
-    use bitfun_core::service::filesystem::FileSearchOptions;
+    use halo_core::service::filesystem::FileSearchOptions;
 
     let search_id = ensure_search_id(request.search_id.clone(), "filenames-stream");
     let cancel_flag = register_search(&state, Some(&search_id));
@@ -4870,7 +4870,7 @@ pub async fn start_search_filenames_stream(
                 progress_sink: Some(progress_sink),
             })
             .await
-            .map_err(bitfun_core::util::errors::BitFunError::service)
+            .map_err(halo_core::util::errors::HaloError::service)
         } else {
             filesystem_service
                 .search_file_names_with_progress(
@@ -4934,7 +4934,7 @@ pub async fn start_search_file_contents_stream(
     state: State<'_, AppState>,
     request: SearchFileContentsRequest,
 ) -> Result<serde_json::Value, String> {
-    use bitfun_core::service::filesystem::FileSearchOptions;
+    use halo_core::service::filesystem::FileSearchOptions;
 
     let search_id = ensure_search_id(request.search_id.clone(), "content-stream");
     let cancel_flag = register_search(&state, Some(&search_id));
@@ -5007,18 +5007,18 @@ pub async fn start_search_file_contents_stream(
                     .is_some_and(|flag| flag.load(Ordering::Relaxed))
                 {
                     for group in group_search_results(outcome.results.clone()) {
-                        bitfun_core::infrastructure::FileSearchProgressSink::report(
+                        halo_core::infrastructure::FileSearchProgressSink::report(
                             progress_sink.as_ref(),
                             group,
                         );
                     }
-                    bitfun_core::infrastructure::FileSearchProgressSink::flush(
+                    halo_core::infrastructure::FileSearchProgressSink::flush(
                         progress_sink.as_ref(),
                     );
                 }
             }
             result.map_err(|error| {
-                bitfun_core::util::errors::BitFunError::service(format!(
+                halo_core::util::errors::HaloError::service(format!(
                     "Failed to search file contents via workspace search: {}",
                     error
                 ))
@@ -5098,7 +5098,7 @@ pub async fn cancel_search(
 
 #[tauri::command]
 pub async fn reload_global_config() -> Result<String, String> {
-    match bitfun_core::service::config::reload_global_config().await {
+    match halo_core::service::config::reload_global_config().await {
         Ok(_) => {
             info!("Global config reloaded");
             Ok("Configuration reloaded successfully".to_string())
@@ -5112,12 +5112,12 @@ pub async fn reload_global_config() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn get_global_config_status() -> Result<bool, String> {
-    Ok(bitfun_core::service::config::GlobalConfigManager::is_initialized())
+    Ok(halo_core::service::config::GlobalConfigManager::is_initialized())
 }
 
 #[tauri::command]
 pub async fn subscribe_config_updates() -> Result<(), String> {
-    if let Some(mut receiver) = bitfun_core::service::config::subscribe_config_updates() {
+    if let Some(mut receiver) = halo_core::service::config::subscribe_config_updates() {
         tokio::spawn(async move {
             while let Ok(event) = receiver.recv().await {
                 debug!("Config update event: {:?}", event);
@@ -5192,27 +5192,27 @@ pub async fn get_watched_paths() -> Result<Vec<String>, String> {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubscriptionProviderRequest {
-    pub provider: bitfun_core::infrastructure::subscription_auth::SubscriptionProvider,
+    pub provider: halo_core::infrastructure::subscription_auth::SubscriptionProvider,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubscriptionLoginRequest {
-    pub provider: bitfun_core::infrastructure::subscription_auth::SubscriptionProvider,
+    pub provider: halo_core::infrastructure::subscription_auth::SubscriptionProvider,
     pub session_id: String,
 }
 
 #[tauri::command]
 pub async fn list_subscription_accounts(
-) -> Result<Vec<bitfun_core::infrastructure::subscription_auth::SubscriptionAccount>, String> {
-    Ok(bitfun_core::infrastructure::subscription_auth::list_accounts().await)
+) -> Result<Vec<halo_core::infrastructure::subscription_auth::SubscriptionAccount>, String> {
+    Ok(halo_core::infrastructure::subscription_auth::list_accounts().await)
 }
 
 #[tauri::command]
 pub async fn start_subscription_login(
     request: SubscriptionLoginRequest,
-) -> Result<bitfun_core::infrastructure::subscription_auth::LoginStartResult, String> {
-    bitfun_core::infrastructure::subscription_auth::start_login(
+) -> Result<halo_core::infrastructure::subscription_auth::LoginStartResult, String> {
+    halo_core::infrastructure::subscription_auth::start_login(
         request.provider,
         request.session_id,
     )
@@ -5223,8 +5223,8 @@ pub async fn start_subscription_login(
 #[tauri::command]
 pub async fn get_subscription_login_status(
     request: SubscriptionLoginRequest,
-) -> Result<bitfun_core::infrastructure::subscription_auth::LoginSessionSnapshot, String> {
-    bitfun_core::infrastructure::subscription_auth::login_status(
+) -> Result<halo_core::infrastructure::subscription_auth::LoginSessionSnapshot, String> {
+    halo_core::infrastructure::subscription_auth::login_status(
         request.provider,
         &request.session_id,
     )
@@ -5234,7 +5234,7 @@ pub async fn get_subscription_login_status(
 
 #[tauri::command]
 pub async fn cancel_subscription_login(request: SubscriptionLoginRequest) -> Result<(), String> {
-    bitfun_core::infrastructure::subscription_auth::cancel_login(
+    halo_core::infrastructure::subscription_auth::cancel_login(
         request.provider,
         &request.session_id,
     )
@@ -5245,8 +5245,8 @@ pub async fn cancel_subscription_login(request: SubscriptionLoginRequest) -> Res
 #[tauri::command]
 pub async fn logout_subscription_account(
     request: SubscriptionProviderRequest,
-) -> Result<bitfun_core::infrastructure::subscription_auth::SubscriptionLogoutResult, String> {
-    bitfun_core::infrastructure::subscription_auth::logout(request.provider)
+) -> Result<halo_core::infrastructure::subscription_auth::SubscriptionLogoutResult, String> {
+    halo_core::infrastructure::subscription_auth::logout(request.provider)
         .await
         .map_err(|e| format!("Failed to logout subscription account: {e:#}"))
 }
@@ -5254,8 +5254,8 @@ pub async fn logout_subscription_account(
 #[tauri::command]
 pub async fn refresh_subscription_account(
     request: SubscriptionProviderRequest,
-) -> Result<bitfun_core::infrastructure::subscription_auth::SubscriptionAccount, String> {
-    bitfun_core::infrastructure::subscription_auth::refresh_account(request.provider)
+) -> Result<halo_core::infrastructure::subscription_auth::SubscriptionAccount, String> {
+    halo_core::infrastructure::subscription_auth::refresh_account(request.provider)
         .await
         .map_err(|e| format!("Failed to refresh subscription account: {e:#}"))
 }

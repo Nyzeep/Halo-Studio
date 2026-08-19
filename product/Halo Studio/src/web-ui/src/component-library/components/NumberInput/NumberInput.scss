@@ -3,7 +3,7 @@
  */
 @use '../../styles/tokens.scss' as tokens;
 
-.bitfun-number-input {
+.halo-number-input {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -25,7 +25,7 @@
     transition: all var(--motion-base) var(--easing-standard);
     overflow: hidden;
 
-    &:hover:not(.bitfun-number-input--disabled &) {
+    &:hover:not(.halo-number-input--disabled &) {
       background: var(--element-bg-subtle);
       border-color: var(--border-strong);
     }
@@ -173,16 +173,16 @@
   }
 
   &--small {
-    .bitfun-number-input__container {
+    .halo-number-input__container {
       height: 28px;
       font-size: 12px;
     }
 
-    .bitfun-number-input__value-area {
+    .halo-number-input__value-area {
       padding: 0 8px;
     }
 
-    .bitfun-number-input__btn {
+    .halo-number-input__btn {
       width: 22px;
       height: 14px;
 
@@ -194,28 +194,28 @@
   }
 
   &--medium {
-    .bitfun-number-input__container {
+    .halo-number-input__container {
       height: 36px;
       font-size: 14px;
     }
 
-    .bitfun-number-input__btn {
+    .halo-number-input__btn {
       width: 28px;
       height: 18px;
     }
   }
 
   &--large {
-    .bitfun-number-input__container {
+    .halo-number-input__container {
       height: 44px;
       font-size: 16px;
     }
 
-    .bitfun-number-input__value-area {
+    .halo-number-input__value-area {
       padding: 0 16px;
     }
 
-    .bitfun-number-input__btn {
+    .halo-number-input__btn {
       width: 36px;
       height: 22px;
 
@@ -228,21 +228,21 @@
 
 
   &--compact {
-    .bitfun-number-input__container {
+    .halo-number-input__container {
       border-radius: var(--size-radius-sm);
     }
 
-    .bitfun-number-input__value-area {
+    .halo-number-input__value-area {
       padding: 0 8px;
     }
 
-    .bitfun-number-input__progress {
+    .halo-number-input__progress {
       display: none;
     }
   }
 
   &--stepper {
-    .bitfun-number-input__buttons {
+    .halo-number-input__buttons {
       flex-direction: row;
       border-left: none;
       position: absolute;
@@ -254,7 +254,7 @@
       pointer-events: none;
     }
 
-    .bitfun-number-input__btn {
+    .halo-number-input__btn {
       pointer-events: auto;
       width: 32px;
       height: 100%;
@@ -271,7 +271,7 @@
       }
     }
 
-    .bitfun-number-input__value-area {
+    .halo-number-input__value-area {
       padding: 0 40px;
     }
   }
@@ -281,18 +281,18 @@
     opacity: var(--opacity-disabled);
     pointer-events: none;
 
-    .bitfun-number-input__container {
+    .halo-number-input__container {
       background: transparent;
     }
   }
 
   &--dragging {
-    .bitfun-number-input__container {
+    .halo-number-input__container {
       border-color: var(--color-purple-500);
       background: var(--color-purple-100);
     }
 
-    .bitfun-number-input__progress-bar {
+    .halo-number-input__progress-bar {
       background: var(--color-purple-500);
     }
   }

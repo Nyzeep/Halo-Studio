@@ -68,7 +68,7 @@ pub enum PluginSourceKind {
     LocalPath,
     OpenCodeCompatible,
     RemoteRegistry,
-    BitFunNative,
+    HaloNative,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

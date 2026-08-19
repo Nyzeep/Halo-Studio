@@ -1,6 +1,6 @@
 use anyhow::Context;
-use bitfun_miniapp_market_service::build_market_router;
-use bitfun_miniapp_market_service::config::MarketConfig;
+use halo_miniapp_market_service::build_market_router;
+use halo_miniapp_market_service::config::MarketConfig;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -9,7 +9,7 @@ async fn main() -> anyhow::Result<()> {
         .json()
         .with_env_filter(
             EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("bitfun_miniapp_market=info,tower_http=info")),
+                .unwrap_or_else(|_| EnvFilter::new("halo_miniapp_market=info,tower_http=info")),
         )
         .init();
 

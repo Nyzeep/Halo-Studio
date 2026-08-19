@@ -24,7 +24,7 @@ function getProductName() {
   if (haloProductName) {
     return haloProductName;
   }
-  return packageJson.name === 'BitFun' ? 'BitFun' : packageJson.name;
+  return packageJson.name === 'Halo' ? 'Halo' : packageJson.name;
 }
 
 function getGitInfo() {

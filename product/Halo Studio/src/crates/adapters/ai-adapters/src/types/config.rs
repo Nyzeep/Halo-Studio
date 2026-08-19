@@ -1,4 +1,4 @@
-pub use bitfun_core_types::{AIConfig, ProxyConfig, ReasoningMode};
+pub use halo_core_types::{AIConfig, ProxyConfig, ReasoningMode};
 
 fn append_endpoint(base_url: &str, endpoint: &str) -> String {
     let base = base_url.trim();

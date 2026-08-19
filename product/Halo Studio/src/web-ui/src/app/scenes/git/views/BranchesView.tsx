@@ -202,21 +202,21 @@ const BranchesView: React.FC<BranchesViewProps> = ({ workspacePath }) => {
 
   if (!workspacePath) {
     return (
-      <div className="bitfun-git-scene-branches">
-        <div className="bitfun-git-scene-branches__placeholder">
+      <div className="halo-git-scene-branches">
+        <div className="halo-git-scene-branches__placeholder">
           <GitBranch size={48} />
           <p>{t('tabs.branches')}</p>
-          <p className="bitfun-git-scene-branches__hint">Open a workspace to see branches.</p>
+          <p className="halo-git-scene-branches__hint">Open a workspace to see branches.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bitfun-git-scene-branches">
-      <div className="bitfun-git-scene-branches__left">
-        <div className="bitfun-git-scene-branches__toolbar">
-          <div className="bitfun-git-scene-branches__toolbar-search">
+    <div className="halo-git-scene-branches">
+      <div className="halo-git-scene-branches__left">
+        <div className="halo-git-scene-branches__toolbar">
+          <div className="halo-git-scene-branches__toolbar-search">
             <SearchComponent
               placeholder={t('search.branches')}
               value={branchSearchQuery}
@@ -224,39 +224,39 @@ const BranchesView: React.FC<BranchesViewProps> = ({ workspacePath }) => {
               onClear={() => setBranchSearchQuery('')}
             />
           </div>
-          <div className="bitfun-git-scene-branches__toolbar-actions">
+          <div className="halo-git-scene-branches__toolbar-actions">
             <Button
               size="small"
               variant="primary"
               onClick={() => handleCreateFrom(branches.find(b => b.current)?.name ?? selectedBranchName ?? '')}
               title={t('dialog.createNewBranch.title')}
-              className="bitfun-git-scene-branches__create-btn"
+              className="halo-git-scene-branches__create-btn"
             >
               <Plus size={14} />
               <span>{t('dialog.createNewBranch.confirm')}</span>
             </Button>
           </div>
         </div>
-        <div className="bitfun-git-scene-branches__list">
+        <div className="halo-git-scene-branches__list">
           {branchLoading ? (
-            <div className="bitfun-git-scene-branches__empty">{t('common.loading')}</div>
+            <div className="halo-git-scene-branches__empty">{t('common.loading')}</div>
           ) : filteredBranches.length === 0 ? (
-            <div className="bitfun-git-scene-branches__empty">
+            <div className="halo-git-scene-branches__empty">
               {branchSearchQuery ? t('empty.noMatchingBranches') : t('empty.noBranches')}
             </div>
           ) : (
             filteredBranches.map((branch, idx) => (
               <div
                 key={branch.name ?? idx}
-                className={`bitfun-git-scene-branches__row ${branch.current ? 'bitfun-git-scene-branches__row--current' : ''} ${selectedBranchName === branch.name ? 'bitfun-git-scene-branches__row--selected' : ''}`}
+                className={`halo-git-scene-branches__row ${branch.current ? 'halo-git-scene-branches__row--current' : ''} ${selectedBranchName === branch.name ? 'halo-git-scene-branches__row--selected' : ''}`}
                 onClick={() => handleSelectBranch(branch.name)}
               >
-                <div className="bitfun-git-scene-branches__info">
+                <div className="halo-git-scene-branches__info">
                   <GitBranch size={14} />
-                  <span className="bitfun-git-scene-branches__name">{branch.name}</span>
-                  {branch.current && <span className="bitfun-git-scene-branches__current-badge">{t('branch.current')}</span>}
+                  <span className="halo-git-scene-branches__name">{branch.name}</span>
+                  {branch.current && <span className="halo-git-scene-branches__current-badge">{t('branch.current')}</span>}
                 </div>
-                <div className="bitfun-git-scene-branches__actions" onClick={e => e.stopPropagation()}>
+                <div className="halo-git-scene-branches__actions" onClick={e => e.stopPropagation()}>
                   {!branch.current && (
                     <Tooltip content={t('actions.switchBranch')}>
                       <IconButton size="xs" variant="ghost" onClick={() => handleSwitchBranch(branch.name)} disabled={isOperating}>
@@ -283,9 +283,9 @@ const BranchesView: React.FC<BranchesViewProps> = ({ workspacePath }) => {
         </div>
       </div>
 
-      <div className="bitfun-git-scene-branches__right">
-        <div className="bitfun-git-scene-branches__history-toolbar">
-          <span className="bitfun-git-scene-branches__history-title">
+      <div className="halo-git-scene-branches__right">
+        <div className="halo-git-scene-branches__history-toolbar">
+          <span className="halo-git-scene-branches__history-title">
             {selectedBranchName ? t('tabs.branchCommitHistory', { branch: selectedBranchName }) : t('tabs.commits')}
           </span>
           <SearchComponent
@@ -295,13 +295,13 @@ const BranchesView: React.FC<BranchesViewProps> = ({ workspacePath }) => {
             onClear={() => setCommitSearchQuery('')}
           />
         </div>
-        <div className="bitfun-git-scene-branches__history-list">
+        <div className="halo-git-scene-branches__history-list">
           {!selectedBranchName ? (
-            <div className="bitfun-git-scene-branches__empty">{t('empty.noCommits')}</div>
+            <div className="halo-git-scene-branches__empty">{t('empty.noCommits')}</div>
           ) : commitLoading ? (
-            <div className="bitfun-git-scene-branches__empty">{t('common.loading')}</div>
+            <div className="halo-git-scene-branches__empty">{t('common.loading')}</div>
           ) : filteredCommits.length === 0 ? (
-            <div className="bitfun-git-scene-branches__empty">
+            <div className="halo-git-scene-branches__empty">
               {commitSearchQuery ? t('empty.noMatchingCommits') : t('empty.noCommits')}
             </div>
           ) : (
@@ -315,19 +315,19 @@ const BranchesView: React.FC<BranchesViewProps> = ({ workspacePath }) => {
               return (
                 <div
                   key={commit.hash ?? idx}
-                  className={`bitfun-git-scene-branches__commit ${isExpanded ? 'bitfun-git-scene-branches__commit--expanded' : ''}`}
+                  className={`halo-git-scene-branches__commit ${isExpanded ? 'halo-git-scene-branches__commit--expanded' : ''}`}
                 >
-                  <div className="bitfun-git-scene-branches__commit-header" onClick={() => toggleCommitExpand(commit.hash)}>
-                    <button type="button" className="bitfun-git-scene-branches__expand">
+                  <div className="halo-git-scene-branches__commit-header" onClick={() => toggleCommitExpand(commit.hash)}>
+                    <button type="button" className="halo-git-scene-branches__expand">
                       {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                     </button>
-                    <div className="bitfun-git-scene-branches__commit-info">
-                      <div className="bitfun-git-scene-branches__commit-message">{summary}</div>
-                      <div className="bitfun-git-scene-branches__commit-meta">
+                    <div className="halo-git-scene-branches__commit-info">
+                      <div className="halo-git-scene-branches__commit-message">{summary}</div>
+                      <div className="halo-git-scene-branches__commit-meta">
                         {author} · {commit.hash?.substring(0, 7)}
                       </div>
                     </div>
-                    <div className="bitfun-git-scene-branches__commit-actions" onClick={e => e.stopPropagation()}>
+                    <div className="halo-git-scene-branches__commit-actions" onClick={e => e.stopPropagation()}>
                       <Tooltip content={t('actions.copyCommitHash')}>
                         <IconButton size="xs" variant="ghost" onClick={() => handleCopyHash(commit.hash)}>
                           <Copy size={14} />
@@ -341,10 +341,10 @@ const BranchesView: React.FC<BranchesViewProps> = ({ workspacePath }) => {
                     </div>
                   </div>
                   {isExpanded && (
-                    <div className="bitfun-git-scene-branches__commit-detail">
-                      {body && <pre className="bitfun-git-scene-branches__commit-body">{body}</pre>}
+                    <div className="halo-git-scene-branches__commit-detail">
+                      {body && <pre className="halo-git-scene-branches__commit-body">{body}</pre>}
                       {files && files.length > 0 && (
-                        <div className="bitfun-git-scene-branches__files">
+                        <div className="halo-git-scene-branches__files">
                           <span>
                             <FileText size={12} /> {t('commit.changedFiles', { count: files.length })}
                           </span>

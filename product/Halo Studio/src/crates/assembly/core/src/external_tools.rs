@@ -5,10 +5,10 @@ use crate::agentic::tools::framework::{
     ValidationResult,
 };
 use crate::agentic::tools::registry::get_global_tool_registry;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
-use bitfun_external_sources::{ExternalSourceControlPlane, ExternalToolCoordinatorSnapshot};
-use bitfun_product_domains::external_sources::{
+use halo_external_sources::{ExternalSourceControlPlane, ExternalToolCoordinatorSnapshot};
+use halo_product_domains::external_sources::{
     external_tool_approval_key, external_tool_conflict_key, external_tool_decision_key,
     EcosystemId, ExternalSourceAssetKind, ExternalSourceDiagnostic,
     ExternalSourceDiagnosticSeverity, ExternalSourceScope, ExternalToolActivationState,
@@ -16,11 +16,11 @@ use bitfun_product_domains::external_sources::{
     ExternalToolConflictCandidate, ExternalToolConflictCandidateKind, ExternalToolDefinition,
     ExternalToolStaticStatus, PreparedExternalToolTarget, SourceQualifiedToolTargetId,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     PortErrorKind, ScriptToolDescriptor, ScriptToolExpectedExport, ScriptToolInvokeRequest,
     ScriptToolLoadRequest, ScriptToolRuntime, ScriptToolRuntimeAvailability,
 };
-use bitfun_services_integrations::script_tool::NodeScriptToolRuntime;
+use halo_services_integrations::script_tool::NodeScriptToolRuntime;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -149,8 +149,8 @@ pub(super) fn project_external_tools_read_only(
     state
 }
 
-pub(super) const UNRESOLVED_TOOL_CONFLICT_CHOICE: &str = "__bitfun_unresolved__";
-pub(super) const TOOL_CONFLICT_RESELECTION_REQUIRED: &str = "__bitfun_reselection_required__";
+pub(super) const UNRESOLVED_TOOL_CONFLICT_CHOICE: &str = "__halo_unresolved__";
+pub(super) const TOOL_CONFLICT_RESELECTION_REQUIRED: &str = "__halo_reselection_required__";
 
 fn external_tool_permission_intent(provider_id: &str, tool_name: &str) -> PermissionIntent {
     PermissionIntent::new("custom_tool", vec![format!("{provider_id}:{tool_name}")])
@@ -178,7 +178,7 @@ impl Tool for LoadedExternalTool {
         &self.descriptor.name
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(self.descriptor.description.clone())
     }
 
@@ -218,7 +218,7 @@ impl Tool for LoadedExternalTool {
         &self,
         _input: &Value,
         _context: &ToolUseContext,
-    ) -> BitFunResult<Vec<PermissionIntent>> {
+    ) -> HaloResult<Vec<PermissionIntent>> {
         Ok(vec![external_tool_permission_intent(
             &self.provider_id,
             &self.descriptor.name,
@@ -229,7 +229,7 @@ impl Tool for LoadedExternalTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         if !crate::external_sources::external_tool_invocation_is_authorized(
             &self.ecosystem_id,
             &self.approval_key,
@@ -237,10 +237,10 @@ impl Tool for LoadedExternalTool {
             &self.workspace_key,
         )
         .await
-        .map_err(BitFunError::tool)?
+        .map_err(HaloError::tool)?
         {
-            return Err(BitFunError::tool(format!(
-                "external tool '{}' was disabled in another BitFun process; refresh external tools before retrying",
+            return Err(HaloError::tool(format!(
+                "external tool '{}' was disabled in another Halo process; refresh external tools before retrying",
                 self.name()
             )));
         }
@@ -285,7 +285,7 @@ impl Tool for LoadedExternalTool {
                         )
                         .await;
                     }
-                    return Err(BitFunError::Cancelled(format!("external tool '{}' was cancelled", self.name())));
+                    return Err(HaloError::Cancelled(format!("external tool '{}' was cancelled", self.name())));
                 }
             }
         } else {
@@ -308,7 +308,7 @@ impl Tool for LoadedExternalTool {
                     )
                     .await;
                 }
-                return Err(BitFunError::tool(error.to_string()));
+                return Err(HaloError::tool(error.to_string()));
             }
         };
         Ok(vec![ToolResult::ok(
@@ -526,7 +526,7 @@ impl Tool for ExternalToolMux {
         &self.name
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         match self.original() {
             Some(tool) => tool.description().await,
             None => Ok(format!("External tool: {}", self.name)),
@@ -536,10 +536,10 @@ impl Tool for ExternalToolMux {
     async fn description_with_context(
         &self,
         context: Option<&ToolUseContext>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         match self.selected(context) {
             Some(tool) => tool.description_with_context(context).await,
-            None => Err(BitFunError::tool(format!(
+            None => Err(HaloError::tool(format!(
                 "tool '{}' is waiting for an external-source decision",
                 self.name
             ))),
@@ -607,9 +607,9 @@ impl Tool for ExternalToolMux {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<PermissionIntent>> {
+    ) -> HaloResult<Vec<PermissionIntent>> {
         self.selected(Some(context))
-            .ok_or_else(|| BitFunError::tool(format!("tool '{}' is unavailable", self.name)))?
+            .ok_or_else(|| HaloError::tool(format!("tool '{}' is unavailable", self.name)))?
             .permission_intents(input, context)
     }
 
@@ -636,9 +636,9 @@ impl Tool for ExternalToolMux {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let selected = self.selected(Some(context)).ok_or_else(|| {
-            BitFunError::tool(format!(
+            HaloError::tool(format!(
                 "tool '{}' is waiting for an external-source decision",
                 self.name
             ))
@@ -646,12 +646,12 @@ impl Tool for ExternalToolMux {
         selected.call(input, context).await
     }
 
-    async fn call(&self, input: &Value, context: &ToolUseContext) -> BitFunResult<Vec<ToolResult>> {
+    async fn call(&self, input: &Value, context: &ToolUseContext) -> HaloResult<Vec<ToolResult>> {
         if context.is_remote() {
             return self
                 .original()
                 .ok_or_else(|| {
-                    BitFunError::tool(format!(
+                    HaloError::tool(format!(
                         "tool '{}' is unavailable in remote workspaces",
                         self.name
                     ))
@@ -672,10 +672,10 @@ impl Tool for ExternalToolMux {
                 expectation.selected_candidate_id.as_deref(),
             )
             .await
-            .map_err(BitFunError::tool)?
+            .map_err(HaloError::tool)?
             {
-                return Err(BitFunError::tool(format!(
-                    "tool conflict choice for '{}' changed in another BitFun process; refresh before retrying",
+                return Err(HaloError::tool(format!(
+                    "tool conflict choice for '{}' changed in another Halo process; refresh before retrying",
                     self.name
                 )));
             }
@@ -685,7 +685,7 @@ impl Tool for ExternalToolMux {
             Some(WorkspaceRoute::Original { .. }) | None => {
                 self.original()
                     .ok_or_else(|| {
-                        BitFunError::tool(format!(
+                        HaloError::tool(format!(
                             "tool '{}' is waiting for an external-source decision",
                             self.name
                         ))
@@ -693,7 +693,7 @@ impl Tool for ExternalToolMux {
                     .call(input, context)
                     .await
             }
-            Some(WorkspaceRoute::Unavailable { .. }) => Err(BitFunError::tool(format!(
+            Some(WorkspaceRoute::Unavailable { .. }) => Err(HaloError::tool(format!(
                 "tool '{}' is waiting for an external-source decision",
                 self.name
             ))),
@@ -2014,7 +2014,7 @@ async fn local_candidate(tool: &Arc<dyn Tool>) -> ExternalToolConflictCandidate 
     let provider_id = dynamic
         .as_ref()
         .map(|info| info.provider_id.clone())
-        .unwrap_or_else(|| "bitfun.builtin".to_string());
+        .unwrap_or_else(|| "halo.builtin".to_string());
     let candidate_id = format!("registry:{provider_id}:{}", tool.name());
     let description = tool.description().await.unwrap_or_default();
     let schema = serde_json::to_vec(&tool.input_schema()).unwrap_or_default();
@@ -2069,7 +2069,7 @@ fn runtime_target_id(workspace_key: &str, target: &SourceQualifiedToolTargetId) 
 fn tool_diagnostic(
     code: impl Into<String>,
     message: impl Into<String>,
-    source: Option<bitfun_product_domains::external_sources::SourceKey>,
+    source: Option<halo_product_domains::external_sources::SourceKey>,
 ) -> ExternalSourceDiagnostic {
     ExternalSourceDiagnostic {
         severity: ExternalSourceDiagnosticSeverity::Warning,
@@ -2102,7 +2102,7 @@ mod tests {
             &self.name
         }
 
-        async fn description(&self) -> BitFunResult<String> {
+        async fn description(&self) -> HaloResult<String> {
             Ok("test tool".to_string())
         }
 
@@ -2118,7 +2118,7 @@ mod tests {
             &self,
             _input: &Value,
             _context: &ToolUseContext,
-        ) -> BitFunResult<Vec<ToolResult>> {
+        ) -> HaloResult<Vec<ToolResult>> {
             Ok(Vec::new())
         }
     }
@@ -2226,7 +2226,7 @@ mod tests {
     #[test]
     fn changed_conflict_stays_unavailable_after_an_external_choice() {
         let candidates = vec![candidate(
-            "registry:bitfun.builtin:read",
+            "registry:halo.builtin:read",
             ExternalToolConflictCandidateKind::BuiltIn,
         )];
         let choices = BTreeMap::from([(
@@ -2543,7 +2543,7 @@ mod tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         };
 
         assert!(!mux
@@ -2673,10 +2673,10 @@ mod tests {
 }
 
 pub(super) fn merge_tool_state(
-    mut snapshot: bitfun_product_domains::external_sources::ExternalSourceCatalogSnapshot,
+    mut snapshot: halo_product_domains::external_sources::ExternalSourceCatalogSnapshot,
     tool_snapshot: &ExternalToolCoordinatorSnapshot,
     state: ExternalToolProductState,
-) -> bitfun_product_domains::external_sources::ExternalSourceCatalogSnapshot {
+) -> halo_product_domains::external_sources::ExternalSourceCatalogSnapshot {
     snapshot.generation = snapshot.generation.max(tool_snapshot.generation);
     snapshot.discovery_pending |= tool_snapshot.discovery_pending;
     snapshot.sources.extend(tool_snapshot.sources.clone());

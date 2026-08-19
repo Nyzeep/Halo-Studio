@@ -236,7 +236,7 @@ def add_comment(
     unpacked_dir: Path | str,
     text: str,
     comment_id: int | None = None,
-    author: str = "BitFun",
+    author: str = "Halo",
     initials: str = "B",
     parent_id: int | None = None,
     raw: bool = False,
@@ -318,7 +318,7 @@ def main() -> None:
                    help="Treat text as pre-escaped XML (skip automatic escaping)")
     p.add_argument("--id", type=int, dest="comment_id",
                    help="Comment ID (default: auto-assign as max existing + 1)")
-    p.add_argument("--author", default="BitFun", help="Author name")
+    p.add_argument("--author", default="Halo", help="Author name")
     p.add_argument("--initials", default="B", help="Author initials")
     p.add_argument("--parent", type=int, help="Parent comment ID (makes this a reply)")
     p.add_argument("-o", "--output",

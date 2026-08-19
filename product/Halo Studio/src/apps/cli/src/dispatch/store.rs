@@ -95,9 +95,9 @@ pub(crate) struct DispatchStore {
 
 impl DispatchStore {
     pub(crate) fn open_default() -> Result<Self> {
-        let path_manager = bitfun_core::infrastructure::PathManager::new()
-            .map_err(|error| anyhow!("resolve BitFun storage root: {error}"))?;
-        Self::open(path_manager.bitfun_home_dir().join("dispatch"))
+        let path_manager = halo_core::infrastructure::PathManager::new()
+            .map_err(|error| anyhow!("resolve Halo storage root: {error}"))?;
+        Self::open(path_manager.halo_home_dir().join("dispatch"))
     }
 
     pub(crate) fn open(root: PathBuf) -> Result<Self> {
@@ -1362,9 +1362,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn cross_process_reader_and_writer_remain_consistent_during_rotation() {
-        const MODE_ENV: &str = "BITFUN_DISPATCH_ROTATION_STRESS_MODE";
-        const ROOT_ENV: &str = "BITFUN_DISPATCH_ROTATION_STRESS_ROOT";
-        const DONE_ENV: &str = "BITFUN_DISPATCH_ROTATION_STRESS_DONE";
+        const MODE_ENV: &str = "HALO_DISPATCH_ROTATION_STRESS_MODE";
+        const ROOT_ENV: &str = "HALO_DISPATCH_ROTATION_STRESS_ROOT";
+        const DONE_ENV: &str = "HALO_DISPATCH_ROTATION_STRESS_DONE";
 
         if let Some(mode) = std::env::var_os(MODE_ENV) {
             let root = PathBuf::from(std::env::var_os(ROOT_ENV).expect("stress root"));
@@ -1555,7 +1555,7 @@ mod tests {
 
     #[test]
     fn default_store_honors_path_manager_storage_overrides() {
-        const CHILD_ENV: &str = "BITFUN_DISPATCH_PATH_TEST_CHILD";
+        const CHILD_ENV: &str = "HALO_DISPATCH_PATH_TEST_CHILD";
         if let Some(expected_home) = std::env::var_os(CHILD_ENV) {
             let store = DispatchStore::open_default().expect("open isolated default store");
             assert_eq!(store.root, PathBuf::from(expected_home).join("dispatch"));
@@ -1563,7 +1563,7 @@ mod tests {
         }
 
         let dir = tempfile::tempdir().expect("tempdir");
-        let bitfun_home = dir.path().join("bitfun-home");
+        let halo_home = dir.path().join("halo-home");
         let user_root = dir.path().join("user-root");
         let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
             .args([
@@ -1571,12 +1571,12 @@ mod tests {
                 "dispatch::store::tests::default_store_honors_path_manager_storage_overrides",
                 "--nocapture",
             ])
-            .env(CHILD_ENV, &bitfun_home)
-            .env("BITFUN_HOME", &bitfun_home)
-            .env("BITFUN_USER_ROOT", &user_root)
-            .env("BITFUN_E2E_STORAGE_GUARD", "1")
-            .env_remove("BITFUN_E2E_HOME")
-            .env_remove("BITFUN_E2E_USER_ROOT")
+            .env(CHILD_ENV, &halo_home)
+            .env("HALO_HOME", &halo_home)
+            .env("HALO_USER_ROOT", &user_root)
+            .env("HALO_E2E_STORAGE_GUARD", "1")
+            .env_remove("HALO_E2E_HOME")
+            .env_remove("HALO_E2E_USER_ROOT")
             .output()
             .expect("run isolated path test");
         assert!(
@@ -1585,8 +1585,8 @@ mod tests {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
-        assert!(bitfun_home.join("dispatch/jobs").is_dir());
-        assert!(bitfun_home.join("dispatch/workspaces").is_dir());
+        assert!(halo_home.join("dispatch/jobs").is_dir());
+        assert!(halo_home.join("dispatch/workspaces").is_dir());
     }
 
     #[cfg(unix)]

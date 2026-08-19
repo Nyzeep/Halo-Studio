@@ -29,18 +29,18 @@ mod tests {
     use crate::chat_state::ChatState;
     use crate::config::ShortcutsConfig;
     use crate::ui::command_menu::{ExternalCommandProjection, NativeCommandCollisionProjection};
-    use bitfun_core::external_hooks::ExternalHookCatalogSnapshotV1;
-    use bitfun_core::external_sources::{
+    use halo_core::external_hooks::ExternalHookCatalogSnapshotV1;
+    use halo_core::external_sources::{
         native_prompt_command_conflict_key, ExternalSourceAssetKind, ExternalSourceCatalogSnapshot,
         ExternalSourceControlSnapshotV1, ExternalSourceDiagnostic,
         ExternalSourceDiagnosticSeverity, ExternalSourceOperationError,
         ExternalSourceOperationErrorCode, ExternalSubagentActivationState,
         ExternalToolActivationState,
     };
-    use bitfun_core::native_hooks::{
+    use halo_core::native_hooks::{
         NativeHookFileView, NativeHookHandlerView, NativeHookOverview, NativeHookRuleView,
     };
-    use bitfun_product_domains::external_sources::ExternalSourceScope;
+    use halo_product_domains::external_sources::ExternalSourceScope;
     use std::collections::{BTreeMap, BTreeSet};
 
     fn external_command(
@@ -58,7 +58,7 @@ mod tests {
             provider_conflict_key: None,
             native_collision: Some(NativeCommandCollisionProjection {
                 native_action_id: name.to_string(),
-                native_candidate_id: format!("bitfun.cli:{name}"),
+                native_candidate_id: format!("halo.cli:{name}"),
                 external_candidate_id: format!("external:{name}"),
                 conflict_key: "conflict-v1".to_string(),
                 selected_candidate_id: selected_candidate_id.map(str::to_string),
@@ -337,10 +337,10 @@ mod tests {
                 "conflictKey": "conflict-v1",
                 "toolName": "review",
                 "candidates": [{
-                    "candidateId": "bitfun:review",
-                    "displayName": "BitFun review",
+                    "candidateId": "halo:review",
+                    "displayName": "Halo review",
                     "kind": "built_in",
-                    "providerId": "bitfun",
+                    "providerId": "halo",
                     "contentVersion": "builtin-v1"
                 }, {
                     "candidateId": "external:review",
@@ -434,7 +434,7 @@ mod tests {
         assert!(text.contains("OpenCode: recommended"));
         assert!(text.contains("command auto"));
         assert!(text.contains("tool ask"));
-        assert!(text.contains("bitfun config external --help"));
+        assert!(text.contains("halo config external --help"));
     }
 
     #[test]
@@ -478,10 +478,10 @@ mod tests {
     fn external_tool_review_summary_discloses_execution_boundary_and_commands() {
         let summary = external_tool_review_text(Some(&external_tool_review_snapshot()));
 
-        assert!(summary.contains("BitFun and MCP"));
+        assert!(summary.contains("Halo and MCP"));
         assert!(summary.contains("External AI applications"));
         assert!(summary.contains("Use /mcp to manage MCP servers"));
-        assert!(summary.contains("BitFun does not run external code while checking sources"));
+        assert!(summary.contains("Halo does not run external code while checking sources"));
         assert!(summary.contains("filesystem, network, process, environment variables"));
         assert!(summary.contains("inherited environment variables"));
         assert!(summary.contains("processes it starts may keep running after cancellation"));
@@ -508,7 +508,7 @@ mod tests {
     fn external_tool_runtime_recovery_starts_with_refresh_without_restart_pressure() {
         let mut snapshot = external_tool_review_snapshot();
         snapshot.tools[0].activation = ExternalToolActivationState::RuntimeUnavailable {
-            reason: "BitFun could not find Node.js for external tools".to_string(),
+            reason: "Halo could not find Node.js for external tools".to_string(),
         };
 
         let summary = external_tool_review_text(Some(&snapshot));
@@ -527,7 +527,7 @@ mod tests {
         let summary = external_tool_review_text(Some(&snapshot));
         assert!(summary.contains("Current choices"));
         assert!(summary.contains("OpenCode review [selected, currently unavailable]"));
-        assert!(summary.contains("BitFun review [not selected]"));
+        assert!(summary.contains("Halo review [not selected]"));
         assert!(summary.contains("/tools choose 1 1"));
 
         snapshot.tools[0].activation = ExternalToolActivationState::Active;
@@ -539,7 +539,7 @@ mod tests {
             parse_external_tool_review_action("choose 1 1", Some(&snapshot), None).unwrap(),
             ExternalToolReviewAction::Choose {
                 conflict_key: "conflict-v1".to_string(),
-                candidate_id: "bitfun:review".to_string(),
+                candidate_id: "halo:review".to_string(),
             }
         );
         let notice = external_tool_pending_notice_key(&snapshot).unwrap();
@@ -662,7 +662,7 @@ mod tests {
             crate::actions::action_for_alias("/hooks", crate::actions::ActionContext::Chat)
                 .expect("/hooks must be registered");
         assert_eq!(action.id, "hooks");
-        // /hooks shows BitFun's own executable hooks; the external read-only
+        // /hooks shows Halo's own executable hooks; the external read-only
         // catalog keeps its own command.
         assert_eq!(action.handler, ActionHandler::NativeHooks);
         for alias in ["/hooks_external", "/hooks-external"] {
@@ -805,7 +805,7 @@ mod tests {
         assert!(text.contains("Discovery is read-only"));
         assert!(text.contains("Claude Code"));
         assert!(text.contains("PreToolUse"));
-        assert!(text.contains("coverage mapped: BitFun tool before"));
+        assert!(text.contains("coverage mapped: Halo tool before"));
         assert!(text.contains("SessionStart"));
         assert!(text.contains("native only"));
         assert!(text.contains("opaque static registration"));
@@ -820,13 +820,13 @@ mod tests {
             files: vec![
                 NativeHookFileView {
                     scope: "user",
-                    path: std::path::PathBuf::from("/home/u/.config/bitfun/config/hooks.json"),
+                    path: std::path::PathBuf::from("/home/u/.config/halo/config/hooks.json"),
                     exists: true,
                     loaded: true,
                 },
                 NativeHookFileView {
                     scope: "project",
-                    path: std::path::PathBuf::from("/ws/.bitfun/config/hooks.json"),
+                    path: std::path::PathBuf::from("/ws/.halo-studio/config/hooks.json"),
                     exists: true,
                     loaded: false,
                 },
@@ -836,7 +836,7 @@ mod tests {
                 matcher: "Bash".to_string(),
                 matcher_is_valid: true,
                 scope: "user",
-                source: "/home/u/.config/bitfun/config/hooks.json".to_string(),
+                source: "/home/u/.config/halo/config/hooks.json".to_string(),
                 handlers: vec![NativeHookHandlerView {
                     command: "jq -r '.tool_input.command' >> ~/log".to_string(),
                     timeout_seconds: 600,
@@ -852,7 +852,7 @@ mod tests {
     fn native_hook_text_reports_gating_layers_and_issues() {
         let text = render_native_hook_overview(&native_hook_overview());
 
-        assert!(text.contains("Hooks (BitFun)"));
+        assert!(text.contains("Hooks (Halo)"));
         assert!(text.contains("Hooks: enabled (app.hooks.enabled)"));
         assert!(text.contains("Project hook file: disabled (app.hooks.project_hooks_enabled)"));
         assert!(text.contains("user [loaded; present]"));
@@ -991,16 +991,16 @@ mod tests {
             .unwrap();
         snapshot.entries = (0..105)
             .map(
-                |index| bitfun_core::external_hooks::ExternalHookCatalogEntry {
+                |index| halo_core::external_hooks::ExternalHookCatalogEntry {
                     stable_key: format!("test-{index}"),
                     source: snapshot.sources[0].key.clone(),
                     native_event: format!("Event{index}"),
-                    matcher: bitfun_core::external_hooks::ExternalHookMatcherSummary::Any,
-                    handler_kind: bitfun_core::external_hooks::ExternalHookHandlerKind::Command,
+                    matcher: halo_core::external_hooks::ExternalHookMatcherSummary::Any,
+                    handler_kind: halo_core::external_hooks::ExternalHookHandlerKind::Command,
                     projection_status:
-                        bitfun_core::external_hooks::ExternalHookProjectionStatus::NativeOnly,
+                        halo_core::external_hooks::ExternalHookProjectionStatus::NativeOnly,
                     native_activation:
-                        bitfun_core::external_hooks::ExternalHookNativeActivation::Unknown,
+                        halo_core::external_hooks::ExternalHookNativeActivation::Unknown,
                     mapping: None,
                     content_version: format!("entry-v{index}"),
                 },
@@ -1109,7 +1109,7 @@ mod tests {
 
     #[test]
     fn native_choice_is_reused_when_multiple_external_candidates_remain_unresolved() {
-        let selected_native = "bitfun.cli:help";
+        let selected_native = "halo.cli:help";
         let first = external_command("help", Some(selected_native));
         let mut second = external_command("help", Some(selected_native));
         second.candidate_id = "external:help:second".to_string();
@@ -1130,7 +1130,7 @@ mod tests {
     }
 
     #[test]
-    fn discovery_pending_does_not_block_known_bitfun_commands() {
+    fn discovery_pending_does_not_block_known_halo_commands() {
         assert_eq!(
             command_route(true, None, true, false),
             CommandRoute::Builtin
@@ -1147,7 +1147,7 @@ mod tests {
             let descriptors = cli_native_prompt_command_descriptors(alias);
             assert_eq!(descriptors.len(), 1);
             assert_eq!(descriptors[0].command_name, alias);
-            assert_eq!(descriptors[0].candidate_id, "bitfun.cli:mcp_servers");
+            assert_eq!(descriptors[0].candidate_id, "halo.cli:mcp_servers");
         }
     }
 
@@ -1167,7 +1167,7 @@ mod tests {
             choices: BTreeMap::new(),
             lineage_current_keys: BTreeMap::new(),
             conflicted_candidate_ids: BTreeSet::from([
-                "bitfun.cli:help".to_string(),
+                "halo.cli:help".to_string(),
                 "external:help".to_string(),
             ]),
         };
@@ -1401,9 +1401,9 @@ mod tests {
                 "conflictKey": "conflict-v1",
                 "logicalId": "review",
                 "candidates": [{
-                    "candidateId": "bitfun:review",
-                    "displayName": "BitFun review",
-                    "sourceLabel": "BitFun",
+                    "candidateId": "halo:review",
+                    "displayName": "Halo review",
+                    "sourceLabel": "Halo",
                     "external": false
                 }, {
                     "candidateId": "external_subagent:opencode:review:v1",
@@ -1458,7 +1458,7 @@ mod tests {
 
     #[test]
     fn agent_management_behavior_change_invalidates_an_old_native_choice() {
-        let candidate_id = "bitfun.cli:switch_agent";
+        let candidate_id = "halo.cli:switch_agent";
         let old_key = native_prompt_command_conflict_key(
             "local-user",
             "agents",
@@ -1488,7 +1488,7 @@ mod tests {
         assert!(
             summary.contains("Review agent (OpenCode, external) [selected, currently unavailable]")
         );
-        assert!(summary.contains("BitFun review (BitFun, BitFun/local) [not selected]"));
+        assert!(summary.contains("Halo review (Halo, Halo/local) [not selected]"));
         assert!(summary.contains("/agent choose 1 1"));
 
         snapshot.subagents[0].activation_state = ExternalSubagentActivationState::Active;
@@ -1500,7 +1500,7 @@ mod tests {
             parse_external_agent_review_action("choose 1 1", Some(&snapshot), None).unwrap(),
             ExternalAgentReviewAction::Choose {
                 conflict_key: "conflict-v1".to_string(),
-                candidate_id: "bitfun:review".to_string(),
+                candidate_id: "halo:review".to_string(),
                 approve_external: false,
                 expected_subagent_generation: 4,
                 expected_preference_revision: 7,
@@ -1517,7 +1517,7 @@ mod tests {
             "",
         );
         let text = lines.join("\n");
-        assert!(text.contains("check that BitFun can read and save its settings, then refresh"));
+        assert!(text.contains("check that Halo can read and save its settings, then refresh"));
         assert!(!text.to_ascii_lowercase().contains("restart"));
     }
 
@@ -1540,8 +1540,8 @@ mod tests {
         });
 
         let agents = external_agent_review_text(Some(&snapshot));
-        assert!(agents.contains("BitFun could not save conflict information"));
-        assert!(agents.contains("check BitFun settings storage, then refresh"));
+        assert!(agents.contains("Halo could not save conflict information"));
+        assert!(agents.contains("check Halo settings storage, then refresh"));
         assert!(agents.contains("external_subagent.conflict_history_write_failed"));
         assert!(agents.contains("future_host.agent_map_invalid"));
 
@@ -1578,7 +1578,7 @@ mod tests {
             parse_external_agent_review_action("choose 1 0", Some(&snapshot), None).unwrap(),
             ExternalAgentReviewAction::Choose {
                 conflict_key: "conflict-v1".to_string(),
-                candidate_id: "__bitfun_disabled__".to_string(),
+                candidate_id: "__halo_disabled__".to_string(),
                 approve_external: false,
                 expected_subagent_generation: 4,
                 expected_preference_revision: 7,

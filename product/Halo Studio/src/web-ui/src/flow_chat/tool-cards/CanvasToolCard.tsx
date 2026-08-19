@@ -112,7 +112,7 @@ export const CanvasToolCard: React.FC<ToolCardProps> = ({ toolItem, sessionId })
   const handleOpenPanel = useCallback(() => {
     if (!isOpenable) return;
 
-    const duplicateCheckKey = `bitfun-canvas-${artifactReference}`;
+    const duplicateCheckKey = `halo-canvas-${artifactReference}`;
     log.info('Opening Canvas panel', {
       artifactReference,
       title,
@@ -130,7 +130,7 @@ export const CanvasToolCard: React.FC<ToolCardProps> = ({ toolItem, sessionId })
     });
 
     createTab({
-      type: 'bitfun-canvas',
+      type: 'halo-canvas',
       title,
       data: {
         artifactReference,

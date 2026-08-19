@@ -1,12 +1,12 @@
 /* Regex Playground — developer-tool theme.
  * Design system reference:
- *   palette  ─ Inherits BitFun host theme (--bitfun-* tokens) so it reads
- *              as a native panel under both bitfun-dark and bitfun-light.
+ *   palette  ─ Inherits Halo host theme (--halo-* tokens) so it reads
+ *              as a native panel under both halo-dark and halo-light.
  *              Local --rx-* tokens are derived from the host vars with
  *              standalone-safe fallbacks matching the default dark theme.
  *   accent   ─ host primary (cool blue / slate) for focus & active states;
  *              warning amber as the secondary "match" highlight.
- *   type     ─ system mono (code) + system sans (UI), follows --bitfun-font-*
+ *   type     ─ system mono (code) + system sans (UI), follows --halo-font-*
  *   pattern  ─ bento-style cards on calm host surfaces
  *   motion   ─ 150-300ms color-shift micro-interactions, no scale jumps
  */
@@ -21,45 +21,45 @@ body, html { margin: 0; padding: 0; height: 100%; }
 
 :root {
   /* Surfaces — drive everything off host bg tokens so the playground tracks
-   * BitFun light/dark automatically. Fallbacks mirror the default dark theme. */
-  --rx-bg:        var(--bitfun-bg,            #0e0e10);
-  --rx-bg-2:      var(--bitfun-bg-tertiary,   #121214);
-  --rx-surface:   var(--bitfun-bg-secondary,  #1c1c1f);
-  --rx-surface-2: var(--bitfun-element-bg,    rgba(255,255,255,0.06));
-  --rx-surface-3: var(--bitfun-element-hover, rgba(255,255,255,0.10));
+   * Halo light/dark automatically. Fallbacks mirror the default dark theme. */
+  --rx-bg:        var(--halo-bg,            #0e0e10);
+  --rx-bg-2:      var(--halo-bg-tertiary,   #121214);
+  --rx-surface:   var(--halo-bg-secondary,  #1c1c1f);
+  --rx-surface-2: var(--halo-element-bg,    rgba(255,255,255,0.06));
+  --rx-surface-3: var(--halo-element-hover, rgba(255,255,255,0.10));
 
-  --rx-border:        var(--bitfun-border-subtle, rgba(255,255,255,0.10));
-  --rx-border-strong: var(--bitfun-border,        rgba(255,255,255,0.18));
-  --rx-border-bright: var(--bitfun-border,        rgba(255,255,255,0.28));
+  --rx-border:        var(--halo-border-subtle, rgba(255,255,255,0.10));
+  --rx-border-strong: var(--halo-border,        rgba(255,255,255,0.18));
+  --rx-border-bright: var(--halo-border,        rgba(255,255,255,0.28));
 
-  --rx-text:      var(--bitfun-text,           #e8e8e8);
-  --rx-text-soft: var(--bitfun-text-secondary, #b0b0b0);
-  --rx-text-mute: var(--bitfun-text-muted,     #858585);
-  --rx-text-dim:  var(--bitfun-text-muted,     #6a6a6a);
+  --rx-text:      var(--halo-text,           #e8e8e8);
+  --rx-text-soft: var(--halo-text-secondary, #b0b0b0);
+  --rx-text-mute: var(--halo-text-muted,     #858585);
+  --rx-text-dim:  var(--halo-text-muted,     #6a6a6a);
 
   /* Accent — follows host primary (blue in dark, slate in light) instead of
-   * the previous saturated "run green" which clashed with BitFun's neutral palette. */
-  --rx-accent:        var(--bitfun-accent,       #60a5fa);
-  --rx-accent-strong: var(--bitfun-accent-hover, #3b82f6);
+   * the previous saturated "run green" which clashed with Halo's neutral palette. */
+  --rx-accent:        var(--halo-accent,       #60a5fa);
+  --rx-accent-strong: var(--halo-accent-hover, #3b82f6);
   --rx-accent-soft:   rgba(96,165,250,0.14);
 
-  /* Semantic colors — pulled from host so they harmonize with the rest of BitFun. */
-  --rx-match:      var(--bitfun-warning, #f59e0b);            /* warm match highlight */
+  /* Semantic colors — pulled from host so they harmonize with the rest of Halo. */
+  --rx-match:      var(--halo-warning, #f59e0b);            /* warm match highlight */
   --rx-match-soft: rgba(245,158,11,0.18);
-  --rx-error:      var(--bitfun-error,   #ef4444);
-  --rx-info:       var(--bitfun-info,    #E1AB80);
+  --rx-error:      var(--halo-error,   #ef4444);
+  --rx-info:       var(--halo-info,    #E1AB80);
   --rx-group:      #b39dff;                                    /* capture-group accent */
-  --rx-string:     var(--bitfun-success, #34d399);
+  --rx-string:     var(--halo-success, #34d399);
 
-  --rx-radius:    var(--bitfun-radius,    8px);
+  --rx-radius:    var(--halo-radius,    8px);
   --rx-radius-sm: 6px;
   --rx-shadow-card: 0 1px 0 rgba(255,255,255,0.025) inset, 0 4px 14px -8px rgba(0,0,0,0.55);
   --rx-shadow-elevated: 0 1px 0 rgba(255,255,255,0.035) inset, 0 16px 32px -18px rgba(0,0,0,0.7);
 
-  --rx-mono: var(--bitfun-font-mono, "JetBrains Mono", "FiraCode", ui-monospace, "SFMono-Regular",
+  --rx-mono: var(--halo-font-mono, "JetBrains Mono", "FiraCode", ui-monospace, "SFMono-Regular",
               "SF Mono", Menlo, Monaco, "Cascadia Mono", "Cascadia Code", Consolas,
               "Liberation Mono", "Courier New", monospace);
-  --rx-sans: var(--bitfun-font-sans, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+  --rx-sans: var(--halo-font-sans, -apple-system, BlinkMacSystemFont, "SF Pro Text",
               "PingFang SC", "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei UI",
               "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif);
 
@@ -67,7 +67,7 @@ body, html { margin: 0; padding: 0; height: 100%; }
   --rx-ease: cubic-bezier(.2,.8,.2,1);
 }
 
-/* Light-theme local overrides — host already swaps --bitfun-* tokens, but a
+/* Light-theme local overrides — host already swaps --halo-* tokens, but a
  * few decorative pieces (rgba accent washes, capture-group badge, code chips)
  * benefit from sturdier alpha / hue picks against a near-white surface. */
 [data-theme-type="light"] {
@@ -666,11 +666,11 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: var(--bitfun-scrollbar-thumb, rgba(255,255,255,0.14));
+  background: var(--halo-scrollbar-thumb, rgba(255,255,255,0.14));
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--bitfun-scrollbar-thumb-hover, rgba(255,255,255,0.26));
+  background: var(--halo-scrollbar-thumb-hover, rgba(255,255,255,0.26));
 }
 
 /* ── Reduced motion ─────────────────────────────────── */
@@ -712,8 +712,8 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
 
 /* ── Light theme adaptation ─────────────────────────────────────────────
  * The host (see bridge_builder.rs) writes [data-theme-type="light"] on <html>
- * AND repaints all --bitfun-* CSS variables. Because every --rx-* token above
- * already proxies through var(--bitfun-…), most of the playground re-tints
+ * AND repaints all --halo-* CSS variables. Because every --rx-* token above
+ * already proxies through var(--halo-…), most of the playground re-tints
  * automatically. Only a handful of decorative pieces — page wash, frosted
  * topbar tint — need an explicit ivory pass. */
 [data-theme-type="light"] .rx {

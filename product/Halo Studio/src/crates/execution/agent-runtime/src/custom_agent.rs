@@ -29,9 +29,9 @@ pub const DEFAULT_CUSTOM_SUBAGENT_READONLY: bool = true;
 pub const DEFAULT_CUSTOM_SUBAGENT_REVIEW: bool = false;
 pub const DEFAULT_CUSTOM_MODE_MODEL: &str = "auto";
 pub const DEFAULT_CUSTOM_SUBAGENT_MODEL: &str = "fast";
-// Only BitFun custom agents are loaded. Unlike skills, custom subagents from
+// Only Halo custom agents are loaded. Unlike skills, custom subagents from
 // different vendors do not share a stable schema or compatible tool contract.
-pub const CUSTOM_AGENT_PROJECT_AGENT_SUBDIRS: &[(&str, &str)] = &[(".bitfun", "agents")];
+pub const CUSTOM_AGENT_PROJECT_AGENT_SUBDIRS: &[(&str, &str)] = &[(".halo-studio", "agents")];
 pub const CUSTOM_AGENT_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -237,7 +237,7 @@ impl CustomAgentDefinition {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CustomAgentDiscoveryRoots {
     pub workspace_root: Option<PathBuf>,
-    pub bitfun_user_agents_dir: Option<PathBuf>,
+    pub halo_user_agents_dir: Option<PathBuf>,
     pub home_dir: Option<PathBuf>,
 }
 
@@ -345,10 +345,10 @@ pub fn custom_agent_possible_dirs(roots: &CustomAgentDiscoveryRoots) -> Vec<Cust
         }
     }
 
-    if let Some(bitfun_agents) = &roots.bitfun_user_agents_dir {
-        if bitfun_agents.exists() && bitfun_agents.is_dir() {
+    if let Some(halo_agents) = &roots.halo_user_agents_dir {
+        if halo_agents.exists() && halo_agents.is_dir() {
             entries.push(CustomAgentDirEntry {
-                path: bitfun_agents.clone(),
+                path: halo_agents.clone(),
                 level: CustomAgentLevel::User,
             });
         }

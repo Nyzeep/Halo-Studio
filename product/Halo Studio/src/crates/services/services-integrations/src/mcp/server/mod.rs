@@ -121,7 +121,7 @@ pub struct MCPServerConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub working_directory: Option<String>,
     /// Whether a local process inherits every environment variable from the
-    /// BitFun process. `None` preserves the legacy behavior for native MCP
+    /// Halo process. `None` preserves the legacy behavior for native MCP
     /// configurations; imported executable configuration can opt out.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inherit_parent_environment: Option<bool>,

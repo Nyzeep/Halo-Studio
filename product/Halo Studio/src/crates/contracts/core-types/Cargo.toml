@@ -1,11 +1,11 @@
 [package]
-name = "bitfun-core-types"
+name = "halo-core-types"
 version.workspace = true
 edition.workspace = true
-description = "BitFun shared low-level product DTOs"
+description = "Halo shared low-level product DTOs"
 
 [lib]
-name = "bitfun_core_types"
+name = "halo_core_types"
 crate-type = ["rlib"]
 
 [dependencies]

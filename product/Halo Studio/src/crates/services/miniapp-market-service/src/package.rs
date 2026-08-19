@@ -1,5 +1,5 @@
 use crate::error::{MarketError, MarketResult};
-use bitfun_product_domains::miniapp::market::{
+use halo_product_domains::miniapp::market::{
     MarketPackageMeta, MARKET_MAX_PACKAGE_BYTES, MARKET_MAX_SCREENSHOT_BYTES,
     MARKET_MAX_UNCOMPRESSED_BYTES,
 };
@@ -327,7 +327,7 @@ fn validate_package_meta(meta: &MarketPackageMeta) -> MarketResult<()> {
             "MiniApp descriptions must contain between 1 and 500 characters.",
         ));
     }
-    if !bitfun_product_domains::miniapp::market::validate_market_category(&meta.category) {
+    if !halo_product_domains::miniapp::market::validate_market_category(&meta.category) {
         return Err(MarketError::bad_request(
             "invalid_category",
             "The MiniApp category is not supported.",
@@ -408,11 +408,11 @@ fn is_forbidden_interpreter(command: &str) -> bool {
     )
 }
 
-pub fn validate_min_bitfun_version(value: &str) -> MarketResult<()> {
+pub fn validate_min_halo_version(value: &str) -> MarketResult<()> {
     semver::Version::parse(value).map_err(|_| {
         MarketError::bad_request(
-            "invalid_min_bitfun_version",
-            "minBitfunVersion must be a semantic version such as 0.2.14.",
+            "invalid_min_halo_version",
+            "minHaloVersion must be a semantic version such as 0.2.14.",
         )
     })?;
     Ok(())

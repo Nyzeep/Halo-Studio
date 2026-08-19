@@ -1,9 +1,9 @@
 use crate::agentic::tools::framework::{
     PermissionIntent, Tool, ToolExposure, ToolResult, ToolUseContext,
 };
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
-use bitfun_services_integrations::web_tools::{ExaSearchRequest, WebToolNetworkProvider};
+use halo_services_integrations::web_tools::{ExaSearchRequest, WebToolNetworkProvider};
 use log::{error, info};
 use serde_json::{json, Value};
 use tool_runtime::web_search::{parse_exa_text_results, WebSearchResult};
@@ -31,7 +31,7 @@ impl WebSearchTool {
         kind: &str,
         crawl: &str,
         ctx: u64,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         WebToolNetworkProvider::search_exa(ExaSearchRequest {
             query,
             num_results: num,
@@ -42,7 +42,7 @@ impl WebSearchTool {
         .await
         .map_err(|error| {
             error!("WebSearch Exa error: {}", error);
-            BitFunError::tool(error.to_string())
+            HaloError::tool(error.to_string())
         })
     }
 
@@ -101,12 +101,12 @@ impl Tool for WebSearchTool {
         "WebSearch"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(
-            r#"- Allows BitFun to search the web and use the results to inform responses
+            r#"- Allows Halo to search the web and use the results to inform responses
 - Provides up-to-date information for current events and recent data
 - Returns search result information formatted as search result blocks
-- Use this tool for accessing information beyond BitFun's knowledge cutoff
+- Use this tool for accessing information beyond Halo's knowledge cutoff
 
 Usage notes:
 - Use when you need current information not in training data
@@ -182,13 +182,13 @@ Advanced features:
         &self,
         input: &Value,
         _context: &ToolUseContext,
-    ) -> BitFunResult<Vec<PermissionIntent>> {
+    ) -> HaloResult<Vec<PermissionIntent>> {
         let query = input
             .get("query")
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|query| !query.is_empty())
-            .ok_or_else(|| BitFunError::validation("query is required".to_string()))?;
+            .ok_or_else(|| HaloError::validation("query is required".to_string()))?;
         Ok(vec![PermissionIntent::new(
             "websearch",
             vec![query.to_string()],
@@ -199,11 +199,11 @@ Advanced features:
         &self,
         input: &Value,
         _context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let query = input
             .get("query")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| BitFunError::tool("query is required".to_string()))?;
+            .ok_or_else(|| HaloError::tool("query is required".to_string()))?;
 
         let num_results = input
             .get("num_results")

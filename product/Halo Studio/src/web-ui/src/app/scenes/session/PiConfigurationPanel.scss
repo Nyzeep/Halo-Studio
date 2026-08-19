@@ -1,4 +1,4 @@
-.bitfun-pi-configuration {
+.halo-pi-configuration {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -118,7 +118,7 @@
 }
 
 @media (max-width: 760px) {
-  .bitfun-pi-configuration__form {
+  .halo-pi-configuration__form {
     grid-template-columns: minmax(0, 1fr);
   }
 }

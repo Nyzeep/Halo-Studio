@@ -48,7 +48,7 @@ pub async fn read_workspace_instruction_files(
 
 #[cfg(feature = "workspace-runtime")]
 pub async fn read_workspace_instruction_files_with_fs(
-    fs: &dyn bitfun_runtime_ports::WorkspaceFileSystem,
+    fs: &dyn halo_runtime_ports::WorkspaceFileSystem,
     workspace_root: &str,
 ) -> Result<Vec<WorkspaceInstructionFile>, String> {
     let mut files = Vec::new();

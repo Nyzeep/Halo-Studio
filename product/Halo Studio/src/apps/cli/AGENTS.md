@@ -1,4 +1,4 @@
-# BitFun CLI Agent Guide
+# Halo Studio CLI Agent Guide
 
 Scope: this guide applies to `src/apps/cli`.
 
@@ -12,13 +12,13 @@ before product-definition, TUI layout, branding, packaging, runtime, or plugin a
 - This app owns Clap commands, TUI state and rendering, terminal input/lifecycle,
   CLI-local settings, structured output projection, and user-facing CLI diagnostics.
 - Peer Device Mode **host** support lives in `src/peer_host/`: after `/login`
-  (same Auth Server / Username / Password flow and `~/.bitfun` session/hint
+  (same Auth Server / Username / Password flow and `~/.halo-studio` session/hint
   files as Desktop), device routing stays up so Desktop controllers can
   HostInvoke this process. CLI is not a Peer Mode controller. Same-machine
   Desktop+CLI share one `device_id`; last AuthConnect wins.
 - Shared session, turn, task, tool, permission, context, checkpoint, Subagent,
   Harness, MCP, plugin, and capability facts belong to their runtime owners.
-- Existing `bitfun-core/product-full` compatibility paths may remain during a
+- Existing `halo-core/product-full` compatibility paths may remain during a
   reviewed migration. Do not add new concrete managers, global mutable services,
   or CLI-only copies of shared product behavior.
 
@@ -100,8 +100,8 @@ before product-definition, TUI layout, branding, packaging, runtime, or plugin a
 Run the smallest checks matching the change:
 
 ```bash
-cargo check -p bitfun-cli
-cargo test -p bitfun-cli
+cargo check -p halo-cli
+cargo test -p halo-cli
 ```
 
 Also run focused protocol/PTY tests when structured output, terminal lifecycle,
@@ -113,5 +113,5 @@ two-product build assertion.
 ## Install for end users
 
 Use [`install.ps1`](install.ps1), [`install.sh`](install.sh), and [`README.md`](README.md) for
-platform-native per-user installation. Document `bitfun` as primary; ship `bitfun-cli` only as the
-deprecated compatibility entrypoint, and use `bitfun` in all new examples and integrations.
+platform-native per-user installation. Document `halo` as primary; ship `halo-cli` only as the
+deprecated compatibility entrypoint, and use `halo` in all new examples and integrations.

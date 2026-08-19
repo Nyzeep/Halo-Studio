@@ -11,7 +11,7 @@ integration, or stable product-domain contracts.
 
 | Crate | Responsibility | Local doc |
 |---|---|---|
-| `core` | `bitfun-core` compatibility facade and product-full assembly | [AGENTS.md](core/AGENTS.md) |
+| `core` | `halo-core` compatibility facade and product-full assembly | [AGENTS.md](core/AGENTS.md) |
 | `external-sources` | Ecosystem-neutral lifecycle owner: capability-specific coordinators plus shared bounded discovery lanes | inherited |
 | `product-capabilities` | Product capability profiles, tool group facts, service requirements, and harness selections | [AGENTS.md](product-capabilities/AGENTS.md) |
 

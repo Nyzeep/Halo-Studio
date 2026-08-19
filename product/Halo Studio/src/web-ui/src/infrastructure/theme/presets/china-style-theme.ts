@@ -31,13 +31,13 @@ const CHINA_STYLE_BORDER = '#6a5c46';
 const chinaStyleBlue = (alpha: number | string) => rgbaFromHex(CHINA_STYLE_BLUE, alpha);
 const chinaStyleBorder = (alpha: number | string) => rgbaFromHex(CHINA_STYLE_BORDER, alpha);
 
-export const bitfunChinaStyleTheme: ThemeConfig = {
+export const haloChinaStyleTheme: ThemeConfig = {
 
-  id: 'bitfun-china-style',
+  id: 'halo-china-style',
   name: 'Ink Charm',
   type: 'light',
   description: 'Chinese style theme - Rice paper and ink, blue and vermilion, warm and elegant',
-  author: 'BitFun Team',
+  author: 'Halo Studio Team',
   version: '1.0.0',
 
 

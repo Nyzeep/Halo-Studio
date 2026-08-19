@@ -26,7 +26,7 @@ session controller leases, event delivery, connection bounds, and cleanup. It is
   and UserInput answers. Disconnect cleanup is internal lifecycle, not a detach operation. Do not add delete, fork, replay, observer,
   controller transfer, Tool/MCP/Hook management, or product configuration incidentally.
 - Stable Event, Product Domain, and Runtime Port DTOs may be reused. Do not
-  depend on `bitfun-core`, Agent Runtime implementations, SDK Host, services,
+  depend on `halo-core`, Agent Runtime implementations, SDK Host, services,
   Tauri, terminal, tool runtime, or remote transports.
 - Use only Windows Named Pipes or Unix Domain Sockets. Do not add TCP, HTTP,
   WebSocket, browser access, or remote fallback.
@@ -36,6 +36,6 @@ session controller leases, event delivery, connection bounds, and cleanup. It is
 ## Verification
 
 ```bash
-cargo test -p bitfun-agent-runtime-ipc
+cargo test -p halo-agent-runtime-ipc
 node scripts/check-core-boundaries.mjs
 ```

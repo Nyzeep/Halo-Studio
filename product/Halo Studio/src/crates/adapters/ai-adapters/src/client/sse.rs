@@ -3,7 +3,7 @@ use crate::client::StreamResponse;
 use crate::stream::UnifiedResponse;
 use crate::trace::{ModelExchangeRequestAttempt, ModelExchangeTraceConfig};
 use anyhow::{anyhow, Result};
-use bitfun_core_types::errors::{AiProviderError, ErrorCategory};
+use halo_core_types::errors::{AiProviderError, ErrorCategory};
 use chrono::{DateTime, Utc};
 use futures::Stream;
 use log::{debug, error, warn};

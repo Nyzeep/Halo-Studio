@@ -53,7 +53,7 @@ impl I18nService {
     }
 
     /// Initializes the i18n service.
-    pub async fn initialize(&self) -> BitFunResult<()> {
+    pub async fn initialize(&self) -> HaloResult<()> {
         let mut initialized = self.initialized.write().await;
         if *initialized {
             warn!("I18nService already initialized");
@@ -99,7 +99,7 @@ impl I18nService {
     }
 
     /// Loads all locale bundles.
-    async fn load_all_bundles(&self) -> BitFunResult<()> {
+    async fn load_all_bundles(&self) -> HaloResult<()> {
         let mut bundles = self.bundles.write().await;
 
         for locale in LOCALE_RESOURCE_REGISTRY {
@@ -133,7 +133,7 @@ impl I18nService {
     /// Persistence is owned by the caller through `app.language`, which is the
     /// canonical cross-runtime source of truth. Keeping this method memory-only
     /// avoids reviving `i18n.currentLanguage` writes on every runtime switch.
-    pub async fn set_locale(&self, locale: LocaleId) -> BitFunResult<()> {
+    pub async fn set_locale(&self, locale: LocaleId) -> HaloResult<()> {
         let old_locale = {
             let mut current = self.current_locale.write().await;
             let old = *current;
@@ -268,7 +268,7 @@ pub async fn get_global_i18n_service() -> Option<Arc<I18nService>> {
 }
 
 /// Updates the global i18n service locale if it has been initialized.
-pub async fn sync_global_i18n_service_locale(locale: LocaleId) -> BitFunResult<bool> {
+pub async fn sync_global_i18n_service_locale(locale: LocaleId) -> HaloResult<bool> {
     if let Some(service) = get_global_i18n_service().await {
         service.set_locale(locale).await?;
         Ok(true)
@@ -286,7 +286,7 @@ pub async fn set_global_i18n_service(service: Arc<I18nService>) {
 /// Initializes the global i18n service.
 pub async fn initialize_global_i18n_service(
     config_service: Option<Arc<ConfigService>>,
-) -> BitFunResult<Arc<I18nService>> {
+) -> HaloResult<Arc<I18nService>> {
     let service = match config_service {
         Some(cs) => Arc::new(I18nService::with_config_service(cs)),
         None => Arc::new(I18nService::new()),
@@ -324,13 +324,13 @@ mod tests {
             service
                 .translate_with_locale(&LocaleId::EnUS, "app-name", None)
                 .await,
-            "BitFun"
+            "Halo"
         );
         assert_eq!(
             service
                 .translate_with_locale(&LocaleId::ZhTW, "app-name", None)
                 .await,
-            "BitFun"
+            "Halo"
         );
     }
 

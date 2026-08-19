@@ -2,7 +2,7 @@
 
 # AGENTS.md
 
-BitFun is a Rust workspace plus React frontends.
+Halo Studio is a Rust workspace plus React frontends.
 
 Repository rule: **keep product logic platform-agnostic, then expose it through platform adapters**.
 
@@ -24,7 +24,7 @@ Keep crate dependencies inside each layer to the smallest set needed.
 
 | # | Layer | Path | Owns | Modules / entries | Layer doc |
 |---|---|---|---|---|---|
-| 1 | Interfaces and entrypoints | `src/apps/*`, `src/web-ui`, `src/mobile-web`, `BitFun-Installer`, `tests/e2e`, `src/crates/interfaces` | Product hosts, commands, UI entrypoints, protocol interfaces, and cross-surface tests | desktop, CLI, server, relay, Web UI, mobile web, installer, E2E, `acp`, `sdk-host` | nearest local `AGENTS.md`; [interfaces](src/crates/interfaces/AGENTS.md) |
+| 1 | Interfaces and entrypoints | `src/apps/*`, `src/web-ui`, `src/mobile-web`, `Halo-Installer`, `tests/e2e`, `src/crates/interfaces` | Product hosts, commands, UI entrypoints, protocol interfaces, and cross-surface tests | desktop, CLI, server, relay, Web UI, mobile web, installer, E2E, `acp`, `sdk-host` | nearest local `AGENTS.md`; [interfaces](src/crates/interfaces/AGENTS.md) |
 | 2 | Product assembly | `src/crates/assembly` | Compatibility exports, product capability selection, product-full wiring, adapter/service registration, and ecosystem-neutral source coordination | `core`, `external-sources`, `product-capabilities` | [AGENTS.md](src/crates/assembly/AGENTS.md) |
 | 3 | Adapters | `src/crates/adapters` | AI/transport/WebDriver protocol adapters, external AI work source adapters (OpenCode/Claude Code/Codex), and external-provider translation | `agent-runtime-ipc`, `ai-adapters`, `opencode-adapter`, `claude-code-adapter`, `codex-adapter`, `static-hook-support`, `transport`, `webdriver` | [AGENTS.md](src/crates/adapters/AGENTS.md) |
 | 4 | Services | `src/crates/services` | Reusable OS, filesystem, terminal, MCP, remote, git, watch, process, LSP plugin registry, session persistence primitives, MiniApp runtime IO, and network implementations | `services-core`, `services-integrations`, `miniapp-market-service`, `relay-service`, `page-function-runtime`, `terminal` | [AGENTS.md](src/crates/services/AGENTS.md) |
@@ -58,7 +58,7 @@ pnpm run desktop:dev               # full hot-reload: Vite HMR + Rust auto-rebui
 pnpm run desktop:preview:debug     # reuse pre-built binary + Vite HMR; no Rust auto-rebuild
 pnpm run dev:web                   # browser-only frontend
 pnpm run cli:dev                   # CLI runtime
-pnpm run cli:install               # build release + install bitfun (Windows/macOS/Linux; deprecated bitfun-cli included)
+pnpm run cli:install               # build release + install halo (Windows/macOS/Linux; deprecated halo-cli included)
 
 # Check
 pnpm run fmt:rs                     # format only changed / staged Rust files
@@ -78,7 +78,7 @@ pnpm --dir src/web-ui run test:run      # broad suite; prefer focused paths loca
 cargo test --workspace                  # broad suite; CI-backed
 
 # Build (only for build-impacting changes or CI reproduction)
-cargo build -p bitfun-desktop           # build-impacting changes / CI reproduction
+cargo build -p halo-desktop           # build-impacting changes / CI reproduction
 pnpm run build:web                      # build-impacting changes / CI reproduction
 pnpm run build:mobile-web               # build-impacting changes / CI reproduction
 
@@ -97,7 +97,7 @@ The dev/build pipeline trades some flexibility for speed. Override when needed:
 | Variable / flag | Use when |
 | --- | --- |
 | `CARGO_PROFILE_DEV_DEBUG=2` | You need full debug info for breakpoints. The dev profile ships `line-tables-only` (panic backtraces keep line numbers, PDBs stay small). |
-| `BITFUN_MOBILE_WEB_FORCE_BUILD=1` or `node scripts/mobile-web-build.cjs --force` | mobile-web must rebuild even though its sources look unchanged. The build is skipped when `src/mobile-web/dist` is newer than every input. |
+| `HALO_MOBILE_WEB_FORCE_BUILD=1` or `node scripts/mobile-web-build.cjs --force` | mobile-web must rebuild even though its sources look unchanged. The build is skipped when `src/mobile-web/dist` is newer than every input. |
 | `VITE_USE_POLLING=1` | The Vite dev watcher misses changes — typically on a network drive or a WSL mount. Native file events are the default. |
 
 `pnpm run build:web` runs the type-check and the Vite build concurrently, so a
@@ -115,7 +115,7 @@ type error and a bundling error can surface in either order; both are prefixed
   `src/shared/i18n/resources/shared/<locale>/terms.json`; workflow copy stays
   in the owning product surface.
 - Do not import Web UI locale resources into smaller product surfaces such as
-  `src/mobile-web` or `BitFun-Installer`. See `docs/architecture/i18n.md`.
+  `src/mobile-web` or `Halo-Installer`. See `docs/architecture/i18n.md`.
 - Static self-contained pages may use generated page-scoped shared-term files;
   they must not import Web UI locale catalogs.
 - Web UI loads only bootstrap namespaces eagerly; use `useI18n(namespace)` for
@@ -168,7 +168,7 @@ await api.invoke('your_command', { request: { ... } });
 
 - Do not call Tauri APIs directly from UI components; go through the adapter/infrastructure layer.
 - Desktop-only host adapters belong in `src/apps/desktop`, then flow through typed capability interfaces and, when event delivery is needed, the production transport adapter.
-- In shared core, avoid host-specific APIs such as `tauri::AppHandle`; use shared abstractions such as `bitfun_events::EventEmitter`.
+- In shared core, avoid host-specific APIs such as `tauri::AppHandle`; use shared abstractions such as `halo_events::EventEmitter`.
 
 ### Remote compatibility
 
@@ -186,15 +186,15 @@ await api.invoke('your_command', { request: { ... } });
 
 ### Agent hooks
 
-- BitFun implements the Codex hook contract, so <https://learn.chatgpt.com/docs/hooks> is the reference for events, payload fields, and the decision schema. Do not fork that contract. [`docs/features/agent-hooks.md`](docs/features/agent-hooks.md) ([中文](docs/features/agent-hooks.zh-CN.md)) covers only the BitFun-specific parts — file locations, the `app.hooks` gates, and the deviations table — and must be updated whenever a deviation is added or closed.
-- The portable engine (settings parsing, payload construction, process execution, decision merging) lives in `bitfun-agent-runtime::native_hooks`. `bitfun-core::native_hooks` owns config discovery, gating, and per-event dispatch helpers; dispatch sites call those helpers instead of executing hooks inline.
+- Halo Studio implements the Codex hook contract, so <https://learn.chatgpt.com/docs/hooks> is the reference for events, payload fields, and the decision schema. Do not fork that contract. [`docs/features/agent-hooks.md`](docs/features/agent-hooks.md) ([中文](docs/features/agent-hooks.zh-CN.md)) covers only the Halo Studio-specific parts — file locations, the `app.hooks` gates, and the deviations table — and must be updated whenever a deviation is added or closed.
+- The portable engine (settings parsing, payload construction, process execution, decision merging) lives in `halo-agent-runtime::native_hooks`. `halo-core::native_hooks` owns config discovery, gating, and per-event dispatch helpers; dispatch sites call those helpers instead of executing hooks inline.
 - Three separate things share the word "hook": these native user hooks, the internal compiled-in `post_call_hooks`, and the read-only external hook catalog of other AI applications (`external_hooks`). Keep them separate.
 
 ## Architecture
 
 ### Product architecture guardrails
 
-For any `bitfun-core` decomposition, feature-boundary, dependency-boundary, or
+For any `halo-core` decomposition, feature-boundary, dependency-boundary, or
 Rust build-speed refactor, read
 [`docs/architecture/product-architecture.md`](docs/architecture/product-architecture.md)
 before editing. Keep this file as an entry point; put module-specific ownership
@@ -266,7 +266,7 @@ first, then [`docs/sdlc-harness/design.md`](docs/sdlc-harness/design.md). If
 module boundaries or behavior change, follow the matching design under
 `docs/sdlc-harness/architecture/` or `docs/sdlc-harness/features/`.
 
-Do not hard-code BitFun repository assumptions as target-project rules; keep
+Do not hard-code Halo Studio repository assumptions as target-project rules; keep
 quality protection behavior target-aware, evidence-backed, risk-tiered,
 cost-aware, and auditable.
 
@@ -285,11 +285,11 @@ change directly affects build, packaging, or CI cannot protect the path.
 | Mobile web UI, state, pairing, disconnect, or reconnect behavior | `pnpm --dir src/mobile-web run type-check`; include manual pairing / reconnect notes when behavior changes |
 | Product definition, schema, resolver, or Desktop/CLI product build adapter | `pnpm run product:test`, plus `pnpm run product:check` for the default definition |
 | Shared Rust logic in `core`, `transport`, adapters, or services | `cargo check --workspace`, plus the nearest focused `cargo test` when behavior changed |
-| Desktop integration, Tauri APIs, browser/computer-use, or desktop-only behavior | `cargo check -p bitfun-desktop`, plus focused desktop tests when behavior changed |
+| Desktop integration, Tauri APIs, browser/computer-use, or desktop-only behavior | `cargo check -p halo-desktop`, plus focused desktop tests when behavior changed |
 | Behavior covered by desktop smoke/functional flows | Prefer the nearest focused E2E/smoke check; rely on CI for broad build/test coverage unless build behavior changed |
-| `src/crates/adapters/ai-adapters` | Relevant Rust checks above; add `cargo test -p bitfun-agent-stream` only when stream contracts changed |
-| Installer frontend or i18n runtime without packaging changes | `pnpm --dir BitFun-Installer run type-check` |
-| Installer Tauri/Rust changes | `cargo check --manifest-path BitFun-Installer/src-tauri/Cargo.toml` |
+| `src/crates/adapters/ai-adapters` | Relevant Rust checks above; add `cargo test -p halo-agent-stream` only when stream contracts changed |
+| Installer frontend or i18n runtime without packaging changes | `pnpm --dir Halo-Installer run type-check` |
+| Installer Tauri/Rust changes | `cargo check --manifest-path Halo-Installer/src-tauri/Cargo.toml` |
 | Installer packaging, payload, install/uninstall flow, or native bundling | `pnpm run installer:build` |
 
 ## Agent-doc priority

@@ -1,6 +1,6 @@
 //! CLI account login and device-routing (RPC control) support.
 //!
-//! This module lets the CLI log in to a BitFun relay account and then become
+//! This module lets the CLI log in to a Halo relay account and then become
 //! RPC-controllable by other devices on the same account.
 //!
 //! Incoming `HostInvoke` / `DeviceEvent` messages are handled by
@@ -19,7 +19,7 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use tokio::sync::{Notify, RwLock};
 
-use bitfun_core::service::remote_connect::{
+use halo_core::service::remote_connect::{
     self, encryption, relay_client::RelayClient, relay_client::RelayEvent, session_store,
     validate_relay_base_url, AccountClient, AccountSession, DeviceIdentity, RemoteServer,
 };
@@ -145,7 +145,7 @@ async fn invalidate_and_wait_for_account_sync() -> AccountContextTransitionGuard
     let transition_guard = ACCOUNT_CONTEXT_TRANSITION_LOCK.lock().await;
     let transition = AccountContextTransitionPermit::begin();
     let sync_guard = ACCOUNT_SYNC_LOCK.lock().await;
-    bitfun_core::service::remote_connect::settings_sync::wait_for_sync_operations_idle().await;
+    halo_core::service::remote_connect::settings_sync::wait_for_sync_operations_idle().await;
     let routing_guard = DEVICE_ROUTING_LIFECYCLE.write().await;
     AccountContextTransitionGuard {
         sync_guard: Some(sync_guard),
@@ -164,7 +164,7 @@ async fn invalidate_and_wait_if_account_current(
     }
     let transition = AccountContextTransitionPermit::begin();
     let sync_guard = ACCOUNT_SYNC_LOCK.lock().await;
-    bitfun_core::service::remote_connect::settings_sync::wait_for_sync_operations_idle().await;
+    halo_core::service::remote_connect::settings_sync::wait_for_sync_operations_idle().await;
     let routing_guard = DEVICE_ROUTING_LIFECYCLE.write().await;
     Some(AccountContextTransitionGuard {
         sync_guard: Some(sync_guard),
@@ -463,8 +463,8 @@ pub(crate) async fn login_with_credentials(
 
     let generation = transition_guard.finish();
     let routing_msg = match spawn_device_routing(&relay_url, &device_name, generation).await {
-        Ok(()) if retired_daemon => " The previous CLI daemon was stopped and routing is connected in this CLI process. Restart `bitfun daemon run` to restore always-on routing.".to_string(),
-        Ok(()) => " Device routing connected (Peer Host ready). Tip: `bitfun daemon install` keeps this device reachable after exit or reboot.".to_string(),
+        Ok(()) if retired_daemon => " The previous CLI daemon was stopped and routing is connected in this CLI process. Restart `halo daemon run` to restore always-on routing.".to_string(),
+        Ok(()) => " Device routing connected (Peer Host ready). Tip: `halo daemon install` keeps this device reachable after exit or reboot.".to_string(),
         Err(e) if retired_daemon => format!(" (Warning: the previous CLI daemon was stopped, but replacement routing failed: {e})"),
         Err(e) => format!(" (Warning: device routing failed: {e})"),
     };
@@ -1363,14 +1363,14 @@ mod tests {
     #[test]
     fn pending_replacement_cannot_restore_the_previous_persisted_account() {
         let directory = std::env::temp_dir().join(format!(
-            "bitfun-cli-account-session-{}",
+            "halo-cli-account-session-{}",
             uuid::Uuid::new_v4()
         ));
-        bitfun_core::service::remote_connect::session_store::set_session_store_directory_for_test(
+        halo_core::service::remote_connect::session_store::set_session_store_directory_for_test(
             directory,
         );
         let old_master_key = [7_u8; 32];
-        bitfun_core::service::remote_connect::session_store::save_session_with_device(
+        halo_core::service::remote_connect::session_store::save_session_with_device(
             "account-a-token",
             "account-a",
             &old_master_key,
@@ -1379,7 +1379,7 @@ mod tests {
         )
         .expect("persist account A");
         assert_eq!(
-            bitfun_core::service::remote_connect::session_store::load_session_detailed()
+            halo_core::service::remote_connect::session_store::load_session_detailed()
                 .expect("load account A")
                 .expect("account A should be persisted")
                 .token,
@@ -1391,7 +1391,7 @@ mod tests {
         clear_replaced_persisted_session();
 
         assert!(
-            bitfun_core::service::remote_connect::session_store::load_session_detailed()
+            halo_core::service::remote_connect::session_store::load_session_detailed()
                 .expect("load after candidate B becomes pending")
                 .is_none()
         );
@@ -1400,7 +1400,7 @@ mod tests {
     #[test]
     fn replacement_revokes_only_the_previous_distinct_token() {
         let previous = AccountContextState {
-            session: bitfun_core::service::remote_connect::AccountSession {
+            session: halo_core::service::remote_connect::AccountSession {
                 token: "old-token".to_string(),
                 user_id: "same-account".to_string(),
                 master_key: [3_u8; 32],

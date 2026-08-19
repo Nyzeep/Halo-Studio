@@ -509,7 +509,7 @@
   }
 
   &__spinner {
-    animation: bitfun-notification-center-spin 1s linear infinite;
+    animation: halo-notification-center-spin 1s linear infinite;
   }
 
   &__active-task-content {
@@ -620,7 +620,7 @@
 }
 
 
-@keyframes bitfun-notification-center-spin {
+@keyframes halo-notification-center-spin {
   from {
     transform: rotate(0deg);
   }

@@ -25,7 +25,7 @@ export class MarketApiError extends Error {
 }
 
 function csrfToken(): string | undefined {
-  const prefix = 'bitfun_market_csrf=';
+  const prefix = 'halo_market_csrf=';
   return document.cookie
     .split(';')
     .map((item) => item.trim())
@@ -96,7 +96,7 @@ export const marketApi = {
     request<MarketSubmission>(`/submissions/${id}/package`, {
       method: 'PUT',
       body: file,
-      headers: { 'content-type': 'application/vnd.bitfun.miniapp+zip' },
+      headers: { 'content-type': 'application/vnd.halo.miniapp+zip' },
     }),
   uploadScreenshot: (id: string, position: number, file: File) =>
     request<MarketSubmission>(`/submissions/${id}/screenshots/${position}`, {

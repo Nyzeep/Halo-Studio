@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     AgentEventStream, AgentRunRequest, AgentRuntimeBuilder, AgentRuntimeSdkCompatibility,
     AgentSessionCreateRequest, AgentSessionCreateResult, AgentSubmissionPort,
     AgentSubmissionRequest, AgentSubmissionResult, AgentSubmissionSource, PortResult,

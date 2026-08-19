@@ -23,7 +23,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 280px;
-  font-family: var(--bitfun-font-mono, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
+  font-family: var(--halo-font-mono, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
 }
 .toolbar__branch-filter { position: relative; }
 .toolbar__branch-filter .chevron { margin-left: 4px; opacity: .8; }

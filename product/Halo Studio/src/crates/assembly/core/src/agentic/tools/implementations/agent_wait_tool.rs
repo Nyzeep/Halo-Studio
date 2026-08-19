@@ -5,7 +5,7 @@ use crate::agentic::coordination::{
 use crate::agentic::tools::framework::{
     PermissionIntent, Tool, ToolRenderOptions, ToolResult, ToolUseContext, ValidationResult,
 };
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -34,10 +34,10 @@ impl AgentWaitTool {
         Self
     }
 
-    fn parse_request(input: &Value) -> BitFunResult<AgentWaitRequest> {
+    fn parse_request(input: &Value) -> HaloResult<AgentWaitRequest> {
         let object = input
             .as_object()
-            .ok_or_else(|| BitFunError::tool("AgentWait input must be an object".to_string()))?;
+            .ok_or_else(|| HaloError::tool("AgentWait input must be an object".to_string()))?;
 
         let task_ids = object
             .get("bg_task_ids")
@@ -48,7 +48,7 @@ impl AgentWaitTool {
             Some(Value::Array(values)) if values.is_empty() => (Vec::new(), false),
             Some(Value::Array(values)) => (values.iter().collect::<Vec<_>>(), true),
             Some(_) => {
-                return Err(BitFunError::tool(
+                return Err(HaloError::tool(
                     "bg_task_ids must be a string or an array".to_string(),
                 ));
             }
@@ -64,7 +64,7 @@ impl AgentWaitTool {
             .map(ToOwned::to_owned)
             .collect::<Vec<_>>();
         if require_task_id && bg_task_ids.is_empty() {
-            return Err(BitFunError::tool(
+            return Err(HaloError::tool(
                 "bg_task_ids must contain at least one non-empty string".to_string(),
             ));
         }
@@ -76,21 +76,21 @@ impl AgentWaitTool {
         })
     }
 
-    fn parse_wait_mode(wait_mode: Option<&Value>) -> BitFunResult<BackgroundSubagentWaitMode> {
+    fn parse_wait_mode(wait_mode: Option<&Value>) -> HaloResult<BackgroundSubagentWaitMode> {
         let wait_mode = match wait_mode {
             None => BackgroundSubagentWaitMode::All,
             Some(Value::String(value)) => match value.trim() {
                 "any" => BackgroundSubagentWaitMode::Any,
                 "all" => BackgroundSubagentWaitMode::All,
                 value => {
-                    return Err(BitFunError::tool(format!(
+                    return Err(HaloError::tool(format!(
                         "wait_mode must be \"any\" or \"all\"; got: {}",
                         value
                     )));
                 }
             },
             Some(_) => {
-                return Err(BitFunError::tool(
+                return Err(HaloError::tool(
                     "wait_mode must be \"any\" or \"all\"".to_string(),
                 ));
             }
@@ -162,7 +162,7 @@ impl Tool for AgentWaitTool {
         true
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok("Wait for background subagent results.
 Set wait_mode to `any` to return after any selected task completes, or `all` to wait for every selected task.
 Provide bg_task_ids when known; omit it or pass [] to select all unconsumed background tasks.
@@ -205,7 +205,7 @@ The selected task set is fixed when the call starts. wait_mode defaults to `all`
         &self,
         _input: &Value,
         _context: &ToolUseContext,
-    ) -> BitFunResult<Vec<PermissionIntent>> {
+    ) -> HaloResult<Vec<PermissionIntent>> {
         Ok(Vec::new())
     }
 
@@ -242,17 +242,17 @@ The selected task set is fixed when the call starts. wait_mode defaults to `all`
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let request = Self::parse_request(input)?;
         let session_id = context
             .session_id
             .as_deref()
-            .ok_or_else(|| BitFunError::tool("session_id is required in context".to_string()))?;
+            .ok_or_else(|| HaloError::tool("session_id is required in context".to_string()))?;
         let dialog_turn_id = context.dialog_turn_id.as_deref().ok_or_else(|| {
-            BitFunError::tool("dialog_turn_id is required in context".to_string())
+            HaloError::tool("dialog_turn_id is required in context".to_string())
         })?;
         let coordinator = get_global_coordinator()
-            .ok_or_else(|| BitFunError::tool("coordinator not initialized".to_string()))?;
+            .ok_or_else(|| HaloError::tool("coordinator not initialized".to_string()))?;
         let result = coordinator
             .wait_for_background_subagent_outcomes(
                 session_id,

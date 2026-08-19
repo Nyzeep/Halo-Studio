@@ -125,15 +125,15 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
       showCloseButton={true}
       size="medium"
     >
-      <div className="bitfun-about-dialog__content">
+      <div className="halo-about-dialog__content">
         {/* Hero section - product info */}
-        <div className="bitfun-about-dialog__hero">
-          <h1 className="bitfun-about-dialog__title">{version.name}</h1>
-          <div className="bitfun-about-dialog__version-badge">
+        <div className="halo-about-dialog__hero">
+          <h1 className="halo-about-dialog__title">{version.name}</h1>
+          <div className="halo-about-dialog__version-badge">
             {t('about.version', { version: formatVersion(version.version, version.isDev) })}
           </div>
-          <div className="bitfun-about-dialog__divider" />
-          <div className="bitfun-about-dialog__dots">
+          <div className="halo-about-dialog__divider" />
+          <div className="halo-about-dialog__dots">
             <span></span>
             <span></span>
             <span></span>
@@ -141,28 +141,28 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
         </div>
 
         {/* Scrollable area */}
-        <div className="bitfun-about-dialog__scrollable">
+        <div className="halo-about-dialog__scrollable">
           {isTauriRuntime() ? (
-            <div className="bitfun-about-dialog__update-card">
-              <div className="bitfun-about-dialog__update-card-top">
-                <div className="bitfun-about-dialog__update-card-main">
-                  <div className="bitfun-about-dialog__update-card-head">
-                    <div className="bitfun-about-dialog__update-card-icon" aria-hidden>
+            <div className="halo-about-dialog__update-card">
+              <div className="halo-about-dialog__update-card-top">
+                <div className="halo-about-dialog__update-card-main">
+                  <div className="halo-about-dialog__update-card-head">
+                    <div className="halo-about-dialog__update-card-icon" aria-hidden>
                       <Download size={18} strokeWidth={2} />
                     </div>
-                    <div className="bitfun-about-dialog__update-card-meta">
-                      <div className="bitfun-about-dialog__update-card-title">
+                    <div className="halo-about-dialog__update-card-meta">
+                      <div className="halo-about-dialog__update-card-title">
                         {t('about.updateSectionTitle')}
                       </div>
-                      <p className="bitfun-about-dialog__update-card-hint">
+                      <p className="halo-about-dialog__update-card-hint">
                         {t('about.updateSectionHint')}
                       </p>
                     </div>
                   </div>
-                  <div className="bitfun-about-dialog__update-card-feedback">
+                  <div className="halo-about-dialog__update-card-feedback">
                     {manualCheckStatus === 'latest' ? (
                       <div
-                        className="bitfun-about-dialog__update-status bitfun-about-dialog__update-status--success"
+                        className="halo-about-dialog__update-status halo-about-dialog__update-status--success"
                         role="status"
                       >
                         <CheckCircle2 size={14} aria-hidden />
@@ -174,12 +174,12 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
                         type="error"
                         message={manualCheckErrorMessage}
                         showIcon
-                        className="bitfun-about-dialog__update-alert"
+                        className="halo-about-dialog__update-alert"
                       />
                     ) : null}
                   </div>
                 </div>
-                <div className="bitfun-about-dialog__update-card-actions">
+                <div className="halo-about-dialog__update-card-actions">
                   <Button
                     variant="secondary"
                     size="small"
@@ -188,16 +188,16 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
                     onClick={() => void handleCheckForUpdates()}
                   >
                     {!manualCheckBusy ? (
-                      <Check size={14} className="bitfun-about-dialog__update-btn-icon" aria-hidden />
+                      <Check size={14} className="halo-about-dialog__update-btn-icon" aria-hidden />
                     ) : null}
                     {manualCheckBusy ? t('update.checking') : t('update.checkForUpdates')}
                   </Button>
                 </div>
               </div>
               {updateStatus === 'downloading' ? (
-                <div className="bitfun-about-dialog__download-status" role="status">
+                <div className="halo-about-dialog__download-status" role="status">
                   <div
-                    className="bitfun-about-dialog__download-bar"
+                    className="halo-about-dialog__download-bar"
                     role="progressbar"
                     aria-valuemin={0}
                     aria-valuemax={100}
@@ -207,8 +207,8 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
                     <div
                       className={
                         updateProgressPercent != null
-                          ? 'bitfun-about-dialog__download-fill'
-                          : 'bitfun-about-dialog__download-fill bitfun-about-dialog__download-fill--indeterminate'
+                          ? 'halo-about-dialog__download-fill'
+                          : 'halo-about-dialog__download-fill halo-about-dialog__download-fill--indeterminate'
                       }
                       style={
                         updateProgressPercent != null
@@ -217,7 +217,7 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
                       }
                     />
                   </div>
-                  <div className="bitfun-about-dialog__download-meta">
+                  <div className="halo-about-dialog__download-meta">
                     <span>{t('update.backgroundDownloading')}</span>
                     <span>
                       {updateProgressPercent != null
@@ -225,14 +225,14 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
                         : t('update.progressUnknown')}
                     </span>
                   </div>
-                  <p className="bitfun-about-dialog__download-hint">
+                  <p className="halo-about-dialog__download-hint">
                     {t('update.backgroundDownloadHint')}
                   </p>
                 </div>
               ) : null}
               {updateStatus === 'installed' ? (
-                <div className="bitfun-about-dialog__update-installed">
-                  <div className="bitfun-about-dialog__update-status bitfun-about-dialog__update-status--success">
+                <div className="halo-about-dialog__update-installed">
+                  <div className="halo-about-dialog__update-status halo-about-dialog__update-status--success">
                     <CheckCircle2 size={14} aria-hidden />
                     <span>{t('update.installedMessage')}</span>
                   </div>
@@ -246,32 +246,32 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
                   type="error"
                   message={formatUpdateInstallError(updateError, t)}
                   showIcon
-                  className="bitfun-about-dialog__update-alert"
+                  className="halo-about-dialog__update-alert"
                 />
               ) : null}
             </div>
           ) : (
-            <p className="bitfun-about-dialog__update-hint">{t('update.desktopOnly')}</p>
+            <p className="halo-about-dialog__update-hint">{t('update.desktopOnly')}</p>
           )}
-          <div className="bitfun-about-dialog__info-section">
-            <div className="bitfun-about-dialog__info-card">
-              <div className="bitfun-about-dialog__info-row">
-                <span className="bitfun-about-dialog__info-label">{t('about.buildDate')}</span>
-                <span className="bitfun-about-dialog__info-value">
+          <div className="halo-about-dialog__info-section">
+            <div className="halo-about-dialog__info-card">
+              <div className="halo-about-dialog__info-row">
+                <span className="halo-about-dialog__info-label">{t('about.buildDate')}</span>
+                <span className="halo-about-dialog__info-value">
                   {formatBuildDate(version.buildDate)}
                 </span>
               </div>
 
               {version.gitCommit && (
-                <div className="bitfun-about-dialog__info-row">
-                  <span className="bitfun-about-dialog__info-label">{t('about.commit')}</span>
-                  <div className="bitfun-about-dialog__info-value-group">
-                    <span className="bitfun-about-dialog__info-value bitfun-about-dialog__info-value--mono">
+                <div className="halo-about-dialog__info-row">
+                  <span className="halo-about-dialog__info-label">{t('about.commit')}</span>
+                  <div className="halo-about-dialog__info-value-group">
+                    <span className="halo-about-dialog__info-value halo-about-dialog__info-value--mono">
                       {version.gitCommit}
                     </span>
                     <Tooltip content={t('about.copy')}>
                       <button
-                        className="bitfun-about-dialog__copy-btn"
+                        className="halo-about-dialog__copy-btn"
                         onClick={() => copyToClipboard(version.gitCommit || '', 'commit')}
                       >
                         {copiedItem === 'commit' ? <Check size={12} /> : <Copy size={12} />}
@@ -282,9 +282,9 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
               )}
 
               {version.gitBranch && (
-                <div className="bitfun-about-dialog__info-row">
-                  <span className="bitfun-about-dialog__info-label">{t('about.branch')}</span>
-                  <span className="bitfun-about-dialog__info-value">{version.gitBranch}</span>
+                <div className="halo-about-dialog__info-row">
+                  <span className="halo-about-dialog__info-label">{t('about.branch')}</span>
+                  <span className="halo-about-dialog__info-value">{version.gitBranch}</span>
                 </div>
               )}
             </div>
@@ -292,9 +292,9 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="bitfun-about-dialog__footer">
-          <p className="bitfun-about-dialog__license">{license.text}</p>
-          <p className="bitfun-about-dialog__copyright">
+        <div className="halo-about-dialog__footer">
+          <p className="halo-about-dialog__license">{license.text}</p>
+          <p className="halo-about-dialog__copyright">
             {t('about.copyright')}
           </p>
         </div>

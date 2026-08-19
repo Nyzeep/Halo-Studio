@@ -1,4 +1,4 @@
-use bitfun_product_domains::canvas::types::{
+use halo_product_domains::canvas::types::{
     CanvasDiagnostic, CanvasDiagnosticCategory, CanvasDiagnosticSeverity,
 };
 
@@ -39,7 +39,7 @@ pub(super) fn validate_canvas_import_shadowing(
                 severity: CanvasDiagnosticSeverity::Error,
                 category: CanvasDiagnosticCategory::TypeScript,
                 message: format!(
-                    "`{}` is imported from bitfun/canvas and also declared locally",
+                    "`{}` is imported from halo/canvas and also declared locally",
                     name
                 ),
                 code: Some("canvas.compile.sdk_name_shadowed".to_string()),
@@ -440,7 +440,7 @@ pub(super) fn canvas_runtime_binding_prelude(import_bindings: &CanvasSdkImportBi
         .map(|name| {
             (
                 (*name).to_string(),
-                format!("__BitfunCanvasSDK.{}", property_access(name)),
+                format!("__HaloCanvasSDK.{}", property_access(name)),
             )
         })
         .collect::<BTreeMap<_, _>>();
@@ -455,18 +455,18 @@ pub(super) fn canvas_runtime_binding_prelude(import_bindings: &CanvasSdkImportBi
         local_bindings.insert(
             namespace.local.clone(),
             match namespace.source {
-                CanvasSdkImportSource::Canvas => "__BitfunCanvasSDK".to_string(),
-                CanvasSdkImportSource::React => "__BitfunCanvasReactCompat".to_string(),
+                CanvasSdkImportSource::Canvas => "__HaloCanvasSDK".to_string(),
+                CanvasSdkImportSource::React => "__HaloCanvasReactCompat".to_string(),
             },
         );
     }
 
     let mut prelude = String::from(
-        "const __BitfunCanvasSDK = window.BitfunCanvasSDK;\n\
-const __BitfunCanvasRuntime = window.BitfunCanvasRuntime;\n\
-const __BitfunCanvasReactCompat = Object.freeze({ ...__BitfunCanvasSDK, createElement: __BitfunCanvasRuntime.h, Fragment: __BitfunCanvasRuntime.Fragment });\n\
-const h = __BitfunCanvasRuntime.h;\n\
-const Fragment = __BitfunCanvasRuntime.Fragment;\n",
+        "const __HaloCanvasSDK = window.HaloCanvasSDK;\n\
+const __HaloCanvasRuntime = window.HaloCanvasRuntime;\n\
+const __HaloCanvasReactCompat = Object.freeze({ ...__HaloCanvasSDK, createElement: __HaloCanvasRuntime.h, Fragment: __HaloCanvasRuntime.Fragment });\n\
+const h = __HaloCanvasRuntime.h;\n\
+const Fragment = __HaloCanvasRuntime.Fragment;\n",
     );
     for (local, expression) in local_bindings {
         if local == "h" || local == "Fragment" {
@@ -484,7 +484,7 @@ const Fragment = __BitfunCanvasRuntime.Fragment;\n",
 #[cfg(feature = "canvas-runtime")]
 fn canvas_sdk_import_source(source: &str) -> Option<CanvasSdkImportSource> {
     match source {
-        "bitfun/canvas" | "cursor/canvas" => Some(CanvasSdkImportSource::Canvas),
+        "halo/canvas" | "cursor/canvas" => Some(CanvasSdkImportSource::Canvas),
         "react" => Some(CanvasSdkImportSource::React),
         _ => None,
     }
@@ -504,23 +504,23 @@ fn named_import_target(source: CanvasSdkImportSource, imported: &str) -> Option<
                 .contains(&imported)
                 .then(|| NamedImportTarget {
                     canonical: imported.to_string(),
-                    expression: format!("__BitfunCanvasSDK.{}", property_access(imported)),
+                    expression: format!("__HaloCanvasSDK.{}", property_access(imported)),
                 })
         }
         CanvasSdkImportSource::React => match imported {
             "useState" | "useRef" | "useEffect" | "useCallback" | "useMemo" => {
                 Some(NamedImportTarget {
                     canonical: imported.to_string(),
-                    expression: format!("__BitfunCanvasSDK.{}", property_access(imported)),
+                    expression: format!("__HaloCanvasSDK.{}", property_access(imported)),
                 })
             }
             "Fragment" => Some(NamedImportTarget {
                 canonical: "Fragment".to_string(),
-                expression: "__BitfunCanvasRuntime.Fragment".to_string(),
+                expression: "__HaloCanvasRuntime.Fragment".to_string(),
             }),
             "createElement" => Some(NamedImportTarget {
                 canonical: "createElement".to_string(),
-                expression: "__BitfunCanvasRuntime.h".to_string(),
+                expression: "__HaloCanvasRuntime.h".to_string(),
             }),
             _ => None,
         },
@@ -545,7 +545,7 @@ fn unsupported_sdk_import_diagnostic(
 ) -> CanvasDiagnostic {
     let (line, column) = line_column(source, offset);
     let module = match import_source {
-        CanvasSdkImportSource::Canvas => "bitfun/canvas",
+        CanvasSdkImportSource::Canvas => "halo/canvas",
         CanvasSdkImportSource::React => "react",
     };
     CanvasDiagnostic {
@@ -584,9 +584,9 @@ fn is_reserved_canvas_runtime_binding(name: &str) -> bool {
     matches!(
         name,
         "h" | "Fragment"
-            | "__BitfunCanvasSDK"
-            | "__BitfunCanvasRuntime"
-            | "__BitfunCanvasReactCompat"
+            | "__HaloCanvasSDK"
+            | "__HaloCanvasRuntime"
+            | "__HaloCanvasReactCompat"
     )
 }
 
@@ -725,7 +725,7 @@ pub(super) fn rewrite_canvas_module_for_runtime(
         cursor = end;
     }
     rewritten.push_str(&source[cursor..]);
-    rewritten.push_str("\nwindow.BitfunCanvasRuntime.mount(__BitfunCanvasComponent);\n");
+    rewritten.push_str("\nwindow.HaloCanvasRuntime.mount(__HaloCanvasComponent);\n");
     Ok(rewritten)
 }
 
@@ -743,14 +743,14 @@ fn default_export_replacement(
             *start,
             *end,
             format!(
-                "const __BitfunCanvasComponent = {};",
+                "const __HaloCanvasComponent = {};",
                 source[*expression_start..*end].trim()
             ),
         ),
         CanvasDefaultExport::Identifier { start, end, name } => (
             *start,
             *end,
-            format!("const __BitfunCanvasComponent = {name};"),
+            format!("const __HaloCanvasComponent = {name};"),
         ),
     }
 }

@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use bitfun_core::external_sources::{
+use halo_core::external_sources::{
     apply_external_source_control_action, choose_external_mcp_conflict,
     choose_external_subagent_conflict, external_source_snapshot,
     get_external_source_control_snapshot, set_external_mcp_server_decision,
@@ -104,7 +104,7 @@ async fn workspace_root(
 }
 
 fn public_snapshot(
-    snapshot: bitfun_core::external_sources::ExternalSourceCatalogSnapshot,
+    snapshot: halo_core::external_sources::ExternalSourceCatalogSnapshot,
 ) -> ExternalSourceOperationResult<Value> {
     serde_json::to_value(ExternalSourcePublicSnapshot::from(snapshot).into_legacy_v0_compatible())
         .map_err(|_| {
@@ -274,7 +274,7 @@ async fn dispatch_inner(
             ))
         }
     }
-    .map_err(bitfun_core::external_sources::sanitize_external_source_operation_error)?;
+    .map_err(halo_core::external_sources::sanitize_external_source_operation_error)?;
 
     public_snapshot(snapshot)
 }
@@ -282,7 +282,7 @@ async fn dispatch_inner(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitfun_core::external_sources::ExternalSourceControlActionV1;
+    use halo_core::external_sources::ExternalSourceControlActionV1;
 
     #[test]
     fn optional_host_fields_reject_wrong_types() {

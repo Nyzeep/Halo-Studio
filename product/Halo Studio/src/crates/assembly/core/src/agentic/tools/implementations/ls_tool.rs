@@ -5,9 +5,9 @@
 use crate::agentic::tools::framework::{
     Tool, ToolRenderOptions, ToolResult, ToolUseContext, ValidationResult,
 };
-use crate::agentic::tools::workspace_paths::is_bitfun_tool_uri;
+use crate::agentic::tools::workspace_paths::is_halo_tool_uri;
 use crate::service::filesystem::{format_directory_listing, list_directory_entries};
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
 use chrono::{DateTime, Local};
 use serde_json::{json, Value};
@@ -45,11 +45,11 @@ impl Tool for LSTool {
         "LS"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(r#"Recursively lists files and directories in a given path.
 
 Usage:
-- The path parameter must be relative to the current workspace, an absolute path inside the current workspace, or an exact `bitfun://...` URI returned by another tool
+- The path parameter must be relative to the current workspace, an absolute path inside the current workspace, or an exact `halo://...` URI returned by another tool
 - Do not list host roots such as `/`, `/Users`, `/home`, or placeholder paths such as `/workspace`
 - Hidden files (files starting with '.') are automatically excluded
 - Results are sorted by modification time (newest first)"#
@@ -66,7 +66,7 @@ Usage:
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Directory to list. Use a workspace-relative path, an absolute path inside the current workspace, or an exact bitfun:// URI returned by another tool."
+                    "description": "Directory to list. Use a workspace-relative path, an absolute path inside the current workspace, or an exact halo:// URI returned by another tool."
                 },
                 "limit": {
                     "type": "number",
@@ -112,11 +112,11 @@ Usage:
                     };
                 }
                 None => {
-                    if is_bitfun_tool_uri(path) {
+                    if is_halo_tool_uri(path) {
                         return ValidationResult {
                             result: false,
                             message: Some(
-                                "Tool context is required to resolve BitFun URIs".to_string(),
+                                "Tool context is required to resolve Halo URIs".to_string(),
                             ),
                             error_code: Some(400),
                             meta: None,
@@ -219,11 +219,11 @@ Usage:
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let path = input
             .get("path")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| BitFunError::tool("path is required".to_string()))?;
+            .ok_or_else(|| HaloError::tool("path is required".to_string()))?;
 
         let limit = input
             .get("limit")
@@ -236,7 +236,7 @@ Usage:
         // Remote workspace path: execute ls via SSH shell
         if resolved.uses_remote_workspace_backend() {
             let ws_shell = context.ws_shell().ok_or_else(|| {
-                BitFunError::tool("Workspace shell not available for remote LS".to_string())
+                HaloError::tool("Workspace shell not available for remote LS".to_string())
             })?;
 
             let list_commands = build_remote_list_commands(&resolved.resolved_path, limit);
@@ -245,7 +245,7 @@ Usage:
                 .exec(&list_commands.scan_command, Some(15_000))
                 .await
                 .map_err(|e| {
-                    BitFunError::tool(format!("Failed to list remote directory: {}", e))
+                    HaloError::tool(format!("Failed to list remote directory: {}", e))
                 })?;
 
             // Use a simpler stat-based listing for the text output
@@ -253,7 +253,7 @@ Usage:
                 .exec(&list_commands.listing_command, Some(15_000))
                 .await
                 .map_err(|e| {
-                    BitFunError::tool(format!("Failed to list remote directory: {}", e))
+                    HaloError::tool(format!("Failed to list remote directory: {}", e))
                 })?;
 
             let result_text = format!(
@@ -296,9 +296,9 @@ Usage:
             tokio::task::spawn_blocking(move || list_directory_entries(&listing_path, limit))
                 .await
                 .map_err(|error| {
-                    BitFunError::tool(format!("Directory listing task failed: {}", error))
+                    HaloError::tool(format!("Directory listing task failed: {}", error))
                 })?
-                .map_err(|error| BitFunError::tool(error.to_string()))?;
+                .map_err(|error| HaloError::tool(error.to_string()))?;
 
         let entries_json = entries
             .iter()

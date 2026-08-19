@@ -1,16 +1,16 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use bitfun_agent_runtime::halo_workbench::{
+use halo_agent_runtime::halo_workbench::{
     HaloWorkbenchError, HaloWorkbenchIntent, HaloWorkbenchIntentRequest, HaloWorkbenchRuntime,
 };
-use bitfun_agent_runtime::sdk::{AgentRuntime, PermissionRequestEvent};
-use bitfun_core::agentic::coordination::{ConversationCoordinator, DialogScheduler};
-use bitfun_core::product_runtime::CoreLocalWorkspaceSnapshot;
-use bitfun_core::service::remote_ssh::SSHConnectionManager;
-use bitfun_core::service::token_usage::TokenUsageService;
-use bitfun_core::service::workspace::{WorkspaceKind, WorkspaceService};
-use bitfun_runtime_ports::{
+use halo_agent_runtime::sdk::{AgentRuntime, PermissionRequestEvent};
+use halo_core::agentic::coordination::{ConversationCoordinator, DialogScheduler};
+use halo_core::product_runtime::CoreLocalWorkspaceSnapshot;
+use halo_core::service::remote_ssh::SSHConnectionManager;
+use halo_core::service::token_usage::TokenUsageService;
+use halo_core::service::workspace::{WorkspaceKind, WorkspaceService};
+use halo_runtime_ports::{
     LocalWorkspaceSnapshotPort, PiCredentialStorePort, PiRuntimeConfigurationManagementPort,
 };
 use tokio::sync::RwLock;
@@ -74,7 +74,7 @@ impl DesktopRuntimeContext {
         token_usage_service: Arc<TokenUsageService>,
         workspace_service: Arc<WorkspaceService>,
         ssh_manager: Arc<RwLock<Option<SSHConnectionManager>>>,
-        acp_client_service: Option<Arc<bitfun_acp::AcpClientService>>,
+        acp_client_service: Option<Arc<halo_acp::AcpClientService>>,
         halo_workbench: Option<HaloWorkbenchRuntime>,
         pi_configuration: Option<Arc<dyn PiRuntimeConfigurationManagementPort>>,
         pi_credential_store: Option<Arc<dyn PiCredentialStorePort>>,
@@ -243,7 +243,7 @@ impl DesktopRuntimeContext {
     pub(crate) fn start_permission_event_forwarding(
         &self,
         app: tauri::AppHandle,
-    ) -> Result<(), bitfun_agent_runtime::sdk::RuntimeError> {
+    ) -> Result<(), halo_agent_runtime::sdk::RuntimeError> {
         if self.permission_events_started.swap(true, Ordering::AcqRel) {
             return Ok(());
         }

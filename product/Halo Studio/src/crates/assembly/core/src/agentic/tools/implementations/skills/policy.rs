@@ -1,8 +1,8 @@
 //! Compatibility re-export for mode-aware built-in skill policy.
 //!
-//! The provider-neutral owner lives in `bitfun-agent-runtime`.
+//! The provider-neutral owner lives in `halo-agent-runtime`.
 
-pub use bitfun_agent_runtime::skills::resolve_builtin_default_enabled;
+pub use halo_agent_runtime::skills::resolve_builtin_default_enabled;
 
 #[cfg(test)]
 mod tests {

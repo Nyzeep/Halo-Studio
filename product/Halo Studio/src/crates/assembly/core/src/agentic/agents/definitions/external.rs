@@ -3,7 +3,7 @@ use crate::agentic::agents::{
     PromptBuilderContext, UserContextPolicy,
 };
 use crate::agentic::session::SystemPromptCacheIdentity;
-use crate::util::errors::BitFunResult;
+use crate::util::errors::HaloResult;
 use async_trait::async_trait;
 
 /// Immutable, generation-keyed projection of an approved external definition.
@@ -70,7 +70,7 @@ impl Agent for ExternalProvidedSubagent {
         ))
     }
 
-    async fn build_prompt(&self, context: &PromptBuilderContext) -> BitFunResult<String> {
+    async fn build_prompt(&self, context: &PromptBuilderContext) -> HaloResult<String> {
         PromptBuilder::new(context.clone())
             .build_prompt_from_template(&self.prompt)
             .await

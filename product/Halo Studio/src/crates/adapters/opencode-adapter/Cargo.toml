@@ -1,21 +1,21 @@
 [package]
-name = "bitfun-opencode-adapter"
+name = "halo-opencode-adapter"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenCode-compatible source and candidate adapter for BitFun"
+description = "OpenCode-compatible source and candidate adapter for Halo"
 
 [lib]
-name = "bitfun_opencode_adapter"
+name = "halo_opencode_adapter"
 crate-type = ["rlib"]
 
 [dependencies]
 async-trait = { workspace = true }
-bitfun-plugin-runtime-client = { path = "../../execution/plugin-runtime-client" }
-bitfun-product-domains = { path = "../../contracts/product-domains", default-features = false, features = ["external-sources", "plugin-source"] }
-bitfun-runtime-ports = { path = "../../contracts/runtime-ports" }
-bitfun-services-core = { path = "../../services/services-core", default-features = false, features = ["markdown"] }
-bitfun-static-hook-support = { path = "../static-hook-support" }
+halo-plugin-runtime-client = { path = "../../execution/plugin-runtime-client" }
+halo-product-domains = { path = "../../contracts/product-domains", default-features = false, features = ["external-sources", "plugin-source"] }
+halo-runtime-ports = { path = "../../contracts/runtime-ports" }
+halo-services-core = { path = "../../services/services-core", default-features = false, features = ["markdown"] }
+halo-static-hook-support = { path = "../static-hook-support" }
 dirs = { workspace = true }
 dunce = { workspace = true }
 hex = { workspace = true }
@@ -30,7 +30,7 @@ urlencoding = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-bitfun-services-integrations = { path = "../../services/services-integrations", default-features = false, features = ["plugin-source", "script-tool-runtime"] }
+halo-services-integrations = { path = "../../services/services-integrations", default-features = false, features = ["plugin-source", "script-tool-runtime"] }
 tokio = { workspace = true }
 tempfile = { workspace = true }
 

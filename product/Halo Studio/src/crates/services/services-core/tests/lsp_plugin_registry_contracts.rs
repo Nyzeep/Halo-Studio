@@ -1,5 +1,5 @@
-use bitfun_core_types::lsp::{CapabilitiesConfig, LspPlugin, ServerConfig};
-use bitfun_services_core::lsp::{
+use halo_core_types::lsp::{CapabilitiesConfig, LspPlugin, ServerConfig};
+use halo_services_core::lsp::{
     resolve_plugin_command_for_target, LspPluginRegistryError, LspPluginRuntimeArch,
     LspPluginRuntimePlatform, LspPluginRuntimeTarget, PluginRegistry,
 };
@@ -10,7 +10,7 @@ fn plugin(id: &str, languages: &[&str], extensions: &[&str]) -> LspPlugin {
         id: id.to_string(),
         name: id.to_string(),
         version: "1.0.0".to_string(),
-        author: "BitFun".to_string(),
+        author: "Halo".to_string(),
         description: "test plugin".to_string(),
         server: ServerConfig {
             command: "server".to_string(),
@@ -32,7 +32,7 @@ fn plugin(id: &str, languages: &[&str], extensions: &[&str]) -> LspPlugin {
         },
         settings: HashMap::new(),
         checksum: String::new(),
-        min_bitfun_version: String::new(),
+        min_halo_version: String::new(),
     }
 }
 

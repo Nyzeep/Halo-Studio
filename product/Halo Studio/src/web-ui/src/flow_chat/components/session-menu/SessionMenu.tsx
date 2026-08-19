@@ -54,7 +54,7 @@ export const SessionMenu: React.FC<SessionMenuProps> = ({ onOpenChange }) => {
       const target = e.target as HTMLElement | null;
       if (!target) return;
       if (dropdownRef.current?.contains(target)) return;
-      if (target.closest?.('.bitfun-session-menu__trigger')) return;
+      if (target.closest?.('.halo-session-menu__trigger')) return;
       setOpen(false);
     };
 
@@ -76,13 +76,13 @@ export const SessionMenu: React.FC<SessionMenuProps> = ({ onOpenChange }) => {
   }, [isMenuOpen, setOpen]);
 
   return (
-    <div className="bitfun-session-menu" onKeyDown={handleKeyDown}>
+    <div className="halo-session-menu" onKeyDown={handleKeyDown}>
       <Tooltip content={t('toolCards.toolbar.openSessionMenu')}>
         <button
           type="button"
           className={[
-            'bitfun-session-menu__trigger',
-            isMenuOpen ? 'bitfun-session-menu__trigger--open' : '',
+            'halo-session-menu__trigger',
+            isMenuOpen ? 'halo-session-menu__trigger--open' : '',
           ].filter(Boolean).join(' ')}
           onClick={toggleMenu}
           aria-expanded={isMenuOpen}
@@ -94,48 +94,48 @@ export const SessionMenu: React.FC<SessionMenuProps> = ({ onOpenChange }) => {
 
       {isMenuOpen && (
         <div
-          className="bitfun-session-menu__dropdown"
+          className="halo-session-menu__dropdown"
           ref={dropdownRef}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <div className="bitfun-session-menu__actions">
+          <div className="halo-session-menu__actions">
             <button
               type="button"
-              className="bitfun-session-menu__item bitfun-session-menu__item--new"
+              className="halo-session-menu__item halo-session-menu__item--new"
               onMouseDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 createSession('code');
               }}
             >
-              <span className="bitfun-session-menu__item-icon" aria-hidden>
+              <span className="halo-session-menu__item-icon" aria-hidden>
                 <Plus size={13} strokeWidth={2.25} />
               </span>
-              <span className="bitfun-session-menu__item-label">
+              <span className="halo-session-menu__item-label">
                 {t('toolCards.toolbar.newCodeSessionItem')}
               </span>
             </button>
             <button
               type="button"
-              className="bitfun-session-menu__item bitfun-session-menu__item--new"
+              className="halo-session-menu__item halo-session-menu__item--new"
               onMouseDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 createSession('cowork');
               }}
             >
-              <span className="bitfun-session-menu__item-icon" aria-hidden>
+              <span className="halo-session-menu__item-icon" aria-hidden>
                 <Plus size={13} strokeWidth={2.25} />
               </span>
-              <span className="bitfun-session-menu__item-label">
+              <span className="halo-session-menu__item-label">
                 {t('toolCards.toolbar.newCoworkSessionItem')}
               </span>
             </button>
-            <div className="bitfun-session-menu__divider" role="separator" />
+            <div className="halo-session-menu__divider" role="separator" />
           </div>
 
           <div
-            className="bitfun-session-menu__scroll"
+            className="halo-session-menu__scroll"
             role="listbox"
             aria-label={t('session.switchSession')}
           >
@@ -144,8 +144,8 @@ export const SessionMenu: React.FC<SessionMenuProps> = ({ onOpenChange }) => {
                 key={session.sessionId}
                 type="button"
                 className={[
-                  'bitfun-session-menu__item',
-                  session.sessionId === activeSessionId ? 'bitfun-session-menu__item--active' : '',
+                  'halo-session-menu__item',
+                  session.sessionId === activeSessionId ? 'halo-session-menu__item--active' : '',
                 ].filter(Boolean).join(' ')}
                 onMouseDown={(e) => switchSession(e, session.sessionId)}
               >

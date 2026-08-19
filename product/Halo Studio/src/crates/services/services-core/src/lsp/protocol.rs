@@ -7,7 +7,7 @@ use log::{error, warn};
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout};
 
-use bitfun_core_types::lsp::{
+use halo_core_types::lsp::{
     JsonRpcMessage, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse,
 };
 
@@ -187,7 +187,7 @@ pub fn extract_result(response: JsonRpcResponse) -> Result<serde_json::Value> {
 #[cfg(test)]
 mod tests {
     use super::{create_notification, create_request, extract_result};
-    use bitfun_core_types::lsp::{JsonRpcMessage, JsonRpcResponse};
+    use halo_core_types::lsp::{JsonRpcMessage, JsonRpcResponse};
     use serde_json::json;
 
     #[test]

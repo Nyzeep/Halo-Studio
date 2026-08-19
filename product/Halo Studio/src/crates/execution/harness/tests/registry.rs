@@ -1,4 +1,4 @@
-use bitfun_harness::{
+use halo_harness::{
     build_descriptor_harness_registry, DescriptorHarnessProvider, HarnessCapability, HarnessError,
     HarnessInput, HarnessProvider, HarnessProviderDescriptor, HarnessRegistryBuildError,
     HarnessRegistryBuilder, HarnessStepKind, HarnessWorkflow,
@@ -11,13 +11,13 @@ async fn registry_registers_multiple_workflow_providers_and_builds_legacy_plan()
             "core.deep_review",
             HarnessWorkflow::DeepReview,
             &[HarnessCapability::Plan, HarnessCapability::ReviewGate],
-            "bitfun-core::agentic::deep_review",
+            "halo-core::agentic::deep_review",
         ))
         .install_provider(DescriptorHarnessProvider::legacy_facade(
             "core.miniapp",
             HarnessWorkflow::MiniApp,
             &[HarnessCapability::Plan, HarnessCapability::Artifact],
-            "bitfun-core::miniapp",
+            "halo-core::miniapp",
         ))
         .build()
         .expect("two different workflow providers should register");
@@ -48,7 +48,7 @@ async fn registry_registers_multiple_workflow_providers_and_builds_legacy_plan()
     assert_eq!(plan.steps()[0].kind(), HarnessStepKind::LegacyFacade);
     assert_eq!(
         plan.steps()[0].target(),
-        "bitfun-core::agentic::deep_review"
+        "halo-core::agentic::deep_review"
     );
 
     let err = provider
@@ -65,13 +65,13 @@ fn registry_rejects_duplicate_provider_ids() {
             "core.deep_review",
             HarnessWorkflow::DeepReview,
             &[HarnessCapability::Plan],
-            "bitfun-core::agentic::deep_review",
+            "halo-core::agentic::deep_review",
         ))
         .install_provider(DescriptorHarnessProvider::legacy_facade(
             "core.deep_review",
             HarnessWorkflow::DeepResearch,
             &[HarnessCapability::Plan],
-            "bitfun-core::agentic::agents::definitions::modes::deep_research",
+            "halo-core::agentic::agents::definitions::modes::deep_research",
         ))
         .build()
         .expect_err("duplicate provider ids must be rejected");
@@ -89,13 +89,13 @@ fn descriptor_registry_builder_installs_legacy_facade_descriptors() {
             "core.deep_review",
             HarnessWorkflow::DeepReview,
             &[HarnessCapability::Plan, HarnessCapability::ReviewGate],
-            "bitfun-core::agentic::deep_review",
+            "halo-core::agentic::deep_review",
         ),
         HarnessProviderDescriptor::legacy_facade(
             "core.deep_research",
             HarnessWorkflow::DeepResearch,
             &[HarnessCapability::Plan],
-            "bitfun-core::agentic::agents::definitions::modes::deep_research",
+            "halo-core::agentic::agents::definitions::modes::deep_research",
         ),
     ])
     .expect("descriptor registry should build");
@@ -116,7 +116,7 @@ fn legacy_facade_provider_never_exposes_execute_capability() {
         "core.deep_review",
         HarnessWorkflow::DeepReview,
         &[HarnessCapability::Plan, HarnessCapability::Execute],
-        "bitfun-core::agentic::deep_review",
+        "halo-core::agentic::deep_review",
     );
 
     assert_eq!(provider.capabilities(), &[HarnessCapability::Plan]);
@@ -128,7 +128,7 @@ async fn descriptor_provider_rejects_wrong_workflow_input() {
         "core.miniapp",
         HarnessWorkflow::MiniApp,
         &[HarnessCapability::Plan],
-        "bitfun-core::miniapp",
+        "halo-core::miniapp",
     );
 
     let err = provider

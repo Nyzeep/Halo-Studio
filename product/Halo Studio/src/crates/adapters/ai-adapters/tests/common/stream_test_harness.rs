@@ -1,11 +1,11 @@
 use super::fixture_loader::load_fixture_bytes;
 use super::sse_fixture_server::{FixtureSseServer, FixtureSseServerOptions};
-use bitfun_agent_stream::{StreamEventSink, StreamProcessError, StreamProcessor, StreamResult};
-use bitfun_ai_adapters::stream::{
+use halo_agent_stream::{StreamEventSink, StreamProcessError, StreamProcessor, StreamResult};
+use halo_ai_adapters::stream::{
     handle_anthropic_stream, handle_gemini_stream, handle_openai_stream, handle_responses_stream,
     UnifiedResponse,
 };
-use bitfun_events::{AgenticEvent, AgenticEventPriority as EventPriority};
+use halo_events::{AgenticEvent, AgenticEventPriority as EventPriority};
 use futures::StreamExt;
 use std::sync::Arc;
 use std::time::Duration;

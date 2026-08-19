@@ -7,7 +7,7 @@ blocked-by: 14（真实 Pi RPC 原生 UI 验收，not-run）
 
 ## Problem Statement
 
-Halo 当前 P0 执行链（Halo Workbench Runtime → 受控 Pi 子进程 → `pi --mode rpc` → LF JSONL）构建在 BitFun 派生产品树上；该树即将被 DeepSeek Harness（`dsh`，developer preview）替换为新基座。开发者需要在换基座后仍能：
+Halo 当前 P0 执行链（Halo Workbench Runtime → 受控 Pi 子进程 → `pi --mode rpc` → LF JSONL）构建在 Halo Studio 派生产品树上；该树即将被 DeepSeek Harness（`dsh`，developer preview）替换为新基座。开发者需要在换基座后仍能：
 
 - 在受信 Git 工作区中创建受管任务并发送首轮 prompt，Pi RPC 作为唯一受管执行器完成回合；
 - 在同一会话内追问、中止、读取状态，并保持 `等待开发者` 语义；

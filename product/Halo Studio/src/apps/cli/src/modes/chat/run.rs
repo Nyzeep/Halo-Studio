@@ -31,12 +31,12 @@ impl ChatMode {
         let rt_handle = tokio::runtime::Handle::current();
         self.auto_approve_ask_default = tokio::task::block_in_place(|| {
             rt_handle.block_on(async {
-                let Ok(service) = bitfun_core::service::config::get_global_config_service().await
+                let Ok(service) = halo_core::service::config::get_global_config_service().await
                 else {
                     return false;
                 };
                 service
-                    .get_config::<bitfun_core::service::config::types::GlobalConfig>(None)
+                    .get_config::<halo_core::service::config::types::GlobalConfig>(None)
                     .await
                     .map(|config| config.tool_permissions.interaction.auto_approve_ask)
                     .unwrap_or(false)
@@ -294,7 +294,7 @@ impl ChatMode {
             if let Some(receiver) = permission_rx.as_mut() {
                 for _ in 0..4 {
                     match receiver.try_recv() {
-                        Ok(bitfun_agent_runtime::sdk::PermissionRequestEvent::Asked {
+                        Ok(halo_agent_runtime::sdk::PermissionRequestEvent::Asked {
                             request,
                         }) if crate::runtime::approval::permission_request_targets_session(
                             &request,
@@ -305,11 +305,11 @@ impl ChatMode {
                                 needs_redraw = true;
                             }
                         }
-                        Ok(bitfun_agent_runtime::sdk::PermissionRequestEvent::Replied {
+                        Ok(halo_agent_runtime::sdk::PermissionRequestEvent::Replied {
                             request_id,
                             ..
                         })
-                        | Ok(bitfun_agent_runtime::sdk::PermissionRequestEvent::Cancelled {
+                        | Ok(halo_agent_runtime::sdk::PermissionRequestEvent::Cancelled {
                             request_id,
                             ..
                         }) => {

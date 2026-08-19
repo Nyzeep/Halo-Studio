@@ -74,8 +74,8 @@ const manifest = {
       key,
       {
         target,
-        cli: asset(`bitfun-cli-${version}-${target}.tar.gz`),
-        relay: asset(`bitfun-relay-server-${target}.tar.gz`),
+        cli: asset(`halo-cli-${version}-${target}.tar.gz`),
+        relay: asset(`halo-relay-server-${target}.tar.gz`),
       },
     ])
   ),

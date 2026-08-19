@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     RuntimeServiceCapability, RuntimeServicePort, SessionStorageKind, SessionStoragePathRequest,
     SessionStoragePathResolution, SessionStorePort, SessionTurnLoadTiming,
     SessionViewRestoreTiming,
@@ -77,7 +77,7 @@ impl SessionStorePort for ContractSessionStorePort {
     async fn resolve_session_storage_path(
         &self,
         request: SessionStoragePathRequest,
-    ) -> bitfun_runtime_ports::PortResult<SessionStoragePathResolution> {
+    ) -> halo_runtime_ports::PortResult<SessionStoragePathResolution> {
         Ok(SessionStoragePathResolution::new(
             request.workspace_path.clone(),
             request.workspace_path,

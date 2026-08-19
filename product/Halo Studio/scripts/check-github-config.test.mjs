@@ -10,7 +10,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const scriptPath = path.join(repoRoot, 'scripts/check-github-config.mjs');
 
 function createRepo({ workflow, nodeVersionFile }) {
-  const root = mkdtempSync(path.join(tmpdir(), 'bitfun-github-config-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'halo-github-config-'));
   mkdirSync(path.join(root, '.github/workflows'), { recursive: true });
   writeFileSync(
     path.join(root, 'package.json'),
@@ -30,7 +30,7 @@ function runCheck(root) {
     cwd: repoRoot,
     env: {
       ...process.env,
-      BITFUN_GITHUB_CONFIG_TEST_ROOT: root,
+      HALO_GITHUB_CONFIG_TEST_ROOT: root,
     },
     encoding: 'utf8',
   });

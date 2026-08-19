@@ -7,10 +7,10 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use bitfun_product_domains::function_agents::ports::{
+use halo_product_domains::function_agents::ports::{
     FunctionAgentAiPort, FunctionAgentGitPort, FunctionAgentRuntimeFacade,
 };
-use bitfun_product_domains::miniapp::ports::{MiniAppRuntimeFacade, MiniAppStoragePort};
+use halo_product_domains::miniapp::ports::{MiniAppRuntimeFacade, MiniAppStoragePort};
 use chrono::{Local, Timelike};
 use log::info;
 

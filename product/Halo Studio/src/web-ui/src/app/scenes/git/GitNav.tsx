@@ -53,21 +53,21 @@ const GitNav: React.FC = () => {
   );
 
   return (
-    <div className="bitfun-git-scene-nav">
-      <div className="bitfun-git-scene-nav__header">
-        <span className="bitfun-git-scene-nav__title">{t('title')}</span>
+    <div className="halo-git-scene-nav">
+      <div className="halo-git-scene-nav__header">
+        <span className="halo-git-scene-nav__title">{t('title')}</span>
       </div>
 
       {isRepository && (
-        <div className="bitfun-git-scene-nav__status">
-          <div className="bitfun-git-scene-nav__branch-row">
+        <div className="halo-git-scene-nav__status">
+          <div className="halo-git-scene-nav__branch-row">
             <GitBranch size={12} aria-hidden />
-            <span className="bitfun-git-scene-nav__branch-name" title={currentBranch ?? undefined}>
+            <span className="halo-git-scene-nav__branch-name" title={currentBranch ?? undefined}>
               {currentBranch ?? t('common.unknown')}
             </span>
           </div>
           {(ahead > 0 || behind > 0) && (
-            <div className="bitfun-git-scene-nav__sync-badges">
+            <div className="halo-git-scene-nav__sync-badges">
               {ahead > 0 && (
                 <span title={t('status.ahead')}>
                   <ArrowUp size={10} /> {ahead}
@@ -80,7 +80,7 @@ const GitNav: React.FC = () => {
               )}
             </div>
           )}
-          <div className="bitfun-git-scene-nav__actions-row">
+          <div className="halo-git-scene-nav__actions-row">
             <IconButton size="xs" variant="ghost" onClick={() => refresh({ force: true })} tooltip={t('actions.refresh')}>
               <RefreshCw size={14} />
             </IconButton>
@@ -88,12 +88,12 @@ const GitNav: React.FC = () => {
         </div>
       )}
 
-      <div className="bitfun-git-scene-nav__sections">
+      <div className="halo-git-scene-nav__sections">
         {NAV_ITEMS.map(({ id, icon: Icon, labelKey }) => (
           <button
             key={id}
             type="button"
-            className={['bitfun-git-scene-nav__item', activeView === id && 'is-active'].filter(Boolean).join(' ')}
+            className={['halo-git-scene-nav__item', activeView === id && 'is-active'].filter(Boolean).join(' ')}
             onClick={() => handleViewClick(id)}
           >
             <span>
@@ -101,10 +101,10 @@ const GitNav: React.FC = () => {
               {t(labelKey)}
             </span>
             {id === 'working-copy' && changeCount > 0 && (
-              <span className="bitfun-git-scene-nav__item-badge">({changeCount})</span>
+              <span className="halo-git-scene-nav__item-badge">({changeCount})</span>
             )}
             {id === 'branches' && branchCount > 0 && (
-              <span className="bitfun-git-scene-nav__item-badge">({branchCount})</span>
+              <span className="halo-git-scene-nav__item-badge">({branchCount})</span>
             )}
           </button>
         ))}

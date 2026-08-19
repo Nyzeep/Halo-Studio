@@ -88,8 +88,8 @@ pub struct WorktreeSettings {
 impl Default for WorktreeSettings {
     fn default() -> Self {
         Self {
-            root_path: "~/.bitfun/worktrees".to_string(),
-            branch_prefix: "bitfun/".to_string(),
+            root_path: "~/.halo-studio/worktrees".to_string(),
+            branch_prefix: "halo/".to_string(),
             copy_local_changes: false,
             auto_delete_enabled: true,
             auto_delete_limit: 15,
@@ -214,8 +214,8 @@ mod tests {
     #[test]
     fn worktree_defaults_include_managed_cleanup_policy() {
         let defaults = WorktreeSettings::default();
-        assert_eq!(defaults.root_path, "~/.bitfun/worktrees");
-        assert_eq!(defaults.branch_prefix, "bitfun/");
+        assert_eq!(defaults.root_path, "~/.halo-studio/worktrees");
+        assert_eq!(defaults.branch_prefix, "halo/");
         assert!(!defaults.copy_local_changes);
         assert!(defaults.auto_delete_enabled);
         assert_eq!(defaults.auto_delete_limit, 15);

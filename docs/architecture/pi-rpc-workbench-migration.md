@@ -28,7 +28,7 @@ historical sections of `docs/testing/core-rebuild-verification.md`, and the
 OpenCode rows of this migration map. They are not a production fallback.
 
 ```powershell
-rg -n -i 'opencode serve|OpenCode Server|HTTP/SSE|opencode-server-adapter|agent-opencode|opencode.rs' docs "product/Halo Studio" --glob '!docs/adr/0071-use-opencode-server-as-the-p0-managed-execution-adapter.md' --glob '!docs/requirements/bitfun-tauri-product-migration/issues/07-probe-and-start-opencode-1x.md' --glob '!docs/requirements/bitfun-tauri-product-migration/issues/14-complete-real-opencode-native-ui-acceptance.md' --glob '!docs/requirements/2026-07-24-halo-studio-pi-opencode-product-requirements.md' --glob '!docs/testing/core-rebuild-verification.md' --glob '!docs/architecture/pi-rpc-workbench-migration.md'
+rg -n -i 'opencode serve|OpenCode Server|HTTP/SSE|opencode-server-adapter|agent-opencode|opencode.rs' docs "product/Halo Studio" --glob '!docs/adr/0071-use-opencode-server-as-the-p0-managed-execution-adapter.md' --glob '!docs/requirements/halo-tauri-product-migration/issues/07-probe-and-start-opencode-1x.md' --glob '!docs/requirements/halo-tauri-product-migration/issues/14-complete-real-opencode-native-ui-acceptance.md' --glob '!docs/requirements/2026-07-24-halo-studio-pi-opencode-product-requirements.md' --glob '!docs/testing/core-rebuild-verification.md' --glob '!docs/architecture/pi-rpc-workbench-migration.md'
 ```
 
 Any hit outside that allowlist must be classified and removed from the active

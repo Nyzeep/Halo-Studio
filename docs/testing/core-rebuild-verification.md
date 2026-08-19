@@ -17,9 +17,9 @@ pnpm --dir "product/Halo Studio" run product:check
 pnpm --dir "product/Halo Studio" run product:test
 pnpm --dir "product/Halo Studio" run type-check:web
 pnpm --dir "product/Halo Studio/src/web-ui" run test:run -- src/infrastructure/workbench-runtime/client.test.ts src/infrastructure/workbench-runtime/store.test.ts src/infrastructure/workbench-runtime/selectors.test.ts src/infrastructure/workbench-runtime/formalPath.contract.test.ts
-cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter
-cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-agent-runtime --test workbench_runtime_contracts
-cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-desktop --test halo_workbench_runtime_contracts
+cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p halo-pi-rpc-adapter
+cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p halo-agent-runtime --test workbench_runtime_contracts
+cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p halo-desktop --test halo_workbench_runtime_contracts
 pnpm --dir "product/Halo Studio" run desktop:build:fast
 git diff --check
 ```
@@ -80,8 +80,8 @@ pnpm --dir "product/Halo Studio" run e2e:test:smoke
 Node / pnpm：
 pnpm --dir "product/Halo Studio" run check:repo-hygiene：通过 / 失败
 pnpm --dir "product/Halo Studio" run type-check:web：通过 / 失败
-cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-pi-rpc-adapter：通过 / 失败
-cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p bitfun-desktop --test halo_workbench_runtime_contracts：通过 / 失败
+cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p halo-pi-rpc-adapter：通过 / 失败
+cargo test --manifest-path "product/Halo Studio/Cargo.toml" -p halo-desktop --test halo_workbench_runtime_contracts：通过 / 失败
 pnpm --dir "product/Halo Studio" run desktop:build:fast：通过 / 失败
 pnpm --dir "product/Halo Studio" run e2e:test:smoke：通过 / 失败 / 未执行
 工单 14 真实 Pi RPC UI 验收：通过 / 失败 / 未执行

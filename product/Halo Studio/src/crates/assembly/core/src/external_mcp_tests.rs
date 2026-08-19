@@ -2,8 +2,8 @@ use crate::external_mcp::{
     prepared_mcp_config, reconcile_external_mcp_catalog, ActiveExternalMcpCandidate,
     ExternalMcpDecision, ExternalMcpDecisions, NativeMcpCandidate,
 };
-use bitfun_external_sources::ExternalMcpCoordinatorSnapshot;
-use bitfun_product_domains::external_sources::{
+use halo_external_sources::ExternalMcpCoordinatorSnapshot;
+use halo_product_domains::external_sources::{
     external_mcp_approval_key, external_mcp_conflict_key, EcosystemId, ExecutionDomainId,
     ExternalMcpActivationState, ExternalMcpServerDefinition, ExternalMcpStaticStatus,
     ExternalMcpTransportKind, ExternalSourceCatalogEntry, ExternalSourceHealth,
@@ -207,10 +207,10 @@ fn native_conflict_stays_active_by_default_but_is_not_recorded_as_a_choice() {
     let snapshot_v1 = snapshot("behavior-v1");
     let external = &snapshot_v1.servers[0];
     let native = NativeMcpCandidate {
-        candidate_id: "native_mcp:bitfun-github".to_string(),
-        server_id: "bitfun-github".to_string(),
+        candidate_id: "native_mcp:halo-github".to_string(),
+        server_id: "halo-github".to_string(),
         name: "github".to_string(),
-        display_name: "BitFun: github".to_string(),
+        display_name: "Halo: github".to_string(),
         behavior_version: "native-v1".to_string(),
         enabled: true,
     };
@@ -276,7 +276,7 @@ fn native_conflict_stays_active_by_default_but_is_not_recorded_as_a_choice() {
     assert_eq!(selected.active.len(), 1);
     assert_eq!(
         selected.suppressed_native_server_ids,
-        ["bitfun-github".to_string()].into_iter().collect()
+        ["halo-github".to_string()].into_iter().collect()
     );
 
     let other_workspace = reconcile_external_mcp_catalog(
@@ -299,7 +299,7 @@ fn native_conflict_stays_active_by_default_but_is_not_recorded_as_a_choice() {
     assert!(changed.conflicts[0].selected_candidate_id.is_none());
     assert_eq!(
         changed.suppressed_native_server_ids,
-        ["bitfun-github".to_string()].into_iter().collect(),
+        ["halo-github".to_string()].into_iter().collect(),
         "a changed external selection must not silently fall back to the native server"
     );
 
@@ -322,13 +322,13 @@ fn native_conflict_stays_active_by_default_but_is_not_recorded_as_a_choice() {
     assert!(removed.conflicts[0].selected_candidate_id.is_none());
     assert_eq!(
         removed.suppressed_native_server_ids,
-        ["bitfun-github".to_string()].into_iter().collect(),
+        ["halo-github".to_string()].into_iter().collect(),
         "deleting the selected external server must require an explicit native re-selection"
     );
 }
 
 #[test]
-fn prepared_local_external_mcp_keeps_cwd_and_does_not_inherit_bitfun_secrets() {
+fn prepared_local_external_mcp_keeps_cwd_and_does_not_inherit_halo_secrets() {
     let mut source_snapshot = snapshot("behavior-v1");
     let definition = source_snapshot.servers.remove(0);
     let candidate = ActiveExternalMcpCandidate {

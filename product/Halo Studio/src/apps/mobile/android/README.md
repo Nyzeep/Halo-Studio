@@ -1,4 +1,4 @@
-# BitFun Android
+# Halo Studio Android
 
 Android application entrypoint.
 

@@ -1,13 +1,13 @@
 use std::sync::{Arc, Mutex};
 
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     AgentRuntimeBuilder, AgentSessionForkAtTurnRequest, AgentSessionForkPort,
     AgentSessionForkRequest, AgentSessionForkResult, AgentSessionUsagePort,
     AgentSessionUsageRequest, AgentSubmissionPort, AgentSubmissionRequest, AgentSubmissionResult,
     AgentTurnSettlementPort, AgentTurnSettlementRequest, PortErrorKind, PortResult,
     SessionUsageReport,
 };
-use bitfun_agent_runtime::sdk::{AgentSessionCreateRequest, AgentSessionCreateResult};
+use halo_agent_runtime::sdk::{AgentSessionCreateRequest, AgentSessionCreateResult};
 
 #[derive(Default)]
 struct FakeSubmissionPort;
@@ -178,7 +178,7 @@ async fn missing_new_ports_preserve_the_v1_runtime_error_shape() {
 
     assert!(matches!(
         error,
-        bitfun_agent_runtime::sdk::RuntimeError::Port(ref port_error)
+        halo_agent_runtime::sdk::RuntimeError::Port(ref port_error)
             if port_error.kind == PortErrorKind::NotAvailable
     ));
 }

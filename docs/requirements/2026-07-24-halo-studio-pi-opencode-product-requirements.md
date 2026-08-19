@@ -1,6 +1,6 @@
 ---
 status: historical
-superseded by: docs/requirements/bitfun-tauri-product-migration/00-bitfun-tauri-product-migration-spec.md and ADR-0072
+superseded by: docs/requirements/halo-tauri-product-migration/00-halo-tauri-product-migration-spec.md and ADR-0072
 ---
 
 # Halo Studio Pi 与 OpenCode 受管工作台产品需求（历史版本）

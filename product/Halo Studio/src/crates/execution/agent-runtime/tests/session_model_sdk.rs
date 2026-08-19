@@ -1,12 +1,12 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     AgentRuntimeBuilder, AgentSessionCreateRequest, AgentSessionCreateResult,
     AgentSessionModelPort, AgentSessionModelUpdateRequest, AgentSubmissionPort,
     AgentSubmissionRequest, AgentSubmissionResult, PortError, PortResult, RuntimeError,
 };
-use bitfun_runtime_ports::PortErrorKind;
+use halo_runtime_ports::PortErrorKind;
 
 #[derive(Default)]
 struct FakeSubmissionPort;

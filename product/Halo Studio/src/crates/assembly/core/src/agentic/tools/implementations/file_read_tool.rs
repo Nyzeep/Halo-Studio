@@ -6,8 +6,8 @@ use crate::agentic::tools::file_read_state_runtime::{
 use crate::agentic::tools::framework::{
     PermissionIntent, Tool, ToolRenderOptions, ToolResult, ToolUseContext, ValidationResult,
 };
-use crate::agentic::tools::workspace_paths::is_bitfun_tool_uri;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::agentic::tools::workspace_paths::is_halo_tool_uri;
+use crate::util::errors::{HaloError, HaloResult};
 use crate::util::timing::elapsed_ms_u64;
 use async_trait::async_trait;
 use log::{debug, warn};
@@ -135,9 +135,9 @@ impl FileReadTool {
         start_line: usize,
         limit: usize,
         context: &ToolUseContext,
-    ) -> BitFunResult<tool_runtime::fs::read_file::ReadFileResult> {
+    ) -> HaloResult<tool_runtime::fs::read_file::ReadFileResult> {
         let ws_shell = context.ws_shell().ok_or_else(|| {
-            BitFunError::tool("Remote workspace shell is unavailable".to_string())
+            HaloError::tool("Remote workspace shell is unavailable".to_string())
         })?;
 
         let command = build_remote_read_command(
@@ -147,7 +147,7 @@ impl FileReadTool {
             self.max_line_chars,
             self.max_total_chars,
         )
-        .map_err(BitFunError::tool)?;
+        .map_err(HaloError::tool)?;
 
         let remote_read_started_at = Instant::now();
         debug!(
@@ -171,7 +171,7 @@ impl FileReadTool {
                     elapsed_ms_u64(remote_read_started_at),
                     e
                 );
-                BitFunError::tool(format!("Failed to read file: {}", e))
+                HaloError::tool(format!("Failed to read file: {}", e))
             })?;
         debug!(
             "Remote file read command completed: path={}, start_line={}, limit={}, status={}, stdout_len={}, stderr_len={}, duration_ms={}",
@@ -185,7 +185,7 @@ impl FileReadTool {
         );
 
         let result = parse_remote_read_output(&stdout, &stderr, status, resolved_path, start_line)
-            .map_err(BitFunError::tool)?;
+            .map_err(HaloError::tool)?;
 
         debug!(
             "Remote file read parsed successfully: path={}, start_line={}, end_line={}, total_lines={}, hit_total_char_limit={}, duration_ms={}",
@@ -205,9 +205,9 @@ impl FileReadTool {
         resolved_path: &str,
         limit: usize,
         context: &ToolUseContext,
-    ) -> BitFunResult<tool_runtime::fs::read_file::ReadFileResult> {
+    ) -> HaloResult<tool_runtime::fs::read_file::ReadFileResult> {
         let ws_shell = context.ws_shell().ok_or_else(|| {
-            BitFunError::tool("Remote workspace shell is unavailable".to_string())
+            HaloError::tool("Remote workspace shell is unavailable".to_string())
         })?;
 
         let command = build_remote_tail_read_command(
@@ -216,7 +216,7 @@ impl FileReadTool {
             self.max_line_chars,
             self.max_total_chars,
         )
-        .map_err(BitFunError::tool)?;
+        .map_err(HaloError::tool)?;
 
         let remote_read_started_at = Instant::now();
         debug!(
@@ -235,7 +235,7 @@ impl FileReadTool {
                 elapsed_ms_u64(remote_read_started_at),
                 e
             );
-            BitFunError::tool(format!("Failed to read file: {}", e))
+            HaloError::tool(format!("Failed to read file: {}", e))
         })?;
         debug!(
             "Remote file tail read command completed: path={}, limit={}, status={}, stdout_len={}, stderr_len={}, duration_ms={}",
@@ -248,7 +248,7 @@ impl FileReadTool {
         );
 
         let result = parse_remote_tail_read_output(&stdout, &stderr, status, resolved_path, limit)
-            .map_err(BitFunError::tool)?;
+            .map_err(HaloError::tool)?;
 
         debug!(
             "Remote file tail read parsed successfully: path={}, start_line={}, end_line={}, total_lines={}, hit_total_char_limit={}, duration_ms={}",
@@ -270,12 +270,12 @@ impl Tool for FileReadTool {
         "Read"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(format!(
             r#"Reads a file from the current workspace filesystem. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 
 Usage:
-- The file_path parameter must be workspace-relative, an absolute path inside the current workspace, or an exact `bitfun://...` URI returned by another tool.
+- The file_path parameter must be workspace-relative, an absolute path inside the current workspace, or an exact `halo://...` URI returned by another tool.
 - Do not read host roots or placeholder paths such as `/workspace`.
 - By default, it reads up to {} lines starting from the beginning of the file. When you plan to Edit a file, prefer this default full read so you see the exact bytes you will need to match.
 - You can optionally specify an offset and limit. offset is a 1-based line number. Use a range only when you already know the target lines; the range must include every line you will copy into Edit `old_string`.
@@ -302,7 +302,7 @@ Usage:
             "properties": {
                 "file_path": {
                     "type": "string",
-                    "description": "The file to read. Use a workspace-relative path, an absolute path inside the current workspace, or an exact bitfun:// URI returned by another tool."
+                    "description": "The file to read. Use a workspace-relative path, an absolute path inside the current workspace, or an exact halo:// URI returned by another tool."
                 },
                 "offset": {
                     "type": "number",
@@ -334,11 +334,11 @@ Usage:
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<PermissionIntent>> {
+    ) -> HaloResult<Vec<PermissionIntent>> {
         let file_path = input
             .get("file_path")
             .and_then(Value::as_str)
-            .ok_or_else(|| BitFunError::validation("file_path is required".to_string()))?;
+            .ok_or_else(|| HaloError::validation("file_path is required".to_string()))?;
         file_permission_intents("read", [file_path], context)
     }
 
@@ -389,11 +389,11 @@ Usage:
                 }
             }
             None => {
-                if is_bitfun_tool_uri(file_path) {
+                if is_halo_tool_uri(file_path) {
                     return ValidationResult {
                         result: false,
                         message: Some(
-                            "Tool context is required to resolve BitFun URIs".to_string(),
+                            "Tool context is required to resolve Halo URIs".to_string(),
                         ),
                         error_code: Some(400),
                         meta: None,
@@ -471,14 +471,14 @@ Usage:
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let file_path = input
             .get("file_path")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| BitFunError::tool("file_path is required".to_string()))?;
+            .ok_or_else(|| HaloError::tool("file_path is required".to_string()))?;
 
-        let tail = Self::read_tail_mode(input).map_err(BitFunError::tool)?;
-        let start_line = Self::read_window_start_line(input).map_err(BitFunError::tool)?;
+        let tail = Self::read_tail_mode(input).map_err(HaloError::tool)?;
+        let start_line = Self::read_window_start_line(input).map_err(HaloError::tool)?;
 
         let limit = input
             .get("limit")
@@ -522,7 +522,7 @@ Usage:
                 self.max_line_chars,
                 self.max_total_chars,
             )
-            .map_err(BitFunError::tool)?
+            .map_err(HaloError::tool)?
         } else {
             read_file(
                 &resolved.resolved_path,
@@ -531,7 +531,7 @@ Usage:
                 self.max_line_chars,
                 self.max_total_chars,
             )
-            .map_err(BitFunError::tool)?
+            .map_err(HaloError::tool)?
         };
 
         let timestamp_ms = if resolved.uses_remote_workspace_backend() {

@@ -72,7 +72,7 @@ turn 抽取与文件来源记录；旧格式中缺少 turn id 的来源记录不
 4. 文件工具在 `validate_input` 中调用统一检查；shell、WriteStdin 和 Git 工具先将可静态识别的
    变更目标解析为路径。存在 active constraint 时，无法解析目标的高风险变更命令 fail closed。
 5. 命中约束时返回 403 和结构化 `edit_constraint_guard` 元数据，不执行写入。
-6. 设置 `BITFUN_EDIT_CONSTRAINT_TELEMETRY=1` 后，guard 决策和成功的直接文件工具操作写入
+6. 设置 `HALO_EDIT_CONSTRAINT_TELEMETRY=1` 后，guard 决策和成功的直接文件工具操作写入
    session-scoped JSONL，用于产品诊断；默认不创建 JSONL。该开关不影响 AI provider 请求审计。
 
 撤销只接受当前 active constraint id，且只有真实用户提交的 turn 可以授权撤销。含糊表达、

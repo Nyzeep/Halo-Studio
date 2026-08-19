@@ -617,7 +617,7 @@ const ReportView: React.FC<{ report: InsightsReport; onBack: () => void }> = ({ 
             )}
           <BasicCharts stats={report.stats} />
 
-          {/* How You Use BitFun */}
+          {/* How You Use Halo */}
           {report.interaction_style.narrative && <div data-section="usage"><InteractionStyleSection report={report} /></div>}
           <div data-section="usage">
             <UsageCharts stats={report.stats} />
@@ -1058,7 +1058,7 @@ const SuggestionsSection: React.FC<{ report: InsightsReport }> = ({ report }) =>
   const { suggestions } = report;
   const { t } = useI18n('common');
   const hasSuggestions =
-    suggestions.bitfun_md_additions.length > 0 ||
+    suggestions.halo_md_additions.length > 0 ||
     suggestions.features_to_try.length > 0 ||
     suggestions.usage_patterns.length > 0;
 
@@ -1068,10 +1068,10 @@ const SuggestionsSection: React.FC<{ report: InsightsReport }> = ({ report }) =>
     <section className="insights-section">
       <h3>{t('insights.suggestions')}</h3>
 
-      {suggestions.bitfun_md_additions.length > 0 && (
+      {suggestions.halo_md_additions.length > 0 && (
         <div className="insights-md-list">
           <h4>{t('insights.mdAdditions')}</h4>
-          {suggestions.bitfun_md_additions.map((md, i) => (
+          {suggestions.halo_md_additions.map((md, i) => (
             <div key={i} className="insights-md-row">
               <div className="insights-md-row__header">
                 {md.section && <span className="insights-md-row__badge">{md.section}</span>}

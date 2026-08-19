@@ -1,6 +1,6 @@
 # 插件运行时与 Plugin Host 设计
 
-本文定义 BitFun 主应用与第三方插件代码之间的运行边界。OpenCode 的兼容范围见
+本文定义 Halo Studio 主应用与第三方插件代码之间的运行边界。OpenCode 的兼容范围见
 [`opencode-extension-compatibility.md`](opencode-extension-compatibility.md)，生态语义与脚本接口见
 [`opencode-plugin-runtime-adapter-design.md`](opencode-plugin-runtime-adapter-design.md)，外部来源的发现、确认和状态见
 [`external-ai-work-sources-design.md`](external-ai-work-sources-design.md)。详细设计与
@@ -87,7 +87,7 @@ workspace 的逻辑实例和多个 session 的调用；这些身份必须随请�
 ### 3.2 插件之间的隔离承诺
 
 Plugin Host 的首要目的，是把第三方 JS/TS 异常与 Rust 主应用进程隔开，不是把插件彼此隔开。共享同一 Host 的
-插件会共同承担同步死循环、OOM、`process.exit`、进程级环境修改和未文档化全局状态带来的风险。BitFun 可以按
+插件会共同承担同步死循环、OOM、`process.exit`、进程级环境修改和未文档化全局状态带来的风险。Halo Studio 可以按
 插件身份归因普通异常和撤下贡献，但不承诺同一 Host 内的插件故障互不影响，也不承诺兼容插件之间依赖
 `globalThis` 或模块缓存的未文档化协作。
 
@@ -269,7 +269,7 @@ flowchart LR
   Worker -. "narrow slice" .-> Service
 ```
 
-当前受管 `bitfun.plugin.json` 链路仍只有来源校验、启停记录、CLI 诊断和 custom tool 静态预览，不执行 package
+当前受管 `halo.plugin.json` 链路仍只有来源校验、启停记录、CLI 诊断和 custom tool 静态预览，不执行 package
 plugin、Hook、完整 Client 或 TUI 插件入口。与其独立的 standalone `.js` Tool 端到端能力当前由
 `ScriptToolRuntime` 为每个脚本启动 Node worker；这是现有窄实现事实，不是目标 package-plugin 的进程模型。
 
@@ -281,11 +281,11 @@ plugin、Hook、完整 Client 或 TUI 插件入口。与其独立的 standalone 
 
 当前 Rust 边界调整至少运行：
 
-- `cargo test -p bitfun-runtime-ports --test plugin_runtime_contracts`
-- `cargo test -p bitfun-runtime-ports --test plugin_runtime_diagnostics_contracts`
-- `cargo test -p bitfun-plugin-runtime-client`
-- `cargo test -p bitfun-opencode-adapter --test opencode_source_adapter`
-- `cargo test -p bitfun-core plugin_runtime::tests --lib`
+- `cargo test -p halo-runtime-ports --test plugin_runtime_contracts`
+- `cargo test -p halo-runtime-ports --test plugin_runtime_diagnostics_contracts`
+- `cargo test -p halo-plugin-runtime-client`
+- `cargo test -p halo-opencode-adapter --test opencode_source_adapter`
+- `cargo test -p halo-core plugin_runtime::tests --lib`
 - `node scripts/check-core-boundaries.mjs`
 
 目标 Plugin Host 还必须使用固定版本真实 fixture 验证：

@@ -16,7 +16,7 @@ use crate::infrastructure::ai::AIClientFactory;
 use crate::infrastructure::try_get_path_manager_arc;
 use crate::runtime_ownership::CoreRuntimeOwnership;
 use crate::service::token_usage::{TokenUsageService, TokenUsageSubscriber};
-use bitfun_product_capabilities::DeliveryProfile;
+use halo_product_capabilities::DeliveryProfile;
 
 /// Agentic runtime state shared by host adapters.
 #[derive(Clone)]

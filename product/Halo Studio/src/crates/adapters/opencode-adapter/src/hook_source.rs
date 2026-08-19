@@ -2,19 +2,19 @@ use crate::{
     command_source::{opencode_user_config_dir, strip_jsonc},
     source_adapter::statically_discover_hook_events,
 };
-use bitfun_product_domains::external_hook_catalog::{
+use halo_product_domains::external_hook_catalog::{
     ExternalHookCatalogEntry, ExternalHookHandlerKind, ExternalHookMapping,
     ExternalHookMatcherSummary, ExternalHookNativeActivation, ExternalHookProjectionStatus,
     ExternalHookProviderIdentity, ExternalHookProviderSnapshot, ExternalHookSource,
     ExternalHookSourceKind, ExternalHookSourceProvider,
 };
-use bitfun_product_domains::external_hook_contributions::ExternalHookPoint;
-use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_hook_contributions::ExternalHookPoint;
+use halo_product_domains::external_sources::{
     EcosystemId, ExternalSourceAssetKind, ExternalSourceContext, ExternalSourceDiagnostic,
     ExternalSourceDiagnosticSeverity, ExternalSourceHealth, ExternalSourceProviderError,
     ExternalSourceScope, SourceKey,
 };
-use bitfun_static_hook_support::{
+use halo_static_hook_support::{
     bounded_project_ancestors, read_bounded_file, regular_file_exists, BoundedFileRead,
 };
 use serde_json::Value;

@@ -27,7 +27,7 @@ for (const workflow of [
 }
 
 const releaseWorkflow = read('.github/workflows/cli-package.yml');
-assert.match(releaseWorkflow, /primary_binary:\s*"bitfun"/);
-assert.match(releaseWorkflow, /deprecated_binary:\s*"bitfun-cli"/);
+assert.match(releaseWorkflow, /primary_binary:\s*"halo"/);
+assert.match(releaseWorkflow, /deprecated_binary:\s*"halo-cli"/);
 assert.match(releaseWorkflow, /post-publication/i);
 assert.doesNotMatch(releaseWorkflow, /Homebrew release gate/i);

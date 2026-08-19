@@ -641,7 +641,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
   if (loading) {
     return (
-      <div className={`bitfun-markdown-editor-loading ${className}`}>
+      <div className={`halo-markdown-editor-loading ${className}`}>
         <CubeLoading size="medium" text={t('editor.markdownEditor.loadingFile')} />
       </div>
     );
@@ -649,7 +649,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
   if (error) {
     return (
-      <div className={`bitfun-markdown-editor-error ${className}`}>
+      <div className={`halo-markdown-editor-error ${className}`}>
         <div className="error-content">
           <AlertCircle className="error-icon" />
           <p>{error}</p>
@@ -665,24 +665,24 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
   if (shouldUseSourcePreviewFallback) {
     return (
-      <div className={`bitfun-markdown-editor ${className}`}>
+      <div className={`halo-markdown-editor ${className}`}>
         {notices.length > 0 && (
-          <div className="bitfun-markdown-editor__notice-bar">
-            <AlertCircle className="bitfun-markdown-editor__notice-icon" />
-            <div className="bitfun-markdown-editor__notice-copy">
+          <div className="halo-markdown-editor__notice-bar">
+            <AlertCircle className="halo-markdown-editor__notice-icon" />
+            <div className="halo-markdown-editor__notice-copy">
               {notices.map(notice => (
                 <p key={notice}>{notice}</p>
               ))}
             </div>
           </div>
         )}
-        <div className="bitfun-markdown-editor__mode-toolbar">
-          <div className="bitfun-markdown-editor__mode-toggle" role="tablist" aria-label={t('editor.markdownEditor.viewModeLabel')}>
+        <div className="halo-markdown-editor__mode-toolbar">
+          <div className="halo-markdown-editor__mode-toggle" role="tablist" aria-label={t('editor.markdownEditor.viewModeLabel')}>
             <Button
               type="button"
               size="small"
               variant={unsafeViewMode === 'source' ? 'primary' : 'secondary'}
-              className="bitfun-markdown-editor__toolbar-button"
+              className="halo-markdown-editor__toolbar-button"
               onClick={() => setUnsafeViewMode('source')}
               aria-pressed={unsafeViewMode === 'source'}
             >
@@ -692,20 +692,20 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               type="button"
               size="small"
               variant={unsafeViewMode === 'preview' ? 'primary' : 'secondary'}
-              className="bitfun-markdown-editor__toolbar-button"
+              className="halo-markdown-editor__toolbar-button"
               onClick={() => setUnsafeViewMode('preview')}
               aria-pressed={unsafeViewMode === 'preview'}
             >
               {t('editor.markdownEditor.preview')}
             </Button>
           </div>
-          <div className="bitfun-markdown-editor__toolbar-actions">
+          <div className="halo-markdown-editor__toolbar-actions">
             <Button
               type="button"
               size="small"
               variant="secondary"
               iconOnly
-              className="bitfun-markdown-editor__toolbar-button bitfun-markdown-editor__copy-button"
+              className="halo-markdown-editor__toolbar-button halo-markdown-editor__copy-button"
               onClick={() => void handleCopyMarkdown()}
               aria-label={copied
                 ? t('editor.markdownEditor.copiedMarkdown')
@@ -718,7 +718,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             </Button>
           </div>
         </div>
-        <div className="bitfun-markdown-editor__unsafe-body">
+        <div className="halo-markdown-editor__unsafe-body">
           {unsafeViewMode === 'source' ? (
             <CodeEditor
               filePath={filePath}
@@ -773,24 +773,24 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   }
 
   return (
-    <div className={`bitfun-markdown-editor ${className}`}>
+    <div className={`halo-markdown-editor ${className}`}>
       {notices.length > 0 && (
-        <div className="bitfun-markdown-editor__notice-bar">
-          <AlertCircle className="bitfun-markdown-editor__notice-icon" />
-          <div className="bitfun-markdown-editor__notice-copy">
+        <div className="halo-markdown-editor__notice-bar">
+          <AlertCircle className="halo-markdown-editor__notice-icon" />
+          <div className="halo-markdown-editor__notice-copy">
             {notices.map(notice => (
               <p key={notice}>{notice}</p>
             ))}
           </div>
         </div>
       )}
-      <div className="bitfun-markdown-editor__mode-toolbar">
-        <div className="bitfun-markdown-editor__mode-toggle" role="tablist" aria-label={t('editor.markdownEditor.viewModeLabel')}>
+      <div className="halo-markdown-editor__mode-toolbar">
+        <div className="halo-markdown-editor__mode-toggle" role="tablist" aria-label={t('editor.markdownEditor.viewModeLabel')}>
           <Button
             type="button"
             size="small"
             variant={viewMode === 'preview' ? 'primary' : 'secondary'}
-            className="bitfun-markdown-editor__toolbar-button"
+            className="halo-markdown-editor__toolbar-button"
             onClick={() => setViewMode('preview')}
             aria-pressed={viewMode === 'preview'}
           >
@@ -800,20 +800,20 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             type="button"
             size="small"
             variant={viewMode === 'markdown' ? 'primary' : 'secondary'}
-            className="bitfun-markdown-editor__toolbar-button"
+            className="halo-markdown-editor__toolbar-button"
             onClick={() => setViewMode('markdown')}
             aria-pressed={viewMode === 'markdown'}
           >
             {t('editor.markdownEditor.markdown')}
           </Button>
         </div>
-        <div className="bitfun-markdown-editor__toolbar-actions">
+        <div className="halo-markdown-editor__toolbar-actions">
           <Button
             type="button"
             size="small"
             variant="secondary"
             iconOnly
-            className="bitfun-markdown-editor__toolbar-button bitfun-markdown-editor__copy-button"
+            className="halo-markdown-editor__toolbar-button halo-markdown-editor__copy-button"
             onClick={() => void handleCopyMarkdown()}
             aria-label={copied
               ? t('editor.markdownEditor.copiedMarkdown')

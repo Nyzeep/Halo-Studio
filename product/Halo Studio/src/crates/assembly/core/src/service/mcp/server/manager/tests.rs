@@ -1,4 +1,4 @@
-use bitfun_services_integrations::mcp::server::{
+use halo_services_integrations::mcp::server::{
     compute_mcp_backoff_delay, detect_mcp_list_changed_kind, MCPListChangedKind,
 };
 use std::time::Duration;

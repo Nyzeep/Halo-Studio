@@ -7,8 +7,8 @@ use super::{MCPServerConfig, MCPServerStatus, MCPServerTransport, MCPServerType}
 use crate::mcp::protocol::{InitializeResult, MCPMessage, MCPServerInfo, MCPTransport};
 use crate::mcp::server::{is_mcp_auth_error_message, merge_mcp_remote_headers};
 use crate::mcp::{MCPRuntimeError, MCPRuntimeResult};
-use bitfun_services_core::process_manager;
-use bitfun_services_core::process_tree::ProcessTreeChild;
+use halo_services_core::process_manager;
+use halo_services_core::process_tree::ProcessTreeChild;
 use log::{debug, error, info, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -292,7 +292,7 @@ impl MCPServerProcess {
         );
 
         let result: InitializeResult = connection
-            .initialize("BitFun", env!("CARGO_PKG_VERSION"))
+            .initialize("Halo", env!("CARGO_PKG_VERSION"))
             .await?;
 
         info!(

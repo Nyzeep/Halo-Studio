@@ -1,6 +1,6 @@
 /**
  * SSH Connection Dialog Component
- * Professional SSH connection dialog following BitFun design patterns
+ * Professional SSH connection dialog following Halo design patterns
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -1056,7 +1056,7 @@ export const SSHConnectionDialog: React.FC<SSHConnectionDialogProps> = ({
                   prefix={<Lock size={16} />}
                   size="medium"
                   suffix={
-                    <button type="button" className="bitfun-input-toggle" onClick={() => setShowPassword(s => !s)} tabIndex={-1}>
+                    <button type="button" className="halo-input-toggle" onClick={() => setShowPassword(s => !s)} tabIndex={-1}>
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   }
@@ -1100,7 +1100,7 @@ export const SSHConnectionDialog: React.FC<SSHConnectionDialogProps> = ({
                     placeholder={t('ssh.remote.passphraseOptional')}
                     size="medium"
                     suffix={
-                      <button type="button" className="bitfun-input-toggle" onClick={() => setShowPassphrase(s => !s)} tabIndex={-1}>
+                      <button type="button" className="halo-input-toggle" onClick={() => setShowPassphrase(s => !s)} tabIndex={-1}>
                         {showPassphrase ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     }

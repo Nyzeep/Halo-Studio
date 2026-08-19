@@ -1,8 +1,8 @@
 [中文](README.zh-CN.md) | **English**
 
-# BitFun E2E Tests
+# Halo Studio E2E Tests
 
-E2E test framework using WebDriverIO + the embedded BitFun WebDriver.
+E2E test framework using WebDriverIO + the embedded Halo Studio WebDriver.
 
 > For complete documentation, see [E2E-TESTING-GUIDE.md](E2E-TESTING-GUIDE.md)
 
@@ -12,7 +12,7 @@ E2E test framework using WebDriverIO + the embedded BitFun WebDriver.
 
 ```bash
 # Build the debug app
-cargo build -p bitfun-desktop
+cargo build -p halo-desktop
 
 # Install test dependencies
 pnpm --dir tests/e2e install
@@ -55,12 +55,12 @@ tests/e2e/
 
 ### Embedded WebDriver not ready
 
-The test runner starts BitFun directly and waits for the embedded WebDriver service on `127.0.0.1:4445`.
+The test runner starts Halo Studio directly and waits for the embedded WebDriver service on `127.0.0.1:4445`.
 
 ### App not built
 
 ```bash
-cargo build -p bitfun-desktop
+cargo build -p halo-desktop
 ```
 
 ### Test timeout
@@ -70,4 +70,4 @@ Debug builds are slower. Adjust timeouts in config if needed.
 ## More Information
 
 - [Complete Testing Guide](E2E-TESTING-GUIDE.md) - Test writing guidelines, best practices, test plan
-- [BitFun Project Structure](../../AGENTS.md)
+- [Halo Studio Project Structure](../../AGENTS.md)

@@ -983,7 +983,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("bitfun-grep-search-{name}-{unique}"));
+        let dir = std::env::temp_dir().join(format!("halo-grep-search-{name}-{unique}"));
         fs::create_dir_all(&dir).unwrap();
         dir
     }

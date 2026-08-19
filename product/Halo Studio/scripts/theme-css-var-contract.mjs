@@ -4,8 +4,8 @@ export const DEFAULT_BASELINE_PATH = 'scripts/theme-color-governance-baseline.js
 export const COLOR_EXTENSIONS = new Set(['.css', '.scss', '.sass', '.ts', '.tsx', '.js', '.jsx']);
 
 export const TOKEN_PATH_PARTS = [
-  'BitFun-Installer/src/styles/variables.css',
-  'BitFun-Installer/src/theme',
+  'Halo-Installer/src/styles/variables.css',
+  'Halo-Installer/src/theme',
   'component-library/styles',
   'infrastructure/theme',
   'theme/presets',
@@ -16,22 +16,22 @@ export const TOKEN_ALIAS_SOURCE_PATH_PARTS = [
 ];
 
 export const CONTRACT_VAR_DEFINITION_PATH_PARTS = [
-  'BitFun-Installer/src/styles/variables.css',
-  'BitFun-Installer/src/theme/installerThemeRuntime.ts',
+  'Halo-Installer/src/styles/variables.css',
+  'Halo-Installer/src/theme/installerThemeRuntime.ts',
   'component-library/styles',
   'infrastructure/theme',
   'src/mobile-web/src/theme/presets',
-  'tools/bitfun-canvas/runtime/styles',
+  'tools/halo-canvas/runtime/styles',
   'tools/generative-widget/themePayload.ts',
 ];
 
 export const STATIC_CONTRACT_VAR_DEFINITION_PATH_PARTS = [
-  'BitFun-Installer/src/styles/variables.css',
+  'Halo-Installer/src/styles/variables.css',
   'component-library/styles',
 ];
 
 export const RUNTIME_CONTRACT_VAR_DEFINITION_PATH_PARTS = [
-  'BitFun-Installer/src/theme/installerThemeRuntime.ts',
+  'Halo-Installer/src/theme/installerThemeRuntime.ts',
   'infrastructure/theme',
 ];
 
@@ -52,7 +52,7 @@ export const COLOR_DOMAIN_RULES = [
   {
     key: 'themePreset',
     label: 'Theme presets',
-    pathParts: ['BitFun-Installer/src/theme', 'infrastructure/theme/presets', 'theme/presets'],
+    pathParts: ['Halo-Installer/src/theme', 'infrastructure/theme/presets', 'theme/presets'],
   },
   {
     key: 'themeRuntime',
@@ -62,7 +62,7 @@ export const COLOR_DOMAIN_RULES = [
   {
     key: 'tokenContract',
     label: 'Token contracts',
-    pathParts: ['BitFun-Installer/src/styles/variables.css', 'component-library/styles'],
+    pathParts: ['Halo-Installer/src/styles/variables.css', 'component-library/styles'],
   },
   {
     key: 'generatedWidget',
@@ -70,9 +70,9 @@ export const COLOR_DOMAIN_RULES = [
     pathParts: ['tools/generative-widget'],
   },
   {
-    key: 'bitfunCanvas',
-    label: 'BitFun Canvas',
-    pathParts: ['tools/bitfun-canvas'],
+    key: 'haloCanvas',
+    label: 'Halo Canvas',
+    pathParts: ['tools/halo-canvas'],
   },
   {
     key: 'boundaryFallback',
@@ -164,9 +164,9 @@ export const COLOR_DOMAIN_CONTRACTS = [
     mergePolicy: 'Keep payload variables canonical; keep legacy aliases in iframe fallback until widget consumers no longer read them.',
   },
   {
-    key: 'bitfunCanvas',
-    owner: 'src/web-ui/src/tools/bitfun-canvas',
-    reason: 'BitFun Canvas renders generated TSX inside a dedicated iframe runtime with an SDK palette that must stay isolated from app chrome tokens.',
+    key: 'haloCanvas',
+    owner: 'src/web-ui/src/tools/halo-canvas',
+    reason: 'Halo Canvas renders generated TSX inside a dedicated iframe runtime with an SDK palette that must stay isolated from app chrome tokens.',
     mergePolicy: 'Keep Canvas iframe and SDK colors in the Canvas runtime contract; promote only reusable host chrome roles to shared app tokens.',
   },
   {
@@ -299,9 +299,9 @@ export const SURFACE_TOKEN_RENAME_CONTRACTS = [
 
 export const DYNAMIC_VAR_FAMILY_CONTRACTS = [
   {
-    prefix: '--bitfun-canvas-',
-    owner: 'src/web-ui/src/tools/bitfun-canvas/runtime/canvasRuntimeInstaller.ts; src/web-ui/src/tools/bitfun-canvas/runtime/styles/canvas-runtime.scss',
-    reason: 'BitFun Canvas iframe runtime receives host theme values through a scoped CSS variable family that must stay isolated from app root tokens.',
+    prefix: '--halo-canvas-',
+    owner: 'src/web-ui/src/tools/halo-canvas/runtime/canvasRuntimeInstaller.ts; src/web-ui/src/tools/halo-canvas/runtime/styles/canvas-runtime.scss',
+    reason: 'Halo Canvas iframe runtime receives host theme values through a scoped CSS variable family that must stay isolated from app root tokens.',
   },
   {
     prefix: '--blur-',

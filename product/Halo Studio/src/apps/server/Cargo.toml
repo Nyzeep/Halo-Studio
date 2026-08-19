@@ -1,16 +1,16 @@
 [package]
-name = "bitfun-server"
+name = "halo-server"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "BitFun Server - Web-based AI Code Assistant"
+description = "Halo Server - Web-based AI Code Assistant"
 
 [[bin]]
-name = "bitfun-server"
+name = "halo-server"
 path = "src/main.rs"
 
 [dependencies]
-bitfun-core = { path = "../../crates/assembly/core", default-features = false, features = ["product-full"] }
+halo-core = { path = "../../crates/assembly/core", default-features = false, features = ["product-full"] }
 
 # Web framework
 axum = { workspace = true }

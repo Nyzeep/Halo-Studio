@@ -16,8 +16,8 @@ pub(crate) fn spawn(store: &DispatchStore, job_id: &str) -> Result<u32> {
         bail!("dispatch detached workers are supported only on Linux and macOS");
     }
 
-    let executable = std::env::current_exe().context("resolve BitFun executable")?;
-    let mut command = bitfun_services_core::process_manager::create_command(executable);
+    let executable = std::env::current_exe().context("resolve Halo executable")?;
+    let mut command = halo_services_core::process_manager::create_command(executable);
     command
         .arg("dispatch")
         .arg("__run")
@@ -268,10 +268,10 @@ mod tests {
 
     #[test]
     fn process_identity_requires_the_exact_hidden_worker_arguments() {
-        let expected = ["bitfun", "dispatch", "__run", "--job", "job-1"].map(str::to_string);
+        let expected = ["halo", "dispatch", "__run", "--job", "job-1"].map(str::to_string);
         assert!(arguments_match_job(&expected, "job-1"));
         assert!(!arguments_match_job(&expected, "job-2"));
-        let unrelated = ["bitfun", "dispatch", "status"].map(str::to_string);
+        let unrelated = ["halo", "dispatch", "status"].map(str::to_string);
         assert!(!arguments_match_job(&unrelated, "job-1"));
     }
 
@@ -333,14 +333,14 @@ mod tests {
             .arg("-c")
             .arg(
                 "trap 'exit 0' TERM; trap '' HUP; \
-                 sh -c 'trap \"\" TERM HUP; printf ready > \"$BITFUN_DISPATCH_TERM_TEST_READY\"; \
+                 sh -c 'trap \"\" TERM HUP; printf ready > \"$HALO_DISPATCH_TERM_TEST_READY\"; \
                  while :; do sleep 30; done' & \
                  while :; do sleep 30; done",
             )
             // These trailing arguments make the real process identity match
-            // the hidden worker contract without launching BitFun Runtime.
+            // the hidden worker contract without launching Halo Runtime.
             .args(["dispatch", "__run", "--job", job_id])
-            .env("BITFUN_DISPATCH_TERM_TEST_READY", &ready_path)
+            .env("HALO_DISPATCH_TERM_TEST_READY", &ready_path)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());

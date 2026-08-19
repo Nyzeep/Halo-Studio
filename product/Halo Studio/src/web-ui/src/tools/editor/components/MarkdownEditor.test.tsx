@@ -95,7 +95,7 @@ describe('MarkdownEditor', () => {
 
     expect(html).toContain('aria-label="Copy Markdown"');
     expect(html).toContain('data-icon="copy"');
-    expect(html).toContain('bitfun-markdown-editor__toolbar-button');
+    expect(html).toContain('halo-markdown-editor__toolbar-button');
   });
 
   it('uses preview mode for markdown rendering', () => {

@@ -30,7 +30,7 @@ pub use tool::{
     ExternalToolDiscoveryResult,
 };
 
-use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_sources::{
     prompt_command_conflict_key, EcosystemId, ExpandedPromptCommand, ExternalSourceCatalogEntry,
     ExternalSourceCatalogSnapshot, ExternalSourceContext, ExternalSourceDiagnostic,
     ExternalSourceHealth, ExternalSourceLifecycleState, ExternalSourceProviderError,

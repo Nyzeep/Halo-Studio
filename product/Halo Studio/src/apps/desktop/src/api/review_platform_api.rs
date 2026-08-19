@@ -1,7 +1,7 @@
 //! Review platform Tauri commands.
 
 use crate::api::app_state::AppState;
-use bitfun_core::service::review_platform::{
+use halo_core::service::review_platform::{
     ReviewPlatformCiLog, ReviewPlatformDetailSection, ReviewPlatformError,
     ReviewPlatformIssueEvidence, ReviewPlatformKind, ReviewPlatformPullRequestDetail,
     ReviewPlatformPullRequestDetailPage, ReviewPlatformPullRequestReviewTarget,

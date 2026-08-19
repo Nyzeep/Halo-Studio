@@ -1,13 +1,13 @@
-use bitfun_opencode_adapter::{OpenCodeToolProvider, OpenCodeToolProviderOptions};
-use bitfun_product_domains::external_sources::{
+use halo_opencode_adapter::{OpenCodeToolProvider, OpenCodeToolProviderOptions};
+use halo_product_domains::external_sources::{
     ExecutionDomainId, ExternalSourceContext, ExternalSourceScope, ExternalToolSourceProvider,
     ExternalToolStaticStatus,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     ScriptToolExpectedExport, ScriptToolInvokeRequest, ScriptToolLoadRequest, ScriptToolRuntime,
     ScriptToolRuntimeAvailability,
 };
-use bitfun_services_integrations::script_tool::NodeScriptToolRuntime;
+use halo_services_integrations::script_tool::NodeScriptToolRuntime;
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;

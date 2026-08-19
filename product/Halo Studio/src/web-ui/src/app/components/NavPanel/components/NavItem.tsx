@@ -65,7 +65,7 @@ const NavItem: React.FC<NavItemProps> = ({
     <button
       type="button"
       className={[
-        'bitfun-nav-panel__item',
+        'halo-nav-panel__item',
         isActive && 'is-active',
       ]
         .filter(Boolean)
@@ -73,15 +73,15 @@ const NavItem: React.FC<NavItemProps> = ({
       onClick={onClick}
       title={tooltipContent ?? displayLabel}
     >
-      <span className="bitfun-nav-panel__item-icon" aria-hidden="true">
+      <span className="halo-nav-panel__item-icon" aria-hidden="true">
         <Icon size={15} />
       </span>
-      <span className="bitfun-nav-panel__item-label">{displayLabel}</span>
+      <span className="halo-nav-panel__item-label">{displayLabel}</span>
 
       {badge && (
         <span
           ref={badgeRef}
-          className={`bitfun-nav-panel__item-badge ${onBadgeClick ? 'bitfun-nav-panel__item-badge--clickable' : ''}`}
+          className={`halo-nav-panel__item-badge ${onBadgeClick ? 'halo-nav-panel__item-badge--clickable' : ''}`}
           onClick={handleBadgeClick}
           title={badge}
         >
@@ -90,14 +90,14 @@ const NavItem: React.FC<NavItemProps> = ({
       )}
 
       {renderActions ? (
-        <span className="bitfun-nav-panel__item-actions-custom" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+        <span className="halo-nav-panel__item-actions-custom" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
           {renderActions()}
         </span>
       ) : ActionIcon && onActionClick && (
         actionTitle ? (
           <Tooltip content={actionTitle} placement="right" followCursor>
             <span
-              className="bitfun-nav-panel__item-action"
+              className="halo-nav-panel__item-action"
               onClick={handleActionClick}
               onMouseDown={e => e.stopPropagation()}
               role="button"
@@ -109,7 +109,7 @@ const NavItem: React.FC<NavItemProps> = ({
           </Tooltip>
         ) : (
           <span
-            className="bitfun-nav-panel__item-action"
+            className="halo-nav-panel__item-action"
             onClick={handleActionClick}
             onMouseDown={e => e.stopPropagation()}
             role="button"

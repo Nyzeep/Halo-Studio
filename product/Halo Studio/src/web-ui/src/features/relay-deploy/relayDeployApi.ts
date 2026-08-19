@@ -2,7 +2,7 @@
  * Relay Deploy Feature - API Service
  *
  * Wraps the desktop `relay_deploy_*` Tauri commands: deploy the open-source
- * BitFun relay server to a user-owned host over an existing SSH connection.
+ * Halo relay server to a user-owned host over an existing SSH connection.
  */
 
 import { api } from '@/infrastructure/api/service-api/ApiClient';
@@ -39,10 +39,10 @@ export interface RelayPreflight {
   portBusy: boolean;
   /** Port that was probed for busy/selected-port health checks. */
   probedPort: number;
-  /** Selected port belongs to the existing bitfun-relay (not an unrelated process). */
+  /** Selected port belongs to the existing halo-relay (not an unrelated process). */
   portOwnedByRelay: boolean;
   containerExists: boolean;
-  /** bitfun-relay container is currently running. */
+  /** halo-relay container is currently running. */
   containerRunning: boolean;
   /** Host port published by the running relay (0 if unknown). */
   existingRelayPort: number;

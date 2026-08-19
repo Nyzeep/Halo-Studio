@@ -5,7 +5,7 @@ use crate::agentic::session::transcript_render::{
 use crate::agentic::tools::registry::GET_TOOL_SPEC_TOOL_NAME;
 use crate::service::config::types::MemoryExternalContextPolicy;
 use crate::service::session::{DialogTurnData, ToolItemData, ToolItemIdentityExt};
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use regex::Regex;
 use serde::Serialize;
 use serde_json::Value;
@@ -56,14 +56,14 @@ pub(crate) fn render_memory_phase1_transcript(
     turns: &[DialogTurnData],
     token_limit: usize,
     external_context_policy: MemoryExternalContextPolicy,
-) -> BitFunResult<String> {
+) -> HaloResult<String> {
     let items = collect_memory_transcript_items(turns, external_context_policy);
     if items.is_empty() {
         return Ok(String::new());
     }
 
     let serialized = serde_json::to_string(&items).map_err(|error| {
-        BitFunError::serialization(format!(
+        HaloError::serialization(format!(
             "Failed to serialize memory phase1 transcript: {}",
             error
         ))
@@ -547,7 +547,7 @@ mod tests {
         let mut round = base_round();
         round.tool_items.push(ToolItemData {
             id: "tool_1".to_string(),
-            tool_name: bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME.to_string(),
+            tool_name: halo_agent_tools::CALL_DEFERRED_TOOL_NAME.to_string(),
             tool_call: ToolCallData {
                 id: "call_1".to_string(),
                 input: json!({
@@ -597,7 +597,7 @@ mod tests {
         .unwrap();
 
         assert!(transcript.contains("\"function\":{\"name\":\"WebFetch\""));
-        assert!(!transcript.contains(bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME));
+        assert!(!transcript.contains(halo_agent_tools::CALL_DEFERRED_TOOL_NAME));
         assert!(transcript.contains("https://example.test/preferences"));
         assert!(transcript.contains("\"content\":\"[external tool result cleared]\""));
         assert!(

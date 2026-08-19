@@ -13,9 +13,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RELEASE_DIR="${3:-${REPO_ROOT}/target/${TARGET}/release}"
 OUTPUT_DIR="${4:-${REPO_ROOT}}"
-PRIMARY="${RELEASE_DIR}/bitfun"
-LEGACY="${RELEASE_DIR}/bitfun-cli"
-DEPRECATION='Warning: `bitfun-cli` is deprecated; use `bitfun` instead.'
+PRIMARY="${RELEASE_DIR}/halo"
+LEGACY="${RELEASE_DIR}/halo-cli"
+DEPRECATION='Warning: `halo-cli` is deprecated; use `halo` instead.'
 
 assert_legacy_entrypoint() {
   local executable="$1"
@@ -23,7 +23,7 @@ assert_legacy_entrypoint() {
   stderr_file="$(mktemp)"
   if ! "$executable" --version >/dev/null 2>"$stderr_file"; then
     rm -f "$stderr_file"
-    echo "Error: deprecated bitfun-cli entrypoint failed" >&2
+    echo "Error: deprecated halo-cli entrypoint failed" >&2
     return 1
   fi
   warning="$(cat "$stderr_file")"
@@ -38,7 +38,7 @@ assert_legacy_entrypoint() {
 "$PRIMARY" --help >/dev/null
 assert_legacy_entrypoint "$LEGACY"
 
-STAGE_NAME="bitfun-cli-${VERSION}-${TARGET}"
+STAGE_NAME="halo-cli-${VERSION}-${TARGET}"
 STAGE_DIR="${OUTPUT_DIR}/dist-cli/${STAGE_NAME}"
 mkdir -p "$STAGE_DIR"
 cp "$PRIMARY" "$STAGE_DIR/"
@@ -72,8 +72,8 @@ trap 'rm -rf "$EXTRACT_DIR"' EXIT
 tar -xzf "$ARCHIVE" -C "$EXTRACT_DIR"
 
 shopt -s nullglob
-PRIMARY_CANDIDATES=("$EXTRACT_DIR"/*/bitfun)
-LEGACY_CANDIDATES=("$EXTRACT_DIR"/*/bitfun-cli)
+PRIMARY_CANDIDATES=("$EXTRACT_DIR"/*/halo)
+LEGACY_CANDIDATES=("$EXTRACT_DIR"/*/halo-cli)
 [ "${#PRIMARY_CANDIDATES[@]}" -eq 1 ]
 [ "${#LEGACY_CANDIDATES[@]}" -eq 1 ]
 [ -f "$EXTRACT_DIR/$STAGE_NAME/README.md" ]

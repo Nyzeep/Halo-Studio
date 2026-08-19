@@ -155,8 +155,8 @@ export const AgentCompanionDesktopPet: React.FC = () => {
 
   useEffect(() => {
     let disposed = false;
-    document.documentElement.classList.add('bitfun-agent-companion-window-root');
-    document.body.classList.add('bitfun-agent-companion-window-body');
+    document.documentElement.classList.add('halo-agent-companion-window-root');
+    document.body.classList.add('halo-agent-companion-window-body');
 
     const hidePetWindowForInactiveSettings = () => {
       void getCurrentWindow().hide().catch(error => {
@@ -241,8 +241,8 @@ export const AgentCompanionDesktopPet: React.FC = () => {
       disposed = true;
       removeTauriListener?.();
       removeActivityListener?.();
-      document.documentElement.classList.remove('bitfun-agent-companion-window-root');
-      document.body.classList.remove('bitfun-agent-companion-window-body');
+      document.documentElement.classList.remove('halo-agent-companion-window-root');
+      document.body.classList.remove('halo-agent-companion-window-body');
     };
   }, []);
 
@@ -494,7 +494,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
         return;
       }
       const dock = dockRef.current;
-      const hitbox = dock?.querySelector<HTMLElement>('.bitfun-agent-companion-window__pet-hitbox') ?? null;
+      const hitbox = dock?.querySelector<HTMLElement>('.halo-agent-companion-window__pet-hitbox') ?? null;
       cachedHitboxRect = hitbox?.getBoundingClientRect() ?? null;
       cachedBubbleRects = visibleTaskCountRef.current > 0
         ? Array.from(
@@ -835,9 +835,9 @@ export const AgentCompanionDesktopPet: React.FC = () => {
   }, []);
 
   const dockVars = {
-    '--bitfun-agent-companion-pet-width': `${activePetSize.width}px`,
-    '--bitfun-agent-companion-pet-height': `${activePetSize.height}px`,
-    '--bitfun-agent-companion-gap': `${WINDOW_HORIZONTAL_GAP}px`,
+    '--halo-agent-companion-pet-width': `${activePetSize.width}px`,
+    '--halo-agent-companion-pet-height': `${activePetSize.height}px`,
+    '--halo-agent-companion-gap': `${WINDOW_HORIZONTAL_GAP}px`,
   } as React.CSSProperties;
   const isSingleTask = visibleTasks.length === 1;
   const hasAttentionTask = visibleTasks.some(task => task.state === 'attention');
@@ -852,30 +852,30 @@ export const AgentCompanionDesktopPet: React.FC = () => {
 
   return (
     <main
-      className={`bitfun-agent-companion-window${isMenuOverlay ? ' bitfun-agent-companion-window--menu-open' : ''}${IS_WINDOWS_WEBVIEW ? ' bitfun-agent-companion-window--native-hover' : ''}`}
+      className={`halo-agent-companion-window${isMenuOverlay ? ' halo-agent-companion-window--menu-open' : ''}${IS_WINDOWS_WEBVIEW ? ' halo-agent-companion-window--native-hover' : ''}`}
       onContextMenu={onContextMenu}
     >
       {overlay && (
         <div
-          className="bitfun-agent-companion-window__backdrop"
+          className="halo-agent-companion-window__backdrop"
           onPointerDown={closeOverlay}
         />
       )}
       {menuItem && (
         <div
           ref={menuRef}
-          className="bitfun-agent-companion-window__overlay bitfun-agent-companion-window__overlay--anchored"
+          className="halo-agent-companion-window__overlay halo-agent-companion-window__overlay--anchored"
           style={{
             right: `${menuPosition?.right ?? MENU_EDGE_MARGIN}px`,
             bottom: `${menuPosition?.bottom ?? MENU_EDGE_MARGIN}px`,
             visibility: menuPosition ? 'visible' : 'hidden',
           }}
         >
-          <div className="bitfun-agent-companion-window__menu" role="menu">
+          <div className="halo-agent-companion-window__menu" role="menu">
             <button
               type="button"
               role="menuitem"
-              className="bitfun-agent-companion-window__menu-item"
+              className="halo-agent-companion-window__menu-item"
               onClick={menuItem.onClick}
             >
               {menuItem.label}
@@ -883,15 +883,15 @@ export const AgentCompanionDesktopPet: React.FC = () => {
           </div>
         </div>
       )}
-      <div className="bitfun-agent-companion-window__stack" style={dockVars}>
+      <div className="halo-agent-companion-window__stack" style={dockVars}>
         <div
           ref={dockRef}
-          className="bitfun-agent-companion-window__dock"
+          className="halo-agent-companion-window__dock"
         >
           {visibleTasks.length > 0 && (
             <div
               ref={bubblesRef}
-              className={`bitfun-agent-companion-window__bubbles${isSingleTask ? ' bitfun-agent-companion-window__bubbles--single' : ''}`}
+              className={`halo-agent-companion-window__bubbles${isSingleTask ? ' halo-agent-companion-window__bubbles--single' : ''}`}
               aria-live="polite"
               onDoubleClick={event => event.stopPropagation()}
             >
@@ -899,13 +899,13 @@ export const AgentCompanionDesktopPet: React.FC = () => {
                 const isComposingTask = overlay?.kind === 'composer'
                   && overlay.sessionId === task.sessionId;
                 const isHoveredTask = hoveredBubbleSessionId === task.sessionId;
-                const bubbleClassName = `bitfun-agent-companion-window__bubble bitfun-agent-companion-window__bubble--${task.state}${isSingleTask ? ' bitfun-agent-companion-window__bubble--single' : ''}${isComposingTask ? ' bitfun-agent-companion-window__bubble--composing' : ''}`;
+                const bubbleClassName = `halo-agent-companion-window__bubble halo-agent-companion-window__bubble--${task.state}${isSingleTask ? ' halo-agent-companion-window__bubble--single' : ''}${isComposingTask ? ' halo-agent-companion-window__bubble--composing' : ''}`;
                 const bubbleBody = (
                   <>
-                    <span className="bitfun-agent-companion-window__bubble-title">
+                    <span className="halo-agent-companion-window__bubble-title">
                       {task.title}
                     </span>
-                    <span className="bitfun-agent-companion-window__bubble-status">
+                    <span className="halo-agent-companion-window__bubble-status">
                       {t(task.labelKey, { defaultValue: task.defaultLabel })}
                     </span>
                     {isSingleTask && task.latestOutput && (() => {
@@ -924,7 +924,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
                               outputRefs.current.delete(sessionId);
                             }
                           }}
-                          className={`bitfun-agent-companion-window__bubble-output${isTyping ? ' bitfun-agent-companion-window__bubble-output--typing' : ''}`}
+                          className={`halo-agent-companion-window__bubble-output${isTyping ? ' halo-agent-companion-window__bubble-output--typing' : ''}`}
                         >
                           {visibleOutput}
                         </span>
@@ -937,7 +937,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
                   <div
                     key={task.sessionId}
                     data-agent-companion-session-id={task.sessionId}
-                    className={`bitfun-agent-companion-window__bubble-shell${isSingleTask ? ' bitfun-agent-companion-window__bubble-shell--single' : ''}${isHoveredTask ? ' bitfun-agent-companion-window__bubble-shell--hovered' : ''}`}
+                    className={`halo-agent-companion-window__bubble-shell${isSingleTask ? ' halo-agent-companion-window__bubble-shell--single' : ''}${isHoveredTask ? ' halo-agent-companion-window__bubble-shell--hovered' : ''}`}
                     onContextMenu={event => onBubbleContextMenu(event, task.sessionId)}
                   >
                     {isComposingTask ? (
@@ -945,12 +945,12 @@ export const AgentCompanionDesktopPet: React.FC = () => {
                       // and the window keeps its size.
                       <div className={bubbleClassName}>
                         {bubbleBody}
-                        <div className="bitfun-agent-companion-window__bubble-composer">
+                        <div className="halo-agent-companion-window__bubble-composer">
                           <input
                             ref={composerInputRef}
                             type="text"
                             data-mouse-glow-ignore
-                            className="bitfun-agent-companion-window__bubble-composer-input"
+                            className="halo-agent-companion-window__bubble-composer-input"
                             value={composerValue}
                             placeholder={t('agentCompanion.composer.placeholder')}
                             aria-label={t('agentCompanion.composer.ariaLabel')}
@@ -959,7 +959,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
                           />
                           <button
                             type="button"
-                            className="bitfun-agent-companion-window__bubble-composer-cancel"
+                            className="halo-agent-companion-window__bubble-composer-cancel"
                             title={t('agentCompanion.composer.cancel')}
                             aria-label={t('agentCompanion.composer.cancel')}
                             onClick={cancelBubbleComposer}
@@ -976,7 +976,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            className="bitfun-agent-companion-window__bubble-composer-send"
+                            className="halo-agent-companion-window__bubble-composer-send"
                             title={t('agentCompanion.composer.send')}
                             aria-label={t('agentCompanion.composer.send')}
                             disabled={!composerValue.trim() || isSendingComposer}
@@ -1007,7 +1007,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
                     {task.canReply !== false && !isComposingTask && (
                       <button
                         type="button"
-                        className="bitfun-agent-companion-window__bubble-compose"
+                        className="halo-agent-companion-window__bubble-compose"
                         title={t('agentCompanion.composer.openTitle')}
                         aria-label={t('agentCompanion.composer.openTitle')}
                         onClick={() => openBubbleComposer(task.sessionId)}
@@ -1030,7 +1030,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
             </div>
           )}
           <div
-            className={`bitfun-agent-companion-window__pet-hitbox${hasAttentionTask ? ' bitfun-agent-companion-window__pet-hitbox--needs-attention' : ''}`}
+            className={`halo-agent-companion-window__pet-hitbox${hasAttentionTask ? ' halo-agent-companion-window__pet-hitbox--needs-attention' : ''}`}
             onPointerEnter={() => setIsHoveringPet(true)}
             onPointerLeave={() => setIsHoveringPet(false)}
             onPointerDown={onPetPointerDown}
@@ -1045,7 +1045,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
               nativePetdexSize
               petdexScale={PETDEX_DESKTOP_SCALE}
               onPetFrameSizeChange={handlePetFrameSizeChange}
-              className="bitfun-agent-companion-window__pet"
+              className="halo-agent-companion-window__pet"
             />
           </div>
         </div>

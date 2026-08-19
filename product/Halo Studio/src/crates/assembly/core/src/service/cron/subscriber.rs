@@ -2,7 +2,7 @@
 
 use super::service::CronService;
 use crate::agentic::events::{AgenticEvent, EventSubscriber};
-use bitfun_agent_runtime::event_bus::{EventBusError, EventSubscriberResult};
+use halo_agent_runtime::event_bus::{EventBusError, EventSubscriberResult};
 use log::error;
 use std::sync::Arc;
 

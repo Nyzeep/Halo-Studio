@@ -134,7 +134,7 @@ export const forbiddenContentRules = [
       {
         regex: /\bAgenticEvent::[A-Z]/,
         message:
-          'Tauri transport adapter must not match agentic event variants directly; use bitfun-events frontend projection',
+          'Tauri transport adapter must not match agentic event variants directly; use halo-events frontend projection',
       },
     ],
   },
@@ -142,7 +142,7 @@ export const forbiddenContentRules = [
     path: 'src/crates/execution/agent-runtime/tests/sdk_smoke.rs',
     patterns: [
       {
-        regex: /\bbitfun_runtime_services::test_support\b/,
+        regex: /\bhalo_runtime_services::test_support\b/,
         message:
           'agent-runtime SDK smoke tests must prove the public sdk facade is enough; do not rely on runtime-services test_support',
       },
@@ -157,11 +157,11 @@ export const forbiddenContentRules = [
     path: 'src/crates/execution/agent-runtime/src/sdk.rs',
     patterns: [
       {
-        regex: /\bbitfun_core\b/,
-        message: 'SDK facade must not expose bitfun-core',
+        regex: /\bhalo_core\b/,
+        message: 'SDK facade must not expose halo-core',
       },
       {
-        regex: /\bbitfun_product_capabilities\b/,
+        regex: /\bhalo_product_capabilities\b/,
         message: 'SDK facade must not expose product assembly facts',
       },
       {
@@ -196,9 +196,9 @@ export const forbiddenContentRules = [
     path: 'src/crates/assembly/product-capabilities/tests/product_sdk_assembly.rs',
     patterns: [
       {
-        regex: /\bbitfun_core\b/,
+        regex: /\bhalo_core\b/,
         message:
-          'product assembly to SDK smoke must not depend on bitfun-core',
+          'product assembly to SDK smoke must not depend on halo-core',
       },
       {
         regex: /\bCoreRuntimeServicesProvider\b/,
@@ -217,17 +217,17 @@ export const forbiddenContentRules = [
       {
         regex: /\bprocess_manager::/,
         message:
-          'core browser launcher facade must not own browser process execution; use bitfun-services-integrations browser_control launcher',
+          'core browser launcher facade must not own browser process execution; use halo-services-integrations browser_control launcher',
       },
       {
         regex: /\b(?:std::process::Command|Command::new\()/,
         message:
-          'core browser launcher facade must not construct browser launch commands; use bitfun-services-integrations browser_control launcher',
+          'core browser launcher facade must not construct browser launch commands; use halo-services-integrations browser_control launcher',
       },
       {
         regex: /\breqwest::/,
         message:
-          'core browser launcher facade must not own CDP network probing; use bitfun-services-integrations browser_control launcher',
+          'core browser launcher facade must not own CDP network probing; use halo-services-integrations browser_control launcher',
       },
     ],
   },
@@ -237,7 +237,7 @@ export const forbiddenContentRules = [
       {
         regex: /\breqwest::/,
         message:
-          'core CDP client facade must not own HTTP endpoint probing; use bitfun-services-integrations browser_control CDP provider',
+          'core CDP client facade must not own HTTP endpoint probing; use halo-services-integrations browser_control CDP provider',
       },
     ],
   },
@@ -247,7 +247,7 @@ export const forbiddenContentRules = [
       {
         regex: /\breqwest::/,
         message:
-          'core WebFetch tool must not own HTTP clients; use bitfun-services-integrations web provider',
+          'core WebFetch tool must not own HTTP clients; use halo-services-integrations web provider',
       },
     ],
   },
@@ -257,7 +257,7 @@ export const forbiddenContentRules = [
       {
         regex: /\breqwest::/,
         message:
-          'core WebSearch tool must not own provider HTTP clients; use bitfun-services-integrations web provider',
+          'core WebSearch tool must not own provider HTTP clients; use halo-services-integrations web provider',
       },
       {
         regex: /strip_prefix\("Title: "\)/,
@@ -292,27 +292,27 @@ export const forbiddenContentRules = [
       {
         regex: /\breqwest::/,
         message:
-          'core debug log facade must not own HTTP ingest posting; use bitfun-services-integrations debug log network provider',
+          'core debug log facade must not own HTTP ingest posting; use halo-services-integrations debug log network provider',
       },
       {
         regex: /\bOpenOptions\b/,
         message:
-          'core debug log facade must not own debug log file append; use bitfun-services-integrations debug log owner',
+          'core debug log facade must not own debug log file append; use halo-services-integrations debug log owner',
       },
       {
         regex: /\bUuid::new_v4\b/,
         message:
-          'core debug log facade must not own debug log id generation; use bitfun-services-integrations debug log owner',
+          'core debug log facade must not own debug log id generation; use halo-services-integrations debug log owner',
       },
       {
         regex: /\bfn redact_value\b/,
         message:
-          'core debug log facade must not own redaction policy; use bitfun-services-integrations debug log owner',
+          'core debug log facade must not own redaction policy; use halo-services-integrations debug log owner',
       },
       {
         regex: /\bfn build_log_line\b/,
         message:
-          'core debug log facade must not build debug log lines; use bitfun-services-integrations debug log owner',
+          'core debug log facade must not build debug log lines; use halo-services-integrations debug log owner',
       },
     ],
   },
@@ -322,22 +322,22 @@ export const forbiddenContentRules = [
       {
         regex: /\bstatic\s+FILE_LOCKS\b/,
         message:
-          'core persistence wrapper must not own file locks; use bitfun-services-core persistence owner',
+          'core persistence wrapper must not own file locks; use halo-services-core persistence owner',
       },
       {
         regex: /\bserde_json::to_string_pretty\b/,
         message:
-          'core persistence wrapper must not own JSON serialization; use bitfun-services-core persistence owner',
+          'core persistence wrapper must not own JSON serialization; use halo-services-core persistence owner',
       },
       {
         regex: /\btokio::fs::rename\b/,
         message:
-          'core persistence wrapper must not own atomic file replacement; use bitfun-services-core persistence owner',
+          'core persistence wrapper must not own atomic file replacement; use halo-services-core persistence owner',
       },
       {
         regex: /\bfn create_backup\b/,
         message:
-          'core persistence wrapper must not own backup creation; use bitfun-services-core persistence owner',
+          'core persistence wrapper must not own backup creation; use halo-services-core persistence owner',
       },
     ],
   },
@@ -347,22 +347,22 @@ export const forbiddenContentRules = [
       {
         regex: /\btokio::fs::read_dir\b/,
         message:
-          'core storage cleanup wrapper must not own directory traversal; use bitfun-services-core cleanup owner',
+          'core storage cleanup wrapper must not own directory traversal; use halo-services-core cleanup owner',
       },
       {
         regex: /\btokio::fs::remove_file\b/,
         message:
-          'core storage cleanup wrapper must not own cleanup deletion; use bitfun-services-core cleanup owner',
+          'core storage cleanup wrapper must not own cleanup deletion; use halo-services-core cleanup owner',
       },
       {
         regex: /\bfn cleanup_recursively\b/,
         message:
-          'core storage cleanup wrapper must not own recursive cleanup; use bitfun-services-core cleanup owner',
+          'core storage cleanup wrapper must not own recursive cleanup; use halo-services-core cleanup owner',
       },
       {
         regex: /\bfn calculate_dir_size\b/,
         message:
-          'core storage cleanup wrapper must not own cleanup size accounting; use bitfun-services-core cleanup owner',
+          'core storage cleanup wrapper must not own cleanup size accounting; use halo-services-core cleanup owner',
       },
     ],
   },
@@ -372,27 +372,27 @@ export const forbiddenContentRules = [
       {
         regex: /\bconst\s+MODEL_STATS_FILE\b/,
         message:
-          'core token usage wrapper must not own token usage file layout; use bitfun-services-core token usage owner',
+          'core token usage wrapper must not own token usage file layout; use halo-services-core token usage owner',
       },
       {
         regex: /\bRecordsBatch\b/,
         message:
-          'core token usage wrapper must not own token usage persistence batches; use bitfun-services-core token usage owner',
+          'core token usage wrapper must not own token usage persistence batches; use halo-services-core token usage owner',
       },
       {
         regex: /\bfn persist_record\b/,
         message:
-          'core token usage wrapper must not own record persistence; use bitfun-services-core token usage owner',
+          'core token usage wrapper must not own record persistence; use halo-services-core token usage owner',
       },
       {
         regex: /\btokio::fs::/,
         message:
-          'core token usage wrapper must not own token usage file IO; use bitfun-services-core token usage owner',
+          'core token usage wrapper must not own token usage file IO; use halo-services-core token usage owner',
       },
       {
         regex: /\bchrono::/,
         message:
-          'core token usage wrapper must not own token usage time aggregation; use bitfun-services-core token usage owner',
+          'core token usage wrapper must not own token usage time aggregation; use halo-services-core token usage owner',
       },
     ],
   },
@@ -402,12 +402,12 @@ export const forbiddenContentRules = [
       {
         regex: /\btokio::fs::read_to_string\b/,
         message:
-          'core instruction context wrapper must not own workspace instruction file IO; use bitfun-services-core workspace instruction owner',
+          'core instruction context wrapper must not own workspace instruction file IO; use halo-services-core workspace instruction owner',
       },
       {
         regex: /\bfor file_name in\b/,
         message:
-          'core instruction context wrapper must not own instruction file ordering; use bitfun-services-core workspace instruction owner',
+          'core instruction context wrapper must not own instruction file ordering; use halo-services-core workspace instruction owner',
       },
     ],
   },
@@ -417,17 +417,17 @@ export const forbiddenContentRules = [
       {
         regex: /\bserde_yaml::from_str\b/,
         message:
-          'core front-matter markdown facade must not own YAML parsing; use bitfun-services-core markdown owner',
+          'core front-matter markdown facade must not own YAML parsing; use halo-services-core markdown owner',
       },
       {
         regex: /\bserde_yaml::to_string\b/,
         message:
-          'core front-matter markdown facade must not own YAML serialization; use bitfun-services-core markdown owner',
+          'core front-matter markdown facade must not own YAML serialization; use halo-services-core markdown owner',
       },
       {
         regex: /\bstd::fs::write\b/,
         message:
-          'core front-matter markdown facade must not own markdown persistence; use bitfun-services-core markdown owner',
+          'core front-matter markdown facade must not own markdown persistence; use halo-services-core markdown owner',
       },
     ],
   },
@@ -437,27 +437,27 @@ export const forbiddenContentRules = [
       {
         regex: /\breqwest::/,
         message:
-          'core review platform service must not own concrete HTTP clients; use bitfun-services-integrations review platform HTTP transport',
+          'core review platform service must not own concrete HTTP clients; use halo-services-integrations review platform HTTP transport',
       },
       {
         regex: /\btokio::fs\b|\bstd::fs\b/,
         message:
-          'core review platform service must not own token or provider file IO; use bitfun-services-integrations review platform owner',
+          'core review platform service must not own token or provider file IO; use halo-services-integrations review platform owner',
       },
       {
         regex: /\bprocess_manager::|\bCommand::new\(|\bexecute_git_command\b|\bgit\s+remote\b|\brev-parse\b/,
         message:
-          'core review platform service must not own Git probing; use bitfun-services-integrations review platform owner',
+          'core review platform service must not own Git probing; use halo-services-integrations review platform owner',
       },
       {
         regex: /\bserde_json::|\bjson!\b|\bValue\b/,
         message:
-          'core review platform service must not own provider DTO parsing; use bitfun-services-integrations review platform owner',
+          'core review platform service must not own provider DTO parsing; use halo-services-integrations review platform owner',
       },
       {
         regex: /\bstruct\s+(?:Github|Gitlab|Gitcode)|\bimpl\s+ReviewProvider\b|\btrait\s+ReviewProvider\b/,
         message:
-          'core review platform service must not own provider implementations; use bitfun-services-integrations review platform owner',
+          'core review platform service must not own provider implementations; use halo-services-integrations review platform owner',
       },
     ],
   },
@@ -467,27 +467,27 @@ export const forbiddenContentRules = [
       {
         regex: /\bprocess_manager::/,
         message:
-          'core computer-use system facade must not spawn local system processes directly; use bitfun-services-core local system provider',
+          'core computer-use system facade must not spawn local system processes directly; use halo-services-core local system provider',
       },
       {
         regex: /\btokio::process::/,
         message:
-          'core computer-use system facade must not own async process execution; use bitfun-services-core local system provider',
+          'core computer-use system facade must not own async process execution; use halo-services-core local system provider',
       },
       {
         regex: /\b(?:std::process::Command|Command::new\()/,
         message:
-          'core computer-use system facade must not construct local system commands directly; use bitfun-services-core local system provider',
+          'core computer-use system facade must not construct local system commands directly; use halo-services-core local system provider',
       },
       {
         regex: /\bfn\s+script_invocation\b/,
         message:
-          'core computer-use system facade must not own script invocation selection; use bitfun-services-core local system provider',
+          'core computer-use system facade must not own script invocation selection; use halo-services-core local system provider',
       },
       {
         regex: /\bfn\s+platform_open_attempts\b/,
         message:
-          'core computer-use system facade must not own platform open-app command selection; use bitfun-services-core local system provider',
+          'core computer-use system facade must not own platform open-app command selection; use halo-services-core local system provider',
       },
     ],
   },
@@ -522,32 +522,32 @@ export const forbiddenContentRules = [
       {
         regex: /\breqwest::/,
         message:
-          'core Weixin bot facade must not own provider HTTP clients; use bitfun-services-integrations Weixin provider',
+          'core Weixin bot facade must not own provider HTTP clients; use halo-services-integrations Weixin provider',
       },
       {
         regex: /\baes::/,
         message:
-          'core Weixin bot facade must not own provider AES/CDN crypto; use bitfun-services-integrations Weixin provider',
+          'core Weixin bot facade must not own provider AES/CDN crypto; use halo-services-integrations Weixin provider',
       },
       {
         regex: /\bhex::/,
         message:
-          'core Weixin bot facade must not own provider hex encoding; use bitfun-services-integrations Weixin provider',
+          'core Weixin bot facade must not own provider hex encoding; use halo-services-integrations Weixin provider',
       },
       {
         regex: /\bmd5::/,
         message:
-          'core Weixin bot facade must not own provider MD5 signing; use bitfun-services-integrations Weixin provider',
+          'core Weixin bot facade must not own provider MD5 signing; use halo-services-integrations Weixin provider',
       },
       {
         regex: /\bfn\s+sync_buf_path\b/,
         message:
-          'core Weixin bot facade must not own provider sync-buffer storage layout; use bitfun-services-integrations Weixin provider',
+          'core Weixin bot facade must not own provider sync-buffer storage layout; use halo-services-integrations Weixin provider',
       },
       {
         regex: /\bfn\s+parse_weixin_cdn_aes_key\b/,
         message:
-          'core Weixin bot facade must not own provider CDN AES key parsing; use bitfun-services-integrations Weixin provider',
+          'core Weixin bot facade must not own provider CDN AES key parsing; use halo-services-integrations Weixin provider',
       },
     ],
   },
@@ -572,17 +572,17 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub struct LspPlugin\b/,
         message:
-          'LSP plugin manifest DTO belongs in bitfun-core-types; keep core LSP types as a compatibility facade',
+          'LSP plugin manifest DTO belongs in halo-core-types; keep core LSP types as a compatibility facade',
       },
       {
         regex: /\bpub enum JsonRpcMessage\b/,
         message:
-          'LSP JSON-RPC DTOs belong in bitfun-core-types; keep core LSP types as a compatibility facade',
+          'LSP JSON-RPC DTOs belong in halo-core-types; keep core LSP types as a compatibility facade',
       },
       {
         regex: /\buse serde::\{Deserialize,\s*Serialize\}/,
         message:
-          'core LSP types should not own serialization DTOs after migration to bitfun-core-types',
+          'core LSP types should not own serialization DTOs after migration to halo-core-types',
       },
     ],
   },
@@ -592,17 +592,17 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub struct PluginRegistry\b/,
         message:
-          'LSP plugin registry belongs in bitfun-services-core; keep core registry as a compatibility facade',
+          'LSP plugin registry belongs in halo-services-core; keep core registry as a compatibility facade',
       },
       {
         regex: /\bHashMap<String,\s*LspPlugin>\b/,
         message:
-          'core LSP registry must not own plugin index maps after migration to bitfun-services-core',
+          'core LSP registry must not own plugin index maps after migration to halo-services-core',
       },
       {
         regex: /\bPathBuf::from\(file_path\)/,
         message:
-          'LSP file-extension lookup belongs in bitfun-services-core registry rules',
+          'LSP file-extension lookup belongs in halo-services-core registry rules',
       },
     ],
   },
@@ -632,7 +632,7 @@ export const forbiddenContentRules = [
       {
         regex: /\bproduct_assembly_plan_for_profile\b/,
         message:
-          'core agentic harness facade must not rebuild product assembly plans; use bitfun-product-capabilities harness registry entrypoints',
+          'core agentic harness facade must not rebuild product assembly plans; use halo-product-capabilities harness registry entrypoints',
       },
       {
         regex: /\bfn product_harness_registry_for_profile\b/,
@@ -982,22 +982,22 @@ export const forbiddenContentRules = [
       {
         regex: /\bstatic GLOBAL_DEEP_REVIEW_BUDGET_TRACKER\b/,
         message:
-          'core DeepReview policy facade must not re-own runtime budget state; use bitfun-agent-runtime::deep_review',
+          'core DeepReview policy facade must not re-own runtime budget state; use halo-agent-runtime::deep_review',
       },
       {
         regex: /\bstatic GLOBAL_DEEP_REVIEW_QUEUE_CONTROL_TRACKER\b/,
         message:
-          'core DeepReview policy facade must not re-own queue control state; use bitfun-agent-runtime::deep_review',
+          'core DeepReview policy facade must not re-own queue control state; use halo-agent-runtime::deep_review',
       },
       {
         regex: /\bpub struct DeepReviewExecutionPolicy\b/,
         message:
-          'core DeepReview policy facade must not redefine execution policy; use bitfun-agent-runtime::deep_review',
+          'core DeepReview policy facade must not redefine execution policy; use halo-agent-runtime::deep_review',
       },
       {
         regex: /\bpub fn record_deep_review_task_budget\b/,
         message:
-          'core DeepReview policy facade must not re-own task budget recording; use bitfun-agent-runtime::deep_review',
+          'core DeepReview policy facade must not re-own task budget recording; use halo-agent-runtime::deep_review',
       },
     ],
   },
@@ -1007,12 +1007,12 @@ export const forbiddenContentRules = [
       {
         regex: /\bfn fill_deep_review_packet_metadata\b/,
         message:
-          'core DeepReview report must not re-own packet metadata enrichment; use bitfun-agent-runtime::deep_review::report',
+          'core DeepReview report must not re-own packet metadata enrichment; use halo-agent-runtime::deep_review::report',
       },
       {
         regex: /\bfn deep_review_cache_from_completed_reviewers\b/,
         message:
-          'core DeepReview report must not re-own cache update logic; use bitfun-agent-runtime::deep_review::report',
+          'core DeepReview report must not re-own cache update logic; use halo-agent-runtime::deep_review::report',
       },
       {
         regex: /\bmetadata\.deep_review_cache\s*=\s*Some\s*\(/,
@@ -1022,17 +1022,17 @@ export const forbiddenContentRules = [
       {
         regex: /\bstruct DeepReviewCacheUpdate\b/,
         message:
-          'core DeepReview report must not re-own cache update DTO; use bitfun-agent-runtime::deep_review::report',
+          'core DeepReview report must not re-own cache update DTO; use halo-agent-runtime::deep_review::report',
       },
       {
         regex: /"kind": "concurrency_limited"/,
         message:
-          'core DeepReview report must not re-own runtime tracker reliability signal shaping; use bitfun-agent-runtime::deep_review::report',
+          'core DeepReview report must not re-own runtime tracker reliability signal shaping; use halo-agent-runtime::deep_review::report',
       },
       {
         regex: /DeepReview runtime diagnostics:/,
         message:
-          'core DeepReview report must not re-own runtime diagnostics log formatting; use bitfun-agent-runtime::deep_review::diagnostics',
+          'core DeepReview report must not re-own runtime diagnostics log formatting; use halo-agent-runtime::deep_review::diagnostics',
       },
     ],
   },
@@ -1042,47 +1042,47 @@ export const forbiddenContentRules = [
       {
         regex: /\bfn string_for_any_key\b/,
         message:
-          'core DeepReview task adapter must not re-own manifest key normalization; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own manifest key normalization; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /\bfn deep_review_packet_id_for_cache\b/,
         message:
-          'core DeepReview task adapter must not re-own packet id inference; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own packet id inference; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /\bfn ensure_deep_review_retry_coverage\b/,
         message:
-          'core DeepReview task adapter must not re-own retry coverage validation; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own retry coverage validation; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /\bfn provider_capacity_queue_wait_seconds_for_attempt\b/,
         message:
-          'core DeepReview task adapter must not re-own provider capacity backoff; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own provider capacity backoff; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /\bclassify_deep_review_capacity_error\b/,
         message:
-          'core DeepReview task adapter must not directly classify provider or local capacity errors; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not directly classify provider or local capacity errors; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /\bDeepReviewCapacityFailFastReason::DeterministicProviderError\b/,
         message:
-          'core DeepReview task adapter must not re-own provider capacity category fallback; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own provider capacity category fallback; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /\bfn provider_capacity_wait_can_wake_on_active_reviewer_release\b/,
         message:
-          'core DeepReview task adapter must not re-own provider capacity queue wake policy; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own provider capacity queue wake policy; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /\bqueue_expired_without_active_reviewer\b/,
         message:
-          'core DeepReview task adapter must not re-own reviewer admission queue expiry policy; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own reviewer admission queue expiry policy; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /\bstruct QueueWaitTimer\b/,
         message:
-          'core DeepReview task adapter must not re-own queue wait timing; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own queue wait timing; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /runtime_task_execution::decide_provider_capacity_queue_step/,
@@ -1097,37 +1097,37 @@ export const forbiddenContentRules = [
       {
         regex: /\bcontrol_snapshot\.(?:cancelled|paused|skip_optional)\b/,
         message:
-          'core DeepReview task adapter must not re-own queue control decision priority; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own queue control decision priority; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /\bfn prompt_with_deep_review_retry_scope\b/,
         message:
-          'core DeepReview task adapter must not re-own retry prompt shaping; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own retry prompt shaping; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /<partial_result status=/,
         message:
-          'core DeepReview task adapter must not re-own task completion result presentation; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own task completion result presentation; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /completed successfully with result:/,
         message:
-          'core DeepReview task adapter must not re-own task completion result presentation; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own task completion result presentation; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /Retries used:/,
         message:
-          'core DeepReview task adapter must not re-own retry guidance presentation; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own retry guidance presentation; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /DeepReview automatic retry elapsed guard exceeded/,
         message:
-          'core DeepReview task adapter must not re-own auto-retry admission policy; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own auto-retry admission policy; use halo-agent-runtime::deep_review::task_execution',
       },
       {
         regex: /cancelled coverage/,
         message:
-          'core DeepReview task adapter must not re-own cancelled reviewer presentation; use bitfun-agent-runtime::deep_review::task_execution',
+          'core DeepReview task adapter must not re-own cancelled reviewer presentation; use halo-agent-runtime::deep_review::task_execution',
       },
     ],
   },
@@ -1207,12 +1207,12 @@ export const forbiddenContentRules = [
       {
         regex: /\bComputer use \/ `key_chord`\b/,
         message:
-          'core prompt builder must not re-own ComputerUse environment guidance; use bitfun-agent-runtime::prompt',
+          'core prompt builder must not re-own ComputerUse environment guidance; use halo-agent-runtime::prompt',
       },
       {
         regex: /\bfn computer_use_key_chord_guidance\b/,
         message:
-          'core prompt builder must not re-own prompt environment guidance helpers; use bitfun-agent-runtime::prompt',
+          'core prompt builder must not re-own prompt environment guidance helpers; use halo-agent-runtime::prompt',
       },
     ],
   },
@@ -1222,17 +1222,17 @@ export const forbiddenContentRules = [
       {
         regex: /\btokio::fs\b/,
         message:
-          'core MiniApp host-dispatch adapter must not own filesystem execution; use bitfun-services-integrations::miniapp::host_dispatch',
+          'core MiniApp host-dispatch adapter must not own filesystem execution; use halo-services-integrations::miniapp::host_dispatch',
       },
       {
         regex: /\bprocess_manager::create_tokio_command\b/,
         message:
-          'core MiniApp host-dispatch adapter must not own shell process execution; use bitfun-services-integrations::miniapp::host_dispatch',
+          'core MiniApp host-dispatch adapter must not own shell process execution; use halo-services-integrations::miniapp::host_dispatch',
       },
       {
         regex: /\breqwest::Client\b/,
         message:
-          'core MiniApp host-dispatch adapter must not own net.fetch execution; use bitfun-services-integrations::miniapp::host_dispatch',
+          'core MiniApp host-dispatch adapter must not own net.fetch execution; use halo-services-integrations::miniapp::host_dispatch',
       },
       {
         regex: /\basync fn dispatch_fs\b/,
@@ -1262,17 +1262,17 @@ export const forbiddenContentRules = [
       {
         regex: /\btokio::process\b/,
         message:
-          'core MiniApp JS worker facade must not own worker process types; use bitfun-services-integrations::miniapp::worker',
+          'core MiniApp JS worker facade must not own worker process types; use halo-services-integrations::miniapp::worker',
       },
       {
         regex: /\bprocess_manager::create_tokio_command\b/,
         message:
-          'core MiniApp JS worker facade must not spawn worker processes; use bitfun-services-integrations::miniapp::worker',
+          'core MiniApp JS worker facade must not spawn worker processes; use halo-services-integrations::miniapp::worker',
       },
       {
         regex: /\bPendingResponseMap\b/,
         message:
-          'core MiniApp JS worker facade must not own JSON-RPC response routing; use bitfun-services-integrations::miniapp::worker',
+          'core MiniApp JS worker facade must not own JSON-RPC response routing; use halo-services-integrations::miniapp::worker',
       },
     ],
   },
@@ -1282,27 +1282,27 @@ export const forbiddenContentRules = [
       {
         regex: /\bworker_pool_at_capacity\b/,
         message:
-          'core MiniApp worker pool facade must not own pool policy; use bitfun-services-integrations::miniapp::worker_pool',
+          'core MiniApp worker pool facade must not own pool policy; use halo-services-integrations::miniapp::worker_pool',
       },
       {
         regex: /\bselect_lru_worker\b/,
         message:
-          'core MiniApp worker pool facade must not own LRU policy; use bitfun-services-integrations::miniapp::worker_pool',
+          'core MiniApp worker pool facade must not own LRU policy; use halo-services-integrations::miniapp::worker_pool',
       },
       {
         regex: /\bplan_install_deps\b/,
         message:
-          'core MiniApp worker pool facade must not own install-deps planning; use bitfun-services-integrations::miniapp::worker_pool',
+          'core MiniApp worker pool facade must not own install-deps planning; use halo-services-integrations::miniapp::worker_pool',
       },
       {
         regex: /\bprocess_manager::create_tokio_command\b/,
         message:
-          'core MiniApp worker pool facade must not execute install-deps processes; use bitfun-services-integrations::miniapp::worker_pool',
+          'core MiniApp worker pool facade must not execute install-deps processes; use halo-services-integrations::miniapp::worker_pool',
       },
       {
         regex: /\bHashMap<String, WorkerEntry>\b/,
         message:
-          'core MiniApp worker pool facade must not own worker pool state; use bitfun-services-integrations::miniapp::worker_pool',
+          'core MiniApp worker pool facade must not own worker pool state; use halo-services-integrations::miniapp::worker_pool',
       },
     ],
   },
@@ -1312,27 +1312,27 @@ export const forbiddenContentRules = [
       {
         regex: /\btokio::fs\b/,
         message:
-          'core MiniApp storage facade must not own filesystem IO; use bitfun-services-integrations::miniapp::storage',
+          'core MiniApp storage facade must not own filesystem IO; use halo-services-integrations::miniapp::storage',
       },
       {
         regex: /\bMiniAppStorageLayout\b/,
         message:
-          'core MiniApp storage facade must not own storage layout logic; use bitfun-services-integrations::miniapp::storage',
+          'core MiniApp storage facade must not own storage layout logic; use halo-services-integrations::miniapp::storage',
       },
       {
         regex: /\bbuild_package_json\b/,
         message:
-          'core MiniApp storage facade must not own package-json storage assembly; use bitfun-services-integrations::miniapp::storage',
+          'core MiniApp storage facade must not own package-json storage assembly; use halo-services-integrations::miniapp::storage',
       },
       {
         regex: /\bparse_npm_dependencies\b/,
         message:
-          'core MiniApp storage facade must not own package-json dependency parsing; use bitfun-services-integrations::miniapp::storage',
+          'core MiniApp storage facade must not own package-json dependency parsing; use halo-services-integrations::miniapp::storage',
       },
       {
         regex: /\bDRAFTS_CLEANUP_MARKER\b/,
         message:
-          'core MiniApp storage facade must not own draft cleanup marker IO; use bitfun-services-integrations::miniapp::storage',
+          'core MiniApp storage facade must not own draft cleanup marker IO; use halo-services-integrations::miniapp::storage',
       },
     ],
   },
@@ -1342,22 +1342,22 @@ export const forbiddenContentRules = [
       {
         regex: /\bCoreFunctionAgentGitService\b/,
         message:
-          'core function-agent port adapters must not re-own Git concrete snapshots; use bitfun-services-integrations::function_agents',
+          'core function-agent port adapters must not re-own Git concrete snapshots; use halo-services-integrations::function_agents',
       },
       {
         regex: /\bgit_stdout_lenient\b/,
         message:
-          'core function-agent port adapters must not re-own lenient Git process fallback; use bitfun-services-integrations::function_agents',
+          'core function-agent port adapters must not re-own lenient Git process fallback; use halo-services-integrations::function_agents',
       },
       {
         regex: /\bGitService::get_status\b/,
         message:
-          'core function-agent port adapters must not re-own Git status snapshots; use bitfun-services-integrations::function_agents',
+          'core function-agent port adapters must not re-own Git status snapshots; use halo-services-integrations::function_agents',
       },
       {
         regex: /\bcreate_command\("git"\)/,
         message:
-          'core function-agent port adapters must not spawn Git concrete commands; use bitfun-services-integrations::function_agents',
+          'core function-agent port adapters must not spawn Git concrete commands; use halo-services-integrations::function_agents',
       },
     ],
   },
@@ -1367,22 +1367,22 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub struct HarnessProviderDescriptor\b/,
         message:
-          'product-capabilities must not redefine provider-neutral harness descriptors; use bitfun-harness',
+          'product-capabilities must not redefine provider-neutral harness descriptors; use halo-harness',
       },
       {
         regex: /\bfn build_harness_registry_from_descriptors\b/,
         message:
-          'product-capabilities must not own descriptor registry construction; use bitfun-harness',
+          'product-capabilities must not own descriptor registry construction; use halo-harness',
       },
       {
         regex: /\bpub enum ProductCapabilityBuildError\b/,
         message:
-          'product-capabilities must not redefine tool provider group selection errors; use bitfun-tool-packs',
+          'product-capabilities must not redefine tool provider group selection errors; use halo-tool-packs',
       },
       {
         regex: /\bproduct_tool_provider_group_plan\(\)\b/,
         message:
-          'product-capabilities must not scan product tool provider plans locally; use bitfun-tool-packs selector',
+          'product-capabilities must not scan product tool provider plans locally; use halo-tool-packs selector',
       },
       {
         regex: /\bdefault_product_tool_provider_group_plan\b/,
@@ -1397,27 +1397,27 @@ export const forbiddenContentRules = [
       {
         regex: /\btokio::fs::/,
         message:
-          'core filesystem service must not own async local filesystem IO; use bitfun-services-core filesystem primitives',
+          'core filesystem service must not own async local filesystem IO; use halo-services-core filesystem primitives',
       },
       {
         regex: /\bstd::fs::/,
         message:
-          'core filesystem service must not own sync local filesystem IO; use bitfun-services-core filesystem primitives',
+          'core filesystem service must not own sync local filesystem IO; use halo-services-core filesystem primitives',
       },
       {
         regex: /\bignore::WalkBuilder\b/,
         message:
-          'core filesystem service must not own local file walking/search implementation; use bitfun-services-core filesystem primitives',
+          'core filesystem service must not own local file walking/search implementation; use halo-services-core filesystem primitives',
       },
       {
         regex: /\bsha2::/,
         message:
-          'core filesystem service must not own editor-sync hashing implementation; use bitfun-services-core filesystem primitives',
+          'core filesystem service must not own editor-sync hashing implementation; use halo-services-core filesystem primitives',
       },
       {
         regex: /\bbase64::/,
         message:
-          'core filesystem service must not own binary file encoding implementation; use bitfun-services-core filesystem primitives',
+          'core filesystem service must not own binary file encoding implementation; use halo-services-core filesystem primitives',
       },
     ],
   },
@@ -1427,32 +1427,32 @@ export const forbiddenContentRules = [
       {
         regex: /\bManagedClient\b/,
         message:
-          'core workspace-search facade must not own flashgrep daemon clients; use bitfun-services-integrations::workspace_search',
+          'core workspace-search facade must not own flashgrep daemon clients; use halo-services-integrations::workspace_search',
       },
       {
         regex: /\bRepoSession\b/,
         message:
-          'core workspace-search facade must not own flashgrep repo sessions; use bitfun-services-integrations::workspace_search',
+          'core workspace-search facade must not own flashgrep repo sessions; use halo-services-integrations::workspace_search',
       },
       {
         regex: /\bwith_scan_fallback\b/,
         message:
-          'core workspace-search facade must not own scan fallback policy; use bitfun-services-integrations::workspace_search',
+          'core workspace-search facade must not own scan fallback policy; use halo-services-integrations::workspace_search',
       },
       {
         regex: /\bconvert_hits_to_file_search_results\b/,
         message:
-          'core workspace-search facade must not own hit conversion; use bitfun-services-integrations::workspace_search',
+          'core workspace-search facade must not own hit conversion; use halo-services-integrations::workspace_search',
       },
       {
         regex: /\bsplit_preview\b/,
         message:
-          'core workspace-search facade must not own preview mapping; use bitfun-services-integrations::workspace_search',
+          'core workspace-search facade must not own preview mapping; use halo-services-integrations::workspace_search',
       },
       {
         regex: /\bdunce::canonicalize\b/,
         message:
-          'core workspace-search facade must not own local search path normalization; use bitfun-services-integrations::workspace_search',
+          'core workspace-search facade must not own local search path normalization; use halo-services-integrations::workspace_search',
       },
     ],
   },
@@ -1465,7 +1465,7 @@ export const forbiddenContentRules = [
           'core workspace search facade must not own disabled remote search stubs; re-export services-integrations remote_ssh workspace_search disabled surface',
       },
       {
-        regex: /\bbitfun_services_integrations::workspace_search::flashgrep\b/,
+        regex: /\bhalo_services_integrations::workspace_search::flashgrep\b/,
         message:
           'core must not import flashgrep internals; use the remote workspace-search stdio facade instead',
       },
@@ -1476,7 +1476,7 @@ export const forbiddenContentRules = [
     patterns: [
       {
         regex:
-          /\b(?:owner::flashgrep|workspace_search::flashgrep|bitfun_services_integrations::workspace_search::flashgrep)\b/,
+          /\b(?:owner::flashgrep|workspace_search::flashgrep|halo_services_integrations::workspace_search::flashgrep)\b/,
         message:
           'core workspace search facade must not depend on flashgrep internals; use stable workspace-search config and DTO APIs',
       },
@@ -1488,17 +1488,17 @@ export const forbiddenContentRules = [
       {
         regex: /\bconst\s+REMOTE_FLASHGREP_INSTALL_DIR\b/,
         message:
-          'core remote workspace search must not own remote flashgrep install facts; use bitfun-services-integrations::remote_ssh::workspace_search',
+          'core remote workspace search must not own remote flashgrep install facts; use halo-services-integrations::remote_ssh::workspace_search',
       },
       {
         regex: /\bconst\s+REMOTE_(?:OS|ARCHITECTURE)_PROBES\b/,
         message:
-          'core remote workspace search must not own remote probe facts; use bitfun-services-integrations::remote_ssh::workspace_search',
+          'core remote workspace search must not own remote probe facts; use halo-services-integrations::remote_ssh::workspace_search',
       },
       {
         regex: /\bstruct\s+LocalFlashgrepBundle\b/,
         message:
-          'core remote workspace search must not own local remote-search bundle DTOs; use bitfun-services-integrations::remote_ssh::workspace_search',
+          'core remote workspace search must not own local remote-search bundle DTOs; use halo-services-integrations::remote_ssh::workspace_search',
       },
       {
         regex:
@@ -1509,7 +1509,7 @@ export const forbiddenContentRules = [
       {
         regex: /\b(?:RemoteStdioRepoSession|RemoteStdioDaemonClient|RemoteSearchContext|REMOTE_STDIO_SESSIONS|REMOTE_SEARCH_CONTEXTS)\b/,
         message:
-          'core remote workspace search must not own remote flashgrep session/context lifecycle; use bitfun-services-integrations::remote_ssh::workspace_search',
+          'core remote workspace search must not own remote flashgrep session/context lifecycle; use halo-services-integrations::remote_ssh::workspace_search',
       },
       {
         regex: /\bfn\s+(?:ensure_remote_search_context|convert_stdio_search_results|remote_stdio_session_key|remote_search_context_key|schedule_remote_stdio_session_release)\b/,
@@ -1576,12 +1576,12 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub\s+enum\s+UserContextSection\b/,
         message:
-          'core prompt builder must not own user-context section facts; use bitfun-agent-runtime prompt contracts',
+          'core prompt builder must not own user-context section facts; use halo-agent-runtime prompt contracts',
       },
       {
         regex: /\bpub\s+struct\s+UserContextPolicy\b/,
         message:
-          'core prompt builder must not own user-context policy facts; use bitfun-agent-runtime prompt contracts',
+          'core prompt builder must not own user-context policy facts; use halo-agent-runtime prompt contracts',
       },
     ],
   },
@@ -1591,37 +1591,37 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub const SHARED_CODING_MODE_PROMPT_TEMPLATE\b/,
         message:
-          'core agent mode module must not own shared coding-mode prompt facts; use bitfun-agent-runtime agents',
+          'core agent mode module must not own shared coding-mode prompt facts; use halo-agent-runtime agents',
       },
       {
         regex: /\bpub const SHARED_CODING_MODE_CONFIG_PROFILE_ID\b/,
         message:
-          'core agent mode module must not own shared coding-mode config profile facts; use bitfun-agent-runtime agents',
+          'core agent mode module must not own shared coding-mode config profile facts; use halo-agent-runtime agents',
       },
       {
         regex: /\bpub const SHARED_CODING_MODE_IDS\b/,
         message:
-          'core agent mode module must not own shared coding-mode membership facts; use bitfun-agent-runtime agents',
+          'core agent mode module must not own shared coding-mode membership facts; use halo-agent-runtime agents',
       },
       {
         regex: /\bpub fn resolve_mode_config_profile_id\b/,
         message:
-          'core agent mode module must not own mode config profile resolution; use bitfun-agent-runtime agents',
+          'core agent mode module must not own mode config profile resolution; use halo-agent-runtime agents',
       },
       {
         regex: /\bpub fn mode_config_profile_member_mode_ids\b/,
         message:
-          'core agent mode module must not own mode config profile membership; use bitfun-agent-runtime agents',
+          'core agent mode module must not own mode config profile membership; use halo-agent-runtime agents',
       },
       {
         regex: /\bpub fn mode_config_profile_label\b/,
         message:
-          'core agent mode module must not own mode config profile labels; use bitfun-agent-runtime agents',
+          'core agent mode module must not own mode config profile labels; use halo-agent-runtime agents',
       },
       {
         regex: /\bpub fn shared_coding_mode_user_context_policy\b/,
         message:
-          'core agent mode module must not own shared coding-mode context policy; use bitfun-agent-runtime agents',
+          'core agent mode module must not own shared coding-mode context policy; use halo-agent-runtime agents',
       },
     ],
   },
@@ -1631,12 +1631,12 @@ export const forbiddenContentRules = [
       {
         regex: /"agentic"\s*=>\s*0[\s\S]*"Cowork"\s*=>\s*1/,
         message:
-          'core agent registry query must not own mode presentation order; use bitfun-agent-runtime agents',
+          'core agent registry query must not own mode presentation order; use halo-agent-runtime agents',
       },
       {
         regex: /\bfn subagent_source_rank\b/,
         message:
-          'core agent registry query must not own subagent source presentation rank; use bitfun-agent-runtime agents',
+          'core agent registry query must not own subagent source presentation rank; use halo-agent-runtime agents',
       },
     ],
   },
@@ -1646,7 +1646,7 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub enum SubAgentSource\b/,
         message:
-          'core agent registry must not own subagent source DTOs; use bitfun-agent-runtime agents',
+          'core agent registry must not own subagent source DTOs; use halo-agent-runtime agents',
       },
     ],
   },
@@ -1656,32 +1656,32 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub const PROMPT_CACHE_SCHEMA_VERSION\b/,
         message:
-          'core prompt cache must not own prompt-cache schema facts; use bitfun-agent-runtime prompt_cache',
+          'core prompt cache must not own prompt-cache schema facts; use halo-agent-runtime prompt_cache',
       },
       {
         regex: /\bpub struct PromptCachePolicy\b/,
         message:
-          'core prompt cache must not own prompt-cache policy; use bitfun-agent-runtime prompt_cache',
+          'core prompt cache must not own prompt-cache policy; use halo-agent-runtime prompt_cache',
       },
       {
         regex: /\bpub struct SessionPromptCache\b/,
         message:
-          'core prompt cache must not own prompt-cache DTOs; use bitfun-agent-runtime prompt_cache',
+          'core prompt cache must not own prompt-cache DTOs; use halo-agent-runtime prompt_cache',
       },
       {
         regex: /\bpub enum PromptCacheScope\b/,
         message:
-          'core prompt cache must not own prompt-cache invalidation scope; use bitfun-agent-runtime prompt_cache',
+          'core prompt cache must not own prompt-cache invalidation scope; use halo-agent-runtime prompt_cache',
       },
       {
         regex: /\bpub struct SessionPromptCacheStore\b/,
         message:
-          'core prompt cache must not own in-memory prompt-cache store; use bitfun-agent-runtime prompt_cache',
+          'core prompt cache must not own in-memory prompt-cache store; use halo-agent-runtime prompt_cache',
       },
       {
         regex: /\bpub enum PromptCacheLookup\b/,
         message:
-          'core prompt cache must not own prompt-cache lookup outcomes; use bitfun-agent-runtime prompt_cache',
+          'core prompt cache must not own prompt-cache lookup outcomes; use halo-agent-runtime prompt_cache',
       },
     ],
   },
@@ -1691,17 +1691,17 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub struct FileReadState\b/,
         message:
-          'core file_read_state must not own file-read state DTOs; use bitfun-agent-runtime file_read_state',
+          'core file_read_state must not own file-read state DTOs; use halo-agent-runtime file_read_state',
       },
       {
         regex: /\bpub struct FileReadStateStore\b/,
         message:
-          'core file_read_state must not own in-memory file-read state store; use bitfun-agent-runtime file_read_state',
+          'core file_read_state must not own in-memory file-read state store; use halo-agent-runtime file_read_state',
       },
       {
         regex: /\bDashMap\b/,
         message:
-          'core file_read_state must not own file-read state storage maps; use bitfun-agent-runtime file_read_state',
+          'core file_read_state must not own file-read state storage maps; use halo-agent-runtime file_read_state',
       },
     ],
   },
@@ -1711,32 +1711,32 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub enum EvidenceLedgerTargetKind\b/,
         message:
-          'core evidence_ledger must not own evidence ledger DTOs; use bitfun-agent-runtime evidence_ledger',
+          'core evidence_ledger must not own evidence ledger DTOs; use halo-agent-runtime evidence_ledger',
       },
       {
         regex: /\bpub struct EvidenceLedgerEvent\b/,
         message:
-          'core evidence_ledger must not own evidence ledger events; use bitfun-agent-runtime evidence_ledger',
+          'core evidence_ledger must not own evidence ledger events; use halo-agent-runtime evidence_ledger',
       },
       {
         regex: /\bpub struct SessionEvidenceLedger\b/,
         message:
-          'core evidence_ledger must not own evidence ledger store; use bitfun-agent-runtime evidence_ledger',
+          'core evidence_ledger must not own evidence ledger store; use halo-agent-runtime evidence_ledger',
       },
       {
         regex: /\bimpl From<EvidenceLedgerSummary> for CompressionContract\b/,
         message:
-          'core evidence_ledger must not own compression contract projection; use bitfun-agent-runtime evidence_ledger',
+          'core evidence_ledger must not own compression contract projection; use halo-agent-runtime evidence_ledger',
       },
       {
         regex: /\buuid::Uuid::new_v4\b/,
         message:
-          'core evidence_ledger must not own evidence ledger event id generation; use bitfun-agent-runtime evidence_ledger',
+          'core evidence_ledger must not own evidence ledger event id generation; use halo-agent-runtime evidence_ledger',
       },
       {
         regex: /\bDashMap\b/,
         message:
-          'core evidence_ledger must not own evidence ledger storage maps; use bitfun-agent-runtime evidence_ledger',
+          'core evidence_ledger must not own evidence ledger storage maps; use halo-agent-runtime evidence_ledger',
       },
     ],
   },
@@ -1746,7 +1746,7 @@ export const forbiddenContentRules = [
       {
         regex: /\bimpl From<LightCheckpoint> for EvidenceLedgerCheckpoint\b/,
         message:
-          'core tool context runtime must not own checkpoint evidence projection; use bitfun-agent-runtime evidence_ledger',
+          'core tool context runtime must not own checkpoint evidence projection; use halo-agent-runtime evidence_ledger',
       },
       {
         regex: /\bTerminalRuntimePort\b/,
@@ -1761,17 +1761,17 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub struct UserInputManager\b/,
         message:
-          'core user_input_manager must not own user-input channel state; use bitfun-agent-runtime user_questions',
+          'core user_input_manager must not own user-input channel state; use halo-agent-runtime user_questions',
       },
       {
         regex: /\boneshot::Sender\b/,
         message:
-          'core user_input_manager must not own user-input wait channels; use bitfun-agent-runtime user_questions',
+          'core user_input_manager must not own user-input wait channels; use halo-agent-runtime user_questions',
       },
       {
         regex: /\bDashMap\b/,
         message:
-          'core user_input_manager must not own user-input channel storage; use bitfun-agent-runtime user_questions',
+          'core user_input_manager must not own user-input channel storage; use halo-agent-runtime user_questions',
       },
     ],
   },
@@ -1801,7 +1801,7 @@ export const forbiddenContentRules = [
       {
         regex: /\bArc<DashMap<String,\s*CancellationToken>>\b/,
         message:
-          'core round executor must not own dialog-turn cancellation token storage; use bitfun-agent-runtime turn_cancellation',
+          'core round executor must not own dialog-turn cancellation token storage; use halo-agent-runtime turn_cancellation',
       },
       {
         regex: /\bcancellation_tokens:\s*Arc<DashMap\b/,
@@ -2166,17 +2166,17 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub struct TurnSkillAgentSnapshotStore\b/,
         message:
-          'core turn_skill_agent_snapshot_store must not own in-memory skill/agent snapshot store; use bitfun-agent-runtime skill_agent_snapshot',
+          'core turn_skill_agent_snapshot_store must not own in-memory skill/agent snapshot store; use halo-agent-runtime skill_agent_snapshot',
       },
       {
         regex: /\bDashMap\b/,
         message:
-          'core turn_skill_agent_snapshot_store must not own skill/agent snapshot storage maps; use bitfun-agent-runtime skill_agent_snapshot',
+          'core turn_skill_agent_snapshot_store must not own skill/agent snapshot storage maps; use halo-agent-runtime skill_agent_snapshot',
       },
       {
         regex: /\bBTreeMap\b/,
         message:
-          'core turn_skill_agent_snapshot_store must not own sparse turn snapshot ordering; use bitfun-agent-runtime skill_agent_snapshot',
+          'core turn_skill_agent_snapshot_store must not own sparse turn snapshot ordering; use halo-agent-runtime skill_agent_snapshot',
       },
     ],
   },
@@ -2186,37 +2186,37 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub struct SkillSnapshotEntry\b/,
         message:
-          'core skill_agent_snapshot must not own skill snapshot DTOs; use bitfun-agent-runtime skill_agent_snapshot',
+          'core skill_agent_snapshot must not own skill snapshot DTOs; use halo-agent-runtime skill_agent_snapshot',
       },
       {
         regex: /\bpub struct AgentSnapshotEntry\b/,
         message:
-          'core skill_agent_snapshot must not own agent snapshot DTOs; use bitfun-agent-runtime skill_agent_snapshot',
+          'core skill_agent_snapshot must not own agent snapshot DTOs; use halo-agent-runtime skill_agent_snapshot',
       },
       {
         regex: /\bpub struct TurnSkillAgentSnapshot\b/,
         message:
-          'core skill_agent_snapshot must not own turn snapshot DTOs; use bitfun-agent-runtime skill_agent_snapshot',
+          'core skill_agent_snapshot must not own turn snapshot DTOs; use halo-agent-runtime skill_agent_snapshot',
       },
       {
         regex: /\bpub struct SkillAgentDiff\b/,
         message:
-          'core skill_agent_snapshot must not own skill/agent diff contracts; use bitfun-agent-runtime skill_agent_snapshot',
+          'core skill_agent_snapshot must not own skill/agent diff contracts; use halo-agent-runtime skill_agent_snapshot',
       },
       {
         regex: /\bpub fn diff_skill_agent_snapshot\b/,
         message:
-          'core skill_agent_snapshot must not own skill/agent diff rendering; use bitfun-agent-runtime skill_agent_snapshot',
+          'core skill_agent_snapshot must not own skill/agent diff rendering; use halo-agent-runtime skill_agent_snapshot',
       },
       {
         regex: /\bfn render_titled_skill_entries\b/,
         message:
-          'core skill_agent_snapshot must not own skill update rendering helpers; use bitfun-agent-runtime skill_agent_snapshot',
+          'core skill_agent_snapshot must not own skill update rendering helpers; use halo-agent-runtime skill_agent_snapshot',
       },
       {
         regex: /\bfn render_titled_subagent_entries\b/,
         message:
-          'core skill_agent_snapshot must not own agent update rendering helpers; use bitfun-agent-runtime skill_agent_snapshot',
+          'core skill_agent_snapshot must not own agent update rendering helpers; use halo-agent-runtime skill_agent_snapshot',
       },
     ],
   },
@@ -2226,12 +2226,12 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub\s+struct\s+ToolListingSections\b/,
         message:
-          'core prompt builder must not own tool-listing reminder facts; use bitfun-agent-runtime prompt contracts',
+          'core prompt builder must not own tool-listing reminder facts; use halo-agent-runtime prompt contracts',
       },
       {
         regex: /\bpub\s+struct\s+PrependedPromptReminders\b/,
         message:
-          'core prompt builder must not own prepended-reminder ordering facts; use bitfun-agent-runtime prompt contracts',
+          'core prompt builder must not own prepended-reminder ordering facts; use halo-agent-runtime prompt contracts',
       },
     ],
   },
@@ -2241,7 +2241,7 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub\s+enum\s+FinishReason\b/,
         message:
-          'core execution types must not own finish-reason event facts; use bitfun-agent-runtime events',
+          'core execution types must not own finish-reason event facts; use halo-agent-runtime events',
       },
     ],
   },
@@ -2251,17 +2251,17 @@ export const forbiddenContentRules = [
       {
         regex: /SessionState::Idle\s*=>\s*"idle"/,
         message:
-          'core event types must not own session-state wire labels; use bitfun-agent-runtime events',
+          'core event types must not own session-state wire labels; use halo-agent-runtime events',
       },
       {
         regex: /SessionState::Processing\s*\{[^}]*\}\s*=>\s*"processing"/,
         message:
-          'core event types must not own session-state wire labels; use bitfun-agent-runtime events',
+          'core event types must not own session-state wire labels; use halo-agent-runtime events',
       },
       {
         regex: /SessionState::Error\s*\{[^}]*\}\s*=>\s*"error"/,
         message:
-          'core event types must not own session-state wire labels; use bitfun-agent-runtime events',
+          'core event types must not own session-state wire labels; use halo-agent-runtime events',
       },
     ],
   },
@@ -2271,22 +2271,22 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub\s+struct\s+SessionStateManager\b/,
         message:
-          'core session state manager path must remain a compatibility facade; use bitfun-agent-runtime session_state_manager',
+          'core session state manager path must remain a compatibility facade; use halo-agent-runtime session_state_manager',
       },
       {
         regex: /\bDashMap\b/,
         message:
-          'core session state manager path must not own session state storage; use bitfun-agent-runtime session_state_manager',
+          'core session state manager path must not own session state storage; use halo-agent-runtime session_state_manager',
       },
       {
         regex: /\bAgenticEvent::SessionStateChanged\b/,
         message:
-          'core session state manager path must not emit session-state events directly; use bitfun-agent-runtime session_state_manager',
+          'core session state manager path must not emit session-state events directly; use halo-agent-runtime session_state_manager',
       },
       {
         regex: /\bimpl\s+SessionStateManager\b/,
         message:
-          'core session state manager path must not reimplement session state transitions; use bitfun-agent-runtime session_state_manager',
+          'core session state manager path must not reimplement session state transitions; use halo-agent-runtime session_state_manager',
       },
     ],
   },
@@ -2296,62 +2296,62 @@ export const forbiddenContentRules = [
       {
         regex: /\bconst\s+MAX_QUEUE_DEPTH\b/,
         message:
-          'core scheduler must not own dialog queue capacity; use bitfun-agent-runtime scheduler',
+          'core scheduler must not own dialog queue capacity; use halo-agent-runtime scheduler',
       },
       {
         regex: /\bstd::collections::VecDeque\b/,
         message:
-          'core scheduler must not own dialog queue storage; use bitfun-agent-runtime scheduler',
+          'core scheduler must not own dialog queue storage; use halo-agent-runtime scheduler',
       },
       {
         regex: /\bactive_turns:\s*Arc<dashmap::DashMap\b/,
         message:
-          'core scheduler must not own active-turn state maps; use bitfun-agent-runtime scheduler stores',
+          'core scheduler must not own active-turn state maps; use halo-agent-runtime scheduler stores',
       },
       {
         regex: /\bstruct\s+ActiveTurn\b/,
         message:
-          'core scheduler must not own active-turn facts; use bitfun-agent-runtime scheduler',
+          'core scheduler must not own active-turn facts; use halo-agent-runtime scheduler',
       },
       {
         regex: /\bfn\s+format_agent_session_reply\b/,
         message:
-          'core scheduler must not own agent-session reply text assembly; use bitfun-agent-runtime scheduler',
+          'core scheduler must not own agent-session reply text assembly; use halo-agent-runtime scheduler',
       },
       {
         regex: /automated reply to a previous SessionMessage call/,
         message:
-          'core scheduler must not own agent-session reply reminder text; use bitfun-agent-runtime scheduler',
+          'core scheduler must not own agent-session reply reminder text; use halo-agent-runtime scheduler',
       },
       {
         regex: /RoundInjectionKind::UserSteering/,
         message:
-          'core scheduler must not own steering injection construction; use bitfun-agent-runtime scheduler',
+          'core scheduler must not own steering injection construction; use halo-agent-runtime scheduler',
       },
       {
         regex: /RoundInjectionTarget::ExactTurn/,
         message:
-          'core scheduler must not own steering exact-turn targeting; use bitfun-agent-runtime scheduler',
+          'core scheduler must not own steering exact-turn targeting; use halo-agent-runtime scheduler',
       },
       {
         regex: /RoundInjectionKind::ThreadGoalObjectiveUpdated/,
         message:
-          'core scheduler must not own thread-goal background injection construction; use bitfun-agent-runtime scheduler',
+          'core scheduler must not own thread-goal background injection construction; use halo-agent-runtime scheduler',
       },
       {
         regex: /RoundInjectionKind::BackgroundResult/,
         message:
-          'core scheduler must not own background result injection construction; use bitfun-agent-runtime scheduler',
+          'core scheduler must not own background result injection construction; use halo-agent-runtime scheduler',
       },
       {
         regex: /RoundInjectionTarget::CurrentRunningTurn/,
         message:
-          'core scheduler must not own current-turn background injection targeting; use bitfun-agent-runtime scheduler',
+          'core scheduler must not own current-turn background injection targeting; use halo-agent-runtime scheduler',
       },
       {
         regex: /\bfn\s+turn_outcome_kind\s*\(/,
         message:
-          'core scheduler must not own turn-outcome event facts; use bitfun-agent-runtime events',
+          'core scheduler must not own turn-outcome event facts; use halo-agent-runtime events',
       },
     ],
   },
@@ -2360,31 +2360,31 @@ export const forbiddenContentRules = [
     patterns: [
       {
         regex: /\bpub struct DynamicMcpToolInfo\b/,
-        message: 'core tool framework must not redefine DynamicMcpToolInfo; use bitfun-agent-tools',
+        message: 'core tool framework must not redefine DynamicMcpToolInfo; use halo-agent-tools',
       },
       {
         regex: /\bpub struct DynamicToolInfo\b/,
-        message: 'core tool framework must not redefine DynamicToolInfo; use bitfun-agent-tools',
+        message: 'core tool framework must not redefine DynamicToolInfo; use halo-agent-tools',
       },
       {
         regex: /\bpub struct ToolRenderOptions\b/,
-        message: 'core tool framework must not redefine ToolRenderOptions; use bitfun-agent-tools',
+        message: 'core tool framework must not redefine ToolRenderOptions; use halo-agent-tools',
       },
       {
         regex: /\bpub enum ToolPathBackend\b/,
-        message: 'core tool framework must not redefine ToolPathBackend; use bitfun-agent-tools',
+        message: 'core tool framework must not redefine ToolPathBackend; use halo-agent-tools',
       },
       {
         regex: /\bpub struct ToolPathResolution\b/,
-        message: 'core tool framework must not redefine ToolPathResolution; use bitfun-agent-tools',
+        message: 'core tool framework must not redefine ToolPathResolution; use halo-agent-tools',
       },
       {
         regex: /\bpub struct ToolContextFacts\b/,
-        message: 'core tool framework must not redefine ToolContextFacts; use bitfun-agent-tools',
+        message: 'core tool framework must not redefine ToolContextFacts; use halo-agent-tools',
       },
       {
         regex: /\bpub enum ToolWorkspaceKind\b/,
-        message: 'core tool framework must not redefine ToolWorkspaceKind; use bitfun-agent-tools',
+        message: 'core tool framework must not redefine ToolWorkspaceKind; use halo-agent-tools',
       },
       {
         regex: /\bpub struct ToolUseContext\b/,
@@ -2444,37 +2444,37 @@ export const forbiddenContentRules = [
       {
         regex: /\bfn serialize_result_for_assistant\b/,
         message:
-          'core tool pipeline must not own provider-neutral assistant result rendering; use bitfun-agent-tools',
+          'core tool pipeline must not own provider-neutral assistant result rendering; use halo-agent-tools',
       },
       {
         regex: /\bconst TOOL_ERROR_ARGUMENTS_PREVIEW_BYTES\b/,
         message:
-          'core tool pipeline must not own tool error argument preview limits; use bitfun-agent-tools',
+          'core tool pipeline must not own tool error argument preview limits; use halo-agent-tools',
       },
       {
         regex: /\bfn truncate_arguments_preview\b/,
         message:
-          'core tool pipeline must not own tool error argument preview rendering; use bitfun-agent-tools',
+          'core tool pipeline must not own tool error argument preview rendering; use halo-agent-tools',
       },
       {
         regex: /\bfn truncate_raw_arguments_preview\b/,
         message:
-          'core tool pipeline must not own raw tool argument preview rendering; use bitfun-agent-tools',
+          'core tool pipeline must not own raw tool argument preview rendering; use halo-agent-tools',
       },
       {
         regex: /\bconst USER_STEERING_INTERRUPTED_MESSAGE\b/,
         message:
-          'core tool pipeline must not own steering-interrupted result presentation; use bitfun-agent-tools',
+          'core tool pipeline must not own steering-interrupted result presentation; use halo-agent-tools',
       },
       {
         regex: /\bfn build_truncation_recovery_notice\b/,
         message:
-          'core tool pipeline must not own truncation recovery notice policy; use bitfun-agent-tools',
+          'core tool pipeline must not own truncation recovery notice policy; use halo-agent-tools',
       },
       {
         regex: /\bfn is_write_like_tool_name\b/,
         message:
-          'core tool pipeline must not own write-like truncation classification; use bitfun-agent-tools',
+          'core tool pipeline must not own write-like truncation classification; use halo-agent-tools',
       },
       {
         regex: /\bstruct\s+ToolBatch\b/,
@@ -2519,12 +2519,12 @@ export const forbiddenContentRules = [
       {
         regex: /remote_workspace_git_metadata_unavailable|workspace_unavailable|git_status_unavailable:/,
         message:
-          'core tool context must not own light-checkpoint summary policy; use bitfun-agent-runtime::checkpoint',
+          'core tool context must not own light-checkpoint summary policy; use halo-agent-runtime::checkpoint',
       },
       {
         regex: /format!\(\s*"staged=\{\}, unstaged=\{\}, untracked=\{\}"/,
         message:
-          'core tool context must not own local git dirty-state checkpoint formatting; use bitfun-agent-runtime::checkpoint',
+          'core tool context must not own local git dirty-state checkpoint formatting; use halo-agent-runtime::checkpoint',
       },
     ],
   },
@@ -2534,12 +2534,12 @@ export const forbiddenContentRules = [
       {
         regex: /\bFrontMatterMarkdown\b/,
         message:
-          'core custom subagent facade must not own markdown front-matter IO; use bitfun-agent-runtime',
+          'core custom subagent facade must not own markdown front-matter IO; use halo-agent-runtime',
       },
       {
         regex: /\bserde_yaml::Mapping\b/,
         message:
-          'core custom subagent facade must not own markdown metadata serialization; use bitfun-agent-runtime',
+          'core custom subagent facade must not own markdown metadata serialization; use halo-agent-runtime',
       },
     ],
   },
@@ -2549,17 +2549,17 @@ export const forbiddenContentRules = [
       {
         regex: /\bCustomSubagentLoader\b/,
         message:
-          'core custom subagent registry must not restore the old loader owner; use bitfun-agent-runtime discovery report',
+          'core custom subagent registry must not restore the old loader owner; use halo-agent-runtime discovery report',
       },
       {
         regex: /\bread_dir\b/,
         message:
-          'core custom subagent registry must not own directory scanning; use bitfun-agent-runtime discovery report',
+          'core custom subagent registry must not own directory scanning; use halo-agent-runtime discovery report',
       },
       {
         regex: /\.extension\(\)\.is_some_and\(\|ext\|\s*ext\s*==\s*"md"\)/,
         message:
-          'core custom subagent registry must not own markdown file discovery; use bitfun-agent-runtime discovery report',
+          'core custom subagent registry must not own markdown file discovery; use halo-agent-runtime discovery report',
       },
     ],
   },
@@ -2569,12 +2569,12 @@ export const forbiddenContentRules = [
       {
         regex: /\bstruct\s+DelegationPolicy\b/,
         message:
-          'core subagent runtime must not redefine DelegationPolicy; use bitfun-runtime-ports',
+          'core subagent runtime must not redefine DelegationPolicy; use halo-runtime-ports',
       },
       {
         regex: /\benum\s+SubagentContextMode\b/,
         message:
-          'core subagent runtime must not redefine SubagentContextMode; use bitfun-runtime-ports',
+          'core subagent runtime must not redefine SubagentContextMode; use halo-runtime-ports',
       },
     ],
   },
@@ -2584,7 +2584,7 @@ export const forbiddenContentRules = [
       {
         regex: /\benum\s+DialogTriggerSource\b/,
         message:
-          'core coordinator must not redefine DialogTriggerSource; use bitfun-runtime-ports',
+          'core coordinator must not redefine DialogTriggerSource; use halo-runtime-ports',
       },
     ],
   },
@@ -2594,27 +2594,27 @@ export const forbiddenContentRules = [
       {
         regex: /\benum\s+DialogQueuePriority\b/,
         message:
-          'core scheduler must not redefine DialogQueuePriority; use bitfun-runtime-ports',
+          'core scheduler must not redefine DialogQueuePriority; use halo-runtime-ports',
       },
       {
         regex: /\bstruct\s+DialogSubmissionPolicy\b/,
         message:
-          'core scheduler must not redefine DialogSubmissionPolicy; use bitfun-runtime-ports',
+          'core scheduler must not redefine DialogSubmissionPolicy; use halo-runtime-ports',
       },
       {
         regex: /\benum\s+DialogSubmitOutcome\b/,
         message:
-          'core scheduler must not redefine DialogSubmitOutcome; use bitfun-runtime-ports',
+          'core scheduler must not redefine DialogSubmitOutcome; use halo-runtime-ports',
       },
       {
         regex: /\bstruct\s+AgentSessionReplyRoute\b/,
         message:
-          'core scheduler must not redefine AgentSessionReplyRoute; use bitfun-runtime-ports',
+          'core scheduler must not redefine AgentSessionReplyRoute; use halo-runtime-ports',
       },
       {
         regex: /\benum\s+DialogSteerOutcome\b/,
         message:
-          'core scheduler must not redefine DialogSteerOutcome; use bitfun-runtime-ports',
+          'core scheduler must not redefine DialogSteerOutcome; use halo-runtime-ports',
       },
     ],
   },
@@ -2624,27 +2624,27 @@ export const forbiddenContentRules = [
       {
         regex: /\bstruct\s+RoundInjection\b/,
         message:
-          'core round-boundary runtime must not redefine RoundInjection; use bitfun-runtime-ports',
+          'core round-boundary runtime must not redefine RoundInjection; use halo-runtime-ports',
       },
       {
         regex: /\btrait\s+DialogRoundInjectionSource\b/,
         message:
-          'core round-boundary runtime must not redefine DialogRoundInjectionSource; use bitfun-runtime-ports',
+          'core round-boundary runtime must not redefine DialogRoundInjectionSource; use halo-runtime-ports',
       },
       {
         regex: /\benum\s+RoundInjectionKind\b/,
         message:
-          'core round-boundary runtime must not redefine RoundInjectionKind; use bitfun-runtime-ports',
+          'core round-boundary runtime must not redefine RoundInjectionKind; use halo-runtime-ports',
       },
       {
         regex: /\benum\s+RoundInjectionTarget\b/,
         message:
-          'core round-boundary runtime must not redefine RoundInjectionTarget; use bitfun-runtime-ports',
+          'core round-boundary runtime must not redefine RoundInjectionTarget; use halo-runtime-ports',
       },
       {
         regex: /\bpub\s+struct\s+SessionRoundInjectionBuffer\b/,
         message:
-          'core round-boundary runtime must not own round injection buffer; use bitfun-agent-runtime',
+          'core round-boundary runtime must not own round injection buffer; use halo-agent-runtime',
       },
     ],
   },
@@ -2653,59 +2653,59 @@ export const forbiddenContentRules = [
     patterns: [
       {
         regex: /\bconst\s+GOAL_MODE_METADATA_KEY\b/,
-        message: 'core goal mode types must not redefine GOAL_MODE_METADATA_KEY; use bitfun-runtime-ports',
+        message: 'core goal mode types must not redefine GOAL_MODE_METADATA_KEY; use halo-runtime-ports',
       },
       {
         regex: /\bconst\s+MAX_GOAL_CONTINUATIONS\b/,
-        message: 'core goal mode types must not redefine MAX_GOAL_CONTINUATIONS; use bitfun-runtime-ports',
+        message: 'core goal mode types must not redefine MAX_GOAL_CONTINUATIONS; use halo-runtime-ports',
       },
       {
         regex: /\bconst\s+MAX_CONTEXT_SUMMARY_CHARS\b/,
-        message: 'core goal mode types must not redefine MAX_CONTEXT_SUMMARY_CHARS; use bitfun-runtime-ports',
+        message: 'core goal mode types must not redefine MAX_CONTEXT_SUMMARY_CHARS; use halo-runtime-ports',
       },
       {
         regex: /\bstruct\s+ThreadGoal\b/,
-        message: 'core goal mode types must not redefine ThreadGoal; use bitfun-runtime-ports',
+        message: 'core goal mode types must not redefine ThreadGoal; use halo-runtime-ports',
       },
       {
         regex: /\benum\s+ThreadGoalStatus\b/,
-        message: 'core goal mode types must not redefine ThreadGoalStatus; use bitfun-runtime-ports',
+        message: 'core goal mode types must not redefine ThreadGoalStatus; use halo-runtime-ports',
       },
       {
         regex: /\bstruct\s+GoalGenerationResult\b/,
-        message: 'core goal mode types must not redefine GoalGenerationResult; use bitfun-runtime-ports',
+        message: 'core goal mode types must not redefine GoalGenerationResult; use halo-runtime-ports',
       },
       {
         regex: /\bstruct\s+ThreadGoalToolResponse\b/,
-        message: 'core goal mode types must not redefine ThreadGoalToolResponse; use bitfun-runtime-ports',
+        message: 'core goal mode types must not redefine ThreadGoalToolResponse; use halo-runtime-ports',
       },
       {
         regex: /\bstruct\s+GoalActivationResult\b/,
-        message: 'core goal mode types must not redefine GoalActivationResult; use bitfun-runtime-ports',
+        message: 'core goal mode types must not redefine GoalActivationResult; use halo-runtime-ports',
       },
       {
         regex: /\bstruct\s+GoalContinuationPlan\b/,
-        message: 'core goal mode types must not redefine GoalContinuationPlan; use bitfun-runtime-ports',
+        message: 'core goal mode types must not redefine GoalContinuationPlan; use halo-runtime-ports',
       },
       {
         regex: /\bpub\s+struct\s+ThreadGoalRuntime\b/,
         message:
-          'core goal mode must not own thread goal runtime accounting; use bitfun-agent-runtime',
+          'core goal mode must not own thread goal runtime accounting; use halo-agent-runtime',
       },
       {
         regex: /\bfn\s+build_thread_goal_continuation_plan\b/,
         message:
-          'core goal mode must not own thread goal continuation planning; use bitfun-agent-runtime',
+          'core goal mode must not own thread goal continuation planning; use halo-agent-runtime',
       },
       {
         regex: /\bfn\s+goal_tool_response\b/,
         message:
-          'core goal mode must not own thread goal tool response assembly; use bitfun-agent-runtime',
+          'core goal mode must not own thread goal tool response assembly; use halo-agent-runtime',
       },
       {
         regex: /\bfn\s+billable_tokens_from_counts\b/,
         message:
-          'core goal mode must not own thread goal token accounting policy; use bitfun-agent-runtime',
+          'core goal mode must not own thread goal token accounting policy; use halo-agent-runtime',
       },
     ],
   },
@@ -2714,15 +2714,15 @@ export const forbiddenContentRules = [
     patterns: [
       {
         regex: /\bstruct\s+CompressionContract\b/,
-        message: 'core message model must not redefine CompressionContract; use bitfun-runtime-ports',
+        message: 'core message model must not redefine CompressionContract; use halo-runtime-ports',
       },
       {
         regex: /\bstruct\s+CompressionContractItem\b/,
-        message: 'core message model must not redefine CompressionContractItem; use bitfun-runtime-ports',
+        message: 'core message model must not redefine CompressionContractItem; use halo-runtime-ports',
       },
       {
         regex: /\bfn\s+render_contract_items\b/,
-        message: 'core message model must not own compression contract rendering; use bitfun-runtime-ports',
+        message: 'core message model must not own compression contract rendering; use halo-runtime-ports',
       },
     ],
   },
@@ -2731,7 +2731,7 @@ export const forbiddenContentRules = [
     patterns: [
       {
         regex: /\bstruct\s+RelatedPath\b/,
-        message: 'core workspace manager must not redefine RelatedPath; use bitfun-runtime-ports',
+        message: 'core workspace manager must not redefine RelatedPath; use halo-runtime-ports',
       },
     ],
   },
@@ -2841,32 +2841,32 @@ export const forbiddenContentRules = [
       {
         regex: /\bpub\s+trait\s+WorkspaceFileSystem\b/,
         message:
-          'workspace file-system contract must be owned by bitfun-runtime-ports; keep only concrete adapters or re-exports in core',
+          'workspace file-system contract must be owned by halo-runtime-ports; keep only concrete adapters or re-exports in core',
       },
       {
         regex: /\bpub\s+trait\s+WorkspaceShell\b/,
         message:
-          'workspace shell contract must be owned by bitfun-runtime-ports; keep only concrete adapters or re-exports in core',
+          'workspace shell contract must be owned by halo-runtime-ports; keep only concrete adapters or re-exports in core',
       },
       {
         regex: /\bpub\s+struct\s+WorkspaceServices\b/,
         message:
-          'workspace service bundle contract must be owned by bitfun-runtime-ports; keep only concrete adapters or re-exports in core',
+          'workspace service bundle contract must be owned by halo-runtime-ports; keep only concrete adapters or re-exports in core',
       },
       {
         regex: /\bpub\s+struct\s+WorkspaceCommandOptions\b/,
         message:
-          'workspace command contract must be owned by bitfun-runtime-ports; keep only concrete adapters or re-exports in core',
+          'workspace command contract must be owned by halo-runtime-ports; keep only concrete adapters or re-exports in core',
       },
       {
         regex: /\bpub\s+struct\s+WorkspaceCommandResult\b/,
         message:
-          'workspace command result contract must be owned by bitfun-runtime-ports; keep only concrete adapters or re-exports in core',
+          'workspace command result contract must be owned by halo-runtime-ports; keep only concrete adapters or re-exports in core',
       },
       {
         regex: /\bpub\s+struct\s+WorkspaceDirEntry\b/,
         message:
-          'workspace directory entry contract must be owned by bitfun-runtime-ports; keep only concrete adapters or re-exports in core',
+          'workspace directory entry contract must be owned by halo-runtime-ports; keep only concrete adapters or re-exports in core',
       },
     ],
   },
@@ -3005,21 +3005,21 @@ export const forbiddenContentRules = [
     patterns: [
       {
         regex: /\bpub enum ToolPathOperation\b/,
-        message: 'core tool restrictions must not redefine ToolPathOperation; use bitfun-agent-tools',
+        message: 'core tool restrictions must not redefine ToolPathOperation; use halo-agent-tools',
       },
       {
         regex: /\bpub struct ToolPathPolicy\b/,
-        message: 'core tool restrictions must not redefine ToolPathPolicy; use bitfun-agent-tools',
+        message: 'core tool restrictions must not redefine ToolPathPolicy; use halo-agent-tools',
       },
       {
         regex: /\bpub struct ToolRuntimeRestrictions\b/,
         message:
-          'core tool restrictions must not redefine ToolRuntimeRestrictions; use bitfun-agent-tools',
+          'core tool restrictions must not redefine ToolRuntimeRestrictions; use halo-agent-tools',
       },
       {
         regex: /\bfn\s+normalize_absolute_posix_path\b/,
         message:
-          'core tool restrictions must not redefine remote POSIX path normalization; use bitfun-agent-tools',
+          'core tool restrictions must not redefine remote POSIX path normalization; use halo-agent-tools',
       },
     ],
   },
@@ -3027,24 +3027,24 @@ export const forbiddenContentRules = [
     path: 'src/crates/assembly/core/src/agentic/tools/workspace_paths.rs',
     patterns: [
       {
-        regex: /\bpub const BITFUN_RUNTIME_URI_PREFIX\b/,
+        regex: /\bpub const HALO_RUNTIME_URI_PREFIX\b/,
         message:
-          'core workspace path facade must not redefine the runtime URI prefix; use bitfun-agent-tools',
+          'core workspace path facade must not redefine the runtime URI prefix; use halo-agent-tools',
       },
       {
-        regex: /\bpub struct ParsedBitFunRuntimeUri\b/,
+        regex: /\bpub struct ParsedHaloRuntimeUri\b/,
         message:
-          'core workspace path facade must not redefine ParsedBitFunRuntimeUri; use bitfun-agent-tools',
+          'core workspace path facade must not redefine ParsedHaloRuntimeUri; use halo-agent-tools',
       },
       {
         regex: /\bfn\s+posix_normalize_components\b/,
         message:
-          'core workspace path facade must not redefine remote POSIX path normalization; use bitfun-agent-tools',
+          'core workspace path facade must not redefine remote POSIX path normalization; use halo-agent-tools',
       },
       {
         regex: /Component::ParentDir/,
         message:
-          'core workspace path facade must not redefine host path normalization; use bitfun-agent-tools',
+          'core workspace path facade must not redefine host path normalization; use halo-agent-tools',
       },
     ],
   },
@@ -3054,17 +3054,17 @@ export const forbiddenContentRules = [
       {
         regex: /\bstruct DynamicToolMetadata\b/,
         message:
-          'core tool registry must not own dynamic tool metadata storage; use bitfun-agent-tools ToolRegistry',
+          'core tool registry must not own dynamic tool metadata storage; use halo-agent-tools ToolRegistry',
       },
       {
         regex: /\btools\s*:\s*IndexMap\b/,
         message:
-          'core tool registry must not own the generic tool map; use bitfun-agent-tools ToolRegistry',
+          'core tool registry must not own the generic tool map; use halo-agent-tools ToolRegistry',
       },
       {
         regex: /\bdynamic_tools\s*:\s*IndexMap\b/,
         message:
-          'core tool registry must not own the dynamic tool map; use bitfun-agent-tools ToolRegistry',
+          'core tool registry must not own the dynamic tool map; use halo-agent-tools ToolRegistry',
       },
     ],
   },
@@ -3074,7 +3074,7 @@ export const forbiddenContentRules = [
       {
         regex: /\bnormalize_string\b/,
         message:
-          'core file read-state runtime must delegate pure freshness normalization to bitfun-agent-tools',
+          'core file read-state runtime must delegate pure freshness normalization to halo-agent-tools',
       },
     ],
   },
@@ -3084,22 +3084,22 @@ export const forbiddenContentRules = [
       {
         regex: /\bfn\s+generate_preview\b/,
         message:
-          'core tool result storage must delegate pure preview generation to bitfun-agent-tools',
+          'core tool result storage must delegate pure preview generation to halo-agent-tools',
       },
       {
         regex: /\bfn\s+build_persisted_output_message\b/,
         message:
-          'core tool result storage must delegate persisted-output rendering to bitfun-agent-tools',
+          'core tool result storage must delegate persisted-output rendering to halo-agent-tools',
       },
       {
         regex: /\bfn\s+select_candidates_to_persist\b/,
         message:
-          'core tool result storage must delegate round-budget selection to bitfun-agent-tools',
+          'core tool result storage must delegate round-budget selection to halo-agent-tools',
       },
       {
         regex: /\bstruct\s+ToolResultStoragePolicy\b/,
         message:
-          'core tool result storage must use the provider-neutral storage policy from bitfun-agent-tools',
+          'core tool result storage must use the provider-neutral storage policy from halo-agent-tools',
       },
     ],
   },
@@ -4049,7 +4049,7 @@ export const forbiddenContentUnderRules = [
     patterns: [
       {
         regex:
-          /\b(?:PluginRuntimeReadResponse|PluginStatusSnapshot|PluginResponseEnvelope|PluginDispatchEnvelope|PluginEffectCandidate|PluginQuarantineState|PluginRuntimeClient|PluginRuntimeBinding|bitfun_plugin_runtime_client|bitfun_agent_runtime::runtime)\b/,
+          /\b(?:PluginRuntimeReadResponse|PluginStatusSnapshot|PluginResponseEnvelope|PluginDispatchEnvelope|PluginEffectCandidate|PluginQuarantineState|PluginRuntimeClient|PluginRuntimeBinding|halo_plugin_runtime_client|halo_agent_runtime::runtime)\b/,
         message:
           'product entrypoints must not consume raw plugin runtime client contracts; project through the capability surface contract first',
       },
@@ -4062,7 +4062,7 @@ export const forbiddenContentUnderRules = [
     patterns: [
       {
         regex:
-          /\b(?:PluginRuntimeReadResponse|PluginStatusSnapshot|PluginResponseEnvelope|PluginDispatchEnvelope|PluginEffectCandidate|PluginQuarantineState|PluginRuntimeClient|PluginRuntimeBinding|bitfun_plugin_runtime_client|bitfun_agent_runtime::runtime)\b/,
+          /\b(?:PluginRuntimeReadResponse|PluginStatusSnapshot|PluginResponseEnvelope|PluginDispatchEnvelope|PluginEffectCandidate|PluginQuarantineState|PluginRuntimeClient|PluginRuntimeBinding|halo_plugin_runtime_client|halo_agent_runtime::runtime)\b/,
         message:
           'Server/API interfaces must not consume raw plugin runtime client contracts; define a projected contract first',
       },
@@ -4075,7 +4075,7 @@ export const forbiddenContentUnderRules = [
     patterns: [
       {
         regex:
-          /\b(?:PluginRuntimeReadResponse|PluginStatusSnapshot|PluginResponseEnvelope|PluginDispatchEnvelope|PluginEffectCandidate|PluginQuarantineState|PluginRuntimeClient|PluginRuntimeBinding|bitfun_plugin_runtime_client|bitfun_agent_runtime::runtime)\b/,
+          /\b(?:PluginRuntimeReadResponse|PluginStatusSnapshot|PluginResponseEnvelope|PluginDispatchEnvelope|PluginEffectCandidate|PluginQuarantineState|PluginRuntimeClient|PluginRuntimeBinding|halo_plugin_runtime_client|halo_agent_runtime::runtime)\b/,
         message:
           'frontend surfaces must not consume raw plugin runtime client contracts; project through the capability surface contract first',
       },
@@ -4088,20 +4088,20 @@ export const forbiddenContentUnderRules = [
     patterns: [
       {
         regex:
-          /\b(?:PluginRuntimeReadResponse|PluginStatusSnapshot|PluginResponseEnvelope|PluginDispatchEnvelope|PluginEffectCandidate|PluginQuarantineState|PluginRuntimeClient|PluginRuntimeBinding|bitfun_plugin_runtime_client|bitfun_agent_runtime::runtime)\b/,
+          /\b(?:PluginRuntimeReadResponse|PluginStatusSnapshot|PluginResponseEnvelope|PluginDispatchEnvelope|PluginEffectCandidate|PluginQuarantineState|PluginRuntimeClient|PluginRuntimeBinding|halo_plugin_runtime_client|halo_agent_runtime::runtime)\b/,
         message:
           'mobile surfaces must not consume raw plugin runtime client contracts; project through the capability surface contract first',
       },
     ],
   },
   {
-    path: 'BitFun-Installer',
+    path: 'Halo-Installer',
     reason:
       'installer surfaces must consume capability-surface projections instead of raw plugin runtime client contracts',
     patterns: [
       {
         regex:
-          /\b(?:PluginRuntimeReadResponse|PluginStatusSnapshot|PluginResponseEnvelope|PluginDispatchEnvelope|PluginEffectCandidate|PluginQuarantineState|PluginRuntimeClient|PluginRuntimeBinding|bitfun_plugin_runtime_client|bitfun_agent_runtime::runtime)\b/,
+          /\b(?:PluginRuntimeReadResponse|PluginStatusSnapshot|PluginResponseEnvelope|PluginDispatchEnvelope|PluginEffectCandidate|PluginQuarantineState|PluginRuntimeClient|PluginRuntimeBinding|halo_plugin_runtime_client|halo_agent_runtime::runtime)\b/,
         message:
           'installer surfaces must not consume raw plugin runtime client contracts; project through the capability surface contract first',
       },
@@ -4114,7 +4114,7 @@ export const forbiddenContentUnderRules = [
     patterns: [
       {
         regex:
-          /\b(?:use\s+bitfun_pi_rpc_adapter\b|extern\s+crate\s+bitfun_pi_rpc_adapter\b|bitfun_pi_rpc_adapter::)/,
+          /\b(?:use\s+halo_pi_rpc_adapter\b|extern\s+crate\s+halo_pi_rpc_adapter\b|halo_pi_rpc_adapter::)/,
         allowPaths: [
           'src/crates/assembly/core/src/halo_workbench.rs',
         ],
@@ -4124,13 +4124,13 @@ export const forbiddenContentUnderRules = [
     ],
   },
   {
-    path: 'BitFun-Installer/src-tauri',
+    path: 'Halo-Installer/src-tauri',
     reason:
       'Pi RPC Workbench execution adapter imports are limited to the reviewed product assembly module',
     patterns: [
       {
         regex:
-          /\b(?:use\s+bitfun_pi_rpc_adapter\b|extern\s+crate\s+bitfun_pi_rpc_adapter\b|bitfun_pi_rpc_adapter::)/,
+          /\b(?:use\s+halo_pi_rpc_adapter\b|extern\s+crate\s+halo_pi_rpc_adapter\b|halo_pi_rpc_adapter::)/,
         message:
           'installer code must not import or assemble the Halo Workbench Pi RPC adapter',
       },
@@ -4143,7 +4143,7 @@ export const forbiddenContentUnderRules = [
     patterns: [
       {
         regex:
-          /\b(?:use\s+bitfun_opencode_adapter\b|extern\s+crate\s+bitfun_opencode_adapter\b|bitfun_opencode_adapter::)/,
+          /\b(?:use\s+halo_opencode_adapter\b|extern\s+crate\s+halo_opencode_adapter\b|halo_opencode_adapter::)/,
         allowPaths: [
           'src/crates/adapters/opencode-adapter/tests/opencode_source_adapter.rs',
           'src/crates/adapters/opencode-adapter/tests/opencode_command_adapter.rs',
@@ -4156,20 +4156,20 @@ export const forbiddenContentUnderRules = [
           'src/crates/assembly/core/src/external_hooks.rs',
         ],
         message:
-          'only a reviewed product composition root may import bitfun-opencode-adapter through a capability-specific provider boundary',
+          'only a reviewed product composition root may import halo-opencode-adapter through a capability-specific provider boundary',
       },
     ],
   },
   {
-    path: 'BitFun-Installer/src-tauri',
+    path: 'Halo-Installer/src-tauri',
     reason:
       'OpenCode adapter production imports are limited to the reviewed composition root',
     patterns: [
       {
         regex:
-          /\b(?:use\s+bitfun_opencode_adapter\b|extern\s+crate\s+bitfun_opencode_adapter\b|bitfun_opencode_adapter::)/,
+          /\b(?:use\s+halo_opencode_adapter\b|extern\s+crate\s+halo_opencode_adapter\b|halo_opencode_adapter::)/,
         message:
-          'only a reviewed product composition root may import bitfun-opencode-adapter and inject it into PluginRuntimeClient',
+          'only a reviewed product composition root may import halo-opencode-adapter and inject it into PluginRuntimeClient',
       },
     ],
   },
@@ -4177,7 +4177,7 @@ export const forbiddenContentUnderRules = [
     path: 'src',
     reason: 'Claude Code declarative source adapter imports are limited to its fixtures and composition roots',
     patterns: [{
-      regex: /\b(?:use\s+bitfun_claude_code_adapter\b|extern\s+crate\s+bitfun_claude_code_adapter\b|bitfun_claude_code_adapter::)/,
+      regex: /\b(?:use\s+halo_claude_code_adapter\b|extern\s+crate\s+halo_claude_code_adapter\b|halo_claude_code_adapter::)/,
       allowPaths: [
         'src/crates/adapters/claude-code-adapter/tests/hook_source.rs',
         'src/crates/adapters/claude-code-adapter/tests/command_source.rs',
@@ -4193,7 +4193,7 @@ export const forbiddenContentUnderRules = [
     path: 'src',
     reason: 'Codex declarative source adapter imports are limited to its fixtures and composition roots',
     patterns: [{
-      regex: /\b(?:use\s+bitfun_codex_adapter\b|extern\s+crate\s+bitfun_codex_adapter\b|bitfun_codex_adapter::)/,
+      regex: /\b(?:use\s+halo_codex_adapter\b|extern\s+crate\s+halo_codex_adapter\b|halo_codex_adapter::)/,
       allowPaths: [
         'src/crates/adapters/codex-adapter/tests/hook_source.rs',
         'src/crates/adapters/codex-adapter/tests/subagent_source.rs',
@@ -4208,7 +4208,7 @@ export const forbiddenContentUnderRules = [
     path: 'src',
     reason: 'shared bounded static-source support is private to reviewed ecosystem source adapters',
     patterns: [{
-      regex: /\b(?:use\s+bitfun_static_hook_support\b|extern\s+crate\s+bitfun_static_hook_support\b|bitfun_static_hook_support::)/,
+      regex: /\b(?:use\s+halo_static_hook_support\b|extern\s+crate\s+halo_static_hook_support\b|halo_static_hook_support::)/,
       allowPaths: [
         'src/crates/adapters/static-hook-support/tests/parser.rs',
         'src/crates/adapters/opencode-adapter/src/hook_source.rs',
@@ -4251,7 +4251,7 @@ export const forbiddenContentUnderRules = [
         regex:
           /crate::agentic::subagent_runtime(?:::|\s*::|::\{)(?:[^;\n]*\b(?:DelegationPolicy|SubagentContextMode)\b)/,
         message:
-          'DelegationPolicy and SubagentContextMode must be imported from bitfun-runtime-ports, not the core compatibility re-export',
+          'DelegationPolicy and SubagentContextMode must be imported from halo-runtime-ports, not the core compatibility re-export',
       },
     ],
   },
@@ -4378,7 +4378,7 @@ export const forbiddenContentUnderRules = [
   {
     path: 'src/crates/assembly/core/src/agentic/tools/pipeline',
     reason:
-      'core pipeline must delegate deterministic tool execution admission policy to bitfun-agent-tools',
+      'core pipeline must delegate deterministic tool execution admission policy to halo-agent-tools',
     patterns: [
       {
         regex: /\bvalidate_tool_allowed_by_list\s*\(/,
@@ -4401,23 +4401,23 @@ export const forbiddenContentUnderRules = [
     patterns: [
       {
         regex:
-          /\b(?:use\s+bitfun_pi_rpc_adapter\b|extern\s+crate\s+bitfun_pi_rpc_adapter\b|bitfun_pi_rpc_adapter::)/,
+          /\b(?:use\s+halo_pi_rpc_adapter\b|extern\s+crate\s+halo_pi_rpc_adapter\b|halo_pi_rpc_adapter::)/,
         allowPaths: [
           'src/crates/assembly/core/src/halo_workbench.rs',
         ],
         message:
-          'only Halo Workbench product assembly may import bitfun-pi-rpc-adapter; other layers consume the stable PiRpcPort seam',
+          'only Halo Workbench product assembly may import halo-pi-rpc-adapter; other layers consume the stable PiRpcPort seam',
       },
     ],
   },
   {
-    path: 'BitFun-Installer/src-tauri',
+    path: 'Halo-Installer/src-tauri',
     reason:
       'Pi RPC Workbench execution adapter imports are limited to the reviewed product assembly module',
     patterns: [
       {
         regex:
-          /\b(?:use\s+bitfun_pi_rpc_adapter\b|extern\s+crate\s+bitfun_pi_rpc_adapter\b|bitfun_pi_rpc_adapter::)/,
+          /\b(?:use\s+halo_pi_rpc_adapter\b|extern\s+crate\s+halo_pi_rpc_adapter\b|halo_pi_rpc_adapter::)/,
         message:
           'installer code must not import or assemble the Halo Workbench Pi RPC adapter',
       },

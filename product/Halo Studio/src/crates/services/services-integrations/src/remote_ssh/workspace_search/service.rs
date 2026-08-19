@@ -20,7 +20,7 @@ use crate::workspace_search::{
     IndexTaskHandle, WorkspaceIndexStatus, WorkspaceSearchFileCount, WorkspaceSearchRepoStatus,
 };
 use async_trait::async_trait;
-use bitfun_services_core::filesystem::FileSearchOutcome;
+use halo_services_core::filesystem::FileSearchOutcome;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::{Component, Path, PathBuf};
@@ -35,7 +35,7 @@ use tokio::time::{sleep, timeout};
 const REMOTE_STDIO_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 const REMOTE_STDIO_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const REMOTE_STDIO_SESSION_IDLE_GRACE: Duration = Duration::from_secs(45);
-const CLIENT_NAME: &str = "bitfun-remote-workspace-search";
+const CLIENT_NAME: &str = "halo-remote-workspace-search";
 
 static REMOTE_STDIO_SESSIONS: LazyLock<RwLock<HashMap<String, RemoteStdioSessionEntry>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));

@@ -7,8 +7,8 @@ use crate::{
     RuntimeIpcOperationResult, RuntimeIpcRequestHandler, RuntimeIpcTransportError,
     RuntimeSessionLeases, MAX_REQUEST_FRAME_BYTES, MAX_RESPONSE_FRAME_BYTES, PROTOCOL_VERSION,
 };
-use bitfun_events::AgenticEvent;
-use bitfun_runtime_ports::{AgentSubmissionSource, AgentTurnCancellationRequest};
+use halo_events::AgenticEvent;
+use halo_runtime_ports::{AgentSubmissionSource, AgentTurnCancellationRequest};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;

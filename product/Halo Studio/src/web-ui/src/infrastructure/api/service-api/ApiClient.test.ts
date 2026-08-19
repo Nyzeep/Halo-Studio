@@ -37,7 +37,7 @@ vi.mock('@/shared/utils/startupTrace', () => ({
 describe('ApiClient startup trace classification', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete globalThis.__BITFUN_PERF_TRACE_ENABLED__;
+    delete globalThis.__HALO_PERF_TRACE_ENABLED__;
   });
 
   it('does not record optional get_config not found as a startup failure', async () => {
@@ -72,7 +72,7 @@ describe('ApiClient startup trace classification', () => {
     await client.invoke('restore_session_view', {
       request: {
         sessionId: 'history-1',
-        workspacePath: 'D:/workspace/BitFun',
+        workspacePath: 'D:/workspace/Halo',
       },
     });
 
@@ -101,7 +101,7 @@ describe('ApiClient startup trace classification', () => {
     const client = new ApiClient({ enableLogging: false, retries: 0 });
 
     const error = await client.invoke('get_external_source_control_snapshot', {
-      request: { workspacePath: 'D:/workspace/BitFun' },
+      request: { workspacePath: 'D:/workspace/Halo' },
     }).catch((caught: unknown) => caught as {
       code: string;
       details?: { originalError?: unknown };
@@ -168,14 +168,14 @@ describe('ApiClient startup trace classification', () => {
   });
 
   it('uses a bounded response estimate cap for session view restore when perf trace is enabled', async () => {
-    globalThis.__BITFUN_PERF_TRACE_ENABLED__ = true;
+    globalThis.__HALO_PERF_TRACE_ENABLED__ = true;
     adapterMocks.request.mockResolvedValueOnce({ turns: [] });
     const client = new ApiClient({ enableLogging: false, retries: 0 });
 
     await client.invoke('restore_session_view', {
       request: {
         sessionId: 'history-1',
-        workspacePath: 'D:/workspace/BitFun',
+        workspacePath: 'D:/workspace/Halo',
       },
     });
 
@@ -211,7 +211,7 @@ describe('ApiClient startup trace classification', () => {
     });
     const secondRequest = client.invoke('list_persisted_sessions_page', {
       request: {
-        workspacePath: 'D:/workspace/BitFun',
+        workspacePath: 'D:/workspace/Halo',
         limit: 5,
       },
     });
@@ -238,14 +238,14 @@ describe('ApiClient startup trace classification', () => {
     const client = new ApiClient({ enableLogging: false, retries: 0 });
 
     await client.invoke('explorer_get_children', {
-      request: { path: 'D:/workspace/BitFun' },
+      request: { path: 'D:/workspace/Halo' },
     });
     await client.invoke('start_file_watch', {
-      path: 'D:/workspace/BitFun',
+      path: 'D:/workspace/Halo',
       recursive: false,
     });
     await client.invoke('start_file_watch', {
-      path: 'D:/workspace/BitFun',
+      path: 'D:/workspace/Halo',
       recursive: true,
     });
 
@@ -263,6 +263,6 @@ describe('ApiClient startup trace classification', () => {
     }));
 
     const calls = traceMocks.recordApiCall.mock.calls.map(([call]) => call);
-    expect(JSON.stringify(calls)).not.toContain('D:/workspace/BitFun');
+    expect(JSON.stringify(calls)).not.toContain('D:/workspace/Halo');
   });
 });

@@ -1556,9 +1556,9 @@ mod review_path_tests {
             root,
             &[
                 "-c",
-                "user.name=BitFun Tests",
+                "user.name=Halo Tests",
                 "-c",
-                "user.email=bitfun@example.com",
+                "user.email=halo@example.com",
                 "commit",
                 "-m",
                 message,

@@ -81,13 +81,13 @@ jobs:
     needs: prepare
     env:
       NODE_OPTIONS: --max-old-space-size=6144
-      BITFUN_ENABLE_UPDATER_ARTIFACTS: ${{ needs.prepare.outputs.upload_to_release }}
+      HALO_ENABLE_UPDATER_ARTIFACTS: ${{ needs.prepare.outputs.upload_to_release }}
       TAURI_UPDATER_ENDPOINT: https://github.com/GCWing/BitFun/releases/latest/download/latest.json
       TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
       # Same trust root, compiled into the Desktop binary so one-click relay
       # deploy can verify the signed checksum locally and hand the remote host
       # a hash it does not have to trust the mirror for.
-      BITFUN_RELEASE_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+      HALO_RELEASE_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
@@ -120,7 +120,7 @@ jobs:
               $ErrorActionPreference = 'Stop'
               pnpm run desktop:build:nsis --target x86_64-pc-windows-msvc --verbose
               if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-              $desktopExe = "target/x86_64-pc-windows-msvc/release/bitfun-desktop.exe"
+              $desktopExe = "target/x86_64-pc-windows-msvc/release/halo-desktop.exe"
               if (-not (Test-Path $desktopExe)) {
                 throw "Desktop executable was not found after NSIS build: $desktopExe"
               }
@@ -233,13 +233,13 @@ jobs:
       - name: Upload bundles
         uses: actions/upload-artifact@v6
         with:
-          name: bitfun-${{ needs.prepare.outputs.release_tag }}-${{ matrix.platform.name }}-bundle
+          name: halo-${{ needs.prepare.outputs.release_tag }}-${{ matrix.platform.name }}-bundle
           if-no-files-found: error
           path: |
             target/*/release/bundle
             target/release/bundle
             src/apps/desktop/target/release/bundle
-            BitFun-Installer/src-tauri/target/release/bitfun-installer.exe
+            Halo-Installer/src-tauri/target/release/halo-installer.exe
 
   linux-binaries:
     name: Linux CLI and Relay Server
@@ -270,14 +270,14 @@ jobs:
       - name: Download bundled artifacts
         uses: actions/download-artifact@v7
         with:
-          pattern: bitfun-${{ needs.prepare.outputs.release_tag }}-*-bundle
+          pattern: halo-${{ needs.prepare.outputs.release_tag }}-*-bundle
           path: release-assets
           merge-multiple: true
 
       - name: Download Linux binary artifacts
         uses: actions/download-artifact@v7
         with:
-          pattern: bitfun-linux-${{ needs.prepare.outputs.release_tag }}-*
+          pattern: halo-linux-${{ needs.prepare.outputs.release_tag }}-*
           path: linux-release-assets
           merge-multiple: true
 
@@ -334,15 +334,15 @@ jobs:
       - name: Sign installer packages
         shell: bash
         env:
-          BITFUN_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          BITFUN_SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          BITFUN_SIGNING_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+          HALO_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          HALO_SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          HALO_SIGNING_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
         run: |
           set -euo pipefail
           mapfile -t assets < <(
             find release-assets -type f \
               \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \
-                 -o -name '*.dmg' -o -name '*bitfun-installer.exe' \) | sort
+                 -o -name '*.dmg' -o -name '*halo-installer.exe' \) | sort
           )
           if [[ "${#assets[@]}" -eq 0 ]]; then
             echo "No installer packages found to sign."
@@ -352,7 +352,7 @@ jobs:
 
           # Publish the public key alongside the signatures: a signature nobody
           # can fetch a key for is not verifiable.
-          printf '%s' "${BITFUN_SIGNING_PUBKEY}" | base64 -d >release-assets/minisign.pub
+          printf '%s' "${HALO_SIGNING_PUBKEY}" | base64 -d >release-assets/minisign.pub
 
       - name: Upload to release
         uses: softprops/action-gh-release@v3
@@ -365,13 +365,13 @@ jobs:
             release-assets/**/*.deb
             release-assets/**/*.dmg
             release-assets/**/*.rpm
-            release-assets/**/*bitfun-installer.exe
+            release-assets/**/*halo-installer.exe
             release-assets/**/*.sig
             release-assets/minisign.pub
-            linux-release-assets/bitfun-cli-*.tar.gz
-            linux-release-assets/bitfun-cli-*.tar.gz.sha256
-            linux-release-assets/bitfun-relay-server-*.tar.gz
-            linux-release-assets/bitfun-relay-server-*.tar.gz.sha256
+            linux-release-assets/halo-cli-*.tar.gz
+            linux-release-assets/halo-cli-*.tar.gz.sha256
+            linux-release-assets/halo-relay-server-*.tar.gz
+            linux-release-assets/halo-relay-server-*.tar.gz.sha256
             linux-release-assets/*.tar.gz.sig
             linux-release-assets/*.tar.gz.sha256.sig
             linux-release-assets/linux-binaries.json
@@ -403,16 +403,16 @@ jobs:
       # 10-minute cron tick. Until the mirror has these bytes, CN clients have
       # only the GitHub origin to fall back to. Best effort: the cron run is
       # still the source of truth, so a failed or unconfigured ping never fails
-      # the release. Receiver setup: scripts/openbitfun-release-sync.sh.
+      # the release. Receiver setup: scripts/halo-release-sync.sh.
       - name: Request openbitfun mirror sync
         continue-on-error: true
         env:
-          SYNC_WEBHOOK_URL: ${{ secrets.OPENBITFUN_SYNC_WEBHOOK_URL }}
+          SYNC_WEBHOOK_URL: ${{ secrets.OPENHALO_SYNC_WEBHOOK_URL }}
           RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
         run: |
           set -euo pipefail
           if [[ -z "${SYNC_WEBHOOK_URL:-}" ]]; then
-            echo "OPENBITFUN_SYNC_WEBHOOK_URL is not configured; the mirror will pick this up on its next cron run."
+            echo "OPENHALO_SYNC_WEBHOOK_URL is not configured; the mirror will pick this up on its next cron run."
             exit 0
           fi
           curl -fsSL -X POST --retry 3 --retry-delay 5 --max-time 30 \

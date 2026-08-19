@@ -119,12 +119,12 @@ export const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({
   }
 
   return (
-    <div className={`bitfun-smart-recommendations ${className}`}>
-      <div className="bitfun-smart-recommendations__header">
-        <span className="bitfun-smart-recommendations__title">{t('smartRecommendations.title')}</span>
+    <div className={`halo-smart-recommendations ${className}`}>
+      <div className="halo-smart-recommendations__header">
+        <span className="halo-smart-recommendations__title">{t('smartRecommendations.title')}</span>
         <Tooltip content={t('smartRecommendations.close')}>
           <button
-            className="bitfun-smart-recommendations__close"
+            className="halo-smart-recommendations__close"
             onClick={handleClose}
           >
             <X size={16} />
@@ -132,7 +132,7 @@ export const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({
         </Tooltip>
       </div>
 
-      <div className="bitfun-smart-recommendations__actions">
+      <div className="halo-smart-recommendations__actions">
         {actions.map(action => {
           const IconComponent = action.icon
             ? RECOMMENDATION_ICONS[action.icon as keyof typeof RECOMMENDATION_ICONS]
@@ -143,14 +143,14 @@ export const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({
           return (
             <button
               key={action.id}
-              className={`bitfun-smart-recommendations__action bitfun-smart-recommendations__action--${action.type || 'secondary'}`}
+              className={`halo-smart-recommendations__action halo-smart-recommendations__action--${action.type || 'secondary'}`}
               onClick={() => handleActionClick(action)}
               disabled={action.disabled || isLoading}
               title={action.description}
             >
               {IconComponent && <IconComponent size={16} />}
               <span>{action.label}</span>
-              {isLoading && <span className="bitfun-smart-recommendations__loading">...</span>}
+              {isLoading && <span className="halo-smart-recommendations__loading">...</span>}
             </button>
           );
         })}

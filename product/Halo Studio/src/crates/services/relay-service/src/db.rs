@@ -1153,7 +1153,7 @@ impl SyncSettingsRow {
 
 // ── Pages (published static sites) ──────────────────────────────────────
 
-/// Visibility levels for a published BitFun Page.
+/// Visibility levels for a published Halo Page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageVisibility {
     /// Only the page owner (with their token) can access.
@@ -2462,7 +2462,7 @@ mod tests {
     #[tokio::test]
     async fn legacy_global_device_schema_is_migrated_without_ambiguous_tokens() {
         let db_path = std::env::temp_dir().join(format!(
-            "bitfun-relay-device-migration-{}-{}.db",
+            "halo-relay-device-migration-{}-{}.db",
             std::process::id(),
             rand::random::<u64>()
         ));
@@ -2577,7 +2577,7 @@ mod tests {
     #[tokio::test]
     async fn legacy_pages_receive_nonempty_authorization_generations() {
         let db_path = std::env::temp_dir().join(format!(
-            "bitfun-relay-page-generation-migration-{}-{}.db",
+            "halo-relay-page-generation-migration-{}-{}.db",
             std::process::id(),
             rand::random::<u64>()
         ));

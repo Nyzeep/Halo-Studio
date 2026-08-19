@@ -46,7 +46,7 @@ mod tests {
             custom_data: std::collections::HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: Default::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         }
     }
 
@@ -183,7 +183,7 @@ mod tests {
         assert!(description.contains("connect -> navigate -> snapshot"));
         assert!(description.contains("same-origin"));
         assert!(description.contains("CORS"));
-        // connect drives BitFun's managed profile, not the user's everyday
+        // connect drives Halo's managed profile, not the user's everyday
         // browser, so the description must not promise their login state.
         assert!(description.contains("managed browser profile"));
     }

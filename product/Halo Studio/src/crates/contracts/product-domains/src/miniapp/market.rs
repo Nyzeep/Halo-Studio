@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub const MARKET_API_VERSION: &str = "v1";
-pub const MARKET_PACKAGE_CONTENT_TYPE: &str = "application/vnd.bitfun.miniapp+zip";
+pub const MARKET_PACKAGE_CONTENT_TYPE: &str = "application/vnd.halo.miniapp+zip";
 pub const MARKET_MAX_PACKAGE_BYTES: u64 = 20 * 1024 * 1024;
 pub const MARKET_MAX_UNCOMPRESSED_BYTES: u64 = 64 * 1024 * 1024;
 pub const MARKET_MAX_SCREENSHOT_BYTES: u64 = 5 * 1024 * 1024;
@@ -81,7 +81,7 @@ pub struct MarketListingSummary {
     pub tags: Vec<String>,
     pub owner: MarketUserSummary,
     pub latest_release: u32,
-    pub min_bitfun_version: String,
+    pub min_halo_version: String,
     pub permissions: MiniAppPermissions,
     pub screenshot_urls: Vec<String>,
     pub rating_average: f64,
@@ -115,7 +115,7 @@ pub struct MarketRelease {
     pub release_id: String,
     pub listing_id: String,
     pub release_number: u32,
-    pub min_bitfun_version: String,
+    pub min_halo_version: String,
     pub changelog: String,
     pub package_sha256: String,
     pub package_size: u64,
@@ -159,7 +159,7 @@ pub struct MarketSubmission {
     pub icon: String,
     pub category: String,
     pub tags: Vec<String>,
-    pub min_bitfun_version: String,
+    pub min_halo_version: String,
     pub changelog: String,
     pub license: MarketLicense,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -190,7 +190,7 @@ pub struct MarketSubmissionDraftRequest {
     pub category: String,
     #[serde(default)]
     pub tags: Vec<String>,
-    pub min_bitfun_version: String,
+    pub min_halo_version: String,
     pub changelog: String,
     pub license: MarketLicense,
     #[serde(skip_serializing_if = "Option::is_none")]

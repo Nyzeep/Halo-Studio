@@ -31,13 +31,13 @@ const DARK_SUCCESS = '#34d399';
 const DARK_WARNING = '#f59e0b';
 const DARK_ERROR = '#ef4444';
 
-export const bitfunDarkTheme: ThemeConfig = {
+export const haloDarkTheme: ThemeConfig = {
 
-  id: 'bitfun-dark',
+  id: 'halo-dark',
   name: 'Dark',
   type: 'dark',
   description: 'Default dark theme',
-  author: 'BitFun Team',
+  author: 'Halo Studio Team',
   version: '2.1.0',
 
 

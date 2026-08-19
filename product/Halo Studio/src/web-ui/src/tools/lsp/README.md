@@ -1,6 +1,6 @@
 # LSP (Language Server Protocol)
 
-BitFun’s plugin-based LSP implementation: completions, hover, definition, references, formatting, diagnostics, and related editor features.
+Halo Studio’s plugin-based LSP implementation: completions, hover, definition, references, formatting, diagnostics, and related editor features.
 
 ## Scope
 
@@ -98,7 +98,7 @@ my-language-lsp-1.0.0.vcpkg
     "formatting": true,
     "diagnostics": true
   },
-  "min_bitfun_version": "1.0.0"
+  "min_halo_version": "1.0.0"
 }
 ```
 

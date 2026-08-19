@@ -1,1 +1,1 @@
-pub use bitfun_services_integrations::remote_ssh::types::*;
+pub use halo_services_integrations::remote_ssh::types::*;

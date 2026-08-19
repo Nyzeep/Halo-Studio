@@ -1,6 +1,6 @@
-# BitFun CLI 产品线需求与架构设计
+# Halo Studio CLI 产品线需求与架构设计
 
-本文定义 BitFun CLI 产品线的需求边界、目标架构和阶段验收标准。外部来源的统一产品体验见
+本文定义 Halo Studio CLI 产品线的需求边界、目标架构和阶段验收标准。外部来源的统一产品体验见
 [`external-ai-work-sources-design.md`](extensions/external-ai-work-sources-design.md)；稳定的仓库级接口边界以
 [`product-architecture.md`](product-architecture.md) 为准；Agent Runtime、工具和工作流归属见
 [`agent-runtime-services-design.md`](agent-runtime-services-design.md)；插件宿主与 OpenCode 适配边界见
@@ -9,7 +9,7 @@
 CLI/TUI 的目标、问题和风险规约见 [`platform-portability-design.md`](platform-portability-design.md)；跨专题顺序见
 [`../plans/product-architecture-evolution-plan.md`](../plans/product-architecture-evolution-plan.md)。本文只补充
 CLI 产品入口、配置兼容、TUI 布局消费和 CLI Agent 体验，不重复定义这些文档中的通用契约或内部 ABI。公开
-BitFun Agent SDK 与 Headless CLI 的产品选择、能力一致性和 SDK Host 边界见
+Halo Studio Agent SDK 与 Headless CLI 的产品选择、能力一致性和 SDK Host 边界见
 [`agent-sdk-product-architecture.md`](agent-sdk-product-architecture.md)；多个 GUI/TUI/Remote/CLI 实例并存时，交互式 TUI
 连接 Shared Agent Runtime、一次性 CLI 保留 Embedded 的部署边界见
 [`agent-runtime-deployment-design.md`](agent-runtime-deployment-design.md)。
@@ -28,7 +28,7 @@ OpenCode 的完整扩展矩阵、配置资产、插件执行和 TUI Plugin 映�
 
 | CLI 阶段 | 可消费的插件里程碑 | 边界 |
 |---|---|---|
-| CLI-P0 / CLI-P1 | 当前基线、OC-E0 | 只提供 BitFun 原生目录的来源确认和 OpenCode 静态工具名称预览；不注册为可执行工具。 |
+| CLI-P0 / CLI-P1 | 当前基线、OC-E0 | 只提供 Halo Studio 原生目录的来源确认和 OpenCode 静态工具名称预览；不注册为可执行工具。 |
 | CLI-P1 / CLI-P2 | OC-E1 | 一个无外部依赖的 standalone custom tool 真实执行并进入现有 Tool Runtime，支持身份/路径字段和 `abort`；`metadata`/`ask`、官方 import 型样例、package plugin、Hook 与 TUI plugin 仍未承诺。 |
 | CLI-P2 | OC-E2/OC-E3 | package plugin、Hook 和 TUI contribution 只按真实阻塞样例增加；原始 Solid/OpenTUI 组件明确降级。 |
 
@@ -36,20 +36,20 @@ OpenCode 的完整扩展矩阵、配置资产、插件执行和 TUI Plugin 映�
 
 ### 1.1 产品目标
 
-BitFun CLI 应成为可独立安装和发布的 Agent 产品，而不是 Desktop 的终端壳。目标包括：
+Halo Studio CLI 应成为可独立安装和发布的 Agent 产品，而不是 Desktop 的终端壳。目标包括：
 
 1. 覆盖交互式 TUI、非交互自动化、会话生命周期、工具与权限、MCP、Skill、Subagent 和诊断等
    高频工程完整流程。
 2. CLI、Desktop、Server、ACP 和 SDK 共享 Agent Runtime 语义，不复制会话、工具、权限或上下文逻辑。
-3. 通过适配器直接消费或显式导入 OpenCode、Codex 和 Claude Code 的常用配置资产；外部格式不成为 BitFun
+3. 通过适配器直接消费或显式导入 OpenCode、Codex 和 Claude Code 的常用配置资产；外部格式不成为 Halo Studio
    内部模型，但兼容来源可以作为合法运行输入。
 4. 通过 `PluginRuntimeClient`、Plugin Host 和 OpenCode adapter 的插件兼容接口接入服务插件、工具、Hook 和 TUI Plugin；
    来源完成首次激活后本地运行兼容优先，用户、产品或组织可以按需收紧权限。
 5. 消费已校验的产品组装结果和 TUI 布局选择，生成不同品牌和能力范围的
    CLI 产物；通用产品定制不在 CLI 入口重复实现。
 6. 以任务成功率、恢复能力、工具正确性、上下文效率和资源开销评估 Agent 能力，而不是只比较命令数量。
-7. 把 HarmonyOS PC 作为一等 CLI/TUI 目标：用户在系统真实终端中安装并执行本地 `bitfun`；废弃兼容入口
-   `bitfun-cli` 不作为新集成入口。HAP 内终端式
+7. 把 HarmonyOS PC 作为一等 CLI/TUI 目标：用户在系统真实终端中安装并执行本地 `halo`；废弃兼容入口
+   `halo-cli` 不作为新集成入口。HAP 内终端式
    界面、`hdc shell`、移动 Remote App 和其他设备代执行均不构成该目标。
 
 ### 1.2 能力对齐口径
@@ -59,11 +59,11 @@ BitFun CLI 应成为可独立安装和发布的 Agent 产品，而不是 Desktop
 
 | 类别 | 处理方式 |
 |---|---|
-| 通用工程能力 | 由 BitFun 原生实现并保持自己的运行时语义，例如会话、工具、权限、上下文和结构化执行。 |
+| 通用工程能力 | 由 Halo Studio 原生实现并保持自己的运行时语义，例如会话、工具、权限、上下文和结构化执行。 |
 | 可迁移资产 | 按类型处理：规则和 Skill 优先作为持续兼容来源，MCP/模型作为待确认配置；显式导入只是可选快照。 |
 | 生态专属能力 | 仅在有真实消费方、安全评审和兼容测试时适配；不复制对方完整运行时。 |
 
-竞品官方文档仅用于维护能力基线，不构成 BitFun 内部接口规范：
+竞品官方文档仅用于维护能力基线，不构成 Halo Studio 内部接口规范：
 
 - [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) 与
   [Codex 非交互模式](https://learn.chatgpt.com/docs/non-interactive-mode)
@@ -77,13 +77,13 @@ BitFun CLI 应成为可独立安装和发布的 Agent 产品，而不是 Desktop
 当前设计明确不包含：
 
 - 逐像素复制其他产品的 TUI，或复用其内部主题键、快捷键模型和界面状态。
-- 向 OpenCode、Codex 或 Claude Code 配置文件做双向写回，或让外部原始类型成为 BitFun 内部数据模型；只读兼容
+- 向 OpenCode、Codex 或 Claude Code 配置文件做双向写回，或让外部原始类型成为 Halo Studio 内部数据模型；只读兼容
   结果可以随来源变化刷新。
 - 同时建立 OpenCode、Codex 和 Claude Code 三套插件运行时；首个插件执行兼容对象只有 OpenCode。
 - 在产品定义或 TUI 布局选择中加入任意命令、动态代码、renderer、源码文本替换或运行时 Hook。
 - 为每个白标产品 Fork 一套 Rust/React/TUI 实现。
 - 为追求接口完整而提前发布无消费方的代码接口；完整需求矩阵和阶段计划仍必须记录全部官方稳定能力。
-- 一次性把 `bitfun-core` 的全部行为迁移到 Agent Runtime；所有职责迁移仍需行为等价证明。
+- 一次性把 `halo-core` 的全部行为迁移到 Agent Runtime；所有职责迁移仍需行为等价证明。
 
 ## 2. 当前基础与主要缺口
 
@@ -95,7 +95,7 @@ BitFun CLI 应成为可独立安装和发布的 Agent 产品，而不是 Desktop
   显式 `--auto` 才在本次调用内自动批准；兼容参数 `--confirm` 隐藏并映射到安全默认值。`Ctrl+C` 会请求取消
   当前 turn；失败完成事件、事件流失步和 Patch 写入失败均返回错误结果。
 - Agent、模型、MCP、会话、用量、诊断、ACP 外部 Agent 和插件来源管理命令。
-- BitFun 原生插件目录的发现、内容校验、来源确认，以及 OpenCode custom tool 静态名称预览。
+- Halo Studio 原生插件目录的发现、内容校验、来源确认，以及 OpenCode custom tool 静态名称预览。
 - CLI 本地 Agent 入口以类型化 `RuntimeServices` 调用 `ProductAssembler`，选择 `DeliveryProfile::Cli`，
   并把 `ProductRuntimeParts`、Rust Runtime SDK、本地工作区快照 owner port、事件源和调用级审批策略保存在一个 `CliRuntimeContext` 中。
 - TUI、`exec`、会话、用量和交互模式下的 Peer Host 复用同一上下文。Rust Runtime SDK 已承接会话创建（包括
@@ -145,10 +145,10 @@ BitFun CLI 应成为可独立安装和发布的 Agent 产品，而不是 Desktop
 - `doctor` 与 `health` 构造并校验真实 Runtime Parts，区分 assembly-ready、Core compatibility owner 和不可用扩展。
   它们证明必需能力已注册，不把 Core 的 Network/Git/MCP compatibility marker 描述为外部服务实时可用。
 - 独立 CLI 测试与打包工作流；主 CI 的 Windows/macOS/Linux workspace check 同时覆盖 Cargo package
-  `bitfun-cli` 编译，原生发布归档包含主入口 `bitfun` 和废弃兼容入口 `bitfun-cli`，上传前校验 SHA-256 摘要，
+  `halo-cli` 编译，原生发布归档包含主入口 `halo` 和废弃兼容入口 `halo-cli`，上传前校验 SHA-256 摘要，
   并从解压后的目录验证两个入口及废弃告警。
 
-上述切换不等于运行时 owner 已迁移，也不表示 CLI-P0 全部完成。CLI crate 仍以 `bitfun-core/product-full`
+上述切换不等于运行时 owner 已迁移，也不表示 CLI-P0 全部完成。CLI crate 仍以 `halo-core/product-full`
 承载协调器、调度器、持久化、工具管线和 Rust Runtime SDK 当前未覆盖的部分，但 Peer Host 不再自行构造这些 owner；ACP 的 stdio、
 连接和协议转换仍由 `interfaces/acp` 持有，后端已切换至 `DeliveryProfile::Acp` 与组装后的 Rust Runtime SDK；插件命令
 仍以来源管理和静态预览为主。兼容接口只转发，不重新计算或写入同一事实。
@@ -159,7 +159,7 @@ BitFun CLI 应成为可独立安装和发布的 Agent 产品，而不是 Desktop
 |---|---|---|
 | CLI 主会话客户端已仅消费 Rust Runtime SDK；本地工作区快照的准备、文件清单、统计和文件回滚已有 Desktop/Peer Host 共用的窄 owner port，但快照记录/持久化/事件、账号同步、富历史及 Peer Host/ACP 的其余维护仍由现有 Core owner 提供 | 窄端口只消除重复宿主转发，不代表完整快照系统、远程快照或公开 SDK 能力已迁移；过早删除其余兼容路径会改变行为 | 保持快照实现和工具拦截在 Core，远程与历史维护留在宿主；仅在新的真实调用方、独立语义和行为等价测试齐备后继续迁移。 |
 | TUI 编排、输入、命令、副作用和渲染仍有大文件聚集 | 交互回归难以隔离，终端状态与业务状态容易耦合 | 在现有模块上逐步拆成事件、状态处理、副作用和渲染四个边界，不重写全部 TUI。 |
-| CLI 配置只覆盖入口本地选项，除 C0a 外部 MCP 快照导入外仍缺少统一层级、来源解释和通用兼容导入 | 用户无法安全复用其他 CLI 资产，也难以解释最终配置来源 | 保留现有 MCP 窄入口，后续按真实资产建立 BitFun Canonical Config、持续来源视图和可选的显式导入报告。 |
+| CLI 配置只覆盖入口本地选项，除 C0a 外部 MCP 快照导入外仍缺少统一层级、来源解释和通用兼容导入 | 用户无法安全复用其他 CLI 资产，也难以解释最终配置来源 | 保留现有 MCP 窄入口，后续按真实资产建立 Halo Studio Canonical Config、持续来源视图和可选的显式导入报告。 |
 | OpenCode 来源发现与真实执行尚未形成完整流程 | “来源可识别”容易被误解为“插件可执行” | 先完成一个无外部依赖的样例；取得真实 `execute` 并注册到 Tool Runtime 后才显示可用。 |
 | 当前 CLI 使用 `product-full`，OHOS target 图包含多组未验证的平台依赖 | 不能据依赖可解析、`hdc shell` 或移动 Remote App 推导 PC 本地 CLI/TUI 可用 | 问题与风险统一记录在平台规约；具体工作另立专题，HAP 不作为替代。 |
 | Product Capability 已有，但品牌、资源、默认策略和发行配置没有统一产品定义 | 白标需要修改多处常量和工作流，能力隐藏不等于后端禁用 | 产品定义只在组装/构建边界选择身份、资源、能力包、默认策略和发行事实。 |
@@ -223,19 +223,19 @@ CLI-P1 应保证：
 - 大型工具结果和二进制附件只在事件中传递存储引用，不把 data URL 或大块内容写入事件流。
 - 结构化模式下 Patch 只能进入最终结果、已有事件、存储引用或显式文件，不能混入 `stream-json` stdout。
 
-当前协议直接采用同类产品的通用输出心智，不建立 BitFun 专属的平行事件分类：
+当前协议直接采用同类产品的通用输出心智，不建立 Halo Studio 专属的平行事件分类：
 
 | 模式 | 当前约束 |
 |---|---|
 | `text` | 最终助手文本写 stdout；进度、思考、工具状态、日志和诊断写 stderr。显式 `--output-patch -` 是用户选择的额外 stdout 内容。 |
 | `json` | stdout 只写一个结果对象，包含 `type=result`、`subtype`、`is_error`、`result`，以及已建立时的 `session_id`/`turn_id`、本 turn 累计 `usage` 和可用的 `patch`。准备 Session 时若命中跨进程单写冲突，额外返回稳定的 `error_code=session_in_use`；其他错误不猜测分类。 |
 | `stream-json` | 每行直接序列化一个现有 Agent 事件对象；不增加 `schema_version`、`sequence` 或第二套 CLI 事件分类。准备 Session 时若命中单写冲突，复用 `SystemError`，令 `error=session_in_use`、`recoverable=true`。 |
-| 最终状态 | 精确结算和 Patch 交付完成后只发布一次。优先级是：结算失败、Patch 失败、Turn 结果；前两类统一替换为 `SystemError`。一次执行最多发布一个最终事件和一条 `BITFUN_EXIT` 分类。 |
+| 最终状态 | 精确结算和 Patch 交付完成后只发布一次。优先级是：结算失败、Patch 失败、Turn 结果；前两类统一替换为 `SystemError`。一次执行最多发布一个最终事件和一条 `HALO_EXIT` 分类。 |
 | 事件范围 | 只输出本次 session/turn 的事件，以及与其明确关联的 subagent link/tool 事件；同 session 的其他并发 turn 不得混入。 |
 | Patch | `json` 可把 `--output-patch -` 放入最终对象；`stream-json` 要求显式文件路径。Patch 是写出显式 Patch 文件前捕获的仓库 `HEAD` 相对工作区快照，包含 staged、unstaged、untracked 及命令启动前已有改动，不包含输出 artifact 本身，也不表达改动归因。 |
 | 权限 | 非交互默认拒绝并返回权限失败；`--auto` 只改变当前提交策略，不修改持久化配置。 |
 | 人工输入 | 非交互 `exec` 不暴露 `AskUserQuestion`；调用方必须在初始输入中提供完整上下文。该事实沿 Task、SessionMessage 及其自动回复链传播，避免子 Agent 或后续 turn 等待不存在的 stdin 处理器。 |
-| 终止 | 最终事件的 `success=false` 不能映射为成功。`Ctrl+C` 只请求取消；若取消与完成/失败竞争，以实际观察结果为准。到期限仍无最终事件时发布 `SystemError` 并非零退出；只有实际取消使用 `BITFUN_EXIT: cancelled:`。`session_in_use` 同样非零退出，`recoverable` 仅表示关闭另一 writer 后可重新执行，不触发自动重试。当前不公开 Agent Turn 总时限参数。 |
+| 终止 | 最终事件的 `success=false` 不能映射为成功。`Ctrl+C` 只请求取消；若取消与完成/失败竞争，以实际观察结果为准。到期限仍无最终事件时发布 `SystemError` 并非零退出；只有实际取消使用 `HALO_EXIT: cancelled:`。`session_in_use` 同样非零退出，`recoverable` 仅表示关闭另一 writer 后可重新执行，不触发自动重试。当前不公开 Agent Turn 总时限参数。 |
 
 CLI 不提供 `--output-schema v1`。Codex/Claude 同类参数表达的是调用方提供的 JSON Schema，用于约束最终模型
 响应，不是协议版本选择；如未来支持，应复用该语义并独立设计，不能借此重定义事件对象。
@@ -244,20 +244,20 @@ CLI 不提供 `--output-schema v1`。Codex/Claude 同类参数表达的是调用
 
 Headless CLI 和公开 Agent SDK 都调用同一 Agent Runtime API，但交付形态不同。本文件只保留 CLI 约束：
 
-- `bitfun exec` 面向 shell、CI 和一次性任务，使用 stdin/stdout/stderr、退出码与 `text/json/stream-json`。
-- `bitfun` 不承载隐藏 SDK Host 子命令，也不依赖 SDK Host 协议；独立 `bitfun-sdk-host` app 与 CLI
+- `halo exec` 面向 shell、CI 和一次性任务，使用 stdin/stdout/stderr、退出码与 `text/json/stream-json`。
+- `halo` 不承载隐藏 SDK Host 子命令，也不依赖 SDK Host 协议；独立 `halo-sdk-host` app 与 CLI
   分别选择 SDK/CLI profile 和 submission source，只复用同一 Runtime owner，以及由共享产品事实生成的等价能力集合。
 - CLI 不在进程内执行 Python/TypeScript Tool、Permission 或 Hook callback。
 - 公开 SDK 不解析 `stream-json` 作为正式双向协议；它通过版本化 SDK Host 获得 callback 与连接生命周期。
 - 两者的能力对照、共同 fixture 和等价门槛以
   [Agent SDK 产品与宿主架构第 9 节](agent-sdk-product-architecture.md#9-headless-cli-与-agent-sdk)为唯一事实源。
 
-交互式 TUI 另有一个显式部署选项：`bitfun --shared` 或 `bitfun chat --shared`。它通过 CLI 私有本机 IPC adapter 连接同一 Agent Runtime，不经过 SDK Host，也不改变 Headless CLI 或公开 SDK 的协议。当前范围如下：
+交互式 TUI 另有一个显式部署选项：`halo --shared` 或 `halo chat --shared`。它通过 CLI 私有本机 IPC adapter 连接同一 Agent Runtime，不经过 SDK Host，也不改变 Headless CLI 或公开 SDK 的协议。当前范围如下：
 
 | 形态 | 默认部署 | 当前 Shared 范围 |
 |---|---|---|
 | 交互式 TUI | Embedded | 显式 `--shared` 后支持 Session list/create/restore、transcript、Turn submit/cancel、Permission 和 UserInput |
-| `bitfun exec` / CI | Embedded | 不接受 Shared；保持独立进程、stdout/stderr 和退出码语义 |
+| `halo exec` / CI | Embedded | 不接受 Shared；保持独立进程、stdout/stderr 和退出码语义 |
 | ACP / SDK Host / GUI / Remote / Peer | 各自既有部署 | 不消费 TUI IPC，也不因本开关改变生命周期 |
 
 Shared TUI 首版不提供 Session delete/fork、模式/模型、MCP/扩展、账号同步、用量、observer、replay 或 controller transfer；对应入口给出明确的 Embedded 恢复建议，不在 Client 进程初始化第二套 Core owner。
@@ -311,11 +311,11 @@ TUI renderer、实验性接口和完整外部 Server 协议按总矩阵明确降
 
 ```mermaid
 flowchart LR
-  Exec["bitfun exec"] --> Choice{"Session"}
+  Exec["halo exec"] --> Choice{"Session"}
   Choice -->|"new / free"| Embedded["Embedded"]
   Choice -->|"already owned"| Reject["typed occupied error"]
 
-  TUI["bitfun chat"] --> Deploy{"deployment"}
+  TUI["halo chat"] --> Deploy{"deployment"}
   Deploy -->|"default"| EmbeddedTui["Embedded"]
   Deploy -->|"--shared"| SharedTui["private local IPC"]
   SharedTui --> Runtime["one Shared Runtime owner"]
@@ -334,7 +334,7 @@ CLI/TUI 的会话创建、列出、删除、恢复和历史转录读取通过 Ru
 账户同步、富历史及其他未覆盖操作继续使用经过审查的 Core compatibility 方法，直到各自具备明确 owner、稳定 DTO、远程语义和行为等价测试。
 这是一条垂直链路迁移，不是删除整个兼容接口或新建 CLI 专用服务层。
 
-Runtime Configuration Service 当前由 `bitfun-core/service/config` 负责。在经评审的 port/provider
+Runtime Configuration Service 当前由 `halo-core/service/config` 负责。在经评审的 port/provider
 迁移完成前，CLI 和生态适配器不得另建写入器；adapter 只做 discover/parse/normalize，配置服务才能
 预览/应用、记录来源，并通过远程工作区 provider 写目标层。产品定义、品牌资源、界面布局选择
 和内容摘要校验由构建期校验器按
@@ -354,7 +354,7 @@ Runtime Configuration Service 当前由 `bitfun-core/service/config` 负责。�
 产品定义不能替代用户配置；TUI 布局选择只决定入口结构和可见内容；用户配置和运行时插件都不能启用
 未被产品定义允许的能力。隐藏一个 TUI 入口也不能视为能力已禁用。
 
-本文的产品定义描述 BitFun 发行产品；它与 SDLC Harness 用于描述目标仓库事实和质量策略的
+本文的产品定义描述 Halo Studio 发行产品；它与 SDLC Harness 用于描述目标仓库事实和质量策略的
 [`Project Profile`](../sdlc-harness/architecture/project-profile-integration.md) 是两个独立概念，不能共享
 schema、存储或优先级。
 
@@ -420,7 +420,7 @@ Plugin Runtime 状态。
 ### 4.6 HarmonyOS PC 原生终端产品
 
 HarmonyOS PC 复用现有 `DeliveryProfile::Cli`、action、TUI 和 Runtime 语义；平台 target 不成为新的 Delivery
-Profile。目标产物是普通用户在系统真实终端中直接执行的本地 `bitfun`，不是 HAP、ArkUI/ArkWeb 终端模拟器、
+Profile。目标产物是普通用户在系统真实终端中直接执行的本地 `halo`，不是 HAP、ArkUI/ArkWeb 终端模拟器、
 `hdc shell` 工具或现有 HarmonyOS 手机 Remote App。
 
 问题清单、风险和旧设计完整流程统一见[平台规约](platform-portability-design.md)。具体鸿蒙化工作、OpenCode 平台资格、
@@ -432,7 +432,7 @@ HarmonyOS PC GUI 与移动端均另立专题。
 [`product-customization-blueprint.md`](product-customization-blueprint.md) 定义。本节只约束 CLI/TUI 消费。
 
 当前 C0a 只消费已校验解析结果中的 localized 产品名和 binary name，并由 `cli:dev`、`cli:build`
-的同一 wrapper 通过显式 `--product-config` 选择非默认定义。内部 Cargo target 仍为 `bitfun`；build 产物按解析后的
+的同一 wrapper 通过显式 `--product-config` 选择非默认定义。内部 Cargo target 仍为 `halo`；build 产物按解析后的
 名称暂存。安装、更新、用户数据隔离、完整运行时品牌替换以及下表中的布局、命令组、状态、键位或主题选择均未实现。
 
 目标 CLI 入口只接收已校验的产品组装结果和当前 Delivery Profile 对应的 TUI 布局字段，不读取原始品牌资源，
@@ -451,14 +451,14 @@ TUI 布局选择不携带 renderer、终端句柄、shell helper、GUI key、任
 Configuration 只能覆盖产品定义明确允许的默认值；用户插件只能向允许的 TUI 扩展点提交贡献，不能改写
 构建期布局、产品身份、产品能力上限或内置扩展版本。
 
-产品内置扩展来自只读产品 source root，随产品升级。BitFun 原生包继续使用现有来源确认、激活、更新、禁用和
+产品内置扩展来自只读产品 source root，随产品升级。Halo Studio 原生包继续使用现有来源确认、激活、更新、禁用和
 卸载路径；OpenCode 配置和标准目录来源自动发现，低风险内容按用户偏好自动应用或先询问，可执行来源首次启用或
 能力扩大时非阻塞确认。确认后的运行语义兼容优先，用户、产品或组织策略仍可限制。三者可以复用插件内部 ABI、Plugin Host 进程边界
-和经 BitFun 能力接口的权限/审计，但不能共享来源根、安装状态或用一种泛化信任记录互相授权。
+和经 Halo Studio 能力接口的权限/审计，但不能共享来源根、安装状态或用一种泛化信任记录互相授权。
 
 ## 6. Canonical Config、持续兼容来源与显式导入
 
-### 6.1 BitFun 配置层级
+### 6.1 Halo Studio 配置层级
 
 普通设置按以下优先级解析：
 
@@ -486,9 +486,9 @@ Configuration 只能覆盖产品定义明确允许的默认值；用户插件只
 外部进程、不 import 第三方 module、不读取凭据且不主动联网的 L1 字段可以按用户偏好自动应用或先询问。
 Plugin/Tool、可执行 Skill/Command、MCP/LSP/Formatter、远程 Reference 等 L2/L3 内容在 OC-R2 完成归属模块保护
 前只发现和展示；完成后仍须在首次启用或能力扩大时确认。它们无需先迁移；
-显式导入用于用户希望取得 BitFun 独立管理快照的场景。当前只落地两个经过评审的窄切片：Desktop 与
-`bitfun mcp import` 可以预览 OpenCode / Claude Code 中语义等价的 MCP 安全声明，只有显式 `--apply` 才原子写入现有
-BitFun MCP 配置；`bitfun hooks` 和统一 `/hooks` 可预览 Claude Code / Codex 中受支持的同步 command Hook，并用精确
+显式导入用于用户希望取得 Halo Studio 独立管理快照的场景。当前只落地两个经过评审的窄切片：Desktop 与
+`halo mcp import` 可以预览 OpenCode / Claude Code 中语义等价的 MCP 安全声明，只有显式 `--apply` 才原子写入现有
+Halo Studio MCP 配置；`halo hooks` 和统一 `/hooks` 可预览 Claude Code / Codex 中受支持的同步 command Hook，并用精确
 计划指纹确认后复制到现有原生 Hook 层。两者都不写回来源文件，也不表示通用 Canonical Config 导入已进入 CLI-P1。
 MCP 的 Codex 投影、凭据、header、env、cwd、通用导入记录和 undo 均未实现；Hook 的 OpenCode、非 command 或依赖
 外部 Runtime 的 handler 仍只静态展示。其他资产在 CLI-P0 仍截止到 Dry-run，只有各自经过评审的 apply 切片才能写入：
@@ -497,32 +497,32 @@ MCP 的 Codex 投影、凭据、header、env、cwd、通用导入记录和 undo 
 持续兼容：后台发现 -> 解析 -> 风险分级 -> L1 自动应用/先询问 | L2/L3 待确认 -> 同一次状态提交切换
 MCP C0a：发现 -> 安全投影 -> 预览 | 显式 apply -> 原子写入 disabled 原生条目 -> 既有 MCP 管理
 Hook C0：脱敏发现 -> 精确命令预览 | 指纹确认 -> 原子发布本地快照 -> 既有 AgentHookEngine
-其他显式导入：选择来源 -> 归一化 -> 冲突分析 -> Dry-run | 后续评审切片：用户选择 -> 原子写入 BitFun 层
+其他显式导入：选择来源 -> 归一化 -> 冲突分析 -> Dry-run | 后续评审切片：用户选择 -> 原子写入 Halo Studio 层
 ```
 
 交互式 CLI/TUI 以一条非阻塞摘要说明来源产品、全局/项目使用范围、资产数量、自动应用项和待确认项；详细内容进入
-统一来源与插件状态入口。MCP 快照入口固定为 `bitfun mcp import`，Hook 快照入口固定为 `bitfun hooks`；其他资产的命令名在有真实调用方时再固定。非交互命令只有在当前操作实际依赖待确认资产时才
+统一来源与插件状态入口。MCP 快照入口固定为 `halo mcp import`，Hook 快照入口固定为 `halo hooks`；其他资产的命令名在有真实调用方时再固定。非交互命令只有在当前操作实际依赖待确认资产时才
 返回类型化 `action-required`；无关待办只进入结构化状态或 `stderr` 摘要，不等待不可见输入，也不自动批准。
 当前只能静态预览的 custom tool 名称只显示“已发现，未执行”。
 
 导入预览只使用四种用户可读结论：可直接使用、需要转换、会发生功能降级、输入无效。每项同时说明是原地
-引用、写入 BitFun 配置、继续保持外部来源还是不支持；不得用“已映射”推导为已写入、已信任或已启用。
+引用、写入 Halo Studio 配置、继续保持外部来源还是不支持；不得用“已映射”推导为已写入、已信任或已启用。
 
-兼容来源不写入 BitFun 层，也不双向修改原文件。Hook C0 只保存用户/工作区范围的私有不可变快照，并提供启停、更新和
-删除，不实现字段级撤销。以下分层导入记录与撤销语义是后续通用目标，不是 MCP C0a 或 Hook C0 已实现能力：项目级来源默认写入 BitFun 项目层，用户级来源默认写入用户层；用户可以在确认时选择更窄的目标层，
+兼容来源不写入 Halo Studio 层，也不双向修改原文件。Hook C0 只保存用户/工作区范围的私有不可变快照，并提供启停、更新和
+删除，不实现字段级撤销。以下分层导入记录与撤销语义是后续通用目标，不是 MCP C0a 或 Hook C0 已实现能力：项目级来源默认写入 Halo Studio 项目层，用户级来源默认写入用户层；用户可以在确认时选择更窄的目标层，
 但不能写入组织强制策略。导入记录保留来源产品、
-来源范围、内容摘要和导入时间，并按字段保存目标层、导入前值及其版本/摘要和导入值。已导入字段以 BitFun 原生
+来源范围、内容摘要和导入时间，并按字段保存目标层、导入前值及其版本/摘要和导入值。已导入字段以 Halo Studio 原生
 配置为准，不再重复应用外部值；外部来源变化时提示重新导入并展示差异，不做双向写回。撤销只自动恢复当前值
-仍等于导入值的字段；用户后续修改、来源变化或部分重新导入造成冲突时，逐字段选择“保留 BitFun / 重新导入
+仍等于导入值的字段；用户后续修改、来源变化或部分重新导入造成冲突时，逐字段选择“保留 Halo Studio / 重新导入
 外部 / 手工处理”，不得整批覆盖。
 
 下表描述目标覆盖范围；当前能力仅限上文列出的 MCP C0a 与 Hook C0，不能由本表推导出其他资产已经实现。
 
 | 来源 | 目标可导入 | 目标不导入 |
 |---|---|---|
-| OpenCode | 规则/instructions、Agent、Mode、Skill、References、Command、MCP、LSP、Formatter、模型、Theme、Keybind 和稳定配置进入兼容来源图；非执行资产可显式导入 | 凭据值双向复制、把 OpenCode 原始类型变成 BitFun 内部类型；Plugin/Tool 经来源确认后由独立 Runtime 加载，不通过配置导入执行 |
-| Codex | `AGENTS.md` 原地引用；受支持的 MCP、稳定配置和 Skill 可选择原地引用或导入；同步 command Hook 可经精确审阅复制为 BitFun 原生层 | `auth.json` 等凭据、私有/未文档化字段、Codex App Server 状态、依赖未观察会话/信任语义的 Hook |
-| Claude Code | `CLAUDE.md` 原地引用；受支持的 MCP、稳定设置和 Skill 可选择原地引用或导入；同步 command Hook 可经精确审阅复制为 BitFun 原生层 | OAuth/Token、插件执行、非 command 或异步 Hook、managed Hook 例外、组织强制策略降级 |
+| OpenCode | 规则/instructions、Agent、Mode、Skill、References、Command、MCP、LSP、Formatter、模型、Theme、Keybind 和稳定配置进入兼容来源图；非执行资产可显式导入 | 凭据值双向复制、把 OpenCode 原始类型变成 Halo Studio 内部类型；Plugin/Tool 经来源确认后由独立 Runtime 加载，不通过配置导入执行 |
+| Codex | `AGENTS.md` 原地引用；受支持的 MCP、稳定配置和 Skill 可选择原地引用或导入；同步 command Hook 可经精确审阅复制为 Halo Studio 原生层 | `auth.json` 等凭据、私有/未文档化字段、Codex App Server 状态、依赖未观察会话/信任语义的 Hook |
+| Claude Code | `CLAUDE.md` 原地引用；受支持的 MCP、稳定设置和 Skill 可选择原地引用或导入；同步 command Hook 可经精确审阅复制为 Halo Studio 原生层 | OAuth/Token、插件执行、非 command 或异步 Hook、managed Hook 例外、组织强制策略降级 |
 
 规则文件优先复用项目已有文件，不复制出第二份内容。若不同生态规则冲突，导入报告必须展示目标文件、
 优先级和冲突段，不能自动拼接。
@@ -536,7 +536,7 @@ Hook C0：脱敏发现 -> 精确命令预览 | 指纹确认 -> 原子发布本�
 展示来源和默认覆盖状态，模式配置再展示实际采用项；固定根顺序保持为 Skill Registry 的独立回归契约。
 Skill Registry 还保留来源资产声明的隐式调用意图：Claude `SKILL.md` 的 `disable-model-invocation: true` 与 Codex
 `agents/openai.yaml` 的 `policy.allow_implicit_invocation: false` 都会让 Skill 不进入模型自动目录，但不影响 `/skills`、
-模式配置和显式加载。BitFun 不继承来源产品的全局启停策略，也未实现 URL/额外根和自动变化监听。
+模式配置和显式加载。Halo Studio 不继承来源产品的全局启停策略，也未实现 URL/额外根和自动变化监听。
 Skill 说明和索引可按 L1 处理，脚本、URL 和外部依赖按 L2 确认；显式导入仍不得复制凭据值。MCP 启用状态按
 OpenCode 来源解释，首次连接、策略限制和凭据缺失分别显示。
 
@@ -554,9 +554,9 @@ OpenCode 来源解释，首次连接、策略限制和凭据缺失分别显示�
 
 | 能力 | 入口 | 说明 |
 |---|---|---|
-| 外部 ACP 智能体 | `bitfun acp ...` | 启动外部智能体进程并通过 ACP 协作。 |
-| 配置兼容与导入 | 启动时持续兼容来源；`bitfun config import ...` 显式迁移 | 前者后台发现并按风险应用/确认 OpenCode 来源，后者写入 BitFun 原生配置；两者都不在解析线程执行插件。 |
-| 运行时插件 | `bitfun plugins ...` | 当前只提供 BitFun 专用包的来源、启用和静态工具名称预览；目标直接运行 OpenCode 插件。 |
+| 外部 ACP 智能体 | `halo acp ...` | 启动外部智能体进程并通过 ACP 协作。 |
+| 配置兼容与导入 | 启动时持续兼容来源；`halo config import ...` 显式迁移 | 前者后台发现并按风险应用/确认 OpenCode 来源，后者写入 Halo Studio 原生配置；两者都不在解析线程执行插件。 |
+| 运行时插件 | `halo plugins ...` | 当前只提供 Halo Studio 专用包的来源、启用和静态工具名称预览；目标直接运行 OpenCode 插件。 |
 
 三者不能共享“已安装/已启用”状态，也不能互相推导来源确认或运行权限。
 
@@ -564,7 +564,7 @@ OpenCode 来源解释，首次连接、策略限制和凭据缺失分别显示�
 
 | 阶段 | 目标交付 | 边界 |
 |---|---|---|
-| 发现 | 直接发现 OpenCode 用户/项目配置、插件目录、工具目录和软件包来源，形成使用范围与能力摘要；同时保留 BitFun 原生包 | 不要求 OpenCode 作者复制到 `.bitfun/plugins` 或维护 BitFun 清单；不把静态预览称为可用 |
+| 发现 | 直接发现 OpenCode 用户/项目配置、插件目录、工具目录和软件包来源，形成使用范围与能力摘要；同时保留 Halo Studio 原生包 | 不要求 OpenCode 作者复制到 `.halo-studio/plugins` 或维护 Halo Studio 清单；不把静态预览称为可用 |
 | 确认 | 可执行来源首次按来源、插件身份和执行域确认；能力扩大重新确认 | 非阻塞待办，不阻止项目或无关会话；同一摘要下不逐层重复询问 |
 | 准备 | 只为已允许的新版本异步解析依赖并记录当前执行版本；更新时停止旧 Host 后再启动新 Host 并初始化插件 | 不在 TUI 输入线程安装依赖或加载插件，确认前不 import module，也不让新旧插件代码并行运行 |
 | 启用 | 展示来源、插件、真实贡献、策略差异和运行状态 | 用户一次确认可以完成后续内部阶段，但不绕过 import 前策略重算 |
@@ -572,7 +572,7 @@ OpenCode 来源解释，首次连接、策略限制和凭据缺失分别显示�
 | 管理 | 查看、停用、恢复、更新和卸载；区分更新失败、暂时过期、明确删除和重新出现 | 安装成功不等于运行健康，服务入口和 TUI 入口分别管理 |
 
 OpenCode 适配器必须读取真实外部来源；来源确认后才自动准备执行环境。通用配置的显式导入只用于把非执行配置迁移为
-BitFun 原生配置，不能成为运行插件的前置条件。与其分离的 Hook C0 只把用户明确审阅的 Claude Code/Codex 命令 Hook
+Halo Studio 原生配置，不能成为运行插件的前置条件。与其分离的 Hook C0 只把用户明确审阅的 Claude Code/Codex 命令 Hook
 复制为现有 `AgentHookEngine` 的原生层；它不进入插件执行阶段，也不扩展到 OpenCode Hook 或通用 Hook Runtime。
 
 CLI 只有在后端已经从脚本进程取得真实定义和执行函数、注册到现有 Tool Runtime 且当前 worker 健康时，才显示
@@ -645,7 +645,7 @@ CLI Agent 能力加强必须落在共享 Agent Runtime、Tool Runtime 或 Harnes
 
 - TUI 无论正常退出、取消、panic 或初始化失败，都必须恢复终端状态。
 - stdout 只承载用户请求的结果/协议；日志和诊断默认写 stderr 或日志文件。
-- 文件、shell、网络、浏览器、桌面、远程和 MCP 等经 BitFun 能力接口发起的动作统一进入能力/副作用与权限路径。插件直接使用 Bun 文件、网络或进程接口的副作用不伪装成已逐项拦截；严格策略没有真实操作系统隔离时，应禁用相应插件并报告策略限制。
+- 文件、shell、网络、浏览器、桌面、远程和 MCP 等经 Halo Studio 能力接口发起的动作统一进入能力/副作用与权限路径。插件直接使用 Bun 文件、网络或进程接口的副作用不伪装成已逐项拦截；严格策略没有真实操作系统隔离时，应禁用相应插件并报告策略限制。
 - 非交互模式遇到需要人工确认的动作时默认失败并返回类型化诊断；只有显式策略才能自动批准。
 - 插件执行使用独立期限、有界队列、Plugin Host/当前 standalone worker 生命周期和崩溃恢复。兼容进程级事实
   相同的 package plugins 默认共享 Host，不按 workspace 或 session 创建进程。来源完成首次确认后，默认本地兼容策略
@@ -684,7 +684,7 @@ CLI Agent 能力加强必须落在共享 Agent Runtime、Tool Runtime 或 Harnes
 | Action/Keymap | registry 唯一性、Slash/Palette/Help/dispatch 一致、配置键位真实输入、冲突来源和终端恢复 fallback |
 
 通用 `cargo check --workspace` 负责三平台 CLI 编译保护；独立 CLI CI 运行
-`cargo test --locked -p bitfun-cli -p bitfun-acp -p bitfun-agent-runtime`。Linux 启动页 PTY 生命周期冒烟随独立 CLI
+`cargo test --locked -p halo-cli -p halo-acp -p halo-agent-runtime`。Linux 启动页 PTY 生命周期冒烟随独立 CLI
 测试运行，Windows 启动页 ConPTY 生命周期冒烟复用通用 Windows job；Windows x64、macOS 和 Linux 的原生发布归档
 在上传前完成 SHA-256、双入口和解压执行验证。真实供应商模型进程级交互、macOS 活动 PTY 与 OS 级终端故障进程矩阵仍按对应切片补入门禁；Linux PTY
 与 Windows ConPTY 的 Chat 活动 turn resize/取消及 `exec` Ctrl+C 已由本地确定性流式模型夹具覆盖，不能用它替代上述验收。
@@ -719,11 +719,11 @@ CLI-P2 各路线独立完成：
 
 ## 11. 已统一的架构决策
 
-1. 使用 BitFun 统一能力内核，不嵌入或 Fork OpenCode Runtime 作为产品内核。
+1. 使用 Halo Studio 统一能力内核，不嵌入或 Fork OpenCode Runtime 作为产品内核。
 2. CLI 是产品入口，产品逻辑进入共享 Runtime/Capability/Harness，TUI 实现留在 `src/apps/cli`。
 3. 产品定义、Delivery Profile、Runtime Configuration 和 Capability Availability 分离。
 4. 外部源文件可以保持只读；非执行兼容结果可直接生效，可执行结果只有达到对应执行阶段后才激活；也可以显式
-   导入 BitFun 原生配置，凭据和插件执行分别处理。
+   导入 Halo Studio 原生配置，凭据和插件执行分别处理。
 5. OpenCode 是首个插件执行兼容生态；Codex/Claude 首期只做配置资产导入。
 6. CLI 只消费产品组装结果和 TUI 布局选择；产品构建脚本、GUI 布局、品牌和发行信息由产品定制模块管理。
 7. 先补产品组装、协议、配置和测试基础，再扩展插件执行和复杂 TUI 功能。

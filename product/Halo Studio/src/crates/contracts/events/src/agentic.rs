@@ -1,6 +1,6 @@
 //! Agentic Events Definition
-pub use bitfun_core_types::errors::{AiErrorDetail, ErrorCategory};
-use bitfun_core_types::{SessionExecutionTarget, ToolImageAttachment};
+pub use halo_core_types::errors::{AiErrorDetail, ErrorCategory};
+use halo_core_types::{SessionExecutionTarget, ToolImageAttachment};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
@@ -837,7 +837,7 @@ mod tests {
             identity: ToolEventIdentity::direct("tool-image-1", "view_image"),
             result: serde_json::json!({ "path": "preview.png" }),
             result_for_assistant: Some("Image attached".to_string()),
-            image_attachments: Some(vec![bitfun_core_types::ToolImageAttachment {
+            image_attachments: Some(vec![halo_core_types::ToolImageAttachment {
                 mime_type: "image/png".to_string(),
                 data_base64: "AAAA".to_string(),
             }]),

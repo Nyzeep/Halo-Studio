@@ -12,7 +12,7 @@ agent-facing tool surface.
 
 ## Guardrails
 
-- Do not depend on `bitfun-core`, app crates, Tauri, product-domain crates,
+- Do not depend on `halo-core`, app crates, Tauri, product-domain crates,
   transport adapters, or AI providers.
 - Keep this crate focused on reusable execution primitives and pure utilities.
   Product-specific tool exposure, prompt-visible manifests, `GetToolSpec`,
@@ -28,9 +28,9 @@ agent-facing tool surface.
 - Computer Use helpers here may own provider-neutral loop detection, screenshot
   hash, verification, and retry policy. Host APIs, permissions, captures, OCR,
   accessibility, and OS input remain in host adapters.
-- Provider-neutral contracts belong in `tool-contracts` (`bitfun-agent-tools`);
+- Provider-neutral contracts belong in `tool-contracts` (`halo-agent-tools`);
   product provider grouping belongs in `tool-provider-groups`
-  (`bitfun-tool-packs`).
+  (`halo-tool-packs`).
 
 ## Verification
 

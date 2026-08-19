@@ -7,10 +7,10 @@ use support::{
 };
 
 fn run_cli(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_bitfun"))
+    Command::new(env!("CARGO_BIN_EXE_halo"))
         .args(args)
         .output()
-        .expect("run bitfun")
+        .expect("run halo")
 }
 
 fn stdout(output: &Output) -> String {
@@ -254,7 +254,7 @@ fn stream_json_patch_write_failure_emits_error_without_success_terminal() {
     assert!(
         stderr(&output)
             .lines()
-            .any(|line| line.starts_with("BITFUN_EXIT: patch_write_failed:")),
+            .any(|line| line.starts_with("HALO_EXIT: patch_write_failed:")),
         "missing stable patch failure diagnostic: {}",
         stderr(&output)
     );
@@ -387,7 +387,7 @@ fn stream_json_provider_http_403_emits_one_error_terminal() {
     assert!(
         stderr(&output)
             .lines()
-            .any(|line| line.starts_with("BITFUN_EXIT: dialog_turn_failed:")),
+            .any(|line| line.starts_with("HALO_EXIT: dialog_turn_failed:")),
         "missing stable provider failure diagnostic: {}",
         stderr(&output)
     );
@@ -449,7 +449,7 @@ fn stream_json_provider_and_patch_failures_publish_one_final_classification() {
     assert_eq!(output.status.code(), Some(1), "{stderr}\n{stdout}");
     let exit_diagnostics = stderr
         .lines()
-        .filter(|line| line.starts_with("BITFUN_EXIT:"))
+        .filter(|line| line.starts_with("HALO_EXIT:"))
         .collect::<Vec<_>>();
     assert_eq!(
         exit_diagnostics.len(),
@@ -457,7 +457,7 @@ fn stream_json_provider_and_patch_failures_publish_one_final_classification() {
         "combined failure must have one stable classifier: {stderr}"
     );
     assert!(
-        exit_diagnostics[0].starts_with("BITFUN_EXIT: patch_write_failed:"),
+        exit_diagnostics[0].starts_with("HALO_EXIT: patch_write_failed:"),
         "patch delivery failure must be the final classifier: {stderr}"
     );
 

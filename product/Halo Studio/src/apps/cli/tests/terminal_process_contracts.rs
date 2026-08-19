@@ -72,7 +72,7 @@ fn interactive_startup_survives_resize_multiline_input_and_emits_cleanup() {
         "interactive startup did not render the multiline input tail",
     );
     assert!(
-        !process.output().contains("Welcome to BitFun CLI!"),
+        !process.output().contains("Welcome to Halo CLI!"),
         "multiline input was submitted instead of remaining in the startup editor"
     );
 
@@ -224,7 +224,7 @@ fn assert_exec_stream_json_ctrl_c_contract(deprecated_entrypoint: bool) {
         "interrupt exit code changed:\n{output}"
     );
     assert!(
-        output.contains("BITFUN_EXIT: cancelled:"),
+        output.contains("HALO_EXIT: cancelled:"),
         "missing stable cancellation diagnostic:\n{output}"
     );
     let events = strict_stream_json_events(&output);
@@ -274,7 +274,7 @@ fn assert_exec_stream_json_ctrl_c_contract(deprecated_entrypoint: bool) {
         "cancellation must be the final protocol envelope:\n{output}"
     );
     let deprecation_count = output
-        .matches("Warning: `bitfun-cli` is deprecated; use `bitfun` instead.")
+        .matches("Warning: `halo-cli` is deprecated; use `halo` instead.")
         .count();
     assert_eq!(
         deprecation_count,
@@ -379,7 +379,7 @@ impl PtyProcess {
         let mut child = pair
             .slave
             .spawn_command(command)
-            .expect("spawn BitFun CLI in native PTY");
+            .expect("spawn Halo CLI in native PTY");
         drop(pair.slave);
 
         let mut reader = pair.master.try_clone_reader().expect("clone PTY reader");
@@ -401,7 +401,7 @@ impl PtyProcess {
 
         // Detect an immediate startup failure before handing the process to the test.
         if let Some(status) = child.try_wait().expect("poll initial CLI process") {
-            panic!("BitFun CLI exited during PTY startup: {status}");
+            panic!("Halo CLI exited during PTY startup: {status}");
         }
 
         Self {
@@ -428,7 +428,7 @@ impl PtyProcess {
                 .as_mut()
                 .expect("PTY process child")
                 .try_wait()
-                .expect("poll BitFun CLI process")
+                .expect("poll Halo CLI process")
             {
                 let output = self.output();
                 self.close_io();
@@ -464,7 +464,7 @@ impl PtyProcess {
                 .as_mut()
                 .expect("PTY process child")
                 .try_wait()
-                .expect("poll BitFun CLI process")
+                .expect("poll Halo CLI process")
             {
                 break status;
             }

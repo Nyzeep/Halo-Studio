@@ -20,7 +20,7 @@ fn sha256(bytes: &[u8]) -> String {
 }
 
 fn write_package(workspace: &Path, source: &[u8], declared_hash: &str) {
-    let package = workspace.join(".bitfun/plugins/acme.demo");
+    let package = workspace.join(".halo-studio/plugins/acme.demo");
     std::fs::create_dir_all(package.join(".opencode/plugins")).expect("create package directories");
     std::fs::write(package.join(".opencode/plugins/demo.ts"), source).expect("write plugin source");
     let manifest = serde_json::json!({
@@ -34,7 +34,7 @@ fn write_package(workspace: &Path, source: &[u8], declared_hash: &str) {
         }],
     });
     std::fs::write(
-        package.join("bitfun.plugin.json"),
+        package.join("halo.plugin.json"),
         serde_json::to_vec_pretty(&manifest).expect("serialize manifest"),
     )
     .expect("write manifest");
@@ -42,19 +42,19 @@ fn write_package(workspace: &Path, source: &[u8], declared_hash: &str) {
 
 fn run_cli(workspace: &Path, user_root: &Path, home_root: &Path, args: &[&str]) -> Output {
     let config_root = user_root.join("host-config");
-    Command::new(env!("CARGO_BIN_EXE_bitfun"))
+    Command::new(env!("CARGO_BIN_EXE_halo"))
         .args(args)
         .current_dir(workspace)
-        .env_remove("BITFUN_USER_ROOT")
-        .env_remove("BITFUN_HOME")
-        .env("BITFUN_E2E_STORAGE_GUARD", "1")
-        .env("BITFUN_E2E_USER_ROOT", user_root)
-        .env("BITFUN_E2E_HOME", home_root)
+        .env_remove("HALO_USER_ROOT")
+        .env_remove("HALO_HOME")
+        .env("HALO_E2E_STORAGE_GUARD", "1")
+        .env("HALO_E2E_USER_ROOT", user_root)
+        .env("HALO_E2E_HOME", home_root)
         .env("APPDATA", &config_root)
         .env("XDG_CONFIG_HOME", &config_root)
         .env("HOME", home_root)
         .output()
-        .expect("run bitfun")
+        .expect("run halo")
 }
 
 fn stdout(output: &Output) -> String {
@@ -120,22 +120,22 @@ fn plugin_source_cli_rejects_unavailable_product_paths() {
     let config_root = temp.path().join("host-config");
     std::fs::create_dir_all(&workspace).expect("create workspace");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_bitfun"))
+    let output = Command::new(env!("CARGO_BIN_EXE_halo"))
         .args(["plugins", "list"])
         .current_dir(&workspace)
-        .env_remove("BITFUN_USER_ROOT")
-        .env_remove("BITFUN_HOME")
-        .env_remove("BITFUN_E2E_USER_ROOT")
-        .env_remove("BITFUN_E2E_HOME")
-        .env("BITFUN_E2E_STORAGE_GUARD", "1")
+        .env_remove("HALO_USER_ROOT")
+        .env_remove("HALO_HOME")
+        .env_remove("HALO_E2E_USER_ROOT")
+        .env_remove("HALO_E2E_HOME")
+        .env("HALO_E2E_STORAGE_GUARD", "1")
         .env("APPDATA", &config_root)
         .env("XDG_CONFIG_HOME", &config_root)
         .output()
-        .expect("run bitfun");
+        .expect("run halo");
 
     assert!(!output.status.success());
     assert!(stderr(&output).contains("Configuration error"));
-    assert!(stderr(&output).contains("BITFUN_E2E_STORAGE_GUARD"));
+    assert!(stderr(&output).contains("HALO_E2E_STORAGE_GUARD"));
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn plugin_source_cli_lifecycle_and_doctor_exit_codes() {
     assert!(!rejected.status.success());
     assert!(stderr(&rejected).contains("does not match"));
     assert!(stderr(&rejected)
-        .contains("Re-run `bitfun plugins activate acme.demo` to preview the current content"));
+        .contains("Re-run `halo plugins activate acme.demo` to preview the current content"));
 
     let content_hash = activation_content_hash(&preview);
 
@@ -259,7 +259,7 @@ fn plugin_source_cli_lifecycle_and_doctor_exit_codes() {
     assert!(stdout(&changed).contains("acme.demo 1.0.0 (workspace, unreviewed)"));
 
     std::fs::write(
-        workspace.join(".bitfun/plugins/acme.demo/.opencode/plugins/demo.ts"),
+        workspace.join(".halo-studio/plugins/acme.demo/.opencode/plugins/demo.ts"),
         b"tampered",
     )
     .expect("tamper package");
@@ -299,7 +299,7 @@ fn plugin_deactivate_cleans_residual_records_without_revoking_source_approval() 
     assert!(approve.status.success(), "{}", stderr(&approve));
     activate_package(&workspace, &user_root, &home_root);
 
-    std::fs::remove_dir_all(workspace.join(".bitfun/plugins/acme.demo")).expect("remove package");
+    std::fs::remove_dir_all(workspace.join(".halo-studio/plugins/acme.demo")).expect("remove package");
     let missing = run_cli(
         &workspace,
         &user_root,
@@ -332,7 +332,7 @@ fn plugin_deactivate_cleans_residual_records_without_revoking_source_approval() 
     write_package(&workspace, PLUGIN_SOURCE, &sha256(PLUGIN_SOURCE));
     activate_package(&workspace, &user_root, &home_root);
     std::fs::write(
-        workspace.join(".bitfun/plugins/acme.demo/bitfun.plugin.json"),
+        workspace.join(".halo-studio/plugins/acme.demo/halo.plugin.json"),
         "{not-json",
     )
     .expect("corrupt package manifest");
@@ -347,12 +347,12 @@ fn plugin_deactivate_cleans_residual_records_without_revoking_source_approval() 
     assert!(stdout(&corrupt).contains("is unavailable"));
     assert!(stdout(&corrupt).contains("saved activation state was cleared"));
     assert!(stdout(&corrupt).contains("[error:invalid_manifest]"));
-    assert!(stdout(&corrupt).contains("bitfun.plugin.json"));
+    assert!(stdout(&corrupt).contains("halo.plugin.json"));
 
     write_package(&workspace, PLUGIN_SOURCE, &sha256(PLUGIN_SOURCE));
     activate_package(&workspace, &user_root, &home_root);
-    std::fs::remove_dir_all(workspace.join(".bitfun/plugins")).expect("remove plugin root");
-    std::fs::write(workspace.join(".bitfun/plugins"), "not a directory")
+    std::fs::remove_dir_all(workspace.join(".halo-studio/plugins")).expect("remove plugin root");
+    std::fs::write(workspace.join(".halo-studio/plugins"), "not a directory")
         .expect("make plugin root unreadable");
 
     let incomplete = run_cli(

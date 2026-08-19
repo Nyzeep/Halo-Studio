@@ -2,7 +2,7 @@
 
 [English](./CONTRIBUTING.md)
 
-感谢你对 BitFun 的兴趣！BitFun 是一个由 Rust 与 TypeScript 驱动的多端 AI 编程环境，桌面端/CLI/Server 共享核心逻辑。本指南说明如何高效参与贡献。
+感谢你对 Halo Studio 的兴趣！Halo Studio 是一个由 Rust 与 TypeScript 驱动的多端 AI 编程环境，桌面端/CLI/Server 共享核心逻辑。本指南说明如何高效参与贡献。
 
 ## 行为准则
 
@@ -17,7 +17,7 @@
 - Rust toolchain（通过 rustup 安装）
 - 桌面端开发需准备 Tauri 依赖
 
-BitFun 将本地 JavaScript 构建和 CI 统一到 Node.js 22.12+。仓库里的
+Halo Studio 将本地 JavaScript 构建和 CI 统一到 Node.js 22.12+。仓库里的
 GitHub Actions 升级使用的是兼容 Node.js 24 的 action runtime，但项目脚本
 默认仍以 Node.js 22.12+ 为基线，除非局部指南另有说明。从旧 Node.js 版本切换
 后，请重新运行 `pnpm install`。
@@ -60,7 +60,7 @@ pnpm run e2e:test
 ### 桌面端调试工具
 
 桌面端 dev 构建会启用 `devtools` Cargo feature。`F12` 打开原生 webview
-DevTools；`Cmd/Ctrl + Shift + I` 切换 BitFun 元素检查器，`Cmd/Ctrl + Shift + J`
+DevTools；`Cmd/Ctrl + Shift + I` 切换 Halo Studio 元素检查器，`Cmd/Ctrl + Shift + J`
 也可以打开原生 DevTools。面向最终用户的 `release` 构建不会启用这些工具。
 
 ## 代码规范与架构约束
@@ -141,7 +141,7 @@ UI 改动请附前后对比截图或短录屏，方便快速评审。
 | 前端运行时或 UI | `pnpm run type-check:web`；行为变化时再加最近的 focused test |
 | Mobile web | `pnpm --dir src/mobile-web run type-check` |
 | Rust 共享 runtime 或 services | `cargo check --workspace`；行为变化时再加 focused `cargo test` |
-| Desktop/Tauri 集成 | `cargo check -p bitfun-desktop` |
+| Desktop/Tauri 集成 | `cargo check -p halo-desktop` |
 | i18n 资源或契约 | 使用 `AGENTS.md` 中匹配的 i18n 验证行 |
 
 UI 改动在有帮助时附截图或短录屏。无法运行相关检查时，在 PR 中说明原因，并提供风险更低的手动验证路径。

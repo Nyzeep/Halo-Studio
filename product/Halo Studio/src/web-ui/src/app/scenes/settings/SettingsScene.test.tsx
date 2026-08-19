@@ -123,7 +123,7 @@ describe('SettingsScene lazy tab routing', () => {
     });
 
     const activePanel = container.querySelector('[data-settings-panel-active="true"]');
-    const outgoingPanel = container.querySelector('.bitfun-settings-scene__content-wrapper--outgoing');
+    const outgoingPanel = container.querySelector('.halo-settings-scene__content-wrapper--outgoing');
     expect(activePanel?.getAttribute('data-settings-panel')).toBe('appearance');
     expect(outgoingPanel?.getAttribute('data-settings-panel')).toBe('basics');
 

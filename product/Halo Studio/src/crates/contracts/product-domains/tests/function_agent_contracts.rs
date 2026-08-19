@@ -1,6 +1,6 @@
 #![cfg(feature = "function-agents")]
 
-use bitfun_product_domains::function_agents::{
+use halo_product_domains::function_agents::{
     git_func_agent::{
         assemble_commit_message, build_changes_summary_from_paths, build_commit_prompt,
         detect_change_patterns, extract_module_name, infer_file_type, parse_commit_analysis_json,
@@ -83,11 +83,11 @@ impl FunctionAgentAiPort for FunctionAgentPortStub {
         _request: CommitAiAnalysisRequest,
     ) -> FunctionAgentFuture<
         '_,
-        bitfun_product_domains::function_agents::git_func_agent::AICommitAnalysis,
+        halo_product_domains::function_agents::git_func_agent::AICommitAnalysis,
     > {
         Box::pin(async {
             Ok(
-                bitfun_product_domains::function_agents::git_func_agent::AICommitAnalysis {
+                halo_product_domains::function_agents::git_func_agent::AICommitAnalysis {
                     commit_type: CommitType::Chore,
                     scope: None,
                     title: "chore: test".to_string(),
@@ -105,11 +105,11 @@ impl FunctionAgentAiPort for FunctionAgentPortStub {
         _request: WorkStateAiAnalysisRequest,
     ) -> FunctionAgentFuture<
         '_,
-        bitfun_product_domains::function_agents::startchat_func_agent::AIGeneratedAnalysis,
+        halo_product_domains::function_agents::startchat_func_agent::AIGeneratedAnalysis,
     > {
         Box::pin(async {
             Ok(
-                bitfun_product_domains::function_agents::startchat_func_agent::AIGeneratedAnalysis {
+                halo_product_domains::function_agents::startchat_func_agent::AIGeneratedAnalysis {
                     summary: "stub".to_string(),
                     ongoing_work: Vec::new(),
                     predicted_actions: Vec::new(),

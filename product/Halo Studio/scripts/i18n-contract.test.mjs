@@ -5,17 +5,17 @@ import path from 'node:path';
 import test from 'node:test';
 
 const root = process.cwd();
-const contractTestProfile = process.env.BITFUN_I18N_CONTRACT_TEST_PROFILE ?? 'full';
-const runAuditIntegrationTests = process.env.BITFUN_I18N_CONTRACT_TEST_AUDIT_INTEGRATION === '1';
+const contractTestProfile = process.env.HALO_I18N_CONTRACT_TEST_PROFILE ?? 'full';
+const runAuditIntegrationTests = process.env.HALO_I18N_CONTRACT_TEST_AUDIT_INTEGRATION === '1';
 const skipAuditIntegrationTests = contractTestProfile === 'ci' && !runAuditIntegrationTests;
 const contractPath = path.join(root, 'src', 'shared', 'i18n', 'contract', 'locales.json');
 const sharedTermsDir = path.join(root, 'src', 'shared', 'i18n', 'resources', 'shared');
 const expectedGeneratedFiles = [
   'src/web-ui/src/infrastructure/i18n/presets/generatedLocaleContract.ts',
   'src/mobile-web/src/i18n/generatedLocaleContract.ts',
-  'BitFun-Installer/src/i18n/generatedLocaleContract.ts',
+  'Halo-Installer/src/i18n/generatedLocaleContract.ts',
   'src/crates/assembly/core/src/service/i18n/generated_locale_contract.rs',
-  'BitFun-Installer/src-tauri/src/installer/generated_locale_contract.rs',
+  'Halo-Installer/src-tauri/src/installer/generated_locale_contract.rs',
 ];
 const expectedGeneratedJsonFiles = [
   'src/apps/relay-server/static/homepage/i18n.shared.json',
@@ -181,7 +181,7 @@ test('shared i18n terms are consumed by each product surface runtime', () => {
   const mobileMessagesSource = readText('src/mobile-web/src/i18n/messages.ts');
   assert.match(mobileMessagesSource, /SHARED_TERMS_BY_LOCALE/, 'mobile-web should expose shared terms through its message tree');
 
-  const installerLanguagesSource = readText('BitFun-Installer/src/i18n/languages.ts');
+  const installerLanguagesSource = readText('Halo-Installer/src/i18n/languages.ts');
   assert.match(installerLanguagesSource, /SHARED_TERMS_BY_APP_LANGUAGE/, 'installer should merge shared terms into its i18next resources');
 
   const coreServiceSource = readText('src/crates/assembly/core/src/service/i18n/service.rs');
@@ -207,7 +207,7 @@ test('frontend runtimes use generated locale defaults and fallback chains', () =
     'mobile-web translate should not fall back directly to the surface default only',
   );
 
-  const installerI18nSource = readText('BitFun-Installer/src/i18n/index.ts');
+  const installerI18nSource = readText('Halo-Installer/src/i18n/index.ts');
   assert.match(installerI18nSource, /DEFAULT_INSTALLER_UI_LANGUAGE/, 'installer i18next should use the generated default UI language');
   assert.match(installerI18nSource, /getInstallerUiFallbackChain/, 'installer i18next should use the generated locale fallback chain');
 });
@@ -721,7 +721,7 @@ auditIntegrationTest('web-ui uses shared terms for stable navigation and feature
       'common:scenes.settings',
       'common:tabs.settings',
       'common:remoteConnect.title',
-      'common:remoteConnect.tabBitfunServer',
+      'common:remoteConnect.tabHaloServer',
       'common:remoteConnect.tabLan',
       'flow-chat:layout.noPanels',
       'flow-chat:deepReviewActionBar.minimizedDeep',
@@ -744,7 +744,7 @@ auditIntegrationTest('web-ui uses shared terms for stable navigation and feature
     const legacyWebUiKeys = [
       'header.remoteConnect',
       'remoteConnect.title',
-      'remoteConnect.tabBitfunServer',
+      'remoteConnect.tabHaloServer',
       'remoteConnect.tabLan',
       'nav.sections.workspace',
       'nav.sessions.newCodeSessionShort',
@@ -789,11 +789,11 @@ auditIntegrationTest('web-ui uses shared terms for stable navigation and feature
 });
 
 test('installer uses the shared product name for titlebar defaults', { concurrency: false }, () => {
-  const appSource = readText('BitFun-Installer/src/App.tsx');
+  const appSource = readText('Halo-Installer/src/App.tsx');
   const localePaths = [
-    'BitFun-Installer/src/i18n/locales/en.json',
-    'BitFun-Installer/src/i18n/locales/zh.json',
-    'BitFun-Installer/src/i18n/locales/zh-TW.json',
+    'Halo-Installer/src/i18n/locales/en.json',
+    'Halo-Installer/src/i18n/locales/zh.json',
+    'Halo-Installer/src/i18n/locales/zh-TW.json',
   ];
 
   assert.match(

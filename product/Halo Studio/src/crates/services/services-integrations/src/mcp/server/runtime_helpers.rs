@@ -1,7 +1,7 @@
 //! MCP server runtime helper contracts.
 
 use super::{MCPRuntimeError, MCPRuntimeResult};
-use bitfun_services_core::managed_runtime::{
+use halo_services_core::managed_runtime::{
     ManagedRuntimeResolver, ResolvedCommand, RuntimeSource,
 };
 use std::collections::HashMap;
@@ -28,7 +28,7 @@ pub(crate) fn resolve_mcp_local_command_with_resolver(
 ) -> MCPRuntimeResult<MCPLocalCommandResolution> {
     let resolved = resolver.resolve_command(command).ok_or_else(|| {
         MCPRuntimeError::process(format!(
-            "MCP server command '{}' not found in system PATH or BitFun managed runtimes at {}",
+            "MCP server command '{}' not found in system PATH or Halo managed runtimes at {}",
             command,
             resolver.runtime_root_display()
         ))
@@ -82,7 +82,7 @@ pub fn merge_mcp_remote_headers(
         .iter()
         .all(|key| !merged_headers.contains_key(*key))
     {
-        // Backward compatibility: older BitFun configs store `Authorization` under `env`.
+        // Backward compatibility: older Halo configs store `Authorization` under `env`.
         if let Some(value) = AUTHORIZATION_KEYS.iter().find_map(|key| env.get(*key)) {
             merged_headers.insert("Authorization".to_string(), value.clone());
         }
@@ -107,7 +107,7 @@ mod tests {
     fn temp_runtime_root() -> PathBuf {
         let mut p = std::env::temp_dir();
         p.push(format!(
-            "bitfun-mcp-local-command-test-{}-{}",
+            "halo-mcp-local-command-test-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -143,14 +143,14 @@ mod tests {
     fn local_command_resolution_reports_missing_command_as_process_error() {
         let root = temp_runtime_root();
         let error = resolve_mcp_local_command_with_resolver(
-            "definitely-missing-bitfun-command",
+            "definitely-missing-halo-command",
             ManagedRuntimeResolver::new(root.clone()),
         )
         .expect_err("missing command");
 
         assert!(error
             .to_string()
-            .contains("definitely-missing-bitfun-command"));
+            .contains("definitely-missing-halo-command"));
         assert!(error
             .to_string()
             .contains(&root.to_string_lossy().to_string()));

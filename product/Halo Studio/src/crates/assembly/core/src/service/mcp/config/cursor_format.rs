@@ -1,12 +1,12 @@
 use crate::service::mcp::server::MCPServerConfig;
-use crate::util::errors::BitFunResult;
+use crate::util::errors::HaloResult;
 
 pub(super) fn config_to_cursor_format(config: &MCPServerConfig) -> serde_json::Value {
-    bitfun_services_integrations::mcp::config::config_to_cursor_format(config)
+    halo_services_integrations::mcp::config::config_to_cursor_format(config)
 }
 
 pub(super) fn parse_cursor_format(
     config: &serde_json::Value,
-) -> BitFunResult<Vec<MCPServerConfig>> {
-    Ok(bitfun_services_integrations::mcp::config::parse_cursor_format(config))
+) -> HaloResult<Vec<MCPServerConfig>> {
+    Ok(halo_services_integrations::mcp::config::parse_cursor_format(config))
 }

@@ -230,7 +230,7 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
         setQuickActions((nextActions && nextActions.length > 0) ? nextActions : DEFAULT_QUICK_ACTIONS);
       });
     }, {
-      signalName: 'bitfun:interactive-shell-ready',
+      signalName: 'halo:interactive-shell-ready',
       fallbackTimeoutMs: 10000,
       frameCount: 1,
     });

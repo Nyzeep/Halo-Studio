@@ -2,9 +2,9 @@ use crate::agentic::tools::file_permissions::file_permission_intents;
 use crate::agentic::tools::framework::{
     PermissionIntent, Tool, ToolRenderOptions, ToolResult, ToolUseContext, ValidationResult,
 };
-use crate::agentic::tools::workspace_paths::is_bitfun_tool_uri;
+use crate::agentic::tools::workspace_paths::is_halo_tool_uri;
 use crate::agentic::tools::ToolPathOperation;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::path::Path;
@@ -36,7 +36,7 @@ impl Tool for DeleteFileTool {
         "Delete"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(r#"Deletes a file or directory from the filesystem. This operation records a lightweight checkpoint before deletion, but rollback is not automatic.
 
 Usage guidelines:
@@ -51,7 +51,7 @@ Usage guidelines:
    - Be careful with recursive deletion as it will remove all contents
 
 3. **Path Requirements**:
-   - You can use either relative paths (e.g., "temp/data.txt"), absolute paths inside the current workspace, or exact `bitfun://...` URIs returned by another tool
+   - You can use either relative paths (e.g., "temp/data.txt"), absolute paths inside the current workspace, or exact `halo://...` URIs returned by another tool
    - Relative paths will be automatically resolved relative to the workspace directory
    - The path must exist in the filesystem
 
@@ -97,7 +97,7 @@ Important notes:
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The file or directory to delete. Use a workspace-relative path, an absolute path inside the current workspace, or an exact bitfun:// URI returned by another tool."
+                    "description": "The file or directory to delete. Use a workspace-relative path, an absolute path inside the current workspace, or an exact halo:// URI returned by another tool."
                 },
                 "recursive": {
                     "type": "boolean",
@@ -120,11 +120,11 @@ Important notes:
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<PermissionIntent>> {
+    ) -> HaloResult<Vec<PermissionIntent>> {
         let path = input
             .get("path")
             .and_then(Value::as_str)
-            .ok_or_else(|| BitFunError::validation("path parameter is required".to_string()))?;
+            .ok_or_else(|| HaloError::validation("path parameter is required".to_string()))?;
         file_permission_intents("edit", [path], context)
     }
 
@@ -187,11 +187,11 @@ Important notes:
                 };
             }
             None => {
-                if is_bitfun_tool_uri(path_str) {
+                if is_halo_tool_uri(path_str) {
                     return ValidationResult {
                         result: false,
                         message: Some(
-                            "Tool context is required to resolve BitFun URIs".to_string(),
+                            "Tool context is required to resolve Halo URIs".to_string(),
                         ),
                         error_code: Some(400),
                         meta: None,
@@ -319,11 +319,11 @@ Important notes:
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let path_str = input
             .get("path")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| BitFunError::tool("path is required".to_string()))?;
+            .ok_or_else(|| HaloError::tool("path is required".to_string()))?;
 
         let recursive = input
             .get("recursive")
@@ -343,7 +343,7 @@ Important notes:
         // Remote workspace path: delete via shell command
         if resolved.uses_remote_workspace_backend() {
             let ws_shell = context.ws_shell().ok_or_else(|| {
-                BitFunError::tool("Workspace shell not available for remote Delete".to_string())
+                HaloError::tool("Workspace shell not available for remote Delete".to_string())
             })?;
 
             let rm_cmd = build_remote_delete_command(&resolved.resolved_path, recursive);
@@ -351,10 +351,10 @@ Important notes:
             let (_stdout, stderr, exit_code) = ws_shell
                 .exec(&rm_cmd, Some(15_000))
                 .await
-                .map_err(|e| BitFunError::tool(format!("Failed to delete on remote: {}", e)))?;
+                .map_err(|e| HaloError::tool(format!("Failed to delete on remote: {}", e)))?;
 
             if exit_code != 0 && !stderr.is_empty() {
-                return Err(BitFunError::tool(format!(
+                return Err(HaloError::tool(format!(
                     "Remote delete failed: {}",
                     stderr
                 )));
@@ -397,8 +397,8 @@ Important notes:
         };
         let outcome = tokio::task::spawn_blocking(move || delete_local_path(delete_request))
             .await
-            .map_err(|error| BitFunError::tool(format!("Delete task failed: {}", error)))?
-            .map_err(BitFunError::tool)?;
+            .map_err(|error| HaloError::tool(format!("Delete task failed: {}", error)))?
+            .map_err(HaloError::tool)?;
 
         let result_data = json!({
             "success": true,

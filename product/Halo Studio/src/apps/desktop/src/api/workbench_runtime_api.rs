@@ -1,10 +1,10 @@
 //! Thin Tauri projection of the Halo Workbench Runtime Interface.
 
-use bitfun_agent_runtime::halo_workbench::{
+use halo_agent_runtime::halo_workbench::{
     HaloWorkbenchError, HaloWorkbenchIntent, HaloWorkbenchIntentReceipt,
     HaloWorkbenchIntentRequest, HaloWorkbenchSnapshot,
 };
-use bitfun_core::service::workspace::WorkspaceKind;
+use halo_core::service::workspace::WorkspaceKind;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 

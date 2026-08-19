@@ -1,4 +1,4 @@
-use bitfun_core_types::lsp::{
+use halo_core_types::lsp::{
     resolve_lsp_plugin_command_for_target, CapabilitiesConfig, LspPlugin, LspPluginRuntimeArch,
     LspPluginRuntimePlatform, LspPluginRuntimeTarget,
 };
@@ -9,7 +9,7 @@ fn lsp_plugin_manifest_defaults_preserve_legacy_shape() {
         "id": "rust-analyzer",
         "name": "Rust Analyzer",
         "version": "1.0.0",
-        "author": "BitFun",
+        "author": "Halo",
         "description": "Rust language support",
         "server": {
             "command": "bin/${platform}/${arch}/rust-analyzer",
@@ -28,7 +28,7 @@ fn lsp_plugin_manifest_defaults_preserve_legacy_shape() {
     assert_eq!(plugin.server.runtime, None);
     assert_eq!(plugin.settings.len(), 0);
     assert_eq!(plugin.checksum, "");
-    assert_eq!(plugin.min_bitfun_version, "");
+    assert_eq!(plugin.min_halo_version, "");
     assert!(plugin.capabilities.completion);
     assert!(plugin.capabilities.definition);
     assert!(!plugin.capabilities.hover);

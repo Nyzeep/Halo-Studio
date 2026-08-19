@@ -1,19 +1,19 @@
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     AgentRuntime, AgentSessionRestoreRequest, AgentUserAnswersRequest, DialogSubmitOutcome,
     PermissionRequest, PermissionRequestEvent, PortErrorKind, RuntimeError,
     SessionTranscriptRequest,
 };
-use bitfun_agent_runtime_ipc::{
+use halo_agent_runtime_ipc::{
     DiscoveryStore, RuntimeInstanceIdentity, RuntimeIpcClient, RuntimeIpcError,
     RuntimeIpcErrorCode, RuntimeIpcEvent, RuntimeIpcOperation, RuntimeIpcOperationResult,
     RuntimeIpcRequestHandler, RuntimeIpcServer, RuntimeIpcServerConfig,
     RuntimeIpcStreamInvalidationReason, PROTOCOL_VERSION,
 };
-use bitfun_core::runtime_ownership::CoreRuntimeOwnership;
-use bitfun_events::{AgenticEvent, ToolEventData};
-use bitfun_services_core::runtime_ownership::RuntimeDeployment;
+use halo_core::runtime_ownership::CoreRuntimeOwnership;
+use halo_events::{AgenticEvent, ToolEventData};
+use halo_services_core::runtime_ownership::RuntimeDeployment;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -611,7 +611,7 @@ fn index_user_question(
 }
 
 pub(crate) async fn run_service(workspace: PathBuf, expected_identity: String) -> Result<()> {
-    bitfun_services_core::process_manager::contain_current_process_tree()
+    halo_services_core::process_manager::contain_current_process_tree()
         .context("contain Shared Runtime process tree")?;
     prepare_client_environment().await?;
     let identity = instance_identity(&workspace)?;
@@ -738,9 +738,9 @@ fn require_interactive_tui(client: RuntimeIpcClient) -> Result<RuntimeIpcClient>
 
 async fn prepare_client_environment() -> Result<()> {
     crate::agent::agentic_system::select_agentic_system_profile(
-        bitfun_core::product_assembly::DeliveryProfile::Cli,
+        halo_core::product_assembly::DeliveryProfile::Cli,
     )?;
-    bitfun_core::service::config::initialize_global_config()
+    halo_core::service::config::initialize_global_config()
         .await
         .map_err(|error| anyhow!("Failed to initialize Shared TUI configuration: {error}"))
 }
@@ -772,8 +772,8 @@ struct StartupChild {
 
 impl StartupChild {
     fn spawn(workspace: &Path, identity: &str) -> Result<Self> {
-        let executable = std::env::current_exe().context("resolve BitFun executable")?;
-        let mut command = bitfun_services_core::process_manager::create_command(executable);
+        let executable = std::env::current_exe().context("resolve Halo executable")?;
+        let mut command = halo_services_core::process_manager::create_command(executable);
         command
             .arg("__shared-runtime")
             .arg("--workspace")
@@ -853,8 +853,8 @@ fn ipc_root() -> Result<PathBuf> {
         .join(format!("ipc-v{PROTOCOL_VERSION}")))
 }
 
-fn path_manager() -> Result<Arc<bitfun_core::infrastructure::PathManager>> {
-    bitfun_core::infrastructure::try_get_path_manager_arc()
+fn path_manager() -> Result<Arc<halo_core::infrastructure::PathManager>> {
+    halo_core::infrastructure::try_get_path_manager_arc()
         .map_err(|error| anyhow!(error.to_string()))
 }
 
@@ -935,12 +935,12 @@ mod tests {
         project_user_question_route, publish_event, route_agent_event, runtime_ipc_error,
         subscribe_session_events, SessionEventSenders, EVENT_BUFFER,
     };
-    use bitfun_agent_runtime::sdk::{
+    use halo_agent_runtime::sdk::{
         PermissionDelegationContext, PermissionReplySource, PermissionRequest,
         PermissionRequestEvent, PermissionRequestSource, PermissionRequestSourceKind, PortError,
         PortErrorKind, RuntimeError,
     };
-    use bitfun_events::{AgenticEvent, ToolEventData, ToolEventIdentity};
+    use halo_events::{AgenticEvent, ToolEventData, ToolEventIdentity};
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
@@ -955,24 +955,24 @@ mod tests {
 
         assert_eq!(
             error.code,
-            bitfun_agent_runtime_ipc::RuntimeIpcErrorCode::SessionInUse
+            halo_agent_runtime_ipc::RuntimeIpcErrorCode::SessionInUse
         );
     }
 
     #[tokio::test]
     async fn existing_runtime_connection_errors_are_not_hidden_as_absence() {
         let root = tempfile::tempdir().unwrap();
-        let identity = bitfun_agent_runtime_ipc::RuntimeInstanceIdentity::for_workspace(
+        let identity = halo_agent_runtime_ipc::RuntimeInstanceIdentity::for_workspace(
             root.path(),
-            "bitfun",
+            "halo",
             "stable",
             "fixture-user",
-            bitfun_agent_runtime_ipc::PROTOCOL_VERSION,
+            halo_agent_runtime_ipc::PROTOCOL_VERSION,
         )
         .unwrap();
-        let store = bitfun_agent_runtime_ipc::DiscoveryStore::new(root.path(), identity.clone());
+        let store = halo_agent_runtime_ipc::DiscoveryStore::new(root.path(), identity.clone());
         store
-            .write(&bitfun_agent_runtime_ipc::DiscoveryRecord::new(
+            .write(&halo_agent_runtime_ipc::DiscoveryRecord::new(
                 identity,
                 "invalid-endpoint".to_string(),
                 1,
@@ -1039,8 +1039,8 @@ mod tests {
             publish_event(
                 &events,
                 "noisy",
-                bitfun_agent_runtime_ipc::RuntimeIpcEvent::StreamInvalidated {
-                    reason: bitfun_agent_runtime_ipc::RuntimeIpcStreamInvalidationReason::Lagged,
+                halo_agent_runtime_ipc::RuntimeIpcEvent::StreamInvalidated {
+                    reason: halo_agent_runtime_ipc::RuntimeIpcStreamInvalidationReason::Lagged,
                 },
             );
         }
@@ -1051,7 +1051,7 @@ mod tests {
         invalidate_event_stream(
             &available,
             &events,
-            bitfun_agent_runtime_ipc::RuntimeIpcStreamInvalidationReason::Lagged,
+            halo_agent_runtime_ipc::RuntimeIpcStreamInvalidationReason::Lagged,
         );
         assert!(quiet.try_recv().is_ok());
         assert!(subscribe_session_events(&events, &available, "late").is_err());
@@ -1162,7 +1162,7 @@ mod tests {
             },
             PermissionRequestEvent::Replied {
                 request_id: request.request_id,
-                reply: bitfun_agent_runtime::sdk::PermissionReply::Once,
+                reply: halo_agent_runtime::sdk::PermissionReply::Once,
                 source: PermissionReplySource::User,
             },
         ];

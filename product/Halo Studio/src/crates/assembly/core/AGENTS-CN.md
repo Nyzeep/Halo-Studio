@@ -8,7 +8,7 @@
 
 ## 定位
 
-`bitfun-core` 是共享产品 runtime facade。它仍承载兼容路径和 `product-full` 组装边界，但新的拆解工作应优先遵循
+`halo-core` 是共享产品 runtime facade。它仍承载兼容路径和 `product-full` 组装边界，但新的拆解工作应优先遵循
 `docs/architecture/product-architecture.md` 与
 `docs/architecture/agent-runtime-services-design.md` 中定义的 owner crate 边界。
 
@@ -28,7 +28,7 @@ SessionManager -> Session -> DialogTurn -> ModelRound
 ## 边界规则
 
 - 共享 core 必须保持平台无关。避免引入 `tauri::AppHandle` 等宿主 API；优先使用
-  `bitfun_events::EventEmitter` 等共享抽象。
+  `halo_events::EventEmitter` 等共享抽象。
 - 桌面端专属集成应放在 `src/apps/desktop`，再通过类型化能力接口连接回来；需要事件投递时使用已有生产 transport adapter。
 - 不要在没有窄 port/interface 边界的情况下新增 `service` 到 `agentic` 的跨层引用。
 - 不要把平台专属逻辑、构建脚本行为、产品能力选择或 provider-specific AI 序列化写进 shared core。
@@ -36,7 +36,7 @@ SessionManager -> Session -> DialogTurn -> ModelRound
 
 ## 拆解规则
 
-- 将 `bitfun-core` 视为兼容 facade 与完整产品组装点，而不是新稳定契约的默认归属。
+- 将 `halo-core` 视为兼容 facade 与完整产品组装点，而不是新稳定契约的默认归属。
 - 稳定 DTO、facts、ports 和纯决策应放到有明确边界的 owner crate；具体 manager、IO、平台 adapter 和产品执行在没有评审过的
   port/provider 设计与行为等价测试前继续留在 core。
 - Tool 改动必须保持 expanded/collapsed exposure、prompt-visible manifest、`GetToolSpec`、权限行为、
@@ -78,7 +78,7 @@ SessionManager -> Session -> DialogTurn -> ModelRound
 
 ```bash
 cargo check --workspace
-cargo test -p bitfun-core <test_name> -- --nocapture
+cargo test -p halo-core <test_name> -- --nocapture
 node scripts/check-core-boundaries.mjs
 ```
 

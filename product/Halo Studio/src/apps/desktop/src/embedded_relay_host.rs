@@ -1,7 +1,7 @@
 //! Desktop-owned embedded relay host for LAN and Ngrok Remote Connect modes.
 
-use bitfun_core::service::remote_connect::embedded_relay_host::EmbeddedRelayHost;
-use bitfun_relay_service::{build_relay_router, MemoryAssetStore, RoomManager};
+use halo_core::service::remote_connect::embedded_relay_host::EmbeddedRelayHost;
+use halo_relay_service::{build_relay_router, MemoryAssetStore, RoomManager};
 use log::{info, warn};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -111,7 +111,7 @@ impl EmbeddedRelayHost for DesktopEmbeddedRelayHost {
             app = app.fallback_service(static_app);
         }
         app = app.layer(axum::middleware::from_fn(
-            bitfun_relay_service::relay_security_headers,
+            halo_relay_service::relay_security_headers,
         ));
 
         info!("Embedded relay started on 0.0.0.0:{port}");
@@ -231,7 +231,7 @@ mod tests {
     #[tokio::test]
     async fn static_cache_headers_and_listener_lifecycle_are_preserved() {
         let static_dir = std::env::temp_dir().join(format!(
-            "bitfun-embedded-relay-host-{}",
+            "halo-embedded-relay-host-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(static_dir.join("assets"))

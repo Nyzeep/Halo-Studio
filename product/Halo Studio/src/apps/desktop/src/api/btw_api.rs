@@ -12,8 +12,8 @@ use tauri::State;
 
 use crate::api::app_state::AppState;
 
-use bitfun_core::agentic::coordination::ConversationCoordinator;
-use bitfun_core::agentic::image_analysis::ImageContextData;
+use halo_core::agentic::coordination::ConversationCoordinator;
+use halo_core::agentic::image_analysis::ImageContextData;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -135,7 +135,7 @@ pub async fn btw_ask_stream(
             };
 
             match session.state {
-                bitfun_core::agentic::core::SessionState::Processing {
+                halo_core::agentic::core::SessionState::Processing {
                     current_turn_id, ..
                 } if current_turn_id == turn_id => {
                     tokio::time::sleep(std::time::Duration::from_millis(250)).await;

@@ -24,7 +24,7 @@ async function dumpDomDiagnostics(): Promise<void> {
     for (const el of all) {
       if (el.className && typeof el.className === 'string') {
         for (const c of el.className.split(/\s+/)) {
-          if (c.startsWith('virtual-message') || c.startsWith('message-list') || c.startsWith('bitfun-session') || c.startsWith('bitfun-scene') || c.startsWith('bitfun-nav-panel__top-action') || c.startsWith('welcome-panel') || c.startsWith('modern-flowchat')) {
+          if (c.startsWith('virtual-message') || c.startsWith('message-list') || c.startsWith('halo-session') || c.startsWith('halo-scene') || c.startsWith('halo-nav-panel__top-action') || c.startsWith('welcome-panel') || c.startsWith('modern-flowchat')) {
             classSet.add(c);
           }
         }
@@ -46,10 +46,10 @@ async function dumpDomDiagnostics(): Promise<void> {
       virtuosoScroller: !!document.querySelector('[data-virtuoso-scroller]'),
       messageListFooter: !!document.querySelector('.message-list-footer'),
       chatInputContainer: !!document.querySelector('[data-testid="chat-input-container"]'),
-      sessionScene: !!document.querySelector('.bitfun-session-scene'),
-      sceneViewport: !!document.querySelector('.bitfun-scene-viewport'),
-      topActionBtns: document.querySelectorAll('button.bitfun-nav-panel__top-action-btn').length,
-      activeSceneId: (document.querySelector('.bitfun-scene-viewport__scene--active') as HTMLElement)?.className || null,
+      sessionScene: !!document.querySelector('.halo-session-scene'),
+      sceneViewport: !!document.querySelector('.halo-scene-viewport'),
+      topActionBtns: document.querySelectorAll('button.halo-nav-panel__top-action-btn').length,
+      activeSceneId: (document.querySelector('.halo-scene-viewport__scene--active') as HTMLElement)?.className || null,
       // Key data attributes for debugging
       virtualItemCount: messagesDiv?.getAttribute('data-virtual-item-count') || 'N/A',
       activeSessionId: messagesDiv?.getAttribute('data-active-session-id') || 'N/A',

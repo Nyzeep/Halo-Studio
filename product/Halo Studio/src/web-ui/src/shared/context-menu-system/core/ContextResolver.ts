@@ -122,7 +122,7 @@ export class ContextResolver {
       'data-terminal-id'
     ]) || this.findClosestByClass(base.targetElement, [
       'xterm',
-      'bitfun-terminal',
+      'halo-terminal',
       'terminal-container'
     ]);
 

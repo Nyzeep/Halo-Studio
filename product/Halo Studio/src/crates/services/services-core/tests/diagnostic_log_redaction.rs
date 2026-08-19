@@ -1,4 +1,4 @@
-use bitfun_services_core::diagnostics::{
+use halo_services_core::diagnostics::{
     redact_diagnostic_log_text, redact_diagnostic_log_text_with_report,
 };
 

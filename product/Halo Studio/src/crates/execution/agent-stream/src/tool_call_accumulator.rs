@@ -434,7 +434,7 @@ impl PendingToolCall {
                     && options.completion.permits_normal_tool_json_repair()
                 {
                     let repaired =
-                        bitfun_tool_call_jsonrepair::repair_tool_call_json(&raw_arguments)
+                        halo_tool_call_jsonrepair::repair_tool_call_json(&raw_arguments)
                             .ok()
                             .and_then(|candidate| {
                                 Self::parse_arguments(&tool_name, &candidate).ok()
@@ -814,7 +814,7 @@ mod tests {
         let mut pending = PendingToolCall::default();
         pending.start_new("call_1".to_string(), Some("Task".to_string()));
         pending.append_arguments(
-            "{\"description\":\"Explore BitFun project structure\",\"prompt\":\"read README\\n\\nthoroughness: very",
+            "{\"description\":\"Explore Halo project structure\",\"prompt\":\"read README\\n\\nthoroughness: very",
         );
 
         let finalized = pending
@@ -1130,7 +1130,7 @@ mod tests {
         ] {
             assert_eq!(
                 super::is_write_like_tool_name(tool_name),
-                bitfun_agent_tools::is_write_like_tool_name(tool_name),
+                halo_agent_tools::is_write_like_tool_name(tool_name),
                 "tool_name={tool_name}"
             );
         }

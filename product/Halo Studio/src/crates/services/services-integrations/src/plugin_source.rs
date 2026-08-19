@@ -1,14 +1,14 @@
-//! BitFun-managed plugin package discovery and trust persistence.
+//! Halo-managed plugin package discovery and trust persistence.
 //!
-//! This module reads only BitFun-managed package roots. Ecosystem-specific
+//! This module reads only Halo-managed package roots. Ecosystem-specific
 //! file interpretation remains in the corresponding adapter.
 
-use bitfun_product_domains::plugin_source::{
+use halo_product_domains::plugin_source::{
     PluginActivationAuthority, PluginPackageInput, PluginPackageManifest,
     PluginPackageSourceIdentity, PluginPackageTrustLevel, PluginSourceContractError,
     PluginTrustStore,
 };
-pub use bitfun_product_domains::plugin_source::{
+pub use halo_product_domains::plugin_source::{
     PluginPackageTrustLevel as ManagedPluginTrustLevel,
     PluginTrustDecision as ManagedPluginTrustDecision,
 };
@@ -24,7 +24,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tokio::task;
 
-const PLUGIN_MANIFEST_FILE: &str = "bitfun.plugin.json";
+const PLUGIN_MANIFEST_FILE: &str = "halo.plugin.json";
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 const MAX_PACKAGE_FILE_BYTES: u64 = 1024 * 1024;
 const MAX_PACKAGE_BYTES: u64 = 16 * 1024 * 1024;
@@ -3149,7 +3149,7 @@ mod tests {
         ProductPluginSourceStore, ScannedFileReadError, SecureManagedRoot,
         MAX_OPERATION_READ_BYTES, MAX_PACKAGE_FILE_BYTES, MAX_TRUST_STORE_BYTES,
     };
-    use bitfun_product_domains::plugin_source::{
+    use halo_product_domains::plugin_source::{
         PluginPackageTrustLevel, PluginSourceContractError, PluginTrustDecision,
     };
     use sha2::{Digest, Sha256};
@@ -3370,7 +3370,7 @@ mod tests {
             }],
         });
         tokio::fs::write(
-            package.join("bitfun.plugin.json"),
+            package.join("halo.plugin.json"),
             serde_json::to_vec_pretty(&manifest).expect("serialize manifest"),
         )
         .await
@@ -3389,7 +3389,7 @@ mod tests {
             let temp = tempfile::tempdir().expect("tempdir");
             let workspace = temp.path().join("workspace");
             let fixture = Self {
-                workspace_root: workspace.join(".bitfun/plugins"),
+                workspace_root: workspace.join(".halo-studio/plugins"),
                 trust_path: temp.path().join("state/trust.json"),
                 workspace,
                 _temp: temp,
@@ -3706,7 +3706,7 @@ mod tests {
         let service = fixture.service();
         fixture.activate(&service, "acme.demo").await;
         tokio::fs::write(
-            fixture.workspace_root.join("acme.demo/bitfun.plugin.json"),
+            fixture.workspace_root.join("acme.demo/halo.plugin.json"),
             b"{not-json",
         )
         .await
@@ -4275,7 +4275,7 @@ mod tests {
             .await
             .expect("initialize trust store");
         let loaded_identity = loaded.identity.expect("persisted trust identity");
-        let replacement = bitfun_product_domains::plugin_source::PluginTrustStore::new(
+        let replacement = halo_product_domains::plugin_source::PluginTrustStore::new(
             loaded.store.epoch().saturating_add(1),
         );
 
@@ -4316,7 +4316,7 @@ mod tests {
                 })
             })
             .collect::<Vec<_>>();
-        let store: bitfun_product_domains::plugin_source::PluginTrustStore =
+        let store: halo_product_domains::plugin_source::PluginTrustStore =
             serde_json::from_value(serde_json::json!({
                 "schemaVersion": 1,
                 "epoch": 2,
@@ -4520,7 +4520,7 @@ mod tests {
         assert_eq!(
             discovery.packages[0].identity.content_hash,
             PluginPackageManifest::parse_json(
-                &tokio::fs::read_to_string(root.join("acme.demo/bitfun.plugin.json"))
+                &tokio::fs::read_to_string(root.join("acme.demo/halo.plugin.json"))
                     .await
                     .expect("read manifest")
             )
@@ -4549,7 +4549,7 @@ mod tests {
     async fn fixed_package_reads_are_serialized_per_service_instance() {
         let temp = tempfile::tempdir().expect("tempdir");
         let workspace = temp.path().join("workspace");
-        let workspace_root = workspace.join(".bitfun/plugins");
+        let workspace_root = workspace.join(".halo-studio/plugins");
         let user_root = temp.path().join("user/plugins");
         tokio::fs::create_dir_all(&user_root)
             .await
@@ -4596,7 +4596,7 @@ mod tests {
         let service = ManagedPluginSourceService::new(
             temp.path().join("user/plugins"),
             temp.path().join("user"),
-            workspace.join(".bitfun/plugins"),
+            workspace.join(".halo-studio/plugins"),
             workspace.clone(),
             temp.path().join("trust.json"),
         );
@@ -4647,7 +4647,7 @@ mod tests {
     async fn selected_package_load_ignores_unrelated_invalid_package_content() {
         let temp = tempfile::tempdir().expect("tempdir");
         let workspace = temp.path().join("workspace");
-        let workspace_root = workspace.join(".bitfun/plugins");
+        let workspace_root = workspace.join(".halo-studio/plugins");
         let user_root = temp.path().join("user/plugins");
         tokio::fs::create_dir_all(&user_root)
             .await
@@ -4669,7 +4669,7 @@ mod tests {
             .await
             .expect("create unrelated package");
         tokio::fs::write(
-            workspace_root.join("broken.unrelated/bitfun.plugin.json"),
+            workspace_root.join("broken.unrelated/halo.plugin.json"),
             b"not json",
         )
         .await
@@ -4793,7 +4793,7 @@ mod tests {
             }],
         });
         tokio::fs::write(
-            package.join("bitfun.plugin.json"),
+            package.join("halo.plugin.json"),
             serde_json::to_vec_pretty(&manifest).expect("serialize manifest"),
         )
         .await
@@ -4864,8 +4864,8 @@ mod tests {
         tokio::fs::create_dir_all(outside.join("plugins"))
             .await
             .expect("create outside plugins");
-        symlink(&outside, workspace.join(".bitfun")).expect("link workspace plugin parent");
-        let root = workspace.join(".bitfun/plugins");
+        symlink(&outside, workspace.join(".halo-studio")).expect("link workspace plugin parent");
+        let root = workspace.join(".halo-studio/plugins");
         let store = ProductPluginSourceStore::new(
             vec![PluginPackageRoot::new(root, PluginPackageScope::Workspace)
                 .with_containment_root(workspace)],
@@ -5080,7 +5080,7 @@ mod tests {
         assert!(matches!(
             error,
             PluginSourceStoreError::Contract(
-                bitfun_product_domains::plugin_source::PluginSourceContractError::InvalidTrustTransition
+                halo_product_domains::plugin_source::PluginSourceContractError::InvalidTrustTransition
             )
         ));
         assert!(!trust_path.exists());

@@ -5,8 +5,8 @@ use crate::{
     RuntimeIpcServer, RuntimeIpcServerConfig, RuntimeSessionRestoreRequest, PROTOCOL_VERSION,
 };
 use async_trait::async_trait;
-use bitfun_events::{AgenticEvent, AgenticEventEnvelope, AgenticEventPriority};
-use bitfun_runtime_ports::{
+use halo_events::{AgenticEvent, AgenticEventEnvelope, AgenticEventPriority};
+use halo_runtime_ports::{
     AgentDialogTurnRequest, AgentSessionCreateRequest, AgentSessionCreateResult,
     AgentSessionSummary, AgentSubmissionSource, DialogSubmissionPolicy, SessionTranscript,
 };
@@ -190,7 +190,7 @@ impl RuntimeIpcRequestHandler for FakeHandler {
                     ));
                 }
                 Ok(RuntimeIpcOperationResult::TurnCancelled {
-                    cancellation: bitfun_runtime_ports::AgentTurnCancellationResult {
+                    cancellation: halo_runtime_ports::AgentTurnCancellationResult {
                         session_id: request.session_id,
                         turn_id: request.turn_id,
                         requested: true,
@@ -429,7 +429,7 @@ fn restored(session_id: &str) -> RuntimeIpcOperationResult {
 fn test_identity(workspace: &Path) -> RuntimeInstanceIdentity {
     RuntimeInstanceIdentity::for_workspace(
         workspace,
-        "bitfun",
+        "halo",
         "stable",
         "user-a",
         PROTOCOL_VERSION,

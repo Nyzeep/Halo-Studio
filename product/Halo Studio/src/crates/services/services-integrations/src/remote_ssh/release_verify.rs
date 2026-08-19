@@ -1,4 +1,4 @@
-//! Shared verification primitives for BitFun release assets.
+//! Shared verification primitives for Halo release assets.
 //!
 //! Remote installers must use the same build-time trust root as the CLI
 //! self-updater. A SHA256 sidecar detects corruption, while the minisign
@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 ///
 /// Fork and development builds normally have no key. Callers that install
 /// executable code must use [`require_release_pubkey`] and fail closed.
-pub(crate) const RELEASE_PUBKEY: Option<&str> = option_env!("BITFUN_RELEASE_PUBKEY");
+pub(crate) const RELEASE_PUBKEY: Option<&str> = option_env!("HALO_RELEASE_PUBKEY");
 
 pub(crate) fn release_pubkey() -> Option<&'static str> {
     RELEASE_PUBKEY.filter(|key| !key.trim().is_empty())
@@ -20,7 +20,7 @@ pub(crate) fn release_pubkey() -> Option<&'static str> {
 
 pub(crate) fn require_release_pubkey() -> Result<&'static str> {
     release_pubkey().ok_or_else(|| {
-        anyhow!("this build has no BitFun release signing key; refusing to install executable code")
+        anyhow!("this build has no Halo release signing key; refusing to install executable code")
     })
 }
 
@@ -80,7 +80,7 @@ pub(crate) fn verify_minisign(data: &[u8], signature_b64: &str, pubkey_b64: &str
 
 /// Verify the minisign signature over a checksum sidecar, then return its
 /// normalized digest. This is useful when the eventual target host has only a
-/// SHA256 implementation and no copy of the BitFun trust root.
+/// SHA256 implementation and no copy of the Halo trust root.
 pub(crate) fn verify_signed_checksum(
     checksum_text: &str,
     signature_b64: &str,
@@ -99,7 +99,7 @@ mod tests {
     /// Tauri wraps keys and signatures.
     const FIXTURE_PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgRTNFMDg3NENFQzFDMjJDMwpSV1RESWh6c1RJZmc0MXcyR3dpZWkwek5ES2FMWW05ZFFWcEVXTlEvVWxweXQybWJTMkpFMVUyTQo=";
     const FIXTURE_SIGNATURE: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIG1pbmlzaWduIHNlY3JldCBrZXkKUlVUREloenNUSWZnNDBMTitwb25aT3RCVy9VYmJtNWhkR1poM0lCb3IwUDBKaVZmZmM1cFJaNlZSNUpaSzNUUm1yWWpYMXFLQ2svWTdZUDhHdkRZT3YvanVoZlpnZmhyWEFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0OTUxOTM1CWZpbGU6YXJjaGl2ZS50YXIuZ3oJaGFzaGVkCjhWL21EUVAwZGdlZXVNU1lxWlpsOWdFSGUwOTJQTk9yRG1BMUV6ZHNQOUlEYkcyT1dneTFsQ1puUDBJaFIwQnJpMFBCeENRcUdDR2dpb0l0UGtSMUN3PT0K";
-    const FIXTURE_DATA: &[u8] = b"hello-bitfun\n";
+    const FIXTURE_DATA: &[u8] = b"hello-halo\n";
 
     #[test]
     fn minisign_wire_format_accepts_authentic_data_and_rejects_tampering() {
@@ -114,15 +114,15 @@ mod tests {
         let digest = format!("{:x}", Sha256::digest(FIXTURE_DATA));
         assert_eq!(
             parse_sha256(
-                &format!("{digest}  bitfun-cli.tar.gz\n"),
-                "bitfun-cli.tar.gz"
+                &format!("{digest}  halo-cli.tar.gz\n"),
+                "halo-cli.tar.gz"
             )
             .unwrap(),
             digest
         );
-        verify_sha256(FIXTURE_DATA, &digest, "bitfun-cli.tar.gz").unwrap();
-        assert!(verify_sha256(FIXTURE_DATA, &"0".repeat(64), "bitfun-cli.tar.gz").is_err());
-        assert!(parse_sha256("not-a-digest", "bitfun-cli.tar.gz").is_err());
+        verify_sha256(FIXTURE_DATA, &digest, "halo-cli.tar.gz").unwrap();
+        assert!(verify_sha256(FIXTURE_DATA, &"0".repeat(64), "halo-cli.tar.gz").is_err());
+        assert!(parse_sha256("not-a-digest", "halo-cli.tar.gz").is_err());
     }
 
     #[test]

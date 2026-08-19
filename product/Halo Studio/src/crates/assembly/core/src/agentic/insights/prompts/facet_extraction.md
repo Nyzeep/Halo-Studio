@@ -1,4 +1,4 @@
-Analyze this BitFun session and extract structured facets.
+Analyze this Halo Studio session and extract structured facets.
 
 CRITICAL GUIDELINES:
 

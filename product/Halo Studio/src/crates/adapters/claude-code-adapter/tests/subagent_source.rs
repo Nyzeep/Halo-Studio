@@ -1,8 +1,8 @@
-use bitfun_claude_code_adapter::{ClaudeCodeSubagentProvider, ClaudeCodeSubagentProviderOptions};
-use bitfun_product_domains::external_sources::{
+use halo_claude_code_adapter::{ClaudeCodeSubagentProvider, ClaudeCodeSubagentProviderOptions};
+use halo_product_domains::external_sources::{
     ExecutionDomainId, ExternalSourceContext, ExternalSourceScope,
 };
-use bitfun_product_domains::external_subagents::{
+use halo_product_domains::external_subagents::{
     ExternalSubagentCompatibilityState, ExternalSubagentDiscoveryInput,
     ExternalSubagentModelRequest, ExternalSubagentSourceProvider,
 };
@@ -52,8 +52,8 @@ impl Fixture {
 
     fn discover(
         &self,
-        suppressed_sources: BTreeSet<bitfun_product_domains::external_sources::SourceKey>,
-    ) -> bitfun_product_domains::external_subagents::ExternalSubagentProviderSnapshot {
+        suppressed_sources: BTreeSet<halo_product_domains::external_sources::SourceKey>,
+    ) -> halo_product_domains::external_subagents::ExternalSubagentProviderSnapshot {
         self.provider()
             .discover(&ExternalSubagentDiscoveryInput {
                 context: self.context(),

@@ -10,31 +10,31 @@ const MAX_PROJECT_SLUG_LEN = 120;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function defaultBitfunHome() {
-  if (process.env.BITFUN_E2E_HOME) {
-    return process.env.BITFUN_E2E_HOME;
+function defaultHaloHome() {
+  if (process.env.HALO_E2E_HOME) {
+    return process.env.HALO_E2E_HOME;
   }
-  if (process.env.BITFUN_E2E_USE_REAL_PROFILE === '1') {
-    return process.env.BITFUN_HOME || path.join(os.homedir(), '.bitfun');
+  if (process.env.HALO_E2E_USE_REAL_PROFILE === '1') {
+    return process.env.HALO_HOME || path.join(os.homedir(), '.halo');
   }
-  return path.resolve(__dirname, '..', '.bitfun', 'runtime', 'home');
+  return path.resolve(__dirname, '..', '.halo', 'runtime', 'home');
 }
 
-function defaultBitfunUserRoot() {
-  if (process.env.BITFUN_E2E_USER_ROOT) {
-    return process.env.BITFUN_E2E_USER_ROOT;
+function defaultHaloUserRoot() {
+  if (process.env.HALO_E2E_USER_ROOT) {
+    return process.env.HALO_E2E_USER_ROOT;
   }
-  if (process.env.BITFUN_E2E_USE_REAL_PROFILE === '1') {
+  if (process.env.HALO_E2E_USE_REAL_PROFILE === '1') {
     return null;
   }
-  return path.resolve(__dirname, '..', '.bitfun', 'runtime', 'user-root');
+  return path.resolve(__dirname, '..', '.halo', 'runtime', 'user-root');
 }
 
 function parseArgs(argv) {
   const options = {
     workspace: undefined,
-    bitfunHome: defaultBitfunHome(),
-    bitfunUserRoot: defaultBitfunUserRoot(),
+    haloHome: defaultHaloHome(),
+    haloUserRoot: defaultHaloUserRoot(),
     sessionPrefix: 'perf-long-session',
     scenario: 'mixed-visible',
     sessionCount: 80,
@@ -64,11 +64,11 @@ function parseArgs(argv) {
       case '--workspace':
         options.workspace = next();
         break;
-      case '--bitfun-home':
-        options.bitfunHome = next();
+      case '--halo-home':
+        options.haloHome = next();
         break;
-      case '--bitfun-user-root':
-        options.bitfunUserRoot = next();
+      case '--halo-user-root':
+        options.haloUserRoot = next();
         break;
       case '--session-prefix':
         options.sessionPrefix = next();
@@ -148,7 +148,7 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`Generate BitFun long-session performance fixtures.
+  console.log(`Generate Halo long-session performance fixtures.
 
 Usage:
   node tests/e2e/scripts/generate-long-session-fixture.mjs --workspace <path> [options]
@@ -166,8 +166,8 @@ Options:
   --last-active-step-ms <n> lastActiveAt decrement per session index. Default: 1000
   --session-prefix <text>   Session id prefix. Default: perf-long-session
   --scenario <name>         Fixture shape: mixed-visible, dense-visible, explore-only, or user-only-latest. Default: mixed-visible
-  --bitfun-home <path>      BitFun home root. Default: BITFUN_E2E_HOME or isolated tests/e2e/.bitfun/runtime/home; BITFUN_HOME is used only with BITFUN_E2E_USE_REAL_PROFILE=1
-  --bitfun-user-root <path> BitFun user config root for seeding active workspace. Default: BITFUN_E2E_USER_ROOT or isolated tests/e2e/.bitfun/runtime/user-root; skipped for real profile unless provided
+  --halo-home <path>      Halo home root. Default: HALO_E2E_HOME or isolated tests/e2e/.halo-studio/runtime/home; HALO_HOME is used only with HALO_E2E_USE_REAL_PROFILE=1
+  --halo-user-root <path> Halo user config root for seeding active workspace. Default: HALO_E2E_USER_ROOT or isolated tests/e2e/.halo-studio/runtime/user-root; skipped for real profile unless provided
   --cleanup                 Remove generated sessions for the prefix.
 `);
 }
@@ -594,11 +594,11 @@ async function readJsonOptional(filePath) {
 }
 
 async function seedWorkspaceState(options, workspacePath) {
-  if (!options.bitfunUserRoot) {
+  if (!options.haloUserRoot) {
     return null;
   }
 
-  const userRoot = path.resolve(options.bitfunUserRoot);
+  const userRoot = path.resolve(options.haloUserRoot);
   const workspaceDataPath = path.join(userRoot, 'data', 'workspace_data.json');
   const existing = await readJsonOptional(workspaceDataPath);
   const workspaces = existing?.workspaces && typeof existing.workspaces === 'object'
@@ -701,7 +701,7 @@ async function writeIndex(sessionsRoot, generatedMetadata, sessionPrefix) {
 async function generate(options) {
   const workspacePath = fsSync.realpathSync(options.workspace);
   const slug = projectRuntimeSlug(workspacePath);
-  const sessionsRoot = path.join(options.bitfunHome, 'projects', slug, 'sessions');
+  const sessionsRoot = path.join(options.haloHome, 'projects', slug, 'sessions');
 
   await fs.mkdir(sessionsRoot, { recursive: true });
   await removeGeneratedSessions(sessionsRoot, options.sessionPrefix);
@@ -774,8 +774,8 @@ async function generate(options) {
   return {
     action: 'generate',
     workspacePath,
-    bitfunHome: options.bitfunHome,
-    bitfunUserRoot: options.bitfunUserRoot,
+    haloHome: options.haloHome,
+    haloUserRoot: options.haloUserRoot,
     sessionsRoot,
     sessionPrefix: options.sessionPrefix,
     workspaceStateSeeded: Boolean(seededWorkspaceState),

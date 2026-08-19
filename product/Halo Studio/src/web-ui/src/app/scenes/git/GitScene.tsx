@@ -85,38 +85,38 @@ const GitScene: React.FC<GitSceneProps> = ({
   }, [activeView, isActive, workspacePath]);
 
   if (!isActive) {
-    return <div className="bitfun-git-scene" aria-hidden="true" />;
+    return <div className="halo-git-scene" aria-hidden="true" />;
   }
 
   if (!repoLoading && !isRepository) {
     return (
-      <div className="bitfun-git-scene bitfun-git-scene--not-repository">
-        <div className="bitfun-git-scene__content">
-          <div className="bitfun-git-scene__init-container">
-            <div className="bitfun-git-scene__init-decoration">
-              <div className="bitfun-git-scene__init-line bitfun-git-scene__init-line--dashed" />
-              <div className="bitfun-git-scene__init-dot" />
-              <div className="bitfun-git-scene__init-line bitfun-git-scene__init-line--solid" />
+      <div className="halo-git-scene halo-git-scene--not-repository">
+        <div className="halo-git-scene__content">
+          <div className="halo-git-scene__init-container">
+            <div className="halo-git-scene__init-decoration">
+              <div className="halo-git-scene__init-line halo-git-scene__init-line--dashed" />
+              <div className="halo-git-scene__init-dot" />
+              <div className="halo-git-scene__init-line halo-git-scene__init-line--solid" />
             </div>
-            <div className="bitfun-git-scene__init-card">
-              <div className="bitfun-git-scene__init-icon">
+            <div className="halo-git-scene__init-card">
+              <div className="halo-git-scene__init-icon">
                 <GitBranch size={24} />
               </div>
-              <div className="bitfun-git-scene__init-text">
+              <div className="halo-git-scene__init-text">
                 <h3>{t('init.title')}</h3>
                 <p>{t('init.notRepository')}</p>
               </div>
-              <button type="button" className="bitfun-git-scene__init-button" onClick={handleInitGitRepository}>
+              <button type="button" className="halo-git-scene__init-button" onClick={handleInitGitRepository}>
                 <Plus size={14} />
                 <span>{t('init.initButton')}</span>
               </button>
             </div>
-            <div className="bitfun-git-scene__init-decoration">
-              <div className="bitfun-git-scene__init-line bitfun-git-scene__init-line--solid" />
-              <div className="bitfun-git-scene__init-dot bitfun-git-scene__init-dot--muted" />
-              <div className="bitfun-git-scene__init-line bitfun-git-scene__init-line--dashed" />
+            <div className="halo-git-scene__init-decoration">
+              <div className="halo-git-scene__init-line halo-git-scene__init-line--solid" />
+              <div className="halo-git-scene__init-dot halo-git-scene__init-dot--muted" />
+              <div className="halo-git-scene__init-line halo-git-scene__init-line--dashed" />
             </div>
-            <div className="bitfun-git-scene__init-hint">
+            <div className="halo-git-scene__init-hint">
               <span>{t('init.hint')}</span>
             </div>
           </div>
@@ -127,23 +127,23 @@ const GitScene: React.FC<GitSceneProps> = ({
 
   if ((repoLoading || statusLoading) && !forceReset) {
     return (
-      <div className="bitfun-git-scene bitfun-git-scene--loading">
-        <div className="bitfun-git-scene__content">
-          <div className="bitfun-git-scene__loading-actions">
+      <div className="halo-git-scene halo-git-scene--loading">
+        <div className="halo-git-scene__content">
+          <div className="halo-git-scene__loading-actions">
             <IconButton size="xs" variant="ghost" onClick={() => { setForceReset(true); setTimeout(() => { setForceReset(false); handleRefresh(); }, 100); }} tooltip={t('actions.forceRefresh')}>
               <RefreshCw size={14} />
             </IconButton>
           </div>
-          <div className="bitfun-git-scene__loading-state">
+          <div className="halo-git-scene__loading-state">
             <CubeLoading size="medium" text={t('loading.text')} />
-            <p className="bitfun-git-scene__loading-hint">{t('loading.hint')}</p>
+            <p className="halo-git-scene__loading-hint">{t('loading.hint')}</p>
           </div>
         </div>
       </div>
     );
   }
 
-  return <div className="bitfun-git-scene" data-shortcut-scope="git">{renderView()}</div>;
+  return <div className="halo-git-scene" data-shortcut-scope="git">{renderView()}</div>;
 };
 
 export default GitScene;

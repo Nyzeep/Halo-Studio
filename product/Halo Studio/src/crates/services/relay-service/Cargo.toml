@@ -1,12 +1,12 @@
 [package]
-name = "bitfun-relay-service"
+name = "halo-relay-service"
 version = "0.2.14"
-authors = ["BitFun Team"]
+authors = ["Halo Studio Team"]
 edition = "2021"
-description = "Reusable relay runtime for BitFun Remote Connect"
+description = "Reusable relay runtime for Halo Remote Connect"
 
 [lib]
-name = "bitfun_relay_service"
+name = "halo_relay_service"
 path = "src/lib.rs"
 
 [dependencies]
@@ -35,7 +35,7 @@ sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio",
 libsqlite3-sys = { version = "0.30", features = ["bundled"] }
 argon2 = "0.5"
 aes-gcm = "0.10"
-bitfun-page-function-runtime = { path = "../page-function-runtime" }
+halo-page-function-runtime = { path = "../page-function-runtime" }
 rusqlite = { version = "0.32", features = ["bundled", "hooks", "limits"] }
 
 [dev-dependencies]

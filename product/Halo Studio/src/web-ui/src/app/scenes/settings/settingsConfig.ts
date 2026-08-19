@@ -1,7 +1,7 @@
 /**
  * settingsConfig - Halo local-coding settings categories and tabs.
  *
- * Shared by SettingsNav and SettingsScene. The broader BitFun settings modules
+ * Shared by SettingsNav and SettingsScene. The broader Halo settings modules
  * remain in the source tree, but Halo only assembles the local coding surface.
  */
 

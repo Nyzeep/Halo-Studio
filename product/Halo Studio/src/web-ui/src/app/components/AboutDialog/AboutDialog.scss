@@ -7,7 +7,7 @@
 
 // ==================== App updates (desktop) ====================
 
-.bitfun-about-dialog__update-card {
+.halo-about-dialog__update-card {
   margin-bottom: 16px;
   padding: 12px 14px;
   border: 1px dashed var(--border-subtle);
@@ -18,25 +18,25 @@
   gap: 12px;
 }
 
-.bitfun-about-dialog__update-card-top {
+.halo-about-dialog__update-card-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
 }
 
-.bitfun-about-dialog__update-card-main {
+.halo-about-dialog__update-card-main {
   flex: 1;
   min-width: 0;
 }
 
-.bitfun-about-dialog__update-card-head {
+.halo-about-dialog__update-card-head {
   display: flex;
   align-items: flex-start;
   gap: 12px;
 }
 
-.bitfun-about-dialog__update-card-icon {
+.halo-about-dialog__update-card-icon {
   flex-shrink: 0;
   width: 36px;
   height: 36px;
@@ -48,26 +48,26 @@
   color: var(--color-accent-400);
 }
 
-.bitfun-about-dialog__update-card-meta {
+.halo-about-dialog__update-card-meta {
   min-width: 0;
   flex: 1;
 }
 
-.bitfun-about-dialog__update-card-title {
+.halo-about-dialog__update-card-title {
   font-size: 12px;
   font-weight: 600;
   color: var(--color-text-primary);
   letter-spacing: 0.02em;
 }
 
-.bitfun-about-dialog__update-card-hint {
+.halo-about-dialog__update-card-hint {
   margin: 4px 0 0;
   font-size: 11px;
   line-height: 1.45;
   color: var(--color-text-muted);
 }
 
-.bitfun-about-dialog__update-card-actions {
+.halo-about-dialog__update-card-actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -75,16 +75,16 @@
   gap: 8px;
 }
 
-.bitfun-about-dialog__update-card-feedback {
+.halo-about-dialog__update-card-feedback {
   margin-top: 10px;
 }
 
-.bitfun-about-dialog__update-btn-icon {
+.halo-about-dialog__update-btn-icon {
   flex-shrink: 0;
   opacity: 0.9;
 }
 
-.bitfun-about-dialog__update-status {
+.halo-about-dialog__update-status {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -103,17 +103,17 @@
   }
 }
 
-.bitfun-about-dialog__update-alert {
+.halo-about-dialog__update-alert {
   width: 100%;
 }
 
-.bitfun-about-dialog__download-status {
+.halo-about-dialog__download-status {
   display: flex;
   flex-direction: column;
   gap: 7px;
 }
 
-.bitfun-about-dialog__download-bar {
+.halo-about-dialog__download-bar {
   position: relative;
   width: 100%;
   height: 6px;
@@ -122,14 +122,14 @@
   background: var(--element-bg-subtle);
 }
 
-.bitfun-about-dialog__download-fill {
+.halo-about-dialog__download-fill {
   height: 100%;
   border-radius: inherit;
   background: var(--color-accent-500);
   transition: width 0.2s ease;
 }
 
-.bitfun-about-dialog__download-fill--indeterminate {
+.halo-about-dialog__download-fill--indeterminate {
   width: 38%;
   animation: about-update-progress-indeterminate 1.1s ease-in-out infinite;
 }
@@ -143,7 +143,7 @@
   }
 }
 
-.bitfun-about-dialog__download-meta {
+.halo-about-dialog__download-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -153,14 +153,14 @@
   color: var(--color-text-secondary);
 }
 
-.bitfun-about-dialog__download-hint {
+.halo-about-dialog__download-hint {
   margin: 0;
   font-size: 11px;
   line-height: 1.45;
   color: var(--color-text-muted);
 }
 
-.bitfun-about-dialog__update-installed {
+.halo-about-dialog__update-installed {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -170,7 +170,7 @@
 
 // ==================== Content area (inside Modal) ====================
 
-.bitfun-about-dialog__content {
+.halo-about-dialog__content {
   display: flex;
   flex-direction: column;
   min-height: 400px;
@@ -180,7 +180,7 @@
 
 // ==================== Hero section ====================
 
-.bitfun-about-dialog__hero {
+.halo-about-dialog__hero {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -191,7 +191,7 @@
   overflow: hidden;
 }
 
-.bitfun-about-dialog__title {
+.halo-about-dialog__title {
   font-family: var(--font-family-sans);
   font-size: 28px;
   font-weight: 800;
@@ -215,7 +215,7 @@
   }
 }
 
-.bitfun-about-dialog__version-badge {
+.halo-about-dialog__version-badge {
   display: inline-flex;
   align-items: center;
   color: var(--color-text-muted);
@@ -240,7 +240,7 @@
 }
 
 // Decorative divider
-.bitfun-about-dialog__divider {
+.halo-about-dialog__divider {
   width: 60px;
   height: 1px;
   background: var(--border-subtle);
@@ -262,7 +262,7 @@
 }
 
 // Decorative dots
-.bitfun-about-dialog__dots {
+.halo-about-dialog__dots {
   display: flex;
   gap: 6px;
   margin-top: 12px;
@@ -286,7 +286,7 @@
 
 // ==================== Scrollable area ====================
 
-.bitfun-about-dialog__scrollable {
+.halo-about-dialog__scrollable {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -296,7 +296,7 @@
 
 // ==================== Info section ====================
 
-.bitfun-about-dialog__info-section {
+.halo-about-dialog__info-section {
   margin-bottom: 16px;
   animation: about-section-enter 0.4s ease-out 0.2s both;
 }
@@ -312,14 +312,14 @@
   }
 }
 
-.bitfun-about-dialog__info-card {
+.halo-about-dialog__info-card {
   padding: 10px 14px;
   background: transparent;
   border: 1px dashed var(--border-subtle);
   border-radius: 8px;
 }
 
-.bitfun-about-dialog__info-row {
+.halo-about-dialog__info-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -336,14 +336,14 @@
   }
 }
 
-.bitfun-about-dialog__info-label {
+.halo-about-dialog__info-label {
   flex-shrink: 0;
   font-size: 12px;
   color: var(--color-text-secondary);
   font-weight: 500;
 }
 
-.bitfun-about-dialog__info-value {
+.halo-about-dialog__info-value {
   font-size: 12px;
   color: var(--color-text-primary);
   font-weight: 400;
@@ -359,14 +359,14 @@
   }
 }
 
-.bitfun-about-dialog__info-value-group {
+.halo-about-dialog__info-value-group {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
-.bitfun-about-dialog__copy-btn {
+.halo-about-dialog__copy-btn {
   flex-shrink: 0;
   background: transparent;
   border: 1px solid transparent;
@@ -391,12 +391,12 @@
 
 // ==================== Dependencies section ====================
 
-.bitfun-about-dialog__dependencies-section {
+.halo-about-dialog__dependencies-section {
   margin-bottom: 16px;
   animation: about-section-enter 0.4s ease-out 0.25s both;
 }
 
-.bitfun-about-dialog__dependencies-toggle {
+.halo-about-dialog__dependencies-toggle {
   width: 100%;
   display: flex;
   align-items: center;
@@ -434,7 +434,7 @@
   }
 }
 
-.bitfun-about-dialog__dependencies-count {
+.halo-about-dialog__dependencies-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -448,7 +448,7 @@
   border-radius: 9px;
 }
 
-.bitfun-about-dialog__dependencies-list {
+.halo-about-dialog__dependencies-list {
   margin-top: 8px;
   padding: 4px;
   background: transparent;
@@ -468,13 +468,13 @@
   }
 }
 
-.bitfun-about-dialog__dependencies-grid {
+.halo-about-dialog__dependencies-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 4px;
 }
 
-.bitfun-about-dialog__dependency-item {
+.halo-about-dialog__dependency-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -489,7 +489,7 @@
     background: var(--element-bg-subtle);
     border-color: var(--border-subtle);
     
-    .bitfun-about-dialog__dependency-icon {
+    .halo-about-dialog__dependency-icon {
       background: color-mix(in srgb, var(--color-accent-500) 10%, transparent);
       
       svg {
@@ -499,7 +499,7 @@
   }
 }
 
-.bitfun-about-dialog__dependency-icon {
+.halo-about-dialog__dependency-icon {
   flex-shrink: 0;
   width: 26px;
   height: 26px;
@@ -518,7 +518,7 @@
   }
 }
 
-.bitfun-about-dialog__dependency-info {
+.halo-about-dialog__dependency-info {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -526,7 +526,7 @@
   gap: 1px;
 }
 
-.bitfun-about-dialog__dependency-name {
+.halo-about-dialog__dependency-name {
   font-size: 11px;
   font-weight: 500;
   color: var(--color-text-primary);
@@ -536,12 +536,12 @@
   text-overflow: ellipsis;
 }
 
-.bitfun-about-dialog__dependency-license {
+.halo-about-dialog__dependency-license {
   font-size: 9px;
   color: var(--color-text-muted);
 }
 
-.bitfun-about-dialog__dependency-tag {
+.halo-about-dialog__dependency-tag {
   display: inline-flex;
   align-items: center;
   padding: 1px 5px;
@@ -577,7 +577,7 @@
 
 // ==================== Footer ====================
 
-.bitfun-about-dialog__footer {
+.halo-about-dialog__footer {
   flex-shrink: 0;
   padding: 16px 24px 20px;
   text-align: center;
@@ -595,14 +595,14 @@
   }
 }
 
-.bitfun-about-dialog__license {
+.halo-about-dialog__license {
   font-size: 11px;
   color: var(--color-text-secondary);
   line-height: 1.5;
   margin: 0 0 6px 0;
 }
 
-.bitfun-about-dialog__copyright {
+.halo-about-dialog__copyright {
   font-size: 10px;
   color: var(--color-text-muted);
   opacity: 0.6;
@@ -613,28 +613,28 @@
 // ==================== Responsive layout ====================
 
 @media (max-width: 580px) {
-  .bitfun-about-dialog__content {
+  .halo-about-dialog__content {
     min-height: 360px;
     max-height: calc(100vh - 32px);
   }
 
-  .bitfun-about-dialog__hero {
+  .halo-about-dialog__hero {
     padding: 24px 20px 20px;
   }
 
-  .bitfun-about-dialog__title {
+  .halo-about-dialog__title {
     font-size: 20px;
   }
 
-  .bitfun-about-dialog__scrollable {
+  .halo-about-dialog__scrollable {
     padding: 0 16px;
   }
 
-  .bitfun-about-dialog__dependencies-grid {
+  .halo-about-dialog__dependencies-grid {
     grid-template-columns: 1fr;
   }
 
-  .bitfun-about-dialog__footer {
+  .halo-about-dialog__footer {
     padding: 14px 16px 16px;
 
     &::before {
@@ -645,28 +645,28 @@
 }
 
 @media (max-height: 500px) {
-  .bitfun-about-dialog__content {
+  .halo-about-dialog__content {
     min-height: 320px;
   }
 
-  .bitfun-about-dialog__hero {
+  .halo-about-dialog__hero {
     padding: 20px 24px 16px;
   }
 
-  .bitfun-about-dialog__title {
+  .halo-about-dialog__title {
     font-size: 20px;
     margin-bottom: 8px;
   }
 
-  .bitfun-about-dialog__divider {
+  .halo-about-dialog__divider {
     margin-top: 12px;
   }
 
-  .bitfun-about-dialog__dots {
+  .halo-about-dialog__dots {
     margin-top: 8px;
   }
 
-  .bitfun-about-dialog__footer {
+  .halo-about-dialog__footer {
     padding: 12px 24px 14px;
   }
 }

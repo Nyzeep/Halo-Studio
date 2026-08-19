@@ -1,16 +1,16 @@
 [package]
-name = "bitfun-desktop"
+name = "halo-desktop"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "BitFun Desktop Application (Tauri)"
+description = "Halo Desktop Application (Tauri)"
 
 [lib]
-name = "bitfun_desktop_lib"
+name = "halo_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "bitfun-desktop"
+name = "halo-desktop"
 path = "src/main.rs"
 required-features = ["tauri-build-script"]
 
@@ -20,18 +20,18 @@ serde_json = { workspace = true }
 
 [dependencies]
 # Internal crates
-bitfun-core = { path = "../../crates/assembly/core", default-features = false, features = ["product-full"] }
-bitfun-relay-service = { path = "../../crates/services/relay-service" }
-bitfun-agent-runtime = { path = "../../crates/execution/agent-runtime" }
-bitfun-runtime-ports = { path = "../../crates/contracts/runtime-ports" }
-bitfun-product-domains = { path = "../../crates/contracts/product-domains", default-features = false }
-bitfun-services-integrations = { path = "../../crates/services/services-integrations", default-features = false, features = ["canvas-runtime", "miniapp-market"] }
-bitfun-core-types = { path = "../../crates/contracts/core-types" }
-bitfun-agent-tools = { path = "../../crates/execution/tool-contracts" }
-bitfun-transport = { path = "../../crates/adapters/transport", features = ["tauri-adapter"] }
-bitfun-events = { path = "../../crates/contracts/events" }
-bitfun-webdriver = { path = "../../crates/adapters/webdriver" }
-bitfun-acp = { path = "../../crates/interfaces/acp" }
+halo-core = { path = "../../crates/assembly/core", default-features = false, features = ["product-full"] }
+halo-relay-service = { path = "../../crates/services/relay-service" }
+halo-agent-runtime = { path = "../../crates/execution/agent-runtime" }
+halo-runtime-ports = { path = "../../crates/contracts/runtime-ports" }
+halo-product-domains = { path = "../../crates/contracts/product-domains", default-features = false }
+halo-services-integrations = { path = "../../crates/services/services-integrations", default-features = false, features = ["canvas-runtime", "miniapp-market"] }
+halo-core-types = { path = "../../crates/contracts/core-types" }
+halo-agent-tools = { path = "../../crates/execution/tool-contracts" }
+halo-transport = { path = "../../crates/adapters/transport", features = ["tauri-adapter"] }
+halo-events = { path = "../../crates/contracts/events" }
+halo-webdriver = { path = "../../crates/adapters/webdriver" }
+halo-acp = { path = "../../crates/interfaces/acp" }
 
 # Tauri
 tauri = { workspace = true }
@@ -136,8 +136,8 @@ halo-local-coding = []
 # Enable webview devtools and element inspector for development builds.
 # Only active in debug builds or when explicitly requested via --features devtools.
 # Never enabled in release profile intended for end users.
-devtools = ["tauri/devtools", "bitfun-webdriver/embedded"]
-speech = ["bitfun-services-integrations/speech"]
+devtools = ["tauri/devtools", "halo-webdriver/embedded"]
+speech = ["halo-services-integrations/speech"]
 single-instance = []
 tauri-build-script = []
 

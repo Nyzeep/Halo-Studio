@@ -11,8 +11,8 @@ use crate::agentic::events::{
     ModelRoundAttemptToolDiagnostic, ToolEventData,
 };
 use crate::agentic::memories::{
-    parse_bitfun_memory_citation, parse_bitfun_memory_citation_payloads,
-    strip_bitfun_memory_citations,
+    parse_halo_memory_citation, parse_halo_memory_citation_payloads,
+    strip_halo_memory_citations,
 };
 use crate::agentic::permission_policy::resolve_effective_permission_rules;
 use crate::agentic::tools::computer_use_host::ComputerUseHostRef;
@@ -31,16 +31,16 @@ use crate::service::config::types::AgentProfileConfig;
 use crate::service::config::types::SubagentBatchExecutionPolicy as ConfigSubagentBatchExecutionPolicy;
 use crate::service::config::GlobalConfigManager;
 use crate::util::elapsed_ms_u64;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use crate::util::types::Message as AIMessage;
 use crate::util::types::ToolDefinition;
-use bitfun_agent_runtime::permission::AUTO_APPROVE_ASK_CONTEXT_KEY;
-use bitfun_agent_runtime::turn_cancellation::DialogTurnCancellationTokenStore;
-use bitfun_ai_adapters::{
+use halo_agent_runtime::permission::AUTO_APPROVE_ASK_CONTEXT_KEY;
+use halo_agent_runtime::turn_cancellation::DialogTurnCancellationTokenStore;
+use halo_ai_adapters::{
     ModelExchangeRequestTraceHandle, ModelExchangeResponseTrace, ModelExchangeTraceConfig,
 };
-use bitfun_core_types::errors::{AiProviderError, ErrorCategory};
-use bitfun_runtime_ports::PermissionRule;
+use halo_core_types::errors::{AiProviderError, ErrorCategory};
+use halo_runtime_ports::PermissionRule;
 use log::{debug, error, warn};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -194,8 +194,8 @@ impl RoundExecutor {
             .map(|block| block.payload.as_str())
             .collect::<Vec<_>>();
 
-        parse_bitfun_memory_citation_payloads(payloads)
-            .or_else(|| parse_bitfun_memory_citation(&stream_result.full_text))
+        parse_halo_memory_citation_payloads(payloads)
+            .or_else(|| parse_halo_memory_citation(&stream_result.full_text))
             .map(Into::into)
     }
 
@@ -219,7 +219,7 @@ impl RoundExecutor {
         global: &crate::service::config::types::GlobalConfig,
         project_rules: &[PermissionRule],
         agent_profile: Option<&AgentProfileConfig>,
-        parent_runtime_ceiling: Option<&bitfun_runtime_ports::PermissionRuntimeCeiling>,
+        parent_runtime_ceiling: Option<&halo_runtime_ports::PermissionRuntimeCeiling>,
     ) -> Vec<PermissionRule> {
         resolve_effective_permission_rules(
             global,
@@ -243,9 +243,9 @@ impl RoundExecutor {
     async fn sleep_with_cancellation(
         delay_ms: u64,
         cancel_token: &CancellationToken,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         tokio::select! {
-            _ = cancel_token.cancelled() => Err(BitFunError::Cancelled("Execution cancelled".to_string())),
+            _ = cancel_token.cancelled() => Err(HaloError::Cancelled("Execution cancelled".to_string())),
             _ = tokio::time::sleep(Duration::from_millis(delay_ms)) => Ok(()),
         }
     }
@@ -277,7 +277,7 @@ impl RoundExecutor {
         ai_messages: Vec<AIMessage>,
         tool_definitions: Option<Vec<ToolDefinition>>,
         context_window: Option<usize>,
-    ) -> BitFunResult<RoundResult> {
+    ) -> HaloResult<RoundResult> {
         let mut lifecycle = ModelRoundLifecycle::new();
         self.execute_round_with_lifecycle(
             ai_client,
@@ -298,7 +298,7 @@ impl RoundExecutor {
         tool_definitions: Option<Vec<ToolDefinition>>,
         context_window: Option<usize>,
         lifecycle: &mut ModelRoundLifecycle,
-    ) -> BitFunResult<RoundResult> {
+    ) -> HaloResult<RoundResult> {
         let round_started_at = lifecycle.started_at;
         let subagent_parent_info = context.subagent_parent_info.clone();
         let is_subagent = subagent_parent_info.is_some();
@@ -351,7 +351,7 @@ impl RoundExecutor {
                     "Cancel token detected before AI request, stopping execution: session_id={}",
                     context.session_id
                 );
-                return Err(BitFunError::Cancelled("Execution cancelled".to_string()));
+                return Err(HaloError::Cancelled("Execution cancelled".to_string()));
             }
 
             let request_started_at = Instant::now();
@@ -375,7 +375,7 @@ impl RoundExecutor {
             );
             let send_result = tokio::select! {
                 _ = cancel_token.cancelled() => {
-                    return Err(BitFunError::Cancelled("Execution cancelled".to_string()));
+                    return Err(HaloError::Cancelled("Execution cancelled".to_string()));
                 }
                 result = send_future => result,
             };
@@ -432,7 +432,7 @@ impl RoundExecutor {
                     }
                     if !is_structured_context_overflow && Self::is_transient_network_error(&err_msg)
                     {
-                        return Err(BitFunError::AIClient(format!(
+                        return Err(HaloError::AIClient(format!(
                             "Stream retry budget exhausted after {} attempts: {}",
                             max_attempts, err_msg
                         )));
@@ -440,23 +440,23 @@ impl RoundExecutor {
                     // Non-transient errors (429 budget exhausted, context
                     // overflow, auth, etc.) are returned directly. The error
                     // message is classified downstream via
-                    // `BitFunError::error_category()` into `ErrorCategory` for
+                    // `HaloError::error_category()` into `ErrorCategory` for
                     // frontend recovery actions (wait_and_retry, switch_model,
                     // etc.).
                     let category = provider_error
                         .as_ref()
                         .map(|error| error.category.clone())
                         .unwrap_or_else(|| {
-                            bitfun_core_types::errors::classify_ai_error_message(&err_msg)
+                            halo_core_types::errors::classify_ai_error_message(&err_msg)
                         });
                     let error = if category == ErrorCategory::ContextOverflow {
-                        BitFunError::RecoverableContextOverflow(provider_error.unwrap_or_else(
+                        HaloError::RecoverableContextOverflow(provider_error.unwrap_or_else(
                             || AiProviderError::classified(err_msg, ErrorCategory::ContextOverflow),
                         ))
                     } else if let Some(error) = provider_error {
-                        BitFunError::AIProvider(error)
+                        HaloError::AIProvider(error)
                     } else {
-                        BitFunError::AIClient(err_msg)
+                        HaloError::AIClient(err_msg)
                     };
                     warn!(
                         "AI request terminal failure: session_id={}, round_id={}, category={:?}, error={}",
@@ -486,7 +486,7 @@ impl RoundExecutor {
                     "Cancel token detected after AI stream opened, stopping execution: session_id={}",
                     context.session_id
                 );
-                return Err(BitFunError::Cancelled("Execution cancelled".to_string()));
+                return Err(HaloError::Cancelled("Execution cancelled".to_string()));
             }
 
             debug!(
@@ -617,7 +617,7 @@ impl RoundExecutor {
                             ),
                         )
                         .await;
-                        return Err(BitFunError::AIClient(format!(
+                        return Err(HaloError::AIClient(format!(
                             "Stream retry budget exhausted after {} attempts: {}",
                             max_attempts, err_msg
                         )));
@@ -726,7 +726,7 @@ impl RoundExecutor {
                             ),
                         )
                         .await;
-                        return Err(BitFunError::AIClient(format!(
+                        return Err(HaloError::AIClient(format!(
                             "Stream retry budget exhausted after {} attempts: {}",
                             max_attempts, err_msg
                         )));
@@ -832,7 +832,7 @@ impl RoundExecutor {
                     if stream_error_category != ErrorCategory::ContextOverflow
                         && Self::is_transient_network_error(&err_msg)
                     {
-                        return Err(BitFunError::AIClient(format!(
+                        return Err(HaloError::AIClient(format!(
                             "Stream retry budget exhausted after {} attempts: {}",
                             max_attempts, err_msg
                         )));
@@ -841,13 +841,13 @@ impl RoundExecutor {
                         && stream_error_category == ErrorCategory::ContextOverflow
                     {
                         let provider_error = match stream_err.error {
-                            BitFunError::AIProvider(error)
-                            | BitFunError::RecoverableContextOverflow(error) => error,
+                            HaloError::AIProvider(error)
+                            | HaloError::RecoverableContextOverflow(error) => error,
                             _ => {
                                 AiProviderError::classified(err_msg, ErrorCategory::ContextOverflow)
                             }
                         };
-                        return Err(BitFunError::RecoverableContextOverflow(provider_error));
+                        return Err(HaloError::RecoverableContextOverflow(provider_error));
                     }
                     return Err(stream_err.error);
                 }
@@ -906,7 +906,7 @@ impl RoundExecutor {
                 "Cancel token detected after stream processing, stopping execution: session_id={}",
                 context.session_id
             );
-            return Err(BitFunError::Cancelled("Execution cancelled".to_string()));
+            return Err(HaloError::Cancelled("Execution cancelled".to_string()));
         }
 
         // Emit model round completed event
@@ -958,7 +958,7 @@ impl RoundExecutor {
             };
             let parsed_memory_citation =
                 Self::parsed_memory_citation_from_stream_result(&stream_result);
-            let (clean_text, _) = strip_bitfun_memory_citations(&stream_result.full_text);
+            let (clean_text, _) = strip_halo_memory_citations(&stream_result.full_text);
             let assistant_message =
                 Message::assistant_with_reasoning(reasoning, clean_text, vec![])
                     .with_turn_id(context.dialog_turn_id.clone())
@@ -1002,7 +1002,7 @@ impl RoundExecutor {
                 "Cancel token detected before tool execution, stopping execution: session_id={}",
                 context.session_id
             );
-            return Err(BitFunError::Cancelled("Execution cancelled".to_string()));
+            return Err(HaloError::Cancelled("Execution cancelled".to_string()));
         }
 
         let tool_calls = stream_result.tool_calls.clone();
@@ -1176,7 +1176,7 @@ impl RoundExecutor {
         };
         let parsed_memory_citation =
             Self::parsed_memory_citation_from_stream_result(&stream_result);
-        let (clean_text, _) = strip_bitfun_memory_citations(&stream_result.full_text);
+        let (clean_text, _) = strip_halo_memory_citations(&stream_result.full_text);
         let assistant_message =
             Message::assistant_with_reasoning(reasoning, clean_text, tool_calls.clone())
                 .with_turn_id(context.dialog_turn_id.clone())
@@ -1271,7 +1271,7 @@ impl RoundExecutor {
     }
 
     /// Cancel dialog turn (using dialog_turn_id)
-    pub async fn cancel_dialog_turn(&self, dialog_turn_id: &str) -> BitFunResult<()> {
+    pub async fn cancel_dialog_turn(&self, dialog_turn_id: &str) -> HaloResult<()> {
         debug!("Cancelling dialog turn: dialog_turn_id={}", dialog_turn_id);
 
         if self.cancellation_tokens.cancel(dialog_turn_id) {
@@ -1346,7 +1346,7 @@ impl RoundExecutor {
                     attempt_id: None,
                     attempt_index: None,
                     tool_event: ToolEventData::Failed {
-                        identity: bitfun_events::ToolEventIdentity::direct(
+                        identity: halo_events::ToolEventIdentity::direct(
                             tool_call.tool_id.clone(),
                             tool_call.tool_name.clone(),
                         ),
@@ -1640,11 +1640,11 @@ mod tests {
     use crate::agentic::execution::types::RoundContext;
     use crate::agentic::tools::ToolRuntimeRestrictions;
     use crate::service::config::types::{AgentProfileConfig, GlobalConfig};
-    use crate::util::errors::BitFunError;
+    use crate::util::errors::HaloError;
     use crate::util::types::ai::GeminiUsage;
-    use bitfun_agent_runtime::permission::AUTO_APPROVE_ASK_CONTEXT_KEY;
-    use bitfun_agent_runtime::turn_cancellation::DialogTurnCancellationTokenStore;
-    use bitfun_runtime_ports::{
+    use halo_agent_runtime::permission::AUTO_APPROVE_ASK_CONTEXT_KEY;
+    use halo_agent_runtime::turn_cancellation::DialogTurnCancellationTokenStore;
+    use halo_runtime_ports::{
         DelegationPolicy, PermissionEffect, PermissionEvaluator, PermissionPolicyPreset,
         PermissionRule,
     };
@@ -1905,7 +1905,7 @@ mod tests {
         token.cancel();
 
         let result = waiter.await.expect("sleep task should join");
-        assert!(matches!(result, Err(BitFunError::Cancelled(_))));
+        assert!(matches!(result, Err(HaloError::Cancelled(_))));
     }
 
     #[tokio::test]

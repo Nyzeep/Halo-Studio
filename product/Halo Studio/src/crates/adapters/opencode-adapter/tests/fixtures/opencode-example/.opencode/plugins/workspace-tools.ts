@@ -9,7 +9,7 @@ export const WorkspaceToolsPlugin: Plugin = async () => {
     },
     tool: {
       workspaceSummary: tool({
-        description: "Summarize the active workspace for BitFun",
+        description: "Summarize the active workspace for Halo",
         args: {
           topic: tool.schema.string(),
         },

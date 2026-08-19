@@ -145,8 +145,8 @@ const WorkbenchManagedTaskComposer: React.FC<WorkbenchManagedTaskComposerProps> 
     && !pendingFirstPrompt,
   );
   return (
-    <section className="bitfun-workbench-managed-task" data-testid="workbench-managed-task-composer">
-      <header className="bitfun-workbench-managed-task__header">
+    <section className="halo-workbench-managed-task" data-testid="workbench-managed-task-composer">
+      <header className="halo-workbench-managed-task__header">
         <div>
           <h2>{t('nav.sessions.workbenchRuntime.managedTask.title')}</h2>
           <p>{t('nav.sessions.workbenchRuntime.managedTask.description')}</p>
@@ -154,13 +154,13 @@ const WorkbenchManagedTaskComposer: React.FC<WorkbenchManagedTaskComposerProps> 
         <ShieldCheck size={18} aria-hidden="true" />
       </header>
 
-      <div className="bitfun-workbench-managed-task__workspace" role="status">
-        <div className="bitfun-workbench-managed-task__workspace-line">
+      <div className="halo-workbench-managed-task__workspace" role="status">
+        <div className="halo-workbench-managed-task__workspace-line">
           <GitBranch size={14} aria-hidden="true" />
           <span>{t('nav.sessions.workbenchRuntime.managedTask.workspaceRoot')}</span>
           <code>{workspace?.rootPath ?? t('nav.sessions.workbenchRuntime.managedTask.workspaceUnavailable')}</code>
         </div>
-        <div className="bitfun-workbench-managed-task__workspace-facts">
+        <div className="halo-workbench-managed-task__workspace-facts">
           <span>
             {t(workspace?.gitRepository
               ? 'nav.sessions.workbenchRuntime.managedTask.gitRepository'
@@ -174,7 +174,7 @@ const WorkbenchManagedTaskComposer: React.FC<WorkbenchManagedTaskComposerProps> 
         </div>
       </div>
 
-      <form className="bitfun-workbench-managed-task__form" onSubmit={handleCreateManagedTask}>
+      <form className="halo-workbench-managed-task__form" onSubmit={handleCreateManagedTask}>
         <label>
           <span>{t('nav.sessions.workbenchRuntime.managedTask.taskId')}</span>
           <input
@@ -196,7 +196,7 @@ const WorkbenchManagedTaskComposer: React.FC<WorkbenchManagedTaskComposerProps> 
             data-testid="workbench-managed-task-prompt"
           />
         </label>
-        <label className="bitfun-workbench-managed-task__trust-check">
+        <label className="halo-workbench-managed-task__trust-check">
           <input
             type="checkbox"
             checked={managedWorkspaceConfirmed}
@@ -220,14 +220,14 @@ const WorkbenchManagedTaskComposer: React.FC<WorkbenchManagedTaskComposerProps> 
       </form>
 
       {pendingFirstPrompt ? (
-        <p className="bitfun-workbench-managed-task__pending" role="status">
+        <p className="halo-workbench-managed-task__pending" role="status">
           <Loader2 size={13} className="is-spinning" aria-hidden="true" />
           {t('nav.sessions.workbenchRuntime.managedTask.firstTurnPending')}
         </p>
       ) : null}
 
       {actionErrorKey ? (
-        <p className="bitfun-workbench-managed-task__error" role="alert">{t(actionErrorKey)}</p>
+        <p className="halo-workbench-managed-task__error" role="alert">{t(actionErrorKey)}</p>
       ) : null}
     </section>
   );

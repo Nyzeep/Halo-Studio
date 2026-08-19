@@ -1360,7 +1360,7 @@ function resolveReferenceRoot(candidate) {
   if (!READ_ONLY_EVIDENCE_REFERENCE_PATTERN.test(String(locator))) return null;
   const environmentVariable = typeof candidate?.referenceRootEnvironmentVariable === "string"
     ? candidate.referenceRootEnvironmentVariable
-    : "HALO_BITFUN_REFERENCE_ROOT";
+    : "HALO_HALO_REFERENCE_ROOT";
   const configuredRoot = process.env[environmentVariable];
   return isAbsolutePath(configuredRoot) ? path.resolve(configuredRoot) : null;
 }

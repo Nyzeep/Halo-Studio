@@ -221,7 +221,7 @@ pub fn export_diagnostics_bundle() -> Result<DiagnosticsBundleInfo, String> {
         .map_err(|error| format!("Failed to create diagnostics directory: {}", error))?;
 
     let filename = format!(
-        "bitfun-diagnostics-{}.zip",
+        "halo-diagnostics-{}.zip",
         Local::now().format("%Y%m%dT%H%M%S")
     );
     let bundle_path = diagnostics_dir.join(filename);
@@ -481,7 +481,7 @@ mod tests {
     #[test]
     fn detects_previous_unclean_run_state_with_crash_report() {
         let temp_dir = std::env::temp_dir().join(format!(
-            "bitfun-crash-diagnostics-test-{}",
+            "halo-crash-diagnostics-test-{}",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("system time should be after unix epoch")
@@ -523,7 +523,7 @@ mod tests {
     #[test]
     fn ignores_previous_clean_run_state() {
         let temp_dir = std::env::temp_dir().join(format!(
-            "bitfun-crash-diagnostics-clean-test-{}",
+            "halo-crash-diagnostics-clean-test-{}",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("system time should be after unix epoch")
@@ -552,7 +552,7 @@ mod tests {
     #[test]
     fn records_unclean_shutdown_without_startup_notification_when_no_crash_report() {
         let temp_dir = std::env::temp_dir().join(format!(
-            "bitfun-crash-diagnostics-unclean-test-{}",
+            "halo-crash-diagnostics-unclean-test-{}",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("system time should be after unix epoch")
@@ -588,7 +588,7 @@ mod tests {
     #[test]
     fn ignores_crash_report_outside_current_log_root() {
         let temp_dir = std::env::temp_dir().join(format!(
-            "bitfun-crash-diagnostics-root-test-{}",
+            "halo-crash-diagnostics-root-test-{}",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("system time should be after unix epoch")
@@ -598,7 +598,7 @@ mod tests {
             .parent()
             .expect("temporary directory should have a parent")
             .join(format!(
-                "bitfun-crash-diagnostics-outside-{}",
+                "halo-crash-diagnostics-outside-{}",
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .expect("system time should be after unix epoch")

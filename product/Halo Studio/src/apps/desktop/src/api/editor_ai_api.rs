@@ -6,7 +6,7 @@
 //! - Supports streaming output and cancellation by request id
 
 use crate::api::app_state::AppState;
-use bitfun_core::util::types::message::Message as AIMessage;
+use halo_core::util::types::message::Message as AIMessage;
 use futures::StreamExt;
 use log::warn;
 use serde::{Deserialize, Serialize};

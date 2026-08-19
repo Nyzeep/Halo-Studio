@@ -119,7 +119,7 @@ export const TOOL_CARD_COMPONENTS = {
   // MiniApp tool
   'InitMiniApp': InitMiniAppDisplay,
 
-  // BitFun Page (session-only publish)
+  // Halo Page (session-only publish)
   'PageDeploy': PageDeployDisplay,
   'PagePublish': PagePublishDisplay,
 
@@ -132,7 +132,7 @@ export const TOOL_CARD_COMPONENTS = {
   // Model vision image preview
   'view_image': ViewImageToolCard,
 
-  // BitFun Canvas tools
+  // Halo Canvas tools
   'CreateCanvas': CanvasToolCard,
   'ReadCanvas': CanvasToolCard,
   'UpdateCanvas': CanvasToolCard,

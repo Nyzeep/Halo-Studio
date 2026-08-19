@@ -139,9 +139,9 @@ pub fn derive_walk_root(search_path_abs: &Path, pattern: &str) -> (PathBuf, Stri
 }
 
 pub fn resolve_glob_config(pattern: &str) -> (bool, bool) {
-    let is_whitelisted = pattern.starts_with(".bitfun")
-        || pattern.contains("/.bitfun")
-        || pattern.contains("\\.bitfun");
+    let is_whitelisted = pattern.starts_with(".halo-studio")
+        || pattern.contains("/.halo-studio")
+        || pattern.contains("\\.halo-studio");
 
     let apply_gitignore = !is_whitelisted;
     let ignore_hidden_files = !is_whitelisted;
@@ -593,7 +593,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time went backwards")
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("bitfun-glob-search-{name}-{unique}"));
+        let dir = std::env::temp_dir().join(format!("halo-glob-search-{name}-{unique}"));
         fs::create_dir_all(&dir).expect("temp dir should be created");
         TempTree { root: dir }
     }

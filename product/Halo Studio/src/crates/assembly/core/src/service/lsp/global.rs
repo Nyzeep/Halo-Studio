@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 
 use super::file_sync::{FileSyncConfig, LspFileSync};
 use super::WorkspaceLspManager;
-use bitfun_services_core::lsp::manager::LspManager;
+use halo_services_core::lsp::manager::LspManager;
 
 type WorkspaceManagerMap = HashMap<String, Arc<WorkspaceLspManager>>;
 type GlobalWorkspaceManagers = Arc<RwLock<WorkspaceManagerMap>>;

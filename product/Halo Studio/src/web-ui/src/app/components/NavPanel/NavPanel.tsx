@@ -74,7 +74,7 @@ const NavPanel: React.FC<NavPanelProps> = ({ className = '' }) => {
   const updateClipOrigin = useCallback(() => {
     const container = contentRef.current;
     if (!container) return;
-    const anchor = container.querySelector<HTMLElement>('.bitfun-nav-panel__item-slot.is-departing-anchor');
+    const anchor = container.querySelector<HTMLElement>('.halo-nav-panel__item-slot.is-departing-anchor');
     if (anchor) {
       const containerRect = container.getBoundingClientRect();
       const anchorRect = anchor.getBoundingClientRect();
@@ -92,21 +92,21 @@ const NavPanel: React.FC<NavPanelProps> = ({ className = '' }) => {
   }, [useSplitOpen, updateClipOrigin]);
 
   const contentCls = [
-    'bitfun-nav-panel__content',
+    'halo-nav-panel__content',
     hasMountedSceneNav && 'is-scene',
     useSplitOpen && 'is-split-open',
   ].filter(Boolean).join(' ');
 
   const sceneCls = [
-    'bitfun-nav-panel__layer bitfun-nav-panel__layer--scene',
+    'halo-nav-panel__layer halo-nav-panel__layer--scene',
     hasMountedSceneNav && 'is-active',
   ].filter(Boolean).join(' ');
 
   return (
-    <nav className={`bitfun-nav-panel ${className}`} aria-label={t('nav.aria.mainNav')} data-testid="nav-panel">
+    <nav className={`halo-nav-panel ${className}`} aria-label={t('nav.aria.mainNav')} data-testid="nav-panel">
       <div ref={contentRef} className={contentCls}>
 
-        <div className="bitfun-nav-panel__layer bitfun-nav-panel__layer--main">
+        <div className="halo-nav-panel__layer halo-nav-panel__layer--main">
           <MainNav
             isDeparting={useSplitOpen}
             anchorNavSceneId={useSplitOpen ? mountedSceneId : null}
@@ -116,7 +116,7 @@ const NavPanel: React.FC<NavPanelProps> = ({ className = '' }) => {
         {SceneNavComponent && (
           <div className={sceneCls}>
             <Suspense fallback={null}>
-              <div className="bitfun-nav-panel__scene-inner">
+              <div className="halo-nav-panel__scene-inner">
                 <SceneNavComponent />
               </div>
             </Suspense>

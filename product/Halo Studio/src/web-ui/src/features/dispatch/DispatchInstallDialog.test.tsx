@@ -119,7 +119,7 @@ describe('DispatchInstallDialog installation lifecycle', () => {
       release: {
         version: '1.2.3',
         target: 'x86_64-unknown-linux-gnu',
-        url: 'https://example.test/bitfun',
+        url: 'https://example.test/halo',
         sha256: 'abc123',
       },
     });
@@ -182,10 +182,10 @@ describe('DispatchInstallDialog installation lifecycle', () => {
 
     await act(async () => {
       start.resolve({
-        scriptPath: '/tmp/install-bitfun.sh',
+        scriptPath: '/tmp/install-halo.sh',
         version: '1.2.3',
         target: 'x86_64-unknown-linux-gnu',
-        url: 'https://example.test/bitfun',
+        url: 'https://example.test/halo',
         sha256: 'abc123',
       });
       await Promise.resolve();
@@ -205,10 +205,10 @@ describe('DispatchInstallDialog installation lifecycle', () => {
       status: 'running';
     }>();
     mocks.installCliStart.mockResolvedValue({
-      scriptPath: '/tmp/install-bitfun.sh',
+      scriptPath: '/tmp/install-halo.sh',
       version: '1.2.3',
       target: 'x86_64-unknown-linux-gnu',
-      url: 'https://example.test/bitfun',
+      url: 'https://example.test/halo',
       sha256: 'abc123',
     });
     mocks.installCliPoll.mockReturnValue(poll.promise);

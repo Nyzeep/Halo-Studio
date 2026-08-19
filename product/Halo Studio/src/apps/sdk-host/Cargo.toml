@@ -1,5 +1,5 @@
 [package]
-name = "bitfun-sdk-host-app"
+name = "halo-sdk-host-app"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,15 +7,15 @@ description = "Standalone local Agent SDK Host implementation candidate"
 autobins = false
 
 [[bin]]
-name = "bitfun-sdk-host"
+name = "halo-sdk-host"
 path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-bitfun-agent-runtime = { path = "../../crates/execution/agent-runtime" }
-bitfun-core = { path = "../../crates/assembly/core", default-features = false, features = ["product-full"] }
-bitfun-sdk-host = { path = "../../crates/interfaces/sdk-host" }
+halo-agent-runtime = { path = "../../crates/execution/agent-runtime" }
+halo-core = { path = "../../crates/assembly/core", default-features = false, features = ["product-full"] }
+halo-sdk-host = { path = "../../crates/interfaces/sdk-host" }
 futures-util = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

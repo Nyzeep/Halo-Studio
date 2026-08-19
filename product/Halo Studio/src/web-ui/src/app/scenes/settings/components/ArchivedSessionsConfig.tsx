@@ -162,8 +162,8 @@ const ArchivedSessionsConfig: React.FC = () => {
     const handler = () => {
       void loadArchived();
     };
-    window.addEventListener('bitfun:session-archived', handler);
-    return () => window.removeEventListener('bitfun:session-archived', handler);
+    window.addEventListener('halo:session-archived', handler);
+    return () => window.removeEventListener('halo:session-archived', handler);
   }, [loadArchived]);
 
   // ── Group entries by workspace ───────────────────────────────────────────

@@ -1,4 +1,4 @@
-//! Native BitFun agent lifecycle hooks.
+//! Native Halo agent lifecycle hooks.
 //!
 //! This module owns the portable hook engine that executes user-configured
 //! command hooks at agent lifecycle events. The configuration document, event
@@ -7,13 +7,13 @@
 //! consistent with Codex hooks so users can reuse existing hook scripts.
 //!
 //! The engine is host-independent: it receives already-loaded settings layers
-//! and fully-built payloads, and never resolves BitFun config paths itself.
+//! and fully-built payloads, and never resolves Halo config paths itself.
 //! Config discovery, scope gating, and dispatch-site integration live in
-//! `bitfun-core` (`native_hooks` wiring).
+//! `halo-core` (`native_hooks` wiring).
 //!
 //! Distinct from:
 //! - `post_call_hooks`: internal compiled-in Rust hooks (not user-configured).
-//! - the external hook catalog (`bitfun-product-domains`): read-only
+//! - the external hook catalog (`halo-product-domains`): read-only
 //!   inspection of other AI applications' hook configuration.
 
 mod engine;

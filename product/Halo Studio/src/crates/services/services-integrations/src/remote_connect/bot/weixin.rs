@@ -327,7 +327,7 @@ impl WeixinProviderClient {
         let msg = json!({
             "from_user_id": "",
             "to_user_id": to_user_id,
-            "client_id": format!("bitfun-wx-{}", uuid::Uuid::new_v4()),
+            "client_id": format!("halo-wx-{}", uuid::Uuid::new_v4()),
             "message_type": 2,
             "message_state": 2,
             "item_list": item_list,
@@ -604,7 +604,7 @@ impl WeixinProviderClient {
         let msg = json!({
             "from_user_id": "",
             "to_user_id": to_user_id,
-            "client_id": format!("bitfun-wx-{}", uuid::Uuid::new_v4()),
+            "client_id": format!("halo-wx-{}", uuid::Uuid::new_v4()),
             "message_type": 2,
             "message_state": 2,
             "item_list": items,
@@ -1343,7 +1343,7 @@ fn ensure_trailing_slash(url: &str) -> String {
 
 fn sync_buf_path(bot_account_id: &str) -> PathBuf {
     let base =
-        super::super::bitfun_home_dir().unwrap_or_else(|| std::env::temp_dir().join(".bitfun"));
+        super::super::halo_home_dir().unwrap_or_else(|| std::env::temp_dir().join(".halo-studio"));
     base.join("weixin")
         .join(format!("{bot_account_id}_get_updates_buf.txt"))
 }

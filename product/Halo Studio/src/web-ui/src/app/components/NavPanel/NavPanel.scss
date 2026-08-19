@@ -1,7 +1,7 @@
 /**
  * NavPanel styles — categorized sidebar navigation.
  *
- * Root class: .bitfun-nav-panel
+ * Root class: .halo-nav-panel
  * Fixed width 240px, always visible.
  * Sessions supports inline accordion expansion.
  */
@@ -19,7 +19,7 @@ $_section-header-height: 24px;
 // Root
 // ──────────────────────────────────────────────
 
-.bitfun-nav-panel {
+.halo-nav-panel {
   @include nav-font.nav-panel-font-token-scope;
 
   width: 100%;
@@ -144,9 +144,9 @@ $_section-header-height: 24px;
   }
 
   &__mode-pill {
-    --bitfun-mode-pill-liquid-pro-bg: color-mix(in srgb, var(--color-accent-500) 22%, var(--element-bg-medium));
-    --bitfun-mode-pill-liquid-assistant-bg: color-mix(in srgb, var(--color-accent-500) 28%, var(--element-bg-medium));
-    --bitfun-mode-pill-liquid-mid-bg: color-mix(
+    --halo-mode-pill-liquid-pro-bg: color-mix(in srgb, var(--color-accent-500) 22%, var(--element-bg-medium));
+    --halo-mode-pill-liquid-assistant-bg: color-mix(in srgb, var(--color-accent-500) 28%, var(--element-bg-medium));
+    --halo-mode-pill-liquid-mid-bg: color-mix(
       in srgb,
       var(--color-accent-500) 16%,
       color-mix(in srgb, var(--color-accent-500) 14%, var(--element-bg-medium))
@@ -211,7 +211,7 @@ $_section-header-height: 24px;
     left: 0;
     width: 50%;
     border-radius: 999px;
-    background: var(--bitfun-mode-pill-liquid-pro-bg);
+    background: var(--halo-mode-pill-liquid-pro-bg);
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--color-static-white) 12%, transparent),
       0 2px 10px color-mix(in srgb, var(--color-accent-500) 12%, transparent);
@@ -224,23 +224,23 @@ $_section-header-height: 24px;
       box-shadow 0.38s ease,
       border-radius 0.38s ease;
 
-    .bitfun-nav-panel__mode-pill.is-assistant:not(.is-switching) & {
+    .halo-nav-panel__mode-pill.is-assistant:not(.is-switching) & {
       transform: translate3d(100%, 0, 0) scale(1, 1);
-      background: var(--bitfun-mode-pill-liquid-assistant-bg);
+      background: var(--halo-mode-pill-liquid-assistant-bg);
       box-shadow:
         inset 0 1px 0 color-mix(in srgb, var(--color-static-white) 12%, transparent),
         0 2px 12px color-mix(in srgb, var(--color-accent-500) 18%, transparent);
     }
 
     &.is-morph-to-assistant {
-      animation: bitfun-nav-mode-pill-morph-to-assistant 0.48s linear forwards;
+      animation: halo-nav-mode-pill-morph-to-assistant 0.48s linear forwards;
     }
 
     &.is-morph-to-pro {
-      animation: bitfun-nav-mode-pill-morph-to-pro 0.48s linear forwards;
+      animation: halo-nav-mode-pill-morph-to-pro 0.48s linear forwards;
     }
 
-    .bitfun-nav-panel__mode-pill.is-switching & {
+    .halo-nav-panel__mode-pill.is-switching & {
       transition: none;
     }
   }
@@ -271,12 +271,12 @@ $_section-header-height: 24px;
       max-width: 100%;
     }
 
-    &--pro .bitfun-nav-panel__mode-pill-segment-icon {
+    &--pro .halo-nav-panel__mode-pill-segment-icon {
       width: 22px;
       height: 22px;
     }
 
-    &--assistant .bitfun-nav-panel__mode-pill-segment-icon {
+    &--assistant .halo-nav-panel__mode-pill-segment-icon {
       width: 24px;
       height: 24px;
     }
@@ -323,12 +323,12 @@ $_section-header-height: 24px;
       transform: scale(1);
     }
 
-    .bitfun-nav-panel__mode-pill:hover .bitfun-nav-panel__mode-pill-segment-icon--dual &--default {
+    .halo-nav-panel__mode-pill:hover .halo-nav-panel__mode-pill-segment-icon--dual &--default {
       opacity: 0;
       transform: scale(1.05);
     }
 
-    .bitfun-nav-panel__mode-pill:hover .bitfun-nav-panel__mode-pill-segment-icon--dual &--hover {
+    .halo-nav-panel__mode-pill:hover .halo-nav-panel__mode-pill-segment-icon--dual &--hover {
       opacity: 1;
       transform: scale(1);
     }
@@ -458,10 +458,10 @@ $_section-header-height: 24px;
     box-shadow: 0 4px 12px var(--color-overlay-black-30);
     z-index: 9999;
     transform-origin: top left;
-    animation: bitfun-footer-menu-in $motion-fast $easing-decelerate forwards;
+    animation: halo-footer-menu-in $motion-fast $easing-decelerate forwards;
 
     &.is-closing {
-      animation: bitfun-footer-menu-out $motion-fast $easing-accelerate forwards;
+      animation: halo-footer-menu-out $motion-fast $easing-accelerate forwards;
     }
   }
 
@@ -522,7 +522,7 @@ $_section-header-height: 24px;
     max-width: 100%;
     overflow-y: auto;
     overflow-x: hidden;
-    // No padding-top: separation from top-actions is only .bitfun-nav-panel__top-actions padding-bottom.
+    // No padding-top: separation from top-actions is only .halo-nav-panel__top-actions padding-bottom.
     // Top padding here stacked with that and read as “extra” gap above the first section header.
     padding: 0 0 $size-gap-3 0;
 
@@ -535,7 +535,7 @@ $_section-header-height: 24px;
 
     // Synced with button ripple: fade list out, swap group, fade in
     &.is-mode-switching {
-      animation: bitfun-nav-sections-mode-switch 0.48s linear;
+      animation: halo-nav-sections-mode-switch 0.48s linear;
     }
   }
 
@@ -562,7 +562,7 @@ $_section-header-height: 24px;
         opacity: 1;
         background: var(--element-bg-soft);
 
-        .bitfun-nav-panel__section-label {
+        .halo-nav-panel__section-label {
           color: var(--color-text-primary);
         }
       }
@@ -843,7 +843,7 @@ $_section-header-height: 24px;
       margin-left: -8px;
     }
 
-    &:not(.is-active):not(.bitfun-nav-panel__miniapp-bubble--more) {
+    &:not(.is-active):not(.halo-nav-panel__miniapp-bubble--more) {
       filter: saturate(0.72);
       opacity: 0.9;
     }
@@ -917,7 +917,7 @@ $_section-header-height: 24px;
                 opacity $motion-fast $easing-standard,
                 transform $motion-fast $easing-standard;
 
-    .bitfun-nav-panel__section-header--scene-link:hover & {
+    .halo-nav-panel__section-header--scene-link:hover & {
       color: var(--color-text-secondary);
       opacity: 1;
       transform: translateX(1px);
@@ -983,10 +983,10 @@ $_section-header-height: 24px;
     box-shadow: 0 4px 12px var(--color-overlay-black-30);
     z-index: 9999;
     transform-origin: top left;
-    animation: bitfun-footer-menu-in $motion-fast $easing-decelerate forwards;
+    animation: halo-footer-menu-in $motion-fast $easing-decelerate forwards;
 
     &.is-closing {
-      animation: bitfun-footer-menu-out $motion-fast $easing-accelerate forwards;
+      animation: halo-footer-menu-out $motion-fast $easing-accelerate forwards;
     }
   }
 
@@ -1147,7 +1147,7 @@ $_section-header-height: 24px;
     }
   }
 
-  button.bitfun-nav-panel__inline-item {
+  button.halo-nav-panel__inline-item {
     font: inherit;
     appearance: none;
     -webkit-appearance: none;
@@ -1272,7 +1272,7 @@ $_section-header-height: 24px;
         border-radius: 0 2px 2px 0;
       }
 
-      .bitfun-nav-panel__item-icon {
+      .halo-nav-panel__item-icon {
         color: var(--color-text-primary);
         opacity: 1;
       }
@@ -1282,7 +1282,7 @@ $_section-header-height: 24px;
       opacity: 1;
       color: var(--color-text-primary);
 
-      .bitfun-nav-panel__item-icon {
+      .halo-nav-panel__item-icon {
         opacity: 0.8;
       }
     }
@@ -1301,7 +1301,7 @@ $_section-header-height: 24px;
     transition: opacity $motion-fast $easing-standard,
                 color $motion-fast $easing-standard;
 
-    .bitfun-nav-panel__item:hover & {
+    .halo-nav-panel__item:hover & {
       opacity: 1;
     }
   }
@@ -1382,23 +1382,23 @@ $_section-header-height: 24px;
 }
 
 // Liquid thumb: slide with horizontal stretch + corner morph (pro <-> assistant)
-@keyframes bitfun-nav-mode-pill-morph-to-assistant {
+@keyframes halo-nav-mode-pill-morph-to-assistant {
   0% {
     transform: translate3d(0, 0, 0) scale(1, 1);
     border-radius: 999px;
-    background: var(--bitfun-mode-pill-liquid-pro-bg);
+    background: var(--halo-mode-pill-liquid-pro-bg);
     animation-timing-function: cubic-bezier(0.42, 0, 0.64, 0.12);
   }
   24% {
     transform: translate3d(19%, 0, 0) scale(1.11, 0.9);
     border-radius: 15px;
-    background: var(--bitfun-mode-pill-liquid-mid-bg);
+    background: var(--halo-mode-pill-liquid-mid-bg);
     animation-timing-function: cubic-bezier(0.36, 0.02, 0.22, 1);
   }
   48% {
     transform: translate3d(50%, 0, 0) scale(1.22, 0.82);
     border-radius: 10px;
-    background: var(--bitfun-mode-pill-liquid-mid-bg);
+    background: var(--halo-mode-pill-liquid-mid-bg);
     animation-timing-function: cubic-bezier(0.24, 0.72, 0.32, 1);
   }
   72% {
@@ -1410,27 +1410,27 @@ $_section-header-height: 24px;
   100% {
     transform: translate3d(100%, 0, 0) scale(1, 1);
     border-radius: 999px;
-    background: var(--bitfun-mode-pill-liquid-assistant-bg);
+    background: var(--halo-mode-pill-liquid-assistant-bg);
   }
 }
 
-@keyframes bitfun-nav-mode-pill-morph-to-pro {
+@keyframes halo-nav-mode-pill-morph-to-pro {
   0% {
     transform: translate3d(100%, 0, 0) scale(1, 1);
     border-radius: 999px;
-    background: var(--bitfun-mode-pill-liquid-assistant-bg);
+    background: var(--halo-mode-pill-liquid-assistant-bg);
     animation-timing-function: cubic-bezier(0.42, 0, 0.64, 0.12);
   }
   24% {
     transform: translate3d(81%, 0, 0) scale(1.11, 0.9);
     border-radius: 15px;
-    background: var(--bitfun-mode-pill-liquid-mid-bg);
+    background: var(--halo-mode-pill-liquid-mid-bg);
     animation-timing-function: cubic-bezier(0.36, 0.02, 0.22, 1);
   }
   48% {
     transform: translate3d(50%, 0, 0) scale(1.22, 0.82);
     border-radius: 10px;
-    background: var(--bitfun-mode-pill-liquid-mid-bg);
+    background: var(--halo-mode-pill-liquid-mid-bg);
     animation-timing-function: cubic-bezier(0.24, 0.72, 0.32, 1);
   }
   72% {
@@ -1442,7 +1442,7 @@ $_section-header-height: 24px;
   100% {
     transform: translate3d(0, 0, 0) scale(1, 1);
     border-radius: 999px;
-    background: var(--bitfun-mode-pill-liquid-pro-bg);
+    background: var(--halo-mode-pill-liquid-pro-bg);
   }
 }
 
@@ -1451,7 +1451,7 @@ $_section-header-height: 24px;
 // ──────────────────────────────────────────────
 
 // Sections tied to button ripple: fade out then slide in from the opposite side
-@keyframes bitfun-nav-sections-mode-switch {
+@keyframes halo-nav-sections-mode-switch {
   0% {
     opacity: 1;
     transform: translateY(0);
@@ -1473,7 +1473,7 @@ $_section-header-height: 24px;
   }
 }
 
-@keyframes bitfun-footer-menu-in {
+@keyframes halo-footer-menu-in {
   from {
     opacity: 0;
     transform: translateY(6px) scale(0.96);
@@ -1484,7 +1484,7 @@ $_section-header-height: 24px;
   }
 }
 
-@keyframes bitfun-footer-menu-out {
+@keyframes halo-footer-menu-out {
   from {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -1495,7 +1495,7 @@ $_section-header-height: 24px;
   }
 }
 
-.bitfun-nav-panel__footer {
+.halo-nav-panel__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1504,36 +1504,36 @@ $_section-header-height: 24px;
   gap: $size-gap-1;
 }
 
-.bitfun-nav-panel__footer-left {
+.halo-nav-panel__footer-left {
   display: flex;
   align-items: center;
   gap: $size-gap-1;
 }
 
-.bitfun-nav-panel__footer-right {
+.halo-nav-panel__footer-right {
   display: flex;
   align-items: center;
   gap: $size-gap-1;
   flex-shrink: 0;
 }
 
-.bitfun-nav-panel__footer-btn {
+.halo-nav-panel__footer-btn {
   flex-shrink: 0;
 }
 
 // Footer notification: yellow only when there are unread messages (BellDot)
-.bitfun-nav-panel__footer .bitfun-notification-btn .bitfun-notification-btn__icon--has-message {
+.halo-nav-panel__footer .halo-notification-btn .halo-notification-btn__icon--has-message {
   color: var(--color-warning);
 }
 
-.bitfun-nav-panel__footer .bitfun-notification-btn.bitfun-notification-btn--nav-hover-icon:not(.bitfun-notification-btn--has-progress) {
+.halo-nav-panel__footer .halo-notification-btn.halo-notification-btn--nav-hover-icon:not(.halo-notification-btn--has-progress) {
   width: 28px;
   height: 28px;
   padding: 0;
   justify-content: center;
 }
 
-.bitfun-nav-panel__footer-btn--icon {
+.halo-nav-panel__footer-btn--icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1565,7 +1565,7 @@ $_section-header-height: 24px;
 }
 
 // Footer icon buttons: default icon fades to alternate on hover / focus-visible
-.bitfun-nav-panel__footer-btn-icon-swap {
+.halo-nav-panel__footer-btn-icon-swap {
   position: relative;
   width: 15px;
   height: 15px;
@@ -1583,25 +1583,25 @@ $_section-header-height: 24px;
   }
 }
 
-.bitfun-nav-panel__footer-btn-icon-swap-default {
+.halo-nav-panel__footer-btn-icon-swap-default {
   opacity: 1;
 }
 
-.bitfun-nav-panel__footer-btn-icon-swap-hover {
+.halo-nav-panel__footer-btn-icon-swap-hover {
   opacity: 0;
 }
 
 // is-hover-open: multimodal submenu is open but pointer may be over the menu, not the button — keep “hover” icon
-.bitfun-nav-panel__footer-btn--icon:hover .bitfun-nav-panel__footer-btn-icon-swap,
-.bitfun-nav-panel__footer-btn--icon:focus-visible .bitfun-nav-panel__footer-btn-icon-swap,
-.bitfun-nav-panel__footer-btn--icon.is-hover-open .bitfun-nav-panel__footer-btn-icon-swap,
-.bitfun-nav-panel__footer .bitfun-notification-btn--nav-hover-icon:hover .bitfun-nav-panel__footer-btn-icon-swap,
-.bitfun-nav-panel__footer .bitfun-notification-btn--nav-hover-icon:focus-visible .bitfun-nav-panel__footer-btn-icon-swap {
-  .bitfun-nav-panel__footer-btn-icon-swap-default {
+.halo-nav-panel__footer-btn--icon:hover .halo-nav-panel__footer-btn-icon-swap,
+.halo-nav-panel__footer-btn--icon:focus-visible .halo-nav-panel__footer-btn-icon-swap,
+.halo-nav-panel__footer-btn--icon.is-hover-open .halo-nav-panel__footer-btn-icon-swap,
+.halo-nav-panel__footer .halo-notification-btn--nav-hover-icon:hover .halo-nav-panel__footer-btn-icon-swap,
+.halo-nav-panel__footer .halo-notification-btn--nav-hover-icon:focus-visible .halo-nav-panel__footer-btn-icon-swap {
+  .halo-nav-panel__footer-btn-icon-swap-default {
     opacity: 0;
   }
 
-  .bitfun-nav-panel__footer-btn-icon-swap-hover {
+  .halo-nav-panel__footer-btn-icon-swap-hover {
     opacity: 1;
   }
 }
@@ -1610,7 +1610,7 @@ $_section-header-height: 24px;
 // More-options popup menu
 // ──────────────────────────────────────────────
 
-.bitfun-nav-panel__footer-more-wrap {
+.halo-nav-panel__footer-more-wrap {
   position: relative;
 }
 
@@ -1618,7 +1618,7 @@ $_section-header-height: 24px;
 // Multimodal tools picker (Browser + Mermaid)
 // ──────────────────────────────────────────────
 
-@keyframes bitfun-multimodal-menu-in {
+@keyframes halo-multimodal-menu-in {
   from {
     opacity: 0;
     transform: translateY(5px) scale(0.95);
@@ -1629,13 +1629,13 @@ $_section-header-height: 24px;
   }
 }
 
-.bitfun-nav-panel__footer-multimodal-wrap {
+.halo-nav-panel__footer-multimodal-wrap {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-.bitfun-nav-panel__footer-multimodal-menu {
+.halo-nav-panel__footer-multimodal-menu {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 50%;
@@ -1651,11 +1651,11 @@ $_section-header-height: 24px;
   box-shadow: 0 8px 24px rgba(var(--color-static-black-rgb), 0.28), 0 2px 8px rgba(var(--color-static-black-rgb), 0.16);
   z-index: 9999;
   transform-origin: bottom center;
-  animation: bitfun-multimodal-menu-in 0.14s $easing-decelerate forwards;
+  animation: halo-multimodal-menu-in 0.14s $easing-decelerate forwards;
 
 }
 
-.bitfun-nav-panel__footer-multimodal-item {
+.halo-nav-panel__footer-multimodal-item {
   display: flex;
   align-items: center;
   gap: $size-gap-2;
@@ -1678,7 +1678,7 @@ $_section-header-height: 24px;
     color: var(--color-text-primary);
     background: var(--element-bg-soft);
 
-    .bitfun-nav-panel__footer-multimodal-item-icon {
+    .halo-nav-panel__footer-multimodal-item-icon {
       opacity: 1;
     }
   }
@@ -1696,21 +1696,21 @@ $_section-header-height: 24px;
     color: var(--color-text-primary);
     background: var(--element-bg-soft);
 
-    .bitfun-nav-panel__footer-multimodal-item-icon {
+    .halo-nav-panel__footer-multimodal-item-icon {
       color: var(--color-text-primary);
       opacity: 1;
     }
   }
 }
 
-.bitfun-nav-panel__footer-multimodal-item-icon {
+.halo-nav-panel__footer-multimodal-item-icon {
   flex-shrink: 0;
   opacity: 0.65;
   transition: opacity $motion-fast $easing-standard,
               color $motion-fast $easing-standard;
 }
 
-.bitfun-nav-panel__footer-multimodal-item-label {
+.halo-nav-panel__footer-multimodal-item-label {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1718,18 +1718,18 @@ $_section-header-height: 24px;
 }
 
 // Hover-open subtle glow on the main button
-.bitfun-nav-panel__footer-btn--icon.is-hover-open {
+.halo-nav-panel__footer-btn--icon.is-hover-open {
   color: var(--color-text-primary);
   background: var(--element-bg-soft);
 }
 
-.bitfun-nav-panel__footer-backdrop {
+.halo-nav-panel__footer-backdrop {
   position: fixed;
   inset: 0;
   z-index: 9998;
 }
 
-.bitfun-nav-panel__footer-menu {
+.halo-nav-panel__footer-menu {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
@@ -1741,20 +1741,20 @@ $_section-header-height: 24px;
   box-shadow: 0 4px 12px var(--color-overlay-black-30);
   z-index: 9999;
   transform-origin: bottom left;
-  animation: bitfun-footer-menu-in $motion-fast $easing-decelerate forwards;
+  animation: halo-footer-menu-in $motion-fast $easing-decelerate forwards;
 
   &.is-closing {
-    animation: bitfun-footer-menu-out $motion-fast $easing-accelerate forwards;
+    animation: halo-footer-menu-out $motion-fast $easing-accelerate forwards;
   }
 }
 
-.bitfun-nav-panel__footer-menu-divider {
+.halo-nav-panel__footer-menu-divider {
   height: 1px;
   margin: $size-gap-1 $size-gap-2;
   background: var(--border-subtle);
 }
 
-.bitfun-nav-panel__footer-menu-item {
+.halo-nav-panel__footer-menu-item {
   display: flex;
   align-items: center;
   gap: $size-gap-2;
@@ -1814,7 +1814,7 @@ $_section-header-height: 24px;
   }
 }
 
-.bitfun-nav-panel__footer-menu-item-label {
+.halo-nav-panel__footer-menu-item-label {
   flex: 1;
   min-width: 0;
   max-width: 160px;
@@ -1822,7 +1822,7 @@ $_section-header-height: 24px;
   text-overflow: ellipsis;
 }
 
-.bitfun-nav-panel__footer-menu-item-dot {
+.halo-nav-panel__footer-menu-item-dot {
   flex-shrink: 0;
   width: 7px;
   height: 7px;
@@ -1830,7 +1830,7 @@ $_section-header-height: 24px;
   background: var(--color-success);
 }
 
-.bitfun-nav-panel__remote-disclaimer {
+.halo-nav-panel__remote-disclaimer {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1838,14 +1838,14 @@ $_section-header-height: 24px;
   padding: 12px 0 14px;
 }
 
-.bitfun-nav-panel__remote-disclaimer-text {
+.halo-nav-panel__remote-disclaimer-text {
   margin: 0;
   font-size: var(--font-size-xs);
   line-height: 1.2;
   color: var(--color-text-muted);
 }
 
-.bitfun-nav-panel__remote-disclaimer-list {
+.halo-nav-panel__remote-disclaimer-list {
   margin: 0;
   padding-left: 20px;
   display: flex;
@@ -1860,7 +1860,7 @@ $_section-header-height: 24px;
   }
 }
 
-.bitfun-nav-panel__remote-disclaimer-actions {
+.halo-nav-panel__remote-disclaimer-actions {
   display: flex;
   justify-content: center;
   gap: 12px;
@@ -1869,7 +1869,7 @@ $_section-header-height: 24px;
   border-top: 1px solid var(--border-subtle);
 }
 
-.bitfun-nav-panel__remote-disclaimer-btn {
+.halo-nav-panel__remote-disclaimer-btn {
   border-radius: 6px;
   border: 1px solid transparent;
   min-width: 112px;
@@ -1879,7 +1879,7 @@ $_section-header-height: 24px;
   transition: all $motion-fast $easing-standard;
 }
 
-.bitfun-nav-panel__remote-disclaimer-btn--secondary {
+.halo-nav-panel__remote-disclaimer-btn--secondary {
   background: var(--element-bg-subtle);
   color: var(--color-text-secondary);
   border-color: var(--border-subtle);
@@ -1890,7 +1890,7 @@ $_section-header-height: 24px;
   }
 }
 
-.bitfun-nav-panel__remote-disclaimer-btn--primary {
+.halo-nav-panel__remote-disclaimer-btn--primary {
   background: var(--color-accent-600);
   color: var(--color-static-white);
   border-color: color-mix(in srgb, var(--color-accent-700) 35%, transparent);
@@ -1905,7 +1905,7 @@ $_section-header-height: 24px;
 // ──────────────────────────────────────────────
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-nav-panel {
+  .halo-nav-panel {
     &__item,
     &__item-slot,
     &__item-icon,
@@ -1925,41 +1925,41 @@ $_section-header-height: 24px;
     }
   }
 
-  .bitfun-nav-panel__top-action-icon-circle {
+  .halo-nav-panel__top-action-icon-circle {
     transition: none;
   }
 
-  .bitfun-nav-panel__top-action-btn:hover .bitfun-nav-panel__top-action-icon-circle,
-  .bitfun-nav-panel__top-action-btn:active .bitfun-nav-panel__top-action-icon-circle {
+  .halo-nav-panel__top-action-btn:hover .halo-nav-panel__top-action-icon-circle,
+  .halo-nav-panel__top-action-btn:active .halo-nav-panel__top-action-icon-circle {
     transform: scale(1);
   }
 
-  .bitfun-nav-panel__top-action-btn:not(.bitfun-nav-panel__top-action-btn--sub) .bitfun-nav-panel__top-action-icon-slot {
+  .halo-nav-panel__top-action-btn:not(.halo-nav-panel__top-action-btn--sub) .halo-nav-panel__top-action-icon-slot {
     transition: none;
   }
 
-  .bitfun-nav-panel__top-action-btn:not(.bitfun-nav-panel__top-action-btn--sub):hover .bitfun-nav-panel__top-action-icon-slot {
+  .halo-nav-panel__top-action-btn:not(.halo-nav-panel__top-action-btn--sub):hover .halo-nav-panel__top-action-icon-slot {
     transform: scale(1);
   }
 }
 
 // ── Nav workspace search ─────────────────────────
 
-.bitfun-nav-panel__brand-header {
+.halo-nav-panel__brand-header {
   display: flex;
   flex-direction: column;
   padding: 0 $size-gap-2 $size-gap-1;
   flex-shrink: 0;
 }
 
-.bitfun-nav-panel__brand-search {
+.halo-nav-panel__brand-search {
   width: 100%;
   min-width: 0;
 }
 
 // ── Top action strip ─────────────────────────────
 
-.bitfun-nav-panel__top-actions {
+.halo-nav-panel__top-actions {
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -1967,7 +1967,7 @@ $_section-header-height: 24px;
   flex-shrink: 0;
 }
 
-.bitfun-nav-panel__top-action-expand {
+.halo-nav-panel__top-action-expand {
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -1977,7 +1977,7 @@ $_section-header-height: 24px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.bitfun-nav-panel__top-action-sublist {
+.halo-nav-panel__top-action-sublist {
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -1994,7 +1994,7 @@ $_section-header-height: 24px;
 }
 
 // Align with section headers: __section-header margin-x 8 + padding-x 8 → label starts 16px from panel; __top-actions pad-x 8 + button pl 8 → icon column starts at 16px.
-.bitfun-nav-panel__top-action-btn {
+.halo-nav-panel__top-action-btn {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2013,7 +2013,7 @@ $_section-header-height: 24px;
               color $motion-fast $easing-standard;
 
   // Only the label span should grow; icon / chevron wrappers must NOT get flex: 1
-  > span:not(.bitfun-nav-panel__top-action-icon-circle):not(.bitfun-nav-panel__top-action-icon-slot):not(.bitfun-nav-panel__top-action-expand-icons) {
+  > span:not(.halo-nav-panel__top-action-icon-circle):not(.halo-nav-panel__top-action-icon-slot):not(.halo-nav-panel__top-action-expand-icons) {
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -2023,7 +2023,7 @@ $_section-header-height: 24px;
 
   svg { flex-shrink: 0; }
 
-  .bitfun-nav-panel__top-action-icon-slot {
+  .halo-nav-panel__top-action-icon-slot {
     width: 22px;
     min-width: 22px;
     height: 22px;
@@ -2034,13 +2034,13 @@ $_section-header-height: 24px;
   }
 
   // 助理行：前导 icon 悬停微微放大（与 __top-action-icon-circle 一致；排除 --sub 的 Agents / Skills）
-  &:not(.bitfun-nav-panel__top-action-btn--sub) .bitfun-nav-panel__top-action-icon-slot {
+  &:not(.halo-nav-panel__top-action-btn--sub) .halo-nav-panel__top-action-icon-slot {
     transform: scale(1);
     transform-origin: center;
     transition: transform $motion-fast $easing-standard;
   }
 
-  &:not(.bitfun-nav-panel__top-action-btn--sub):hover .bitfun-nav-panel__top-action-icon-slot {
+  &:not(.halo-nav-panel__top-action-btn--sub):hover .halo-nav-panel__top-action-icon-slot {
     transform: scale(1.07);
   }
 
@@ -2065,7 +2065,7 @@ $_section-header-height: 24px;
 }
 
 // 扩展：默认 Blocks，悬停时图标位切换为 Chevron；展开时箭头朝上
-.bitfun-nav-panel__top-action-expand-icons {
+.halo-nav-panel__top-action-expand-icons {
   position: relative;
   width: 22px;
   min-width: 22px;
@@ -2082,11 +2082,11 @@ $_section-header-height: 24px;
                 transform $motion-fast $easing-standard;
   }
 
-  .bitfun-nav-panel__top-action-expand-icon-default {
+  .halo-nav-panel__top-action-expand-icon-default {
     opacity: 1;
   }
 
-  .bitfun-nav-panel__top-action-expand-icon-chevron {
+  .halo-nav-panel__top-action-expand-icon-chevron {
     opacity: 0;
 
     &.is-open {
@@ -2095,17 +2095,17 @@ $_section-header-height: 24px;
   }
 }
 
-.bitfun-nav-panel__top-action-btn--expand:hover .bitfun-nav-panel__top-action-expand-icons {
-  .bitfun-nav-panel__top-action-expand-icon-default {
+.halo-nav-panel__top-action-btn--expand:hover .halo-nav-panel__top-action-expand-icons {
+  .halo-nav-panel__top-action-expand-icon-default {
     opacity: 0;
   }
 
-  .bitfun-nav-panel__top-action-expand-icon-chevron {
+  .halo-nav-panel__top-action-expand-icon-chevron {
     opacity: 1;
   }
 }
 
-.bitfun-nav-panel__top-action-icon-circle {
+.halo-nav-panel__top-action-icon-circle {
   width: 22px;
   min-width: 22px;
   height: 22px;
@@ -2119,12 +2119,12 @@ $_section-header-height: 24px;
   transform: scale(1);
   transform-origin: center;
 
-  .bitfun-nav-panel__top-action-btn:hover & {
+  .halo-nav-panel__top-action-btn:hover & {
     @include btn-primary.btn-primary-surface-hover;
     transform: scale(1.07);
   }
 
-  .bitfun-nav-panel__top-action-btn:active & {
+  .halo-nav-panel__top-action-btn:active & {
     @include btn-primary.btn-primary-surface-active;
     transform: scale(0.86);
   }

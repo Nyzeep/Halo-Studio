@@ -17,8 +17,8 @@
   "settings": {
     "logPath": {
       "label": "Log File Path",
-      "description": "Debug log save path (relative to workspace root), defaults to .bitfun/debug.log",
-      "placeholder": ".bitfun/debug.log",
+      "description": "Debug log save path (relative to workspace root), defaults to .halo-studio/debug.log",
+      "placeholder": ".halo-studio/debug.log",
       "browse": "Browse"
     },
     "ingestPort": {

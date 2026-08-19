@@ -2,7 +2,7 @@ import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { configAPI } from '@/infrastructure/api';
-import { bitfunDarkTheme, bitfunLightTheme } from '../presets';
+import { haloDarkTheme, haloLightTheme } from '../presets';
 import {
   PLUGIN_THEME_COLOR_KEYS,
   createPluginThemeColorProjection,
@@ -38,40 +38,40 @@ function expectNoRetiredThemeAuthoringKeys(theme: ThemeConfig) {
 
 function createThemeWithRetiredAuthoringKeys(id: string, name: string): ThemeConfig {
   return {
-    ...bitfunDarkTheme,
+    ...haloDarkTheme,
     id,
     name,
     colors: {
-      ...bitfunDarkTheme.colors,
+      ...haloDarkTheme.colors,
       accent: {
-        ...bitfunDarkTheme.colors.accent,
+        ...haloDarkTheme.colors.accent,
         800: '#0f766e',
       },
       background: {
-        ...bitfunDarkTheme.colors.background,
+        ...haloDarkTheme.colors.background,
         quaternary: '#252528',
         tooltip: 'rgba(28, 28, 31, 0.96)',
       },
       purple: {
-        ...(bitfunDarkTheme.colors.purple ?? {}),
+        ...(haloDarkTheme.colors.purple ?? {}),
         50: '#faf5ff',
         400: '#c084fc',
         800: '#6b21a8',
       },
       element: {
-        ...bitfunDarkTheme.colors.element,
+        ...haloDarkTheme.colors.element,
         elevated: 'rgba(255, 255, 255, 0.2)',
       },
     },
     typography: {
-      ...bitfunDarkTheme.typography,
+      ...haloDarkTheme.typography,
       weight: {
-        ...bitfunDarkTheme.typography.weight,
+        ...haloDarkTheme.typography.weight,
         bold: 700,
       },
     },
     components: {
-      ...bitfunDarkTheme.components,
+      ...haloDarkTheme.components,
       windowControls: {
         close: {
           hoverColor: '#a85555',
@@ -106,8 +106,8 @@ vi.mock('@/shared/utils/logger', () => ({
 describe('ThemeService runtime theme tokens', () => {
   let dom: JSDOM;
   const bootstrapGlobals = globalThis as typeof globalThis & {
-    __BITFUN_BOOTSTRAP_THEME_ID__?: string;
-    __BITFUN_BOOTSTRAP_THEME_SELECTION__?: string;
+    __HALO_BOOTSTRAP_THEME_ID__?: string;
+    __HALO_BOOTSTRAP_THEME_SELECTION__?: string;
   };
 
   beforeEach(() => {
@@ -122,8 +122,8 @@ describe('ThemeService runtime theme tokens', () => {
         removeEventListener: vi.fn(),
       }),
     });
-    delete bootstrapGlobals.__BITFUN_BOOTSTRAP_THEME_ID__;
-    delete bootstrapGlobals.__BITFUN_BOOTSTRAP_THEME_SELECTION__;
+    delete bootstrapGlobals.__HALO_BOOTSTRAP_THEME_ID__;
+    delete bootstrapGlobals.__HALO_BOOTSTRAP_THEME_SELECTION__;
     vi.mocked(configAPI.getConfig).mockResolvedValue(undefined);
     vi.mocked(configAPI.setConfig).mockResolvedValue(undefined);
   });
@@ -136,7 +136,7 @@ describe('ThemeService runtime theme tokens', () => {
   it('keeps light theme Flow Chat markdown links browser-blue even with a neutral app accent', async () => {
     const service = new ThemeService();
 
-    await service.applyTheme('bitfun-light');
+    await service.applyTheme('halo-light');
 
     const rootStyle = document.documentElement.style;
     expect(rootStyle.getPropertyValue('--color-accent-500')).toBe('#64748b');
@@ -147,7 +147,7 @@ describe('ThemeService runtime theme tokens', () => {
   it('keeps dark neutral-accent themes on an obvious blue link color', async () => {
     const service = new ThemeService();
 
-    await service.applyTheme('bitfun-slate');
+    await service.applyTheme('halo-slate');
 
     const rootStyle = document.documentElement.style;
     expect(rootStyle.getPropertyValue('--color-accent-500')).toBe('#94a3b8');
@@ -158,7 +158,7 @@ describe('ThemeService runtime theme tokens', () => {
   it('uses canonical light overlay stops for scrollbar fallback hover', async () => {
     const service = new ThemeService();
 
-    await service.applyTheme('bitfun-light');
+    await service.applyTheme('halo-light');
 
     expect(document.documentElement.style.getPropertyValue('--scrollbar-thumb-hover')).toBe('rgba(0, 0, 0, 0.3)');
   });
@@ -166,7 +166,7 @@ describe('ThemeService runtime theme tokens', () => {
   it('does not inject component-private card surface variables into the root theme contract', async () => {
     const service = new ThemeService();
 
-    await service.applyTheme('bitfun-dark');
+    await service.applyTheme('halo-dark');
 
     expect(document.documentElement.style.getPropertyValue('--card-bg-default')).toBe('');
     expect(document.documentElement.style.getPropertyValue('--card-bg-hover')).toBe('');
@@ -178,7 +178,7 @@ describe('ThemeService runtime theme tokens', () => {
   it('keeps dark info border aligned with the canonical medium overlay stop', async () => {
     const service = new ThemeService();
 
-    await service.applyTheme('bitfun-dark');
+    await service.applyTheme('halo-dark');
 
     expect(document.documentElement.style.getPropertyValue('--color-info-border')).toBe('rgba(255, 255, 255, 0.24)');
   });
@@ -186,7 +186,7 @@ describe('ThemeService runtime theme tokens', () => {
   it('exports the consumed git runtime token family from the resolved theme', async () => {
     const service = new ThemeService();
 
-    await service.applyTheme('bitfun-dark');
+    await service.applyTheme('halo-dark');
 
     const rootStyle = document.documentElement.style;
     expect(rootStyle.getPropertyValue('--git-color-branch')).toBe('#a1a1aa');
@@ -208,10 +208,10 @@ describe('ThemeService runtime theme tokens', () => {
   it('uses canonical dark overlay stops when a theme omits scrollbar values', () => {
     const service = new ThemeService();
     const fallbackTheme: ThemeConfig = {
-      ...bitfunDarkTheme,
+      ...haloDarkTheme,
       id: 'fallback-dark',
       colors: {
-        ...bitfunDarkTheme.colors,
+        ...haloDarkTheme.colors,
         scrollbar: undefined,
       },
     } as unknown as ThemeConfig;
@@ -224,7 +224,7 @@ describe('ThemeService runtime theme tokens', () => {
   it('exports only the compact low-risk shadow overlay stops', async () => {
     const service = new ThemeService();
 
-    await service.applyTheme('bitfun-dark');
+    await service.applyTheme('halo-dark');
 
     const rootStyle = document.documentElement.style;
     for (const [tone, stop] of [['white', '06'], ['white', '10'], ['black', '10']] as const) {
@@ -237,14 +237,14 @@ describe('ThemeService runtime theme tokens', () => {
   });
 
   it('initializes from bootstrap theme selection without reading or writing themes.current', async () => {
-    bootstrapGlobals.__BITFUN_BOOTSTRAP_THEME_ID__ = 'bitfun-slate';
-    bootstrapGlobals.__BITFUN_BOOTSTRAP_THEME_SELECTION__ = 'bitfun-slate';
+    bootstrapGlobals.__HALO_BOOTSTRAP_THEME_ID__ = 'halo-slate';
+    bootstrapGlobals.__HALO_BOOTSTRAP_THEME_SELECTION__ = 'halo-slate';
     const service = new ThemeService();
 
     await service.initialize();
 
-    expect(service.getCurrentThemeId()).toBe('bitfun-slate');
-    expect(document.documentElement.getAttribute('data-theme')).toBe('bitfun-slate');
+    expect(service.getCurrentThemeId()).toBe('halo-slate');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('halo-slate');
     expect(configAPI.getConfig).not.toHaveBeenCalled();
     expect(configAPI.getConfig).not.toHaveBeenCalledWith(
       'themes.current',
@@ -257,8 +257,8 @@ describe('ThemeService runtime theme tokens', () => {
   });
 
   it('loads custom themes on demand after initialization and deduplicates repeated loads', async () => {
-    bootstrapGlobals.__BITFUN_BOOTSTRAP_THEME_ID__ = 'bitfun-slate';
-    bootstrapGlobals.__BITFUN_BOOTSTRAP_THEME_SELECTION__ = 'bitfun-slate';
+    bootstrapGlobals.__HALO_BOOTSTRAP_THEME_ID__ = 'halo-slate';
+    bootstrapGlobals.__HALO_BOOTSTRAP_THEME_SELECTION__ = 'halo-slate';
     const service = new ThemeService();
     await service.initialize();
 
@@ -273,10 +273,10 @@ describe('ThemeService runtime theme tokens', () => {
   });
 
   it('falls back to config lookup when bootstrap theme selection is unavailable', async () => {
-    bootstrapGlobals.__BITFUN_BOOTSTRAP_THEME_ID__ = 'bitfun-light';
+    bootstrapGlobals.__HALO_BOOTSTRAP_THEME_ID__ = 'halo-light';
     vi.mocked(configAPI.getConfig).mockImplementation(async (key: string) => {
       if (key === 'themes.current') {
-        return 'bitfun-slate';
+        return 'halo-slate';
       }
       return undefined;
     });
@@ -284,7 +284,7 @@ describe('ThemeService runtime theme tokens', () => {
 
     await service.initialize();
 
-    expect(service.getCurrentThemeId()).toBe('bitfun-slate');
+    expect(service.getCurrentThemeId()).toBe('halo-slate');
     expect(configAPI.getConfig).toHaveBeenCalledWith(
       'themes.current',
       expect.objectContaining({ skipRetryOnNotFound: true }),
@@ -293,13 +293,13 @@ describe('ThemeService runtime theme tokens', () => {
 
   it('applies saved custom theme during initialization when bootstrap cannot provide it', async () => {
     const customTheme: ThemeConfig = {
-      ...bitfunLightTheme,
+      ...haloLightTheme,
       id: 'custom-ocean',
       name: 'Custom Ocean',
       colors: {
-        ...bitfunLightTheme.colors,
+        ...haloLightTheme.colors,
         background: {
-          ...bitfunLightTheme.colors.background,
+          ...haloLightTheme.colors.background,
           primary: '#001122',
         },
       },
@@ -333,7 +333,7 @@ describe('ThemeService runtime theme tokens', () => {
   it('does not persist the theme selection again during initialization', async () => {
     vi.mocked(configAPI.getConfig).mockImplementation(async (key: string) => {
       if (key === 'themes.current') {
-        return 'bitfun-slate';
+        return 'halo-slate';
       }
       return undefined;
     });
@@ -350,13 +350,13 @@ describe('ThemeService runtime theme tokens', () => {
   it('validates the core theme schema instead of only root fields', () => {
     const service = new ThemeService();
     const invalidTheme: ThemeConfig = {
-      ...bitfunLightTheme,
+      ...haloLightTheme,
       id: 'custom-invalid-semantic',
       name: 'Invalid Semantic',
       colors: {
-        ...bitfunLightTheme.colors,
+        ...haloLightTheme.colors,
         semantic: {
-          ...bitfunLightTheme.colors.semantic,
+          ...haloLightTheme.colors.semantic,
           success: 'not-a-color',
         },
       },
@@ -368,7 +368,7 @@ describe('ThemeService runtime theme tokens', () => {
     expectThemeError(result, 'colors.semantic.success', 'INVALID_COLOR_FORMAT');
 
     const incompleteTheme = {
-      ...bitfunLightTheme,
+      ...haloLightTheme,
       id: 'custom-incomplete',
       name: 'Incomplete Custom',
       effects: undefined,
@@ -383,11 +383,11 @@ describe('ThemeService runtime theme tokens', () => {
     expectThemeError(incompleteResult, 'typography', 'MISSING_THEME_FIELD_GROUP');
 
     const invalidOptionalTheme = {
-      ...bitfunLightTheme,
+      ...haloLightTheme,
       id: 'custom-invalid-optional-scrollbar',
       name: 'Invalid Optional Scrollbar',
       colors: {
-        ...bitfunLightTheme.colors,
+        ...haloLightTheme.colors,
         scrollbar: {
           thumb: 'invalid',
           thumbHover: '#ffffff',
@@ -434,13 +434,13 @@ describe('ThemeService runtime theme tokens', () => {
     expect(service.getCurrentThemeId()).toBe('custom-partial');
     expect(service.getResolvedThemeId()).toBe('custom-partial');
     expect(normalized?.colors.background.primary).toBe('#101820');
-    expect(normalized?.colors.background.secondary).toBe(bitfunLightTheme.colors.background.secondary);
+    expect(normalized?.colors.background.secondary).toBe(haloLightTheme.colors.background.secondary);
     expect(normalized?.colors.text.primary).toBe('#f8fafc');
-    expect(normalized?.colors.text.secondary).toBe(bitfunLightTheme.colors.text.secondary);
-    expect(normalized?.effects.spacing[4]).toBe(bitfunLightTheme.effects.spacing[4]);
+    expect(normalized?.colors.text.secondary).toBe(haloLightTheme.colors.text.secondary);
+    expect(normalized?.effects.spacing[4]).toBe(haloLightTheme.effects.spacing[4]);
     expect(document.documentElement.style.getPropertyValue('--color-bg-primary')).toBe('#101820');
     expect(document.documentElement.style.getPropertyValue('--color-bg-secondary')).toBe(
-      bitfunLightTheme.colors.background.secondary,
+      haloLightTheme.colors.background.secondary,
     );
     expect(configAPI.setConfig).not.toHaveBeenCalledWith('themes.custom', expect.anything());
   });
@@ -448,62 +448,62 @@ describe('ThemeService runtime theme tokens', () => {
   it('does not inject non-contract dynamic keys from custom themes', () => {
     const service = new ThemeService();
     const customTheme = {
-      ...bitfunLightTheme,
+      ...haloLightTheme,
       id: 'custom-extra-keys',
       colors: {
-        ...bitfunLightTheme.colors,
+        ...haloLightTheme.colors,
         accent: {
-          ...bitfunLightTheme.colors.accent,
+          ...haloLightTheme.colors.accent,
           950: '#111111',
         },
         purple: {
-          ...bitfunLightTheme.colors.purple,
+          ...haloLightTheme.colors.purple,
           300: '#222222',
           700: '#333333',
         },
       },
       effects: {
-        ...bitfunLightTheme.effects,
+        ...haloLightTheme.effects,
         shadow: {
-          ...bitfunLightTheme.effects.shadow,
+          ...haloLightTheme.effects.shadow,
           '2xl': '0 0 0 #111111',
         },
         blur: {
-          ...bitfunLightTheme.effects.blur,
+          ...haloLightTheme.effects.blur,
           intense: 'blur(99px)',
         },
         radius: {
-          ...bitfunLightTheme.effects.radius,
+          ...haloLightTheme.effects.radius,
           huge: '99px',
         },
         spacing: {
-          ...bitfunLightTheme.effects.spacing,
+          ...haloLightTheme.effects.spacing,
           99: '99px',
         },
       },
       motion: {
-        ...bitfunLightTheme.motion,
+        ...haloLightTheme.motion,
         duration: {
-          ...bitfunLightTheme.motion.duration,
+          ...haloLightTheme.motion.duration,
           lazy: '99s',
         },
         easing: {
-          ...bitfunLightTheme.motion.easing,
+          ...haloLightTheme.motion.easing,
           bounce: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
         },
       },
       typography: {
-        ...bitfunLightTheme.typography,
+        ...haloLightTheme.typography,
         weight: {
-          ...bitfunLightTheme.typography.weight,
+          ...haloLightTheme.typography.weight,
           black: 900,
         },
         size: {
-          ...bitfunLightTheme.typography.size,
+          ...haloLightTheme.typography.size,
           '5xl': '99px',
         },
         lineHeight: {
-          ...bitfunLightTheme.typography.lineHeight,
+          ...haloLightTheme.typography.lineHeight,
           loose: 2,
         },
       },
@@ -529,12 +529,12 @@ describe('ThemeService runtime theme tokens', () => {
   it('projects theme motion duration tokens', () => {
     const service = new ThemeService();
     const customTheme = {
-      ...bitfunLightTheme,
+      ...haloLightTheme,
       id: 'custom-motion-alias',
       motion: {
-        ...bitfunLightTheme.motion,
+        ...haloLightTheme.motion,
         duration: {
-          ...bitfunLightTheme.motion.duration,
+          ...haloLightTheme.motion.duration,
           slow: '0.7s',
         },
       },
@@ -549,10 +549,10 @@ describe('ThemeService runtime theme tokens', () => {
   it('does not expose window controls as a theme extension surface', () => {
     const service = new ThemeService();
     const customTheme = {
-      ...bitfunLightTheme,
+      ...haloLightTheme,
       id: 'custom-window-controls',
       components: {
-        ...bitfunLightTheme.components,
+        ...haloLightTheme.components,
         windowControls: {
           close: {
             hoverColor: '#a85555',
@@ -568,13 +568,13 @@ describe('ThemeService runtime theme tokens', () => {
 
   it('skips invalid persisted custom themes before they reach preview or runtime injection', async () => {
     const invalidCustomTheme = {
-      ...bitfunLightTheme,
+      ...haloLightTheme,
       id: 'custom-broken',
       name: 'Broken Custom',
       colors: {
-        ...bitfunLightTheme.colors,
+        ...haloLightTheme.colors,
         background: {
-          ...bitfunLightTheme.colors.background,
+          ...haloLightTheme.colors.background,
           primary: 'definitely-not-a-color',
         },
       },
@@ -621,8 +621,8 @@ describe('ThemeService runtime theme tokens', () => {
 
     const normalized = service.getTheme('custom-registered');
     expect(normalized?.colors.background.primary).toBe('#04080f');
-    expect(normalized?.colors.background.secondary).toBe(bitfunDarkTheme.colors.background.secondary);
-    expect(normalized?.effects.radius.base).toBe(bitfunDarkTheme.effects.radius.base);
+    expect(normalized?.colors.background.secondary).toBe(haloDarkTheme.colors.background.secondary);
+    expect(normalized?.effects.radius.base).toBe(haloDarkTheme.effects.radius.base);
     expect(configAPI.setConfig).toHaveBeenCalledWith(
       'themes.custom',
       expect.arrayContaining([
@@ -631,7 +631,7 @@ describe('ThemeService runtime theme tokens', () => {
           colors: expect.objectContaining({
             background: expect.objectContaining({
               primary: '#04080f',
-              secondary: bitfunDarkTheme.colors.background.secondary,
+              secondary: haloDarkTheme.colors.background.secondary,
             }),
           }),
         }),
@@ -640,12 +640,12 @@ describe('ThemeService runtime theme tokens', () => {
 
     await expect(
       service.registerTheme({
-        ...bitfunLightTheme,
+        ...haloLightTheme,
         id: 'custom-invalid-register',
         colors: {
-          ...bitfunLightTheme.colors,
+          ...haloLightTheme.colors,
           text: {
-            ...bitfunLightTheme.colors.text,
+            ...haloLightTheme.colors.text,
             primary: 'invalid',
           },
         },
@@ -655,7 +655,7 @@ describe('ThemeService runtime theme tokens', () => {
 
     await expect(
       service.registerTheme({
-        ...bitfunLightTheme,
+        ...haloLightTheme,
         id: '',
         name: '',
       }),
@@ -663,7 +663,7 @@ describe('ThemeService runtime theme tokens', () => {
 
     await expect(
       service.registerTheme({
-        ...bitfunLightTheme,
+        ...haloLightTheme,
         name: 'Builtin Override',
       }),
     ).rejects.toThrow(/reserved for a built-in theme/);
@@ -687,13 +687,13 @@ describe('ThemeService runtime theme tokens', () => {
     };
     const service = new ThemeService();
     const legacyTheme = {
-      ...bitfunDarkTheme,
+      ...haloDarkTheme,
       id: 'custom-legacy-git-bg',
       name: 'Legacy Git Backgrounds',
       colors: {
-        ...bitfunDarkTheme.colors,
+        ...haloDarkTheme.colors,
         git: {
-          ...bitfunDarkTheme.colors.git,
+          ...haloDarkTheme.colors.git,
           changesBg: 'rgba(245, 158, 11, 0.1)',
           addedBg: 'rgba(34, 197, 94, 0.1)',
           deletedBg: 'rgba(239, 68, 68, 0.1)',
@@ -712,7 +712,7 @@ describe('ThemeService runtime theme tokens', () => {
     if (!normalized) {
       throw new Error('Expected custom legacy git theme to be registered');
     }
-    expect(normalized.colors.git.added).toBe(bitfunDarkTheme.colors.git.added);
+    expect(normalized.colors.git.added).toBe(haloDarkTheme.colors.git.added);
     expectNoNonContractGitColorKeys(normalized.colors.git);
 
     const persistedThemes = vi.mocked(configAPI.setConfig).mock.calls.find(([key]) => key === 'themes.custom')?.[1] as
@@ -747,7 +747,7 @@ describe('ThemeService runtime theme tokens', () => {
     if (!normalized) {
       throw new Error('Expected custom theme with retired keys to be registered');
     }
-    expect(normalized.colors.accent[700]).toBe(bitfunDarkTheme.colors.accent[700]);
+    expect(normalized.colors.accent[700]).toBe(haloDarkTheme.colors.accent[700]);
     expectNoRetiredThemeAuthoringKeys(normalized);
 
     const persistedThemes = vi.mocked(configAPI.setConfig).mock.calls.find(([key]) => key === 'themes.custom')?.[1] as
@@ -799,13 +799,13 @@ describe('ThemeService runtime theme tokens', () => {
 
   it('migrates persisted custom themes with non-contract git color keys on load', async () => {
     const legacyTheme = {
-      ...bitfunDarkTheme,
+      ...haloDarkTheme,
       id: 'custom-loaded-legacy-git',
       name: 'Loaded Legacy Git',
       colors: {
-        ...bitfunDarkTheme.colors,
+        ...haloDarkTheme.colors,
         git: {
-          ...bitfunDarkTheme.colors.git,
+          ...haloDarkTheme.colors.git,
           changesBg: 'rgba(245, 158, 11, 0.1)',
           addedBgHover: 'rgba(34, 197, 94, 0.2)',
           stagedBorder: 'rgba(16, 185, 129, 0.4)',
@@ -822,8 +822,8 @@ describe('ThemeService runtime theme tokens', () => {
     if (!normalized) {
       throw new Error('Expected legacy custom theme to load');
     }
-    expect(normalized.colors.git.added).toBe(bitfunDarkTheme.colors.git.added);
-    expect(normalized.colors.git.staged).toBe(bitfunDarkTheme.colors.git.staged);
+    expect(normalized.colors.git.added).toBe(haloDarkTheme.colors.git.added);
+    expect(normalized.colors.git.staged).toBe(haloDarkTheme.colors.git.staged);
     expect(normalized.colors.git as unknown as Record<string, unknown>).not.toHaveProperty('changesBg');
     expect(normalized.colors.git as unknown as Record<string, unknown>).not.toHaveProperty('addedBgHover');
     expect(normalized.colors.git as unknown as Record<string, unknown>).not.toHaveProperty('stagedBorder');

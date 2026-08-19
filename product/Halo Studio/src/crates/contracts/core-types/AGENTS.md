@@ -2,12 +2,12 @@
 
 Scope: this guide applies to `src/crates/contracts/core-types`.
 
-`bitfun-core-types` owns low-level shared DTOs and error/session/surface/LSP
+`halo-core-types` owns low-level shared DTOs and error/session/surface/LSP
 protocol contracts. Keep it dependency-light and stable for cross-crate reuse.
 
 ## Guardrails
 
-- Do not depend on `bitfun-core`, runtime owner crates, service crates,
+- Do not depend on `halo-core`, runtime owner crates, service crates,
   transport adapters, app crates, Tauri, AI providers, Git, MCP, terminal, or
   tool-runtime implementations.
 - Keep additions limited to portable data shapes, serialization contracts, and
@@ -22,7 +22,7 @@ protocol contracts. Keep it dependency-light and stable for cross-crate reuse.
 ## Verification
 
 ```bash
-cargo test -p bitfun-core-types
+cargo test -p halo-core-types
 node scripts/check-core-boundaries.mjs
 ```
 

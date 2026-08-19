@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Dispatch is deliberately orthogonal to `SessionExecutionTarget`: the latter
 /// describes a path owned by this process, while non-local dispatch targets are
-/// owned by another BitFun process.
+/// owned by another Halo process.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum DispatchTargetRequest {

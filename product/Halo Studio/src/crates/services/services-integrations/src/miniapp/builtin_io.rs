@@ -1,6 +1,6 @@
 //! Built-in MiniApp seed and marker filesystem IO.
 
-use bitfun_product_domains::miniapp::builtin::{
+use halo_product_domains::miniapp::builtin::{
     build_builtin_package_json, build_builtin_seed_meta, builtin_source_files,
     parse_builtin_install_marker, preserved_builtin_created_at, serialize_builtin_install_marker,
     BuiltinInstallMarker, BuiltinMiniAppBundle, BUILTIN_INSTALL_MARKER,
@@ -164,14 +164,14 @@ pub fn builtin_marker_path(app_dir: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitfun_product_domains::miniapp::builtin::BUILTIN_APPS;
+    use halo_product_domains::miniapp::builtin::BUILTIN_APPS;
 
     fn scratch_dir(label: &str) -> PathBuf {
         let unique = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        let path = std::env::temp_dir().join(format!("bitfun-miniapp-builtin-io-{label}-{unique}"));
+        let path = std::env::temp_dir().join(format!("halo-miniapp-builtin-io-{label}-{unique}"));
         std::fs::create_dir_all(&path).expect("create scratch dir");
         path
     }

@@ -740,7 +740,7 @@ ${JSON.stringify(simpleTodos, null, 2)}
   // Render loading state
   if (loading) {
     return (
-      <div className="bitfun-plan-viewer bitfun-plan-viewer--loading">
+      <div className="halo-plan-viewer halo-plan-viewer--loading">
         <CubeLoading size="medium" text={t('editor.planViewer.loadingPlan')} />
       </div>
     );
@@ -749,7 +749,7 @@ ${JSON.stringify(simpleTodos, null, 2)}
   // Render error state
   if (error) {
     return (
-      <div className="bitfun-plan-viewer bitfun-plan-viewer--error">
+      <div className="halo-plan-viewer halo-plan-viewer--error">
         <div className="error-content">
           <AlertCircle className="error-icon" />
           <p>{error}</p>
@@ -762,7 +762,7 @@ ${JSON.stringify(simpleTodos, null, 2)}
   }
 
   return (
-    <div className="bitfun-plan-viewer">
+    <div className="halo-plan-viewer">
       <div
         className={`plan-viewer-header ${hasTodos ? 'plan-viewer-header--collapsible' : ''}`}
         onClick={() => {

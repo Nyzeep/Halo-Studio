@@ -16,25 +16,25 @@ use tokio::task::JoinSet;
 use tokio::time::{timeout, Duration};
 
 use crate::api::app_state::AppState;
-use bitfun_core::agentic::tools::implementations::skills::mode_overrides::{
+use halo_core::agentic::tools::implementations::skills::mode_overrides::{
     clear_user_mode_skill_overrides, load_globally_disabled_user_skills,
     load_project_mode_skills_document_local, project_mode_skills_path_for_remote,
     save_project_mode_skills_document_local, set_disabled_mode_skills_in_document,
     set_global_user_skill_disabled, set_mode_skill_disabled_in_document, set_user_mode_skill_state,
 };
-use bitfun_core::agentic::tools::implementations::skills::{
+use halo_core::agentic::tools::implementations::skills::{
     resolver::resolve_skill_default_enabled_for_mode, ModeSkillInfo, SkillData, SkillInfo,
     SkillLocation, SkillRegistry,
 };
-use bitfun_core::agentic::workspace::RemoteWorkspaceFs;
-use bitfun_core::infrastructure::get_path_manager_arc;
-use bitfun_core::service::config::agent_profile_project_store::{
+use halo_core::agentic::workspace::RemoteWorkspaceFs;
+use halo_core::infrastructure::get_path_manager_arc;
+use halo_core::service::config::agent_profile_project_store::{
     deserialize_project_agent_profiles_document, serialize_project_agent_profiles_document,
 };
-use bitfun_core::service::remote_ssh::workspace_state::is_remote_path;
-use bitfun_core::service::remote_ssh::{get_remote_workspace_manager, RemoteWorkspaceEntry};
-use bitfun_core::service::runtime::RuntimeManager;
-use bitfun_core::util::process_manager;
+use halo_core::service::remote_ssh::workspace_state::is_remote_path;
+use halo_core::service::remote_ssh::{get_remote_workspace_manager, RemoteWorkspaceEntry};
+use halo_core::service::runtime::RuntimeManager;
+use halo_core::util::process_manager;
 
 const SKILLS_SEARCH_API_BASE: &str = "https://skills.sh";
 const DEFAULT_MARKET_QUERY: &str = "skill";
@@ -54,18 +54,18 @@ fn can_delete_owned_skill(source_id: &str, source_slot: &str, is_builtin: bool) 
 
     let source_id = source_id.trim().to_ascii_lowercase();
     if !source_id.is_empty() {
-        return matches!(source_id.as_str(), "bitfun" | "bitfun-system");
+        return matches!(source_id.as_str(), "halo" | "halo-system");
     }
 
     let source_slot = source_slot.trim().to_ascii_lowercase();
-    source_slot.starts_with("bitfun")
+    source_slot.starts_with("halo")
 }
 
 fn ensure_skill_can_be_deleted(skill: &SkillInfo) -> Result<(), String> {
     if can_delete_owned_skill(&skill.source_id, &skill.source_slot, skill.is_builtin) {
         Ok(())
     } else {
-        Err("Only BitFun-owned, non-built-in Skills can be deleted from BitFun".to_string())
+        Err("Only Halo-owned, non-built-in Skills can be deleted from Halo".to_string())
     }
 }
 
@@ -301,7 +301,7 @@ async fn persist_user_mode_skill_selection(
         }
     }
 
-    bitfun_core::service::config::mode_config_canonicalizer::persist_agent_profile_from_value(
+    halo_core::service::config::mode_config_canonicalizer::persist_agent_profile_from_value(
         mode_id,
         serde_json::json!({
             "disabled_user_skills": normalize_skill_key_list(disabled_user_skills),
@@ -542,7 +542,7 @@ pub async fn set_global_skill_disabled(
         set_global_user_skill_disabled(skill_key, request.disabled)
             .await
             .map_err(|error| format!("Failed to update global Skill settings: {}", error))?;
-    if let Err(error) = bitfun_core::service::config::reload_global_config().await {
+    if let Err(error) = halo_core::service::config::reload_global_config().await {
         log::warn!(
             "Failed to reload global configuration after Skill availability update: skill_key={}, error={}",
             skill_key,
@@ -619,7 +619,7 @@ pub async fn set_mode_skill_disabled(
         set_user_mode_skill_state(&mode_id, &skill_key, !disabled, default_enabled)
             .await
             .map_err(|e| format!("Failed to update user skill override: {}", e))?;
-        if let Err(e) = bitfun_core::service::config::reload_global_config().await {
+        if let Err(e) = halo_core::service::config::reload_global_config().await {
             log::warn!(
                 "Failed to reload global config after user skill override change: mode_id={}, skill_key={}, error={}",
                 mode_id,
@@ -766,7 +766,7 @@ pub async fn replace_mode_skill_selection(
         .await?;
     }
 
-    if let Err(e) = bitfun_core::service::config::reload_global_config().await {
+    if let Err(e) = halo_core::service::config::reload_global_config().await {
         log::warn!(
             "Failed to reload global config after batch skill update: mode_id={}, error={}",
             request.mode_id,
@@ -800,7 +800,7 @@ pub async fn reset_mode_skill_selection(
         clear_project_mode_skill_selection_local(&request.mode_id, &workspace_root).await?;
     }
 
-    if let Err(e) = bitfun_core::service::config::reload_global_config().await {
+    if let Err(e) = halo_core::service::config::reload_global_config().await {
         log::warn!(
             "Failed to reload global config after resetting skill selection: mode_id={}, error={}",
             request.mode_id,
@@ -900,7 +900,7 @@ pub async fn add_skill(
                         .to_string(),
                 );
             }
-            workspace_root.join(".bitfun").join("skills")
+            workspace_root.join(".halo-studio").join("skills")
         } else {
             return Err("No workspace open, cannot add project-level Skill".to_string());
         }
@@ -1052,17 +1052,17 @@ mod skill_delete_policy_tests {
     use super::can_delete_owned_skill;
 
     #[test]
-    fn only_bitfun_owned_non_builtin_skills_are_deletable() {
-        assert!(can_delete_owned_skill("bitfun", "bitfun", false));
-        assert!(can_delete_owned_skill("", "bitfun", false));
+    fn only_halo_owned_non_builtin_skills_are_deletable() {
+        assert!(can_delete_owned_skill("halo", "halo", false));
+        assert!(can_delete_owned_skill("", "halo", false));
         assert!(can_delete_owned_skill(
-            "bitfun-system",
-            "bitfun-system",
+            "halo-system",
+            "halo-system",
             false
         ));
         assert!(!can_delete_owned_skill(
-            "bitfun-system",
-            "bitfun-system",
+            "halo-system",
+            "halo-system",
             true
         ));
         assert!(!can_delete_owned_skill("opencode", "home.opencode", false));
@@ -1137,7 +1137,7 @@ pub async fn download_skill_market(
     let runtime_manager = RuntimeManager::new()
         .map_err(|e| format!("Failed to initialize runtime manager: {}", e))?;
     let resolved_npx = runtime_manager.resolve_command("npx").ok_or_else(|| {
-        "Command 'npx' is not available. Install Node.js or configure BitFun runtimes.".to_string()
+        "Command 'npx' is not available. Install Node.js or configure Halo runtimes.".to_string()
     })?;
 
     let mut command = process_manager::create_tokio_command(&resolved_npx.command);

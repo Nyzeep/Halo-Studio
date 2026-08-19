@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     build_descriptor_harness_registry, AgentEventStream, AgentRunRequest, AgentRuntimeBuilder,
     AgentRuntimeSdkCompatibility, AgentRuntimeSdkStability, AgentSessionClosePort,
     AgentSessionCreateRequest, AgentSessionCreateResult, AgentSubmissionPort,

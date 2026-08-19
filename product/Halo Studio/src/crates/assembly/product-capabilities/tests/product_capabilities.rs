@@ -1,5 +1,5 @@
-use bitfun_harness::{HarnessCapability, HarnessInput, HarnessStepKind, HarnessWorkflow};
-use bitfun_product_capabilities::{
+use halo_harness::{HarnessCapability, HarnessInput, HarnessStepKind, HarnessWorkflow};
+use halo_product_capabilities::{
     default_product_assembly_plan, default_product_capability_assembly,
     default_product_capability_registry, default_product_harness_registry,
     product_assembly_plan_for_profile, product_delivery_profile_entries,
@@ -8,13 +8,13 @@ use bitfun_product_capabilities::{
     ProductCapabilityRegistry, ProductCoreDependencyMode, ProductFeatureGroup,
     ProductRuntimeAssembly, ProductServiceCapabilityRequirement, ProductServiceCapabilityStatus,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     PluginDispatchEnvelope, PluginResponseEnvelope, PluginRuntimeAvailability,
     PluginRuntimeBinding, PluginRuntimeClient, PluginRuntimeUnavailableReason, PortResult,
     RuntimeServiceCapability,
 };
-use bitfun_runtime_services::test_support::FakeRuntimeServicesProvider;
-use bitfun_runtime_services::{
+use halo_runtime_services::test_support::FakeRuntimeServicesProvider;
+use halo_runtime_services::{
     RuntimeServiceMarkerPort, RuntimeServicesBuilder, RuntimeServicesProvider,
 };
 use std::sync::Arc;
@@ -137,7 +137,7 @@ async fn product_harness_provider_plans_legacy_facade_without_execution() {
     assert_eq!(plan.steps()[0].kind(), HarnessStepKind::LegacyFacade);
     assert_eq!(
         plan.steps()[0].target(),
-        "bitfun-core::agentic::agents::definitions::modes::deep_research"
+        "halo-core::agentic::agents::definitions::modes::deep_research"
     );
 
     assert!(

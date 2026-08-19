@@ -6,8 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const scriptRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const rootDir = process.env.BITFUN_GITHUB_CONFIG_TEST_ROOT
-  ? path.resolve(process.env.BITFUN_GITHUB_CONFIG_TEST_ROOT)
+const rootDir = process.env.HALO_GITHUB_CONFIG_TEST_ROOT
+  ? path.resolve(process.env.HALO_GITHUB_CONFIG_TEST_ROOT)
   : scriptRootDir;
 const requireFromWebUi = createRequire(path.join(scriptRootDir, 'src/web-ui/package.json'));
 const yaml = requireFromWebUi('yaml');

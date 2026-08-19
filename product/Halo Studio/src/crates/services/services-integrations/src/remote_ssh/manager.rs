@@ -10,7 +10,7 @@ use crate::remote_ssh::types::{
 };
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
-use bitfun_services_core::process_manager;
+use halo_services_core::process_manager;
 use russh::client::{DisconnectReason, Handle, Handler, Msg};
 use russh::Sig;
 use russh_keys::key::{KeyPair, PublicKey};
@@ -1059,7 +1059,7 @@ fn workspace_command(config: &SSHConnectionConfig, command: &str, tty: bool) -> 
 fn stale_upload_sweep(quoted_dir: &str) -> String {
     format!(
         "if command -v find >/dev/null 2>&1; then \
-           find {quoted_dir} -maxdepth 1 -name '.bitfun-upload-*.tmp' -mmin +1440 \
+           find {quoted_dir} -maxdepth 1 -name '.halo-upload-*.tmp' -mmin +1440 \
              -exec rm -f -- {{}} \\; 2>/dev/null || true; \
          fi; "
     )
@@ -1077,7 +1077,7 @@ fn stale_upload_sweep(quoted_dir: &str) -> String {
 /// to a command that is starting right now; those are only removed once they
 /// are far too old for that to be true.
 fn stale_pid_file_sweep() -> String {
-    "for stale_pid_file in /tmp/.bitfun-exec-*.pid; do \
+    "for stale_pid_file in /tmp/.halo-exec-*.pid; do \
        [ -e \"$stale_pid_file\" ] || continue; \
        if [ ! -s \"$stale_pid_file\" ]; then \
          if command -v find >/dev/null 2>&1; then \
@@ -1099,7 +1099,7 @@ fn supervised_container_command(
     container: &ContainerWorkspaceConfig,
     command: &str,
 ) -> (String, String) {
-    let pid_file = format!("/tmp/.bitfun-exec-{}.pid", uuid::Uuid::new_v4());
+    let pid_file = format!("/tmp/.halo-exec-{}.pid", uuid::Uuid::new_v4());
     let wrapped = supervised_container_command_with_pid_file(container, command, &pid_file);
     (wrapped, pid_file)
 }
@@ -4236,7 +4236,7 @@ impl SSHConnectionManager {
             .map(|(parent, _)| if parent.is_empty() { "/" } else { parent })
             .unwrap_or(".");
         let temporary = format!(
-            "{}/.bitfun-upload-{}.tmp",
+            "{}/.halo-upload-{}.tmp",
             parent.trim_end_matches('/'),
             uuid::Uuid::new_v4()
         );
@@ -5268,7 +5268,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!(
-            "bitfun-remote-ssh-manager-{}-{}-{}",
+            "halo-remote-ssh-manager-{}-{}-{}",
             name,
             std::process::id(),
             nanos
@@ -5339,8 +5339,8 @@ mod tests {
         // The whole point of the pid file is cancellation, so removing one that
         // is still in use silently breaks interrupt/kill for a command that may
         // legitimately run for hours. Liveness, never age.
-        let live = format!("/tmp/.bitfun-exec-live-{}.pid", uuid::Uuid::new_v4());
-        let dead = format!("/tmp/.bitfun-exec-dead-{}.pid", uuid::Uuid::new_v4());
+        let live = format!("/tmp/.halo-exec-live-{}.pid", uuid::Uuid::new_v4());
+        let dead = format!("/tmp/.halo-exec-dead-{}.pid", uuid::Uuid::new_v4());
         std::fs::write(&live, std::process::id().to_string()).expect("write live pid file");
         // Reaped immediately, so its pid is guaranteed not to be running.
         let mut corpse = std::process::Command::new("true")
@@ -5401,7 +5401,7 @@ mod tests {
         let signal =
             container_signal_command(&pid_file, crate::remote_ssh::WorkspaceProcessSignal::Kill);
 
-        assert!(pid_file.starts_with("/tmp/.bitfun-exec-"));
+        assert!(pid_file.starts_with("/tmp/.halo-exec-"));
         assert!(wrapped.contains("setsid '/bin/bash' -lc"));
         assert!(wrapped.contains("|| tracking=0"));
         assert!(wrapped.contains("printf '%s' \"$child\" > \"$pid_file\""));
@@ -5425,7 +5425,7 @@ mod tests {
         let wrapped = supervised_container_command_with_pid_file(
             &container,
             "printf 'compatible'",
-            "/dev/null/bitfun-exec.pid",
+            "/dev/null/halo-exec.pid",
         );
         let output = std::process::Command::new("sh")
             .args(["-lc", &wrapped])
@@ -5456,9 +5456,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires BITFUN_TEST_DOCKER_CONTAINER to name a running container"]
+    #[ignore = "requires HALO_TEST_DOCKER_CONTAINER to name a running container"]
     async fn local_docker_workspace_round_trip() {
-        let Ok(container_name) = std::env::var("BITFUN_TEST_DOCKER_CONTAINER") else {
+        let Ok(container_name) = std::env::var("HALO_TEST_DOCKER_CONTAINER") else {
             return;
         };
         let dir = test_data_dir("local-docker-round-trip");
@@ -5478,7 +5478,7 @@ mod tests {
                     passphrase: None,
                     certificate_path: None,
                 },
-                default_workspace: Some("/tmp/bitfun-remote-workspace".to_string()),
+                default_workspace: Some("/tmp/halo-remote-workspace".to_string()),
                 proxy_jump: None,
                 container: Some(ContainerWorkspaceConfig {
                     name: container_name,
@@ -5518,7 +5518,7 @@ mod tests {
         }
 
         manager
-            .container_mkdir(connection_id, "/tmp/bitfun-remote-workspace", true)
+            .container_mkdir(connection_id, "/tmp/halo-remote-workspace", true)
             .await
             .unwrap();
         let cancellation = tokio_util::sync::CancellationToken::new();
@@ -5530,7 +5530,7 @@ mod tests {
         let cancelled_command = manager
             .execute_command_with_options(
                 connection_id,
-                "trap '' INT; sleep 30; touch /tmp/bitfun-remote-workspace/cancel-leaked",
+                "trap '' INT; sleep 30; touch /tmp/halo-remote-workspace/cancel-leaked",
                 SSHCommandOptions {
                     timeout_ms: Some(5_000),
                     cancellation_token: Some(cancellation),
@@ -5542,23 +5542,23 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert!(
             !manager
-                .container_exists(connection_id, "/tmp/bitfun-remote-workspace/cancel-leaked")
+                .container_exists(connection_id, "/tmp/halo-remote-workspace/cancel-leaked")
                 .await
                 .unwrap(),
             "cancelled Docker command must not continue inside the container"
         );
-        let original = b"BitFun container workspace\0binary";
+        let original = b"Halo container workspace\0binary";
         manager
             .container_write_file(
                 connection_id,
-                "/tmp/bitfun-remote-workspace/source.bin",
+                "/tmp/halo-remote-workspace/source.bin",
                 original,
             )
             .await
             .unwrap();
         assert_eq!(
             manager
-                .container_read_file(connection_id, "/tmp/bitfun-remote-workspace/source.bin")
+                .container_read_file(connection_id, "/tmp/halo-remote-workspace/source.bin")
                 .await
                 .unwrap(),
             original
@@ -5566,7 +5566,7 @@ mod tests {
         manager
             .container_write_file(
                 connection_id,
-                "/tmp/bitfun-remote-workspace/atomic.bin",
+                "/tmp/halo-remote-workspace/atomic.bin",
                 original,
             )
             .await
@@ -5575,7 +5575,7 @@ mod tests {
         let cancelled = manager
             .container_write_file_with_progress(
                 connection_id,
-                "/tmp/bitfun-remote-workspace/atomic.bin",
+                "/tmp/halo-remote-workspace/atomic.bin",
                 &replacement,
                 &mut |written, _| written < 262_144,
             )
@@ -5584,7 +5584,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert_eq!(
             manager
-                .container_read_file(connection_id, "/tmp/bitfun-remote-workspace/atomic.bin")
+                .container_read_file(connection_id, "/tmp/halo-remote-workspace/atomic.bin")
                 .await
                 .unwrap(),
             original,
@@ -5593,19 +5593,19 @@ mod tests {
         manager
             .container_rename(
                 connection_id,
-                "/tmp/bitfun-remote-workspace/source.bin",
-                "/tmp/bitfun-remote-workspace/renamed.bin",
+                "/tmp/halo-remote-workspace/source.bin",
+                "/tmp/halo-remote-workspace/renamed.bin",
             )
             .await
             .unwrap();
         let entries = manager
-            .container_read_dir(connection_id, "/tmp/bitfun-remote-workspace")
+            .container_read_dir(connection_id, "/tmp/halo-remote-workspace")
             .await
             .unwrap();
         assert!(entries.iter().any(|entry| entry.name == "renamed.bin"));
         assert_eq!(
             manager
-                .container_stat(connection_id, "/tmp/bitfun-remote-workspace/renamed.bin")
+                .container_stat(connection_id, "/tmp/halo-remote-workspace/renamed.bin")
                 .await
                 .unwrap()
                 .and_then(|entry| entry.size),
@@ -5614,13 +5614,13 @@ mod tests {
         manager
             .container_remove(
                 connection_id,
-                "/tmp/bitfun-remote-workspace/renamed.bin",
+                "/tmp/halo-remote-workspace/renamed.bin",
                 false,
             )
             .await
             .unwrap();
         assert!(!manager
-            .container_exists(connection_id, "/tmp/bitfun-remote-workspace/renamed.bin")
+            .container_exists(connection_id, "/tmp/halo-remote-workspace/renamed.bin")
             .await
             .unwrap());
 
@@ -5918,14 +5918,14 @@ mod tests {
     #[test]
     fn mkdir_all_prefixes_expand_absolute_posix_path() {
         assert_eq!(
-            sftp_mkdir_all_prefixes("/home/wgq/workspace/bot_detection/.bitfun/bin"),
+            sftp_mkdir_all_prefixes("/home/wgq/workspace/bot_detection/.halo-studio/bin"),
             vec![
                 "/home".to_string(),
                 "/home/wgq".to_string(),
                 "/home/wgq/workspace".to_string(),
                 "/home/wgq/workspace/bot_detection".to_string(),
-                "/home/wgq/workspace/bot_detection/.bitfun".to_string(),
-                "/home/wgq/workspace/bot_detection/.bitfun/bin".to_string(),
+                "/home/wgq/workspace/bot_detection/.halo-studio".to_string(),
+                "/home/wgq/workspace/bot_detection/.halo-studio/bin".to_string(),
             ]
         );
     }

@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use bitfun_core::service::filesystem::FileSystemServiceFactory;
-use bitfun_core::service::workspace::{self, WorkspaceService};
+use halo_core::service::filesystem::FileSystemServiceFactory;
+use halo_core::service::workspace::{self, WorkspaceService};
 
 use crate::runtime::CliRuntimeContext;
 

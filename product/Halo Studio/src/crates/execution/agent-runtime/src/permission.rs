@@ -4,7 +4,7 @@
 //! pipeline yet. It persists remembered grants and audit facts only when an
 //! explicit permission reply is delivered through this standalone contract.
 
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     ClockPort, PermissionAuditEvent, PermissionAuditRecord, PermissionAuditStorePort,
     PermissionGrant, PermissionGrantStorePort, PermissionReply, PermissionReplySource,
     PermissionReplyStorePort, PermissionRequest, PermissionRequestEvent, PortError,
@@ -141,7 +141,7 @@ impl PermissionRequestManager {
 
     pub async fn remove_project_grant(
         &self,
-        key: bitfun_runtime_ports::PermissionGrantKey,
+        key: halo_runtime_ports::PermissionGrantKey,
     ) -> Result<bool, PermissionRequestManagerError> {
         let Some(grant_store) = &self.grant_store else {
             return Ok(false);
@@ -168,7 +168,7 @@ impl PermissionRequestManager {
     pub async fn list_project_permission_audit(
         &self,
         project_id: &str,
-    ) -> Result<Vec<bitfun_runtime_ports::PermissionAuditRecord>, PermissionRequestManagerError>
+    ) -> Result<Vec<halo_runtime_ports::PermissionAuditRecord>, PermissionRequestManagerError>
     {
         self.audit_store
             .list_project_permission_audit(project_id)
@@ -563,7 +563,7 @@ fn audit_id(request_id: &str, event: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitfun_runtime_ports::{
+    use halo_runtime_ports::{
         PermissionAuditStorePort, PermissionReplyStorePort, PortResult, RuntimeServiceCapability,
         RuntimeServicePort,
     };
@@ -643,8 +643,8 @@ mod tests {
             action: "edit".to_string(),
             resources: vec!["src/main.rs".to_string()],
             save_resources: vec!["src/main.rs".to_string()],
-            source: bitfun_runtime_ports::PermissionRequestSource {
-                kind: bitfun_runtime_ports::PermissionRequestSourceKind::ToolCall,
+            source: halo_runtime_ports::PermissionRequestSource {
+                kind: halo_runtime_ports::PermissionRequestSourceKind::ToolCall,
                 identity: "write_file".to_string(),
             },
             delegation: None,

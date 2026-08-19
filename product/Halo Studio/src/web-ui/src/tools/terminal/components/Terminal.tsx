@@ -893,7 +893,7 @@ const Terminal = forwardRef<TerminalRef, TerminalProps>(({
 
   return (
     <div 
-      className={`bitfun-terminal ${className}`}
+      className={`halo-terminal ${className}`}
       data-shortcut-scope="terminal"
       data-terminal-id={terminalId}
       data-session-id={sessionId}
@@ -902,7 +902,7 @@ const Terminal = forwardRef<TerminalRef, TerminalProps>(({
     >
       <div 
         ref={containerRef} 
-        className="bitfun-terminal__container"
+        className="halo-terminal__container"
         data-testid="shell-command-output"
       />
     </div>

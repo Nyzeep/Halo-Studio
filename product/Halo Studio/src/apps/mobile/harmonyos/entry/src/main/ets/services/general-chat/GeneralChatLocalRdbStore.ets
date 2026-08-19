@@ -4,7 +4,7 @@ import { Encoding } from '../Encoding';
 import { GeneralChatLocalStore } from './GeneralChatPort';
 
 const STORE_CONFIG: relationalStore.StoreConfig = {
-  name: 'bitfun_general_chat.db',
+  name: 'halo_general_chat.db',
   securityLevel: relationalStore.SecurityLevel.S1
 };
 

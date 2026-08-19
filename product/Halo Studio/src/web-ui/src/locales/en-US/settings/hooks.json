@@ -21,11 +21,11 @@
     "description": "Hooks live in hooks.json files, not in this settings document. Both layers are additive, with user hooks running first. Changes are picked up without restarting Halo Studio.",
     "userFile": {
       "label": "User hook file",
-      "description": "config/hooks.json in your Halo Studio user config directory (~/.config/bitfun on Linux, ~/Library/Application Support/bitfun on macOS, %APPDATA%\\bitfun on Windows)."
+      "description": "config/hooks.json in your Halo Studio user config directory (~/.config/Halo Studio on Linux, ~/Library/Application Support/Halo Studio on macOS, %APPDATA%\\halo on Windows)."
     },
     "projectFile": {
       "label": "Project hook file",
-      "description": ".bitfun/config/hooks.json inside the workspace. Only read when \"Enable project hook file\" is on."
+      "description": ".halo-studio/config/hooks.json inside the workspace. Only read when \"Enable project hook file\" is on."
     }
   },
   "imports": {

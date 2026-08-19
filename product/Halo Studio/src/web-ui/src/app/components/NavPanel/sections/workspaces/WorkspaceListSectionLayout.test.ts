@@ -75,7 +75,7 @@ describe('WorkspaceListSection layout styles', () => {
     expect(assistantMenu).toContain('position: absolute;');
     expect(assistantMenu).toContain('right: 4px;');
     expect(assistantMenu).toContain('gap: 4px;');
-    expect(stylesheet).toContain('.bitfun-nav-panel__inline-list {\n      margin-left: 8px;');
+    expect(stylesheet).toContain('.halo-nav-panel__inline-list {\n      margin-left: 8px;');
     expect(stylesheet).toContain('padding-left: 2px;');
     expect(stylesheet).toContain('padding-right: 0;');
   });

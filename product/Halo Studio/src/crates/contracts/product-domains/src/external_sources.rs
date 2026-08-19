@@ -558,7 +558,7 @@ pub struct ExternalMcpServerDefinition {
     pub working_directory: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub environment_keys: Vec<String>,
-    /// Names read from BitFun's parent environment while resolving `{env:NAME}`
+    /// Names read from Halo's parent environment while resolving `{env:NAME}`
     /// references. Values never enter the static catalog.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub environment_reference_names: Vec<String>,
@@ -1980,7 +1980,7 @@ pub fn native_prompt_command_conflict_key<'a>(
         candidates
             .iter()
             .map(|(candidate_id, _)| *candidate_id)
-            .filter(|candidate_id| candidate_id.starts_with("bitfun.")),
+            .filter(|candidate_id| candidate_id.starts_with("halo.")),
     );
     let participant_fingerprint = prompt_command_conflict_key(
         execution_domain_id,
@@ -2029,7 +2029,7 @@ impl NativePromptCommandDescriptor {
     pub fn validate(&self) -> Result<(), ExternalSourceContractError> {
         validate_id(&self.command_name, "native prompt command name")?;
         validate_text(&self.candidate_id, "native prompt command candidate")?;
-        if !self.candidate_id.starts_with("bitfun.") {
+        if !self.candidate_id.starts_with("halo.") {
             return Err(ExternalSourceContractError::InvalidIdentifier(
                 "native prompt command candidate",
             ));

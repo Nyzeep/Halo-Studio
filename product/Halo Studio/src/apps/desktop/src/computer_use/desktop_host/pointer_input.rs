@@ -12,13 +12,13 @@
 use super::macos;
 use super::DesktopComputerUseHost;
 #[cfg(target_os = "windows")]
-use bitfun_core::agentic::tools::computer_use_host::AppSelector;
+use halo_core::agentic::tools::computer_use_host::AppSelector;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-use bitfun_core::agentic::tools::computer_use_host::ClickTarget;
-use bitfun_core::agentic::tools::computer_use_host::{
+use halo_core::agentic::tools::computer_use_host::ClickTarget;
+use halo_core::agentic::tools::computer_use_host::{
     ComputerUseHost, ComputerUseLastMutationKind,
 };
-use bitfun_core::util::errors::{BitFunError, BitFunResult};
+use halo_core::util::errors::{HaloError, HaloResult};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use log::debug;
 use std::time::Duration;
@@ -27,7 +27,7 @@ use std::time::Duration;
 const VISION_PIXEL_NUDGE_AFTER_SCREENSHOT_MSG: &str = "Computer use refused: do not use `pointer_move_rel` immediately after a `screenshot` — nudging from the JPEG is inaccurate. First reposition with `move_to_text`, `click_element`, `locate` + `mouse_move` (`use_screen_coordinates`: true), or `mouse_move` using globals from tool JSON; then relative nudges are allowed if still needed.";
 
 impl DesktopComputerUseHost {
-    pub(super) fn ensure_input_automation_allowed() -> BitFunResult<()> {
+    pub(super) fn ensure_input_automation_allowed() -> HaloResult<()> {
         #[cfg(target_os = "macos")]
         {
             if macos::ax_trusted() {
@@ -36,8 +36,8 @@ impl DesktopComputerUseHost {
             let exe = std::env::current_exe()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| "(unknown path)".to_string());
-            Err(BitFunError::tool(format!(
-                "macOS Accessibility is not enabled for this executable. System Settings > Privacy & Security > Accessibility: add and enable BitFun. Development builds use the debug binary at: {}",
+            Err(HaloError::tool(format!(
+                "macOS Accessibility is not enabled for this executable. System Settings > Privacy & Security > Accessibility: add and enable Halo. Development builds use the debug binary at: {}",
                 exe
             )))
         }
@@ -47,14 +47,14 @@ impl DesktopComputerUseHost {
         }
     }
 
-    fn with_enigo<F, T>(f: F) -> BitFunResult<T>
+    fn with_enigo<F, T>(f: F) -> HaloResult<T>
     where
-        F: FnOnce(&mut Enigo) -> BitFunResult<T>,
+        F: FnOnce(&mut Enigo) -> HaloResult<T>,
     {
         Self::ensure_input_automation_allowed()?;
         let settings = Settings::default();
         let mut enigo =
-            Enigo::new(&settings).map_err(|e| BitFunError::tool(format!("enigo init: {}", e)))?;
+            Enigo::new(&settings).map_err(|e| HaloError::tool(format!("enigo init: {}", e)))?;
         f(&mut enigo)
     }
 
@@ -67,9 +67,9 @@ impl DesktopComputerUseHost {
     /// converted into a Rust error instead of propagating across the FFI
     /// boundary as a "foreign exception" — which would otherwise cause Rust's
     /// `catch_unwind` to abort the whole process (`SIGABRT`).
-    pub(super) fn run_enigo_job<F, T>(job: F) -> BitFunResult<T>
+    pub(super) fn run_enigo_job<F, T>(job: F) -> HaloResult<T>
     where
-        F: FnOnce(&mut Enigo) -> BitFunResult<T> + Send,
+        F: FnOnce(&mut Enigo) -> HaloResult<T> + Send,
         T: Send,
     {
         #[cfg(target_os = "macos")]
@@ -84,18 +84,18 @@ impl DesktopComputerUseHost {
 
     /// Absolute pointer move in Quartz global **points** with full float precision (avoids enigo integer truncation).
     #[cfg(target_os = "macos")]
-    fn post_mouse_moved_cg_global(x: f64, y: f64) -> BitFunResult<()> {
+    fn post_mouse_moved_cg_global(x: f64, y: f64) -> HaloResult<()> {
         use core_graphics::event::{CGEvent, CGEventTapLocation, CGEventType, CGMouseButton};
         use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
         use core_graphics::geometry::CGPoint;
 
         let source =
             CGEventSource::new(CGEventSourceStateID::CombinedSessionState).map_err(|_| {
-                BitFunError::tool("CGEventSource create failed (mouse_move)".to_string())
+                HaloError::tool("CGEventSource create failed (mouse_move)".to_string())
             })?;
         let pt = CGPoint { x, y };
         let ev = CGEvent::new_mouse_event(source, CGEventType::MouseMoved, pt, CGMouseButton::Left)
-            .map_err(|_| BitFunError::tool("CGEvent MouseMoved failed".to_string()))?;
+            .map_err(|_| HaloError::tool("CGEvent MouseMoved failed".to_string()))?;
         ev.post(CGEventTapLocation::HID);
         Ok(())
     }
@@ -108,7 +108,7 @@ impl DesktopComputerUseHost {
 
     /// Move the pointer along a short visible path instead of warping in one event.
     #[cfg(target_os = "macos")]
-    fn smooth_mouse_move_cg_global(x1: f64, y1: f64) -> BitFunResult<()> {
+    fn smooth_mouse_move_cg_global(x1: f64, y1: f64) -> HaloResult<()> {
         const MIN_DIST: f64 = 2.5;
         const MIN_STEPS: usize = 8;
         const MAX_STEPS: usize = 85;
@@ -140,7 +140,7 @@ impl DesktopComputerUseHost {
 
     /// Windows/Linux: same smooth path using enigo absolute moves (single `Enigo` session).
     #[cfg(not(target_os = "macos"))]
-    fn smooth_mouse_move_enigo_abs(x1: f64, y1: f64) -> BitFunResult<()> {
+    fn smooth_mouse_move_enigo_abs(x1: f64, y1: f64) -> HaloResult<()> {
         const MIN_DIST: f64 = 2.5;
         const MIN_STEPS: usize = 8;
         const MAX_STEPS: usize = 85;
@@ -148,7 +148,7 @@ impl DesktopComputerUseHost {
 
         Self::run_enigo_job(|e| {
             let (cx, cy) = e.location().map_err(|err| {
-                BitFunError::tool(format!("smooth_mouse_move: pointer location: {}", err))
+                HaloError::tool(format!("smooth_mouse_move: pointer location: {}", err))
             })?;
             let x0 = cx as f64;
             let y0 = cy as f64;
@@ -158,7 +158,7 @@ impl DesktopComputerUseHost {
             if dist < MIN_DIST {
                 return e
                     .move_mouse(x1.round() as i32, y1.round() as i32, Coordinate::Abs)
-                    .map_err(|err| BitFunError::tool(format!("mouse_move: {}", err)));
+                    .map_err(|err| HaloError::tool(format!("mouse_move: {}", err)));
             }
             let duration_ms = (70.0 + dist * 0.28).min(MAX_DURATION_MS as f64) as u64;
             let steps = ((dist / 5.5).ceil() as usize).clamp(MIN_STEPS, MAX_STEPS);
@@ -170,7 +170,7 @@ impl DesktopComputerUseHost {
                 let x = x0 + dx * te;
                 let y = y0 + dy * te;
                 e.move_mouse(x.round() as i32, y.round() as i32, Coordinate::Abs)
-                    .map_err(|err| BitFunError::tool(format!("mouse_move: {}", err)))?;
+                    .map_err(|err| HaloError::tool(format!("mouse_move: {}", err)))?;
                 if i < steps {
                     std::thread::sleep(step_delay);
                 }
@@ -179,16 +179,16 @@ impl DesktopComputerUseHost {
         })
     }
 
-    fn map_button(s: &str) -> BitFunResult<Button> {
+    fn map_button(s: &str) -> HaloResult<Button> {
         match s.to_lowercase().as_str() {
             "left" => Ok(Button::Left),
             "right" => Ok(Button::Right),
             "middle" => Ok(Button::Middle),
-            _ => Err(BitFunError::tool(format!("Unknown mouse button: {}", s))),
+            _ => Err(HaloError::tool(format!("Unknown mouse button: {}", s))),
         }
     }
 
-    fn map_key(name: &str) -> BitFunResult<Key> {
+    fn map_key(name: &str) -> HaloResult<Key> {
         let n = name.to_lowercase();
         Ok(match n.as_str() {
             "command" | "meta" | "super" | "win" => Key::Meta,
@@ -227,7 +227,7 @@ impl DesktopComputerUseHost {
                 Key::Unicode(c)
             }
             _ => {
-                return Err(BitFunError::tool(format!("Unknown key name: {}", name)));
+                return Err(HaloError::tool(format!("Unknown key name: {}", name)));
             }
         })
     }
@@ -241,17 +241,17 @@ impl DesktopComputerUseHost {
 impl DesktopComputerUseHost {
     /// Perform a physical click at the current pointer without running [`ComputerUseHost::computer_use_guard_click_allowed`].
     /// Used after `mouse_move_global_f64` when coordinates came from AX or OCR (not from vision model image coords).
-    async fn mouse_click_at_current_pointer(&self, button: &str) -> BitFunResult<()> {
+    async fn mouse_click_at_current_pointer(&self, button: &str) -> HaloResult<()> {
         let button = button.to_string();
         tokio::task::spawn_blocking(move || {
             Self::run_enigo_job(|e| {
                 let b = Self::map_button(&button)?;
                 e.button(b, Direction::Click)
-                    .map_err(|err| BitFunError::tool(format!("click: {}", err)))
+                    .map_err(|err| HaloError::tool(format!("click: {}", err)))
             })
         })
         .await
-        .map_err(|e| BitFunError::tool(e.to_string()))??;
+        .map_err(|e| HaloError::tool(e.to_string()))??;
 
         // Flash a click highlight at current pointer (macOS only, non-blocking).
         #[cfg(target_os = "macos")]
@@ -274,19 +274,19 @@ impl DesktopComputerUseHost {
         x: i32,
         y: i32,
         screenshot_id: Option<&str>,
-    ) -> BitFunResult<(f64, f64)> {
+    ) -> HaloResult<(f64, f64)> {
         let map = {
             let s = self
                 .state
                 .lock()
-                .map_err(|e| BitFunError::tool(format!("lock: {}", e)))?;
+                .map_err(|e| HaloError::tool(format!("lock: {}", e)))?;
             screenshot_id
                 .and_then(|id| s.screenshot_pointer_maps.get(id).copied())
                 .or_else(|| s.app_pointer_maps.get(&pid).copied())
                 .or(s.pointer_map)
         };
         let Some(map) = map else {
-            return Err(BitFunError::tool(
+            return Err(HaloError::tool(
                 "No screenshot coordinate map is available for this app. Call desktop.get_app_state for the target app first, then use app_click image_xy/image_grid against that returned screenshot_id.".to_string(),
             ));
         };
@@ -296,7 +296,7 @@ impl DesktopComputerUseHost {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(super) fn image_grid_target_to_xy(
         target: &ClickTarget,
-    ) -> BitFunResult<Option<(i32, i32)>> {
+    ) -> HaloResult<Option<(i32, i32)>> {
         let ClickTarget::ImageGrid {
             x0,
             y0,
@@ -314,12 +314,12 @@ impl DesktopComputerUseHost {
         };
 
         if *width == 0 || *height == 0 || *rows == 0 || *cols == 0 {
-            return Err(BitFunError::tool(
+            return Err(HaloError::tool(
                 "image_grid requires positive width, height, rows, and cols.".to_string(),
             ));
         }
         if row >= rows || col >= cols {
-            return Err(BitFunError::tool(format!(
+            return Err(HaloError::tool(format!(
                 "image_grid row/col out of range: row={} col={} for rows={} cols={}",
                 row, col, rows, cols
             )));
@@ -423,7 +423,7 @@ impl DesktopComputerUseHost {
     pub(super) async fn resolve_click_target_windows(
         &self,
         target: &ClickTarget,
-    ) -> BitFunResult<(f64, f64)> {
+    ) -> HaloResult<(f64, f64)> {
         let pid = Self::windows_foreground_pid();
         match target {
             ClickTarget::ScreenXy { x, y } => Ok((*x, *y)),
@@ -434,7 +434,7 @@ impl DesktopComputerUseHost {
             } => self.map_app_image_coords_to_pointer_f64(pid, *x, *y, screenshot_id.as_deref()),
             ClickTarget::ImageGrid { screenshot_id, .. } => {
                 let (ix, iy) = Self::image_grid_target_to_xy(target)?
-                    .ok_or_else(|| BitFunError::tool("invalid image_grid target".to_string()))?;
+                    .ok_or_else(|| HaloError::tool("invalid image_grid target".to_string()))?;
                 self.map_app_image_coords_to_pointer_f64(pid, ix, iy, screenshot_id.as_deref())
             }
             ClickTarget::VisualGrid {
@@ -464,7 +464,7 @@ impl DesktopComputerUseHost {
                     screenshot_id: shot.screenshot_id.clone(),
                 };
                 let (ix, iy) = Self::image_grid_target_to_xy(&detected)?.ok_or_else(|| {
-                    BitFunError::tool("invalid detected visual_grid target".to_string())
+                    HaloError::tool("invalid detected visual_grid target".to_string())
                 })?;
                 if let Some(wait) = wait_ms_after_detection {
                     if *wait > 0 {
@@ -478,19 +478,19 @@ impl DesktopComputerUseHost {
                     .get_app_state_inner(AppSelector::default(), 32, false, false)
                     .await?;
                 let node = snap.nodes.iter().find(|n| n.idx == *idx).ok_or_else(|| {
-                    BitFunError::tool(format!(
+                    HaloError::tool(format!(
                         "AX_NODE_STALE: idx={} no longer present in app state",
                         idx
                     ))
                 })?;
                 let (fx, fy, fw, fh) = node.frame_global.ok_or_else(|| {
-                    BitFunError::tool(format!(
+                    HaloError::tool(format!(
                         "AX_NODE_STALE: idx={} has no frame (off-screen or window minimised)",
                         idx
                     ))
                 })?;
                 if fw <= 0.0 || fh <= 0.0 {
-                    return Err(BitFunError::tool(format!(
+                    return Err(HaloError::tool(format!(
                         "AX_NODE_STALE: idx={} has zero-size frame ({}x{})",
                         idx, fw, fh
                     )));
@@ -505,7 +505,7 @@ impl DesktopComputerUseHost {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
                 let m = best.ok_or_else(|| {
-                    BitFunError::tool(format!("NOT_FOUND: no OCR match for needle {:?}", needle))
+                    HaloError::tool(format!("NOT_FOUND: no OCR match for needle {:?}", needle))
                 })?;
                 Ok((m.center_x, m.center_y))
             }
@@ -521,13 +521,13 @@ impl DesktopComputerUseHost {
         &self,
         x: i32,
         y: i32,
-    ) -> BitFunResult<(f64, f64)> {
+    ) -> HaloResult<(f64, f64)> {
         let s = self
             .state
             .lock()
-            .map_err(|e| BitFunError::tool(format!("lock: {}", e)))?;
+            .map_err(|e| HaloError::tool(format!("lock: {}", e)))?;
         let Some(map) = s.pointer_map else {
-            return Err(BitFunError::tool(
+            return Err(HaloError::tool(
                 "No screenshot yet in this session: run action screenshot first, then use x,y in the screenshot image pixel grid (image_width x image_height), or set use_screen_coordinates true with global screen pixels.".to_string(),
             ));
         };
@@ -538,20 +538,20 @@ impl DesktopComputerUseHost {
         &self,
         x: i32,
         y: i32,
-    ) -> BitFunResult<(f64, f64)> {
+    ) -> HaloResult<(f64, f64)> {
         let s = self
             .state
             .lock()
-            .map_err(|e| BitFunError::tool(format!("lock: {}", e)))?;
+            .map_err(|e| HaloError::tool(format!("lock: {}", e)))?;
         let Some(map) = s.pointer_map else {
-            return Err(BitFunError::tool(
+            return Err(HaloError::tool(
                 "No screenshot yet: run screenshot first. For coordinate_mode \"normalized\", use x and y each in 0..=1000.".to_string(),
             ));
         };
         map.map_normalized_to_global_f64(x, y)
     }
 
-    pub(super) async fn mouse_move_global_f64_impl(&self, gx: f64, gy: f64) -> BitFunResult<()> {
+    pub(super) async fn mouse_move_global_f64_impl(&self, gx: f64, gy: f64) -> HaloResult<()> {
         debug!(
             "computer_use: mouse_move_global_f64 smooth target ({:.2}, {:.2})",
             gx, gy
@@ -567,13 +567,13 @@ impl DesktopComputerUseHost {
             }
         })
         .await
-        .map_err(|e| BitFunError::tool(e.to_string()))??;
+        .map_err(|e| HaloError::tool(e.to_string()))??;
         self.clear_vision_pixel_nudge_block();
         ComputerUseHost::computer_use_after_pointer_mutation(self);
         Ok(())
     }
 
-    pub(super) async fn pointer_move_relative_impl(&self, dx: i32, dy: i32) -> BitFunResult<()> {
+    pub(super) async fn pointer_move_relative_impl(&self, dx: i32, dy: i32) -> HaloResult<()> {
         if dx == 0 && dy == 0 {
             return Ok(());
         }
@@ -582,9 +582,9 @@ impl DesktopComputerUseHost {
             let s = self
                 .state
                 .lock()
-                .map_err(|e| BitFunError::tool(format!("lock: {}", e)))?;
+                .map_err(|e| HaloError::tool(format!("lock: {}", e)))?;
             if s.block_vision_pixel_nudge_after_screenshot {
-                return Err(BitFunError::tool(
+                return Err(HaloError::tool(
                     VISION_PIXEL_NUDGE_AFTER_SCREENSHOT_MSG.to_string(),
                 ));
             }
@@ -599,15 +599,15 @@ impl DesktopComputerUseHost {
                 let s = self
                     .state
                     .lock()
-                    .map_err(|e| BitFunError::tool(format!("lock: {}", e)))?;
+                    .map_err(|e| HaloError::tool(format!("lock: {}", e)))?;
                 let Some(map) = s.pointer_map else {
-                    return Err(BitFunError::tool(
+                    return Err(HaloError::tool(
                         "Run action screenshot first: on macOS, `pointer_move_rel` converts pixel deltas using the last capture scale."
                             .to_string(),
                     ));
                 };
                 map.macos_geo.ok_or_else(|| {
-                    BitFunError::tool(
+                    HaloError::tool(
                         "Pointer map missing display geometry; take a screenshot then retry."
                             .to_string(),
                     )
@@ -617,7 +617,7 @@ impl DesktopComputerUseHost {
             tokio::task::spawn_blocking(move || {
                 Self::run_enigo_job(|e| {
                     let (cx, cy) = macos::quartz_mouse_location().map_err(|err| {
-                        BitFunError::tool(format!("quartz pointer (relative move): {}", err))
+                        HaloError::tool(format!("quartz pointer (relative move): {}", err))
                     })?;
                     let px_w = geo.full_px_w.max(1) as f64;
                     let px_h = geo.full_px_h.max(1) as f64;
@@ -626,11 +626,11 @@ impl DesktopComputerUseHost {
                     let nx = (cx + dpt_x).round() as i32;
                     let ny = (cy + dpt_y).round() as i32;
                     e.move_mouse(nx, ny, Coordinate::Abs)
-                        .map_err(|err| BitFunError::tool(format!("pointer_move_relative: {}", err)))
+                        .map_err(|err| HaloError::tool(format!("pointer_move_relative: {}", err)))
                 })
             })
             .await
-            .map_err(|e| BitFunError::tool(e.to_string()))??;
+            .map_err(|e| HaloError::tool(e.to_string()))??;
             ComputerUseHost::computer_use_after_pointer_mutation(self);
             Ok(())
         }
@@ -640,55 +640,55 @@ impl DesktopComputerUseHost {
             tokio::task::spawn_blocking(move || {
                 Self::run_enigo_job(|e| {
                     e.move_mouse(dx, dy, Coordinate::Rel)
-                        .map_err(|err| BitFunError::tool(format!("pointer_move_relative: {}", err)))
+                        .map_err(|err| HaloError::tool(format!("pointer_move_relative: {}", err)))
                 })
             })
             .await
-            .map_err(|e| BitFunError::tool(e.to_string()))??;
+            .map_err(|e| HaloError::tool(e.to_string()))??;
             ComputerUseHost::computer_use_after_pointer_mutation(self);
             Ok(())
         }
     }
 
-    pub(super) async fn mouse_click_impl(&self, button: &str) -> BitFunResult<()> {
+    pub(super) async fn mouse_click_impl(&self, button: &str) -> HaloResult<()> {
         debug!("computer_use: mouse_click button={}", button);
         ComputerUseHost::computer_use_guard_click_allowed(self)?;
         self.mouse_click_at_current_pointer(button).await
     }
 
-    pub(super) async fn mouse_click_authoritative_impl(&self, button: &str) -> BitFunResult<()> {
+    pub(super) async fn mouse_click_authoritative_impl(&self, button: &str) -> HaloResult<()> {
         debug!("computer_use: mouse_click_authoritative button={}", button);
         self.mouse_click_at_current_pointer(button).await
     }
 
-    pub(super) async fn mouse_down_impl(&self, button: &str) -> BitFunResult<()> {
+    pub(super) async fn mouse_down_impl(&self, button: &str) -> HaloResult<()> {
         debug!("computer_use: mouse_down button={}", button);
         let button = button.to_string();
         tokio::task::spawn_blocking(move || {
             Self::run_enigo_job(|e| {
                 let b = Self::map_button(&button)?;
                 e.button(b, Direction::Press)
-                    .map_err(|err| BitFunError::tool(format!("mouse_down: {}", err)))
+                    .map_err(|err| HaloError::tool(format!("mouse_down: {}", err)))
             })
         })
         .await
-        .map_err(|e| BitFunError::tool(e.to_string()))??;
+        .map_err(|e| HaloError::tool(e.to_string()))??;
         ComputerUseHost::computer_use_after_pointer_mutation(self);
         Ok(())
     }
 
-    pub(super) async fn mouse_up_impl(&self, button: &str) -> BitFunResult<()> {
+    pub(super) async fn mouse_up_impl(&self, button: &str) -> HaloResult<()> {
         debug!("computer_use: mouse_up button={}", button);
         let button = button.to_string();
         tokio::task::spawn_blocking(move || {
             Self::run_enigo_job(|e| {
                 let b = Self::map_button(&button)?;
                 e.button(b, Direction::Release)
-                    .map_err(|err| BitFunError::tool(format!("mouse_up: {}", err)))
+                    .map_err(|err| HaloError::tool(format!("mouse_up: {}", err)))
             })
         })
         .await
-        .map_err(|e| BitFunError::tool(e.to_string()))??;
+        .map_err(|e| HaloError::tool(e.to_string()))??;
         ComputerUseHost::computer_use_after_pointer_mutation(self);
         Ok(())
     }
@@ -704,7 +704,7 @@ impl DesktopComputerUseHost {
         to: (f64, f64),
         button: &str,
         duration_ms: u64,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         debug!(
             "computer_use: drag from=({:.1},{:.1}) to=({:.1},{:.1}) button={} dur={}ms",
             from.0, from.1, to.0, to.1, button, duration_ms
@@ -747,7 +747,7 @@ impl DesktopComputerUseHost {
                         })
                     })
                     .await
-                    .map_err(|e| BitFunError::tool(e.to_string()))??;
+                    .map_err(|e| HaloError::tool(e.to_string()))??;
                     return Ok(());
                 }
             }
@@ -774,7 +774,7 @@ impl DesktopComputerUseHost {
                     )
                 })
                 .await
-                .map_err(|e| BitFunError::tool(e.to_string()))??;
+                .map_err(|e| HaloError::tool(e.to_string()))??;
                 return Ok(());
             }
         }
@@ -793,7 +793,7 @@ impl DesktopComputerUseHost {
         self.mouse_up(button).await
     }
 
-    pub(super) async fn scroll_impl(&self, delta_x: i32, delta_y: i32) -> BitFunResult<()> {
+    pub(super) async fn scroll_impl(&self, delta_x: i32, delta_y: i32) -> HaloResult<()> {
         if delta_x == 0 && delta_y == 0 {
             return Ok(());
         }
@@ -801,24 +801,24 @@ impl DesktopComputerUseHost {
             Self::run_enigo_job(|e| {
                 if delta_x != 0 {
                     e.scroll(delta_x, Axis::Horizontal)
-                        .map_err(|err| BitFunError::tool(format!("scroll horizontal: {}", err)))?;
+                        .map_err(|err| HaloError::tool(format!("scroll horizontal: {}", err)))?;
                 }
                 if delta_y != 0 {
                     e.scroll(delta_y, Axis::Vertical)
-                        .map_err(|err| BitFunError::tool(format!("scroll vertical: {}", err)))?;
+                        .map_err(|err| HaloError::tool(format!("scroll vertical: {}", err)))?;
                 }
                 Ok(())
             })
         })
         .await
-        .map_err(|e| BitFunError::tool(e.to_string()))??;
+        .map_err(|e| HaloError::tool(e.to_string()))??;
         ComputerUseHost::computer_use_after_pointer_mutation(self);
         ComputerUseHost::computer_use_after_committed_ui_action(self);
         ComputerUseHost::computer_use_record_mutation(self, ComputerUseLastMutationKind::Scroll);
         Ok(())
     }
 
-    pub(super) async fn key_chord_impl(&self, keys: Vec<String>) -> BitFunResult<()> {
+    pub(super) async fn key_chord_impl(&self, keys: Vec<String>) -> HaloResult<()> {
         if keys.is_empty() {
             return Ok(());
         }
@@ -842,7 +842,7 @@ impl DesktopComputerUseHost {
                 let mapped: Vec<Key> = keys_for_job
                     .iter()
                     .map(|s| Self::map_key(s))
-                    .collect::<BitFunResult<_>>()?;
+                    .collect::<HaloResult<_>>()?;
                 let chord_has_modifier = keys_for_job.iter().any(|s| {
                     matches!(
                         s.to_lowercase().as_str(),
@@ -859,13 +859,13 @@ impl DesktopComputerUseHost {
                 });
                 if mapped.len() == 1 {
                     e.key(mapped[0], Direction::Click)
-                        .map_err(|err| BitFunError::tool(format!("key: {}", err)))?;
+                        .map_err(|err| HaloError::tool(format!("key: {}", err)))?;
                 } else {
                     let mods = &mapped[..mapped.len() - 1];
                     let last = *mapped.last().unwrap();
                     for k in mods {
                         e.key(*k, Direction::Press)
-                            .map_err(|err| BitFunError::tool(format!("key press: {}", err)))?;
+                            .map_err(|err| HaloError::tool(format!("key press: {}", err)))?;
                     }
                     if chord_has_modifier {
                         // Modifiers must be registered before the main key; otherwise macOS / IME
@@ -876,10 +876,10 @@ impl DesktopComputerUseHost {
                         std::thread::sleep(std::time::Duration::from_millis(55));
                     }
                     e.key(last, Direction::Click)
-                        .map_err(|err| BitFunError::tool(format!("key click: {}", err)))?;
+                        .map_err(|err| HaloError::tool(format!("key click: {}", err)))?;
                     for k in mods.iter().rev() {
                         e.key(*k, Direction::Release)
-                            .map_err(|err| BitFunError::tool(format!("key release: {}", err)))?;
+                            .map_err(|err| HaloError::tool(format!("key release: {}", err)))?;
                     }
                     if chord_has_modifier {
                         std::thread::sleep(std::time::Duration::from_millis(35));
@@ -889,14 +889,14 @@ impl DesktopComputerUseHost {
             })
         })
         .await
-        .map_err(|e| BitFunError::tool(e.to_string()))??;
+        .map_err(|e| HaloError::tool(e.to_string()))??;
         ComputerUseHost::computer_use_after_pointer_mutation(self);
         ComputerUseHost::computer_use_after_committed_ui_action(self);
         ComputerUseHost::computer_use_record_mutation(self, ComputerUseLastMutationKind::KeyChord);
         Ok(())
     }
 
-    pub(super) async fn type_text_impl(&self, text: &str) -> BitFunResult<()> {
+    pub(super) async fn type_text_impl(&self, text: &str) -> HaloResult<()> {
         if text.is_empty() {
             return Ok(());
         }
@@ -918,7 +918,7 @@ impl DesktopComputerUseHost {
                             })
                         })
                         .await
-                        .map_err(|e| BitFunError::tool(e.to_string()))??;
+                        .map_err(|e| HaloError::tool(e.to_string()))??;
                         ComputerUseHost::computer_use_after_committed_ui_action(self);
                         ComputerUseHost::computer_use_trust_pointer_after_text_input(self);
                         ComputerUseHost::computer_use_record_mutation(
@@ -934,11 +934,11 @@ impl DesktopComputerUseHost {
         tokio::task::spawn_blocking(move || {
             Self::run_enigo_job(|e| {
                 e.text(&owned)
-                    .map_err(|err| BitFunError::tool(format!("type_text: {}", err)))
+                    .map_err(|err| HaloError::tool(format!("type_text: {}", err)))
             })
         })
         .await
-        .map_err(|e| BitFunError::tool(e.to_string()))??;
+        .map_err(|e| HaloError::tool(e.to_string()))??;
         // Typing does not move the pointer; do not set click_needs (would block Enter after search).
         ComputerUseHost::computer_use_after_committed_ui_action(self);
         ComputerUseHost::computer_use_trust_pointer_after_text_input(self);

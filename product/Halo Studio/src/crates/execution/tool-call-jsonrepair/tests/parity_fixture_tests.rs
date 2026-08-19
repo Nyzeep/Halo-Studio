@@ -1,4 +1,4 @@
-use bitfun_tool_call_jsonrepair::jsonrepair;
+use halo_tool_call_jsonrepair::jsonrepair;
 use serde_json::Value;
 
 const CORPUS: &str = include_str!("fixtures/parity_cases.json");

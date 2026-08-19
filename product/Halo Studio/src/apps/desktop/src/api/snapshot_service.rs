@@ -1,13 +1,13 @@
 //! Snapshot Service API
 
-use bitfun_core::infrastructure::try_get_path_manager_arc;
-use bitfun_core::service::remote_ssh::workspace_state::is_remote_path;
-use bitfun_core::service::snapshot::{
+use halo_core::infrastructure::try_get_path_manager_arc;
+use halo_core::service::remote_ssh::workspace_state::is_remote_path;
+use halo_core::service::snapshot::{
     ensure_snapshot_manager_for_workspace, get_snapshot_manager_for_workspace,
     initialize_snapshot_manager_for_workspace, open_snapshot_manager_for_view, OperationType,
     SnapshotConfig, SnapshotManager,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     LocalWorkspaceSnapshotPort, LocalWorkspaceSnapshotSessionRequest,
     LocalWorkspaceSnapshotTurnRequest, PortError, PortErrorKind,
 };
@@ -569,7 +569,7 @@ pub async fn rollback_to_turn(
     let workspace_path = resolve_workspace_dir(&request.workspace_path).await?;
 
     {
-        use bitfun_core::agentic::coordination::get_global_coordinator;
+        use halo_core::agentic::coordination::get_global_coordinator;
 
         if let Some(coordinator) = get_global_coordinator() {
             if let Err(e) = coordinator
@@ -598,7 +598,7 @@ pub async fn rollback_to_turn(
         let workspace_path = PathBuf::from(&request.workspace_path);
         let mut rolled_back_parent_turn_ids = HashSet::new();
 
-        use bitfun_core::agentic::persistence::PersistenceManager;
+        use halo_core::agentic::persistence::PersistenceManager;
 
         match try_get_path_manager_arc() {
             Ok(path_manager) => match PersistenceManager::new(path_manager) {
@@ -632,7 +632,7 @@ pub async fn rollback_to_turn(
         }
 
         {
-            use bitfun_core::agentic::coordination::get_global_coordinator;
+            use halo_core::agentic::coordination::get_global_coordinator;
 
             if let Some(coordinator) = get_global_coordinator() {
                 if !rolled_back_parent_turn_ids.is_empty() {
@@ -838,7 +838,7 @@ pub async fn get_session_turns(
     _app_handle: AppHandle,
     request: GetSessionTurnsRequest,
 ) -> Result<Vec<usize>, String> {
-    use bitfun_core::agentic::persistence::PersistenceManager;
+    use halo_core::agentic::persistence::PersistenceManager;
 
     if request.remote_scope.declares_remote() || is_remote_path(&request.workspace_path).await {
         return Ok(vec![]);
@@ -1278,7 +1278,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use bitfun_runtime_ports::{
+    use halo_runtime_ports::{
         LocalWorkspaceSnapshotPort, LocalWorkspaceSnapshotSessionRequest,
         LocalWorkspaceSnapshotStats, LocalWorkspaceSnapshotTurnRequest, PortError, PortErrorKind,
         PortResult,
@@ -1317,7 +1317,7 @@ mod tests {
         let workspace = tempfile::tempdir().expect("create workspace");
         let workspace_path = workspace.path().to_string_lossy().to_string();
         let remote =
-            bitfun_core::service::remote_ssh::workspace_state::init_remote_workspace_manager();
+            halo_core::service::remote_ssh::workspace_state::init_remote_workspace_manager();
         remote
             .register_remote_workspace(
                 workspace_path.clone(),

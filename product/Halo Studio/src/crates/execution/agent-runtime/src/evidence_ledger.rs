@@ -1,5 +1,5 @@
 use crate::checkpoint::LightCheckpoint;
-use bitfun_runtime_ports::{CompressionContract, CompressionContractItem};
+use halo_runtime_ports::{CompressionContract, CompressionContractItem};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

@@ -10,7 +10,7 @@ $config-input-height: 32px;
 
 
 
-.bitfun-config-form {
+.halo-config-form {
   display: flex;
   flex-direction: column;
   gap: $config-section-gap;
@@ -22,7 +22,7 @@ $config-input-height: 32px;
 
 
 
-.bitfun-config-form__group {
+.halo-config-form__group {
   display: flex;
   flex-direction: column;
   gap: $config-form-gap;
@@ -34,7 +34,7 @@ $config-input-height: 32px;
   }
 }
 
-.bitfun-config-form__row {
+.halo-config-form__row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: $config-form-gap;
@@ -42,7 +42,7 @@ $config-input-height: 32px;
 
 
 
-.bitfun-config-form__label {
+.halo-config-form__label {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
@@ -67,7 +67,7 @@ $config-input-height: 32px;
   }
 }
 
-.bitfun-config-form__hint {
+.halo-config-form__hint {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   margin-top: var(--size-gap-1);
@@ -76,9 +76,9 @@ $config-input-height: 32px;
 
 
 
-.bitfun-config-form__input,
-.bitfun-config-form__select,
-.bitfun-config-form__textarea {
+.halo-config-form__input,
+.halo-config-form__select,
+.halo-config-form__textarea {
   width: 100%;
   padding: 0 12px !important;
   font-size: 13px !important;
@@ -119,7 +119,7 @@ $config-input-height: 32px;
 
 
 
-.bitfun-config-form__input {
+.halo-config-form__input {
   height: $config-input-height;
 
   &::placeholder {
@@ -157,15 +157,15 @@ $config-input-height: 32px;
 
 
 
-.bitfun-config-form__select {
-  --bitfun-config-select-chevron-rgb: 150, 163, 180;
+.halo-config-form__select {
+  --halo-config-select-chevron-rgb: 150, 163, 180;
 
   height: $config-input-height !important;
   line-height: $config-input-height !important;
   cursor: pointer !important;
   background-image:
-    linear-gradient(45deg, transparent 50%, rgba(var(--bitfun-config-select-chevron-rgb), 0.8) 50%),
-    linear-gradient(135deg, rgba(var(--bitfun-config-select-chevron-rgb), 0.8) 50%, transparent 50%) !important;
+    linear-gradient(45deg, transparent 50%, rgba(var(--halo-config-select-chevron-rgb), 0.8) 50%),
+    linear-gradient(135deg, rgba(var(--halo-config-select-chevron-rgb), 0.8) 50%, transparent 50%) !important;
   background-position:
     calc(100% - 16px) 50%,
     calc(100% - 11px) 50% !important;
@@ -190,7 +190,7 @@ $config-input-height: 32px;
 
 
 
-.bitfun-config-form__textarea {
+.halo-config-form__textarea {
   min-height: 80px;
   resize: vertical;
   font-family: var(--font-family-sans);
@@ -203,7 +203,7 @@ $config-input-height: 32px;
 
 
 
-.bitfun-config-form__checkbox {
+.halo-config-form__checkbox {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -213,7 +213,7 @@ $config-input-height: 32px;
 }
 
 
-.bitfun-config-form__checkbox-wrapper {
+.halo-config-form__checkbox-wrapper {
   position: relative;
   width: 16px;
   height: 16px;
@@ -221,7 +221,7 @@ $config-input-height: 32px;
   margin-top: 1px;
 }
 
-.bitfun-config-form__checkbox-input {
+.halo-config-form__checkbox-input {
   position: absolute;
   top: 0;
   left: 0;
@@ -233,7 +233,7 @@ $config-input-height: 32px;
   z-index: 1;
 }
 
-.bitfun-config-form__checkbox-mark {
+.halo-config-form__checkbox-mark {
   position: absolute;
   top: 0;
   left: 0;
@@ -263,7 +263,7 @@ $config-input-height: 32px;
   }
 }
 
-.bitfun-config-form__checkbox-input:checked + .bitfun-config-form__checkbox-mark {
+.halo-config-form__checkbox-input:checked + .halo-config-form__checkbox-mark {
   background: var(--color-accent-500);
   border-color: var(--color-accent-500);
   box-shadow: none;
@@ -274,36 +274,36 @@ $config-input-height: 32px;
   }
 }
 
-.bitfun-config-form__checkbox-input:focus + .bitfun-config-form__checkbox-mark {
+.halo-config-form__checkbox-input:focus + .halo-config-form__checkbox-mark {
   border-color: var(--color-accent-500);
   box-shadow: none;
 }
 
-.bitfun-config-form__checkbox:hover .bitfun-config-form__checkbox-mark {
+.halo-config-form__checkbox:hover .halo-config-form__checkbox-mark {
   border-color: var(--border-strong);
 }
 
-.bitfun-config-form__checkbox:hover .bitfun-config-form__checkbox-input:checked + .bitfun-config-form__checkbox-mark {
+.halo-config-form__checkbox:hover .halo-config-form__checkbox-input:checked + .halo-config-form__checkbox-mark {
   background: var(--color-accent-600);
   border-color: var(--color-accent-600);
   box-shadow: none;
 }
 
-.bitfun-config-form__checkbox-content {
+.halo-config-form__checkbox-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.bitfun-config-form__checkbox-title {
+.halo-config-form__checkbox-title {
   font-size: 13px;
   font-weight: var(--font-weight-medium);
   color: var(--color-text-primary);
   line-height: 1.4;
 }
 
-.bitfun-config-form__checkbox-description {
+.halo-config-form__checkbox-description {
   font-size: 12px;
   color: var(--color-text-muted);
   line-height: 1.5;
@@ -311,7 +311,7 @@ $config-input-height: 32px;
 
 
 
-.bitfun-config-form__actions {
+.halo-config-form__actions {
   display: flex;
   gap: var(--size-gap-3);
   justify-content: flex-end;
@@ -334,7 +334,7 @@ $config-input-height: 32px;
 
 
 
-.bitfun-config-form__status {
+.halo-config-form__status {
   display: flex;
   align-items: flex-start;
   gap: var(--size-gap-3);
@@ -373,7 +373,7 @@ $config-input-height: 32px;
 
 
 
-.bitfun-config-form__section {
+.halo-config-form__section {
   display: flex;
   flex-direction: column;
   gap: var(--size-gap-5);
@@ -388,13 +388,13 @@ $config-input-height: 32px;
   overflow: visible;
 }
 
-.bitfun-config-form__section-content {
+.halo-config-form__section-content {
   display: flex;
   flex-direction: column;
   gap: var(--size-gap-4);
 }
 
-.bitfun-config-form__section-title {
+.halo-config-form__section-title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
@@ -404,7 +404,7 @@ $config-input-height: 32px;
   gap: var(--size-gap-2);
 }
 
-.bitfun-config-form__section-description {
+.halo-config-form__section-description {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   margin: 0 0 var(--size-gap-5) 0;
@@ -414,12 +414,12 @@ $config-input-height: 32px;
 
 
 @media (max-width: 768px) {
-  .bitfun-config-form__row {
+  .halo-config-form__row {
     grid-template-columns: 1fr;
     gap: var(--size-gap-3);
   }
   
-  .bitfun-config-form__actions {
+  .halo-config-form__actions {
     flex-direction: column;
     align-items: stretch;
 
@@ -433,27 +433,27 @@ $config-input-height: 32px;
 
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-config-form__input,
-  .bitfun-config-form__select,
-  .bitfun-config-form__textarea,
-  .bitfun-config-form__checkbox-mark {
+  .halo-config-form__input,
+  .halo-config-form__select,
+  .halo-config-form__textarea,
+  .halo-config-form__checkbox-mark {
     transition: none;
   }
   
-  .bitfun-config-form__group {
+  .halo-config-form__group {
     animation: none;
   }
 }
 
 
-.bitfun-config-form__input:focus-visible,
-.bitfun-config-form__select:focus-visible,
-.bitfun-config-form__textarea:focus-visible {
+.halo-config-form__input:focus-visible,
+.halo-config-form__select:focus-visible,
+.halo-config-form__textarea:focus-visible {
   outline: 2px solid var(--color-accent-500);
   outline-offset: 2px;
 }
 
-.bitfun-config-form__checkbox-input:focus-visible + .bitfun-config-form__checkbox-mark {
+.halo-config-form__checkbox-input:focus-visible + .halo-config-form__checkbox-mark {
   outline: 2px solid var(--color-accent-500);
   outline-offset: 2px;
 }
@@ -462,19 +462,19 @@ $config-input-height: 32px;
 
 
 .config-form {
-  @extend .bitfun-config-form;
+  @extend .halo-config-form;
 }
 
 .config-form-group {
-  @extend .bitfun-config-form__group;
+  @extend .halo-config-form__group;
 }
 
 .config-form-row {
-  @extend .bitfun-config-form__row;
+  @extend .halo-config-form__row;
 }
 
 .config-form-label {
-  @extend .bitfun-config-form__label;
+  @extend .halo-config-form__label;
   list-style: none !important;
   
   &::before,
@@ -484,104 +484,104 @@ $config-input-height: 32px;
   }
   
   &.required {
-    @extend .bitfun-config-form__label--required;
+    @extend .halo-config-form__label--required;
   }
 }
 
 .config-form-hint {
-  @extend .bitfun-config-form__hint;
+  @extend .halo-config-form__hint;
 }
 
 .config-form-input {
-  @extend .bitfun-config-form__input;
+  @extend .halo-config-form__input;
 }
 
 .config-form-select {
-  @extend .bitfun-config-form__select;
+  @extend .halo-config-form__select;
 }
 
 .config-form-textarea {
-  @extend .bitfun-config-form__textarea;
+  @extend .halo-config-form__textarea;
 }
 
 .config-form-checkbox {
-  @extend .bitfun-config-form__checkbox;
+  @extend .halo-config-form__checkbox;
 }
 
 .config-form-checkbox-wrapper {
-  @extend .bitfun-config-form__checkbox-wrapper;
+  @extend .halo-config-form__checkbox-wrapper;
 }
 
 .config-form-checkbox-input {
-  @extend .bitfun-config-form__checkbox-input;
+  @extend .halo-config-form__checkbox-input;
 }
 
 .config-form-checkbox-mark {
-  @extend .bitfun-config-form__checkbox-mark;
+  @extend .halo-config-form__checkbox-mark;
 }
 
 .config-form-checkbox-content {
-  @extend .bitfun-config-form__checkbox-content;
+  @extend .halo-config-form__checkbox-content;
 }
 
 .config-form-checkbox-title {
-  @extend .bitfun-config-form__checkbox-title;
+  @extend .halo-config-form__checkbox-title;
 }
 
 .config-form-checkbox-description {
-  @extend .bitfun-config-form__checkbox-description;
+  @extend .halo-config-form__checkbox-description;
 }
 
 .config-form-actions {
-  @extend .bitfun-config-form__actions;
+  @extend .halo-config-form__actions;
   
   &.start {
-    @extend .bitfun-config-form__actions--start;
+    @extend .halo-config-form__actions--start;
   }
   
   &.center {
-    @extend .bitfun-config-form__actions--center;
+    @extend .halo-config-form__actions--center;
   }
   
   &.between {
-    @extend .bitfun-config-form__actions--between;
+    @extend .halo-config-form__actions--between;
   }
 }
 
 .config-form-status {
-  @extend .bitfun-config-form__status;
+  @extend .halo-config-form__status;
   
   &.success {
-    @extend .bitfun-config-form__status--success;
+    @extend .halo-config-form__status--success;
   }
   
   &.error {
-    @extend .bitfun-config-form__status--error;
+    @extend .halo-config-form__status--error;
   }
   
   &.warning {
-    @extend .bitfun-config-form__status--warning;
+    @extend .halo-config-form__status--warning;
   }
   
   &.info {
-    @extend .bitfun-config-form__status--info;
+    @extend .halo-config-form__status--info;
   }
 }
 
 .config-form-section {
-  @extend .bitfun-config-form__section;
+  @extend .halo-config-form__section;
 }
 
 .config-section-content {
-  @extend .bitfun-config-form__section-content;
+  @extend .halo-config-form__section-content;
 }
 
 .config-form-section-title {
-  @extend .bitfun-config-form__section-title;
+  @extend .halo-config-form__section-title;
 }
 
 .config-form-section-description {
-  @extend .bitfun-config-form__section-description;
+  @extend .halo-config-form__section-description;
 }
 
 

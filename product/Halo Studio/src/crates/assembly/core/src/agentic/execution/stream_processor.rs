@@ -2,7 +2,7 @@
 
 use crate::agentic::core::ToolCall;
 use crate::agentic::events::EventQueue;
-use crate::util::errors::BitFunError;
+use crate::util::errors::HaloError;
 use crate::util::types::ai::GeminiUsage;
 use futures::stream::BoxStream;
 use serde_json::Value;
@@ -11,14 +11,14 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-pub use bitfun_agent_stream::{
+pub use halo_agent_stream::{
     HiddenTextBlock, HiddenTextTag, StreamProcessOptions, StreamProcessorError,
     ToolCall as StreamToolCall,
 };
 
 const MEMORY_CITATION_HIDDEN_TEXT_TAG: &str = "memory_citation";
 
-/// Stream processing result exposed through bitfun-core compatibility types.
+/// Stream processing result exposed through halo-core compatibility types.
 #[derive(Debug, Clone)]
 pub struct StreamResult {
     pub full_thinking: String,
@@ -35,8 +35,8 @@ pub struct StreamResult {
     pub partial_recovery_reason: Option<String>,
 }
 
-impl From<bitfun_agent_stream::StreamResult> for StreamResult {
-    fn from(result: bitfun_agent_stream::StreamResult) -> Self {
+impl From<halo_agent_stream::StreamResult> for StreamResult {
+    fn from(result: halo_agent_stream::StreamResult) -> Self {
         Self {
             full_thinking: result.full_thinking,
             reasoning_content_present: result.reasoning_content_present,
@@ -54,15 +54,15 @@ impl From<bitfun_agent_stream::StreamResult> for StreamResult {
     }
 }
 
-/// Stream processing error exposed through bitfun-core compatibility errors.
+/// Stream processing error exposed through halo-core compatibility errors.
 #[derive(Debug)]
 pub struct StreamProcessError {
-    pub error: BitFunError,
+    pub error: HaloError,
     pub has_effective_output: bool,
 }
 
-impl From<bitfun_agent_stream::StreamProcessError> for StreamProcessError {
-    fn from(error: bitfun_agent_stream::StreamProcessError) -> Self {
+impl From<halo_agent_stream::StreamProcessError> for StreamProcessError {
+    fn from(error: halo_agent_stream::StreamProcessError) -> Self {
         Self {
             error: error.error.into(),
             has_effective_output: error.has_effective_output,
@@ -72,24 +72,24 @@ impl From<bitfun_agent_stream::StreamProcessError> for StreamProcessError {
 
 /// Core-facing stream processor wrapper.
 pub struct StreamProcessor {
-    inner: bitfun_agent_stream::StreamProcessor,
+    inner: halo_agent_stream::StreamProcessor,
 }
 
 impl StreamProcessor {
     pub fn new(event_queue: Arc<EventQueue>) -> Self {
         Self {
-            inner: bitfun_agent_stream::StreamProcessor::new(event_queue),
+            inner: halo_agent_stream::StreamProcessor::new(event_queue),
         }
     }
 
     pub fn derive_watchdog_timeout(stream_idle_timeout: Option<Duration>) -> Option<Duration> {
-        bitfun_agent_stream::StreamProcessor::derive_watchdog_timeout(stream_idle_timeout)
+        halo_agent_stream::StreamProcessor::derive_watchdog_timeout(stream_idle_timeout)
     }
 
     #[allow(clippy::too_many_arguments)]
     pub async fn process_stream(
         &self,
-        stream: BoxStream<'static, Result<bitfun_ai_adapters::UnifiedResponse, anyhow::Error>>,
+        stream: BoxStream<'static, Result<halo_ai_adapters::UnifiedResponse, anyhow::Error>>,
         watchdog_timeout: Option<Duration>,
         raw_sse_rx: Option<mpsc::UnboundedReceiver<String>>,
         session_id: String,
@@ -117,7 +117,7 @@ impl StreamProcessor {
     #[allow(clippy::too_many_arguments)]
     pub async fn process_stream_with_options(
         &self,
-        stream: BoxStream<'static, Result<bitfun_ai_adapters::UnifiedResponse, anyhow::Error>>,
+        stream: BoxStream<'static, Result<halo_ai_adapters::UnifiedResponse, anyhow::Error>>,
         watchdog_timeout: Option<Duration>,
         raw_sse_rx: Option<mpsc::UnboundedReceiver<String>>,
         session_id: String,
@@ -152,8 +152,8 @@ fn with_default_hidden_text_tags(mut options: StreamProcessOptions) -> StreamPro
     if options.hidden_text_tags.is_empty() {
         options.hidden_text_tags.push(HiddenTextTag::new(
             MEMORY_CITATION_HIDDEN_TEXT_TAG,
-            "<bitfun-mem-citation>",
-            "</bitfun-mem-citation>",
+            "<halo-mem-citation>",
+            "</halo-mem-citation>",
         ));
     }
     options
@@ -169,8 +169,8 @@ mod tests {
 
         assert_eq!(options.hidden_text_tags.len(), 1);
         assert_eq!(options.hidden_text_tags[0].name, "memory_citation");
-        assert_eq!(options.hidden_text_tags[0].open, "<bitfun-mem-citation>");
-        assert_eq!(options.hidden_text_tags[0].close, "</bitfun-mem-citation>");
+        assert_eq!(options.hidden_text_tags[0].open, "<halo-mem-citation>");
+        assert_eq!(options.hidden_text_tags[0].close, "</halo-mem-citation>");
     }
 
     #[test]

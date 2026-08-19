@@ -1,10 +1,10 @@
 //! Types for session persistence
 
-use bitfun_core_types::ToolImageAttachment;
-use bitfun_core_types::{
+use halo_core_types::ToolImageAttachment;
+use halo_core_types::{
     AiErrorDetail, SessionContinuationPolicy, SessionExecutionTarget, SessionKind,
 };
-use bitfun_events::ModelRoundAttemptDiagnostic;
+use halo_events::ModelRoundAttemptDiagnostic;
 use serde::{Deserialize, Serialize};
 
 pub const SESSION_STORAGE_SCHEMA_VERSION: u32 = 2;
@@ -1070,7 +1070,7 @@ mod tests {
         SessionRelationship, SessionRelationshipKind, TextItemData, ThinkingItemData, ToolItemData,
         UserMessageData,
     };
-    use bitfun_core_types::{SessionContinuationPolicy, SessionKind};
+    use halo_core_types::{SessionContinuationPolicy, SessionKind};
 
     #[test]
     fn dialog_turn_kind_defaults_to_user_dialog_for_legacy_payloads() {

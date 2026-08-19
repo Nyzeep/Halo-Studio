@@ -1,1 +1,1 @@
-pub use bitfun_services_integrations::mcp::protocol::types::*;
+pub use halo_services_integrations::mcp::protocol::types::*;

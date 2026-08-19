@@ -1,7 +1,7 @@
 #![cfg(feature = "workspace-runtime")]
 
-use bitfun_runtime_ports::{RuntimeEventEnvelope, RuntimeEventType, RuntimeServiceCapability};
-use bitfun_services_core::local_runtime_ports::LocalRuntimePorts;
+use halo_runtime_ports::{RuntimeEventEnvelope, RuntimeEventType, RuntimeServiceCapability};
+use halo_services_core::local_runtime_ports::LocalRuntimePorts;
 
 #[tokio::test]
 async fn local_runtime_ports_bind_one_canonical_workspace_and_runtime_facts() {

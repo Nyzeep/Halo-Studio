@@ -34,13 +34,13 @@ const SLATE_SUCCESS = '#7eb09b';
 const SLATE_WARNING = '#f59e0b';
 const SLATE_ERROR = '#c9878d';
 
-export const bitfunSlateTheme: ThemeConfig = {
+export const haloSlateTheme: ThemeConfig = {
 
-  id: 'bitfun-slate',
+  id: 'halo-slate',
   name: 'Slate',
   type: 'dark',
   description: 'Slate gray geometric theme - Deep immersion, high contrast grayscale aesthetics',
-  author: 'BitFun Team',
+  author: 'Halo Studio Team',
   version: '1.3.0',
 
   layout: {

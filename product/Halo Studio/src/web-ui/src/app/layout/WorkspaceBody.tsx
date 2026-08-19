@@ -70,8 +70,8 @@ const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
     let hasCollapsed = false;
     let frameId: number | null = null;
 
-    document.body.classList.add('bitfun-is-dragging-nav-collapse');
-    document.body.classList.add('bitfun-is-resizing-nav');
+    document.body.classList.add('halo-is-dragging-nav-collapse');
+    document.body.classList.add('halo-is-resizing-nav');
 
     // During the drag we bypass React entirely: write the --nav-width CSS
     // variable straight to the two elements that consume it (rAF-merged).
@@ -108,7 +108,7 @@ const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
         cancelAnimationFrame(frameId);
         frameId = null;
       }
-      // Flush the final width synchronously, while `bitfun-is-resizing-nav`
+      // Flush the final width synchronously, while `halo-is-resizing-nav`
       // still suppresses the width transition. Without this, a drop that lands
       // between two animation frames leaves the DOM at the last painted width:
       // React only rewrites the inline var when `navWidth` actually changes, so
@@ -116,8 +116,8 @@ const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
       // sync with state, and any other drop would glide to its final width
       // ($motion-base) while the divider's `left` jumps instantly.
       applyWidth();
-      document.body.classList.remove('bitfun-is-dragging-nav-collapse');
-      document.body.classList.remove('bitfun-is-resizing-nav');
+      document.body.classList.remove('halo-is-dragging-nav-collapse');
+      document.body.classList.remove('halo-is-resizing-nav');
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       dragCleanupRef.current = null;
@@ -131,9 +131,9 @@ const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
   }, [isNavCollapsed, navWidth, toggleLeftPanel]);
 
   return (
-    <div className={`bitfun-workspace-body${isEntering ? ' is-entering' : ''}${isExiting ? ' is-exiting' : ''} ${className}`}>
+    <div className={`halo-workspace-body${isEntering ? ' is-entering' : ''}${isExiting ? ' is-exiting' : ''} ${className}`}>
       {isNavCollapsed && (
-        <div className="bitfun-workspace-body__collapsed-nav">
+        <div className="halo-workspace-body__collapsed-nav">
           <NavBar isCollapsed onExpandNav={toggleLeftPanel} onMaximize={onMaximize} />
         </div>
       )}
@@ -141,18 +141,18 @@ const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
       {/* Left: nav history bar + navigation sidebar — always rendered for slide animation */}
       <div
         ref={navAreaRef}
-        className={`bitfun-workspace-body__nav-area${isNavCollapsed ? ' is-collapsed' : ''}`}
+        className={`halo-workspace-body__nav-area${isNavCollapsed ? ' is-collapsed' : ''}`}
         style={isNavCollapsed ? undefined : { '--nav-width': `${navWidth}px` } as React.CSSProperties}
       >
         <NavBar onExpandNav={toggleLeftPanel} onMaximize={onMaximize} />
-        <NavPanel className="bitfun-workspace-body__nav-panel" />
+        <NavPanel className="halo-workspace-body__nav-panel" />
       </div>
 
       {/* Resize divider — placed at workspace-body level to avoid overflow:hidden clipping */}
       {!isNavCollapsed && (
         <div
           ref={navDividerRef}
-          className="bitfun-workspace-body__nav-divider"
+          className="halo-workspace-body__nav-divider"
           style={{ '--nav-width': `${navWidth}px` } as React.CSSProperties}
           onMouseDown={handleNavCollapseDragStart}
           role="separator"
@@ -161,7 +161,7 @@ const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
       )}
 
       {/* Right: scene tab bar + scene content */}
-      <div className="bitfun-workspace-body__scene-area">
+      <div className="halo-workspace-body__scene-area">
         <SceneBar
           onMinimize={onMinimize}
           onMaximize={onMaximize}

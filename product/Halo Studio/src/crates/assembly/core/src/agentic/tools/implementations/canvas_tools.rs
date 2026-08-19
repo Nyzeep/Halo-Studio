@@ -1,12 +1,12 @@
 //! Canvas artifact tools.
 
 use crate::agentic::tools::framework::{Tool, ToolResult, ToolUseContext};
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
-use bitfun_product_domains::canvas::{
+use halo_product_domains::canvas::{
     parse_canvas_artifact_ref, CanvasArtifact, CanvasArtifactRef, CanvasId, CanvasRevision,
     CanvasScope, CanvasSessionId, CanvasSnapshot, CanvasSource, CanvasStatus, CanvasStoragePort,
-    CanvasWorkspaceId, BITFUN_CANVAS_SDK_VERSION,
+    CanvasWorkspaceId, HALO_CANVAS_SDK_VERSION,
 };
 use chrono::Utc;
 use serde_json::{json, Value};
@@ -76,23 +76,23 @@ impl Tool for CreateCanvasTool {
         "CreateCanvas"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
-        Ok(r#"Create a session-scoped BitFun Canvas artifact from a single TSX source file.
+    async fn description(&self) -> HaloResult<String> {
+        Ok(r#"Create a session-scoped Halo Canvas artifact from a single TSX source file.
 
 Use this for rich visual artifacts, dashboards, explainers, interactive summaries, charts, diagrams, and compact apps that should render beside the conversation instead of being written into the user's repository.
 
 Rules:
 - Provide one complete TSX source string.
-- Import only from `bitfun/canvas`.
+- Import only from `halo/canvas`.
 - Do not use relative imports, dynamic imports, npm packages, network fetches, or helper files.
 - The source must include `export default`.
 
-Returns a stable `bitfun-canvas://...` artifact reference. Use ReadCanvas to inspect it, PatchCanvas for small targeted revisions, and UpdateCanvas for full-source rewrites."#
+Returns a stable `halo-canvas://...` artifact reference. Use ReadCanvas to inspect it, PatchCanvas for small targeted revisions, and UpdateCanvas for full-source rewrites."#
             .to_string())
     }
 
     fn short_description(&self) -> String {
-        "Create a session-scoped BitFun Canvas artifact.".to_string()
+        "Create a session-scoped Halo Canvas artifact.".to_string()
     }
 
     fn input_schema(&self) -> Value {
@@ -111,7 +111,7 @@ Returns a stable `bitfun-canvas://...` artifact reference. Use ReadCanvas to ins
                 },
                 "source": {
                     "type": "string",
-                    "description": "Complete single-file TSX source using imports from bitfun/canvas only."
+                    "description": "Complete single-file TSX source using imports from halo/canvas only."
                 },
                 "filename": {
                     "type": "string",
@@ -125,7 +125,7 @@ Returns a stable `bitfun-canvas://...` artifact reference. Use ReadCanvas to ins
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let title = required_non_empty_string(input, "title")?;
         let source = normalize_canvas_source_input(required_non_empty_string(input, "source")?);
         let description = optional_non_empty_string(input, "description");
@@ -158,7 +158,7 @@ Returns a stable `bitfun-canvas://...` artifact reference. Use ReadCanvas to ins
             revision,
             filename,
             source,
-            BITFUN_CANVAS_SDK_VERSION,
+            HALO_CANVAS_SDK_VERSION,
             now,
         );
 
@@ -190,8 +190,8 @@ impl Tool for ReadCanvasTool {
         "ReadCanvas"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
-        Ok(r#"Read a BitFun Canvas artifact from the current session.
+    async fn description(&self) -> HaloResult<String> {
+        Ok(r#"Read a Halo Canvas artifact from the current session.
 
 Provide either `artifact_reference` returned by CreateCanvas/PatchCanvas/UpdateCanvas or `canvas_id` for the current session. By default this returns metadata, status, diagnostics, and source. Set `include_source` to false when only status metadata is needed."#
             .to_string())
@@ -208,7 +208,7 @@ Provide either `artifact_reference` returned by CreateCanvas/PatchCanvas/UpdateC
             "properties": {
                 "artifact_reference": {
                     "type": "string",
-                    "description": "Stable bitfun-canvas:// artifact reference."
+                    "description": "Stable halo-canvas:// artifact reference."
                 },
                 "canvas_id": {
                     "type": "string",
@@ -234,7 +234,7 @@ Provide either `artifact_reference` returned by CreateCanvas/PatchCanvas/UpdateC
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let (session_id, canvas_id) = resolve_canvas_target(input, context)?;
         let snapshot = canvas_storage_for_context(context)?
             .load_snapshot(session_id, canvas_id)
@@ -251,7 +251,7 @@ Provide either `artifact_reference` returned by CreateCanvas/PatchCanvas/UpdateC
         let mut data = snapshot_data(&snapshot, include_source);
         if include_compiled_payload {
             data["compiledPayload"] = serde_json::to_value(&snapshot.compiled_payload)
-                .map_err(|error| BitFunError::tool(error.to_string()))?;
+                .map_err(|error| HaloError::tool(error.to_string()))?;
         }
 
         let assistant_text = canvas_read_result_for_assistant(&snapshot, include_source);
@@ -269,15 +269,15 @@ impl Tool for UpdateCanvasTool {
         "UpdateCanvas"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
-        Ok(r#"Replace the TSX source for an existing BitFun Canvas artifact.
+    async fn description(&self) -> HaloResult<String> {
+        Ok(r#"Replace the TSX source for an existing Halo Canvas artifact.
 
 Provide either `artifact_reference` or `canvas_id`, plus one complete replacement `source` string. The Canvas remains session-scoped and keeps its stable artifact reference. The previous compiled payload is retained as last-known-good if the new source fails policy or compile validation."#
             .to_string())
     }
 
     fn short_description(&self) -> String {
-        "Update an existing BitFun Canvas artifact.".to_string()
+        "Update an existing Halo Canvas artifact.".to_string()
     }
 
     fn input_schema(&self) -> Value {
@@ -288,7 +288,7 @@ Provide either `artifact_reference` or `canvas_id`, plus one complete replacemen
             "properties": {
                 "artifact_reference": {
                     "type": "string",
-                    "description": "Stable bitfun-canvas:// artifact reference."
+                    "description": "Stable halo-canvas:// artifact reference."
                 },
                 "canvas_id": {
                     "type": "string",
@@ -296,7 +296,7 @@ Provide either `artifact_reference` or `canvas_id`, plus one complete replacemen
                 },
                 "source": {
                     "type": "string",
-                    "description": "Complete replacement TSX source using imports from bitfun/canvas only."
+                    "description": "Complete replacement TSX source using imports from halo/canvas only."
                 },
                 "title": {
                     "type": "string",
@@ -318,7 +318,7 @@ Provide either `artifact_reference` or `canvas_id`, plus one complete replacemen
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let source_text =
             normalize_canvas_source_input(required_non_empty_string(input, "source")?);
         let (session_id, canvas_id) = resolve_canvas_target(input, context)?;
@@ -347,15 +347,15 @@ impl Tool for PatchCanvasTool {
         "PatchCanvas"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
-        Ok(r#"Patch an existing BitFun Canvas artifact by applying exact text replacements to the latest TSX source.
+    async fn description(&self) -> HaloResult<String> {
+        Ok(r#"Patch an existing Halo Canvas artifact by applying exact text replacements to the latest TSX source.
 
 Use this for small, targeted edits such as changing a label, number, style prop, component prop, or a short JSX block. Provide either `artifact_reference` or `canvas_id`, plus one or more replacements. Each `old` text must match the current source exactly once; the tool fails without saving if a replacement is missing or ambiguous. For large rewrites, use UpdateCanvas with a complete replacement source."#
             .to_string())
     }
 
     fn short_description(&self) -> String {
-        "Patch an existing BitFun Canvas artifact.".to_string()
+        "Patch an existing Halo Canvas artifact.".to_string()
     }
 
     fn input_schema(&self) -> Value {
@@ -366,7 +366,7 @@ Use this for small, targeted edits such as changing a label, number, style prop,
             "properties": {
                 "artifact_reference": {
                     "type": "string",
-                    "description": "Stable bitfun-canvas:// artifact reference."
+                    "description": "Stable halo-canvas:// artifact reference."
                 },
                 "canvas_id": {
                     "type": "string",
@@ -412,7 +412,7 @@ Use this for small, targeted edits such as changing a label, number, style prop,
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let replacements = parse_canvas_replacements(input)?;
         let (session_id, canvas_id) = resolve_canvas_target(input, context)?;
         let service = canvas_storage_for_context(context)?;
@@ -442,7 +442,7 @@ async fn save_canvas_source_revision(
     existing: CanvasSnapshot,
     source_text: String,
     input: &Value,
-) -> BitFunResult<(CanvasSnapshot, bool)> {
+) -> HaloResult<(CanvasSnapshot, bool)> {
     let now = now_millis();
     let revision = CanvasRevision::new(format!("rev_{}", uuid_short()));
     let mut artifact = existing.artifact.clone();
@@ -466,7 +466,7 @@ async fn save_canvas_source_revision(
         revision,
         filename,
         source_text,
-        BITFUN_CANVAS_SDK_VERSION,
+        HALO_CANVAS_SDK_VERSION,
         now,
     );
 
@@ -588,12 +588,12 @@ fn normalize_canvas_source_input(source: &str) -> String {
     inner.trim().to_string()
 }
 
-fn parse_canvas_replacements(input: &Value) -> BitFunResult<Vec<CanvasReplacement>> {
+fn parse_canvas_replacements(input: &Value) -> HaloResult<Vec<CanvasReplacement>> {
     let values = input
         .get("replacements")
         .and_then(|value| value.as_array())
         .filter(|values| !values.is_empty())
-        .ok_or_else(|| BitFunError::validation("Missing required field: replacements"))?;
+        .ok_or_else(|| HaloError::validation("Missing required field: replacements"))?;
 
     values
         .iter()
@@ -603,13 +603,13 @@ fn parse_canvas_replacements(input: &Value) -> BitFunResult<Vec<CanvasReplacemen
                 .get("old")
                 .and_then(|value| value.as_str())
                 .ok_or_else(|| {
-                    BitFunError::validation(format!(
+                    HaloError::validation(format!(
                         "Missing required field: replacements[{}].old",
                         index
                     ))
                 })?;
             if old.is_empty() {
-                return Err(BitFunError::validation(format!(
+                return Err(HaloError::validation(format!(
                     "replacements[{}].old must not be empty",
                     index
                 )));
@@ -618,7 +618,7 @@ fn parse_canvas_replacements(input: &Value) -> BitFunResult<Vec<CanvasReplacemen
                 .get("new")
                 .and_then(|value| value.as_str())
                 .ok_or_else(|| {
-                    BitFunError::validation(format!(
+                    HaloError::validation(format!(
                         "Missing required field: replacements[{}].new",
                         index
                     ))
@@ -634,13 +634,13 @@ fn parse_canvas_replacements(input: &Value) -> BitFunResult<Vec<CanvasReplacemen
 fn apply_canvas_replacements(
     source: &str,
     replacements: &[CanvasReplacement],
-) -> BitFunResult<String> {
+) -> HaloResult<String> {
     let mut patched = source.to_string();
     for (index, replacement) in replacements.iter().enumerate() {
         let matches = patched.match_indices(&replacement.old).count();
         match matches {
             0 => {
-                return Err(BitFunError::validation(format!(
+                return Err(HaloError::validation(format!(
                     "Canvas patch replacement {} did not match the current source",
                     index + 1
                 )));
@@ -649,7 +649,7 @@ fn apply_canvas_replacements(
                 patched = patched.replacen(&replacement.old, &replacement.new, 1);
             }
             count => {
-                return Err(BitFunError::validation(format!(
+                return Err(HaloError::validation(format!(
                     "Canvas patch replacement {} matched {} locations; provide a more specific old text",
                     index + 1,
                     count
@@ -672,9 +672,9 @@ fn canvas_source_preview(source: &str) -> String {
 
 fn canvas_storage_for_context(
     context: &ToolUseContext,
-) -> BitFunResult<Arc<dyn CanvasStoragePort>> {
+) -> HaloResult<Arc<dyn CanvasStoragePort>> {
     context.canvas_storage().ok_or_else(|| {
-        BitFunError::tool(
+        HaloError::tool(
             "Canvas storage is unavailable for this execution context; use a workspace-backed session",
         )
     })
@@ -708,10 +708,10 @@ fn artifact_reference(snapshot: &CanvasSnapshot) -> CanvasArtifactRef {
 fn resolve_canvas_target(
     input: &Value,
     context: &ToolUseContext,
-) -> BitFunResult<(CanvasSessionId, CanvasId)> {
+) -> HaloResult<(CanvasSessionId, CanvasId)> {
     if let Some(reference) = optional_non_empty_string(input, "artifact_reference") {
         let parsed = parse_canvas_artifact_ref(reference).map_err(|error| {
-            BitFunError::validation(format!("Invalid artifact_reference: {error}"))
+            HaloError::validation(format!("Invalid artifact_reference: {error}"))
         })?;
         return Ok((parsed.session_id, parsed.canvas_id));
     }
@@ -719,7 +719,7 @@ fn resolve_canvas_target(
     let session_id = require_session_id(context)?;
     let canvas_id = optional_non_empty_string(input, "canvas_id")
         .ok_or_else(|| {
-            BitFunError::validation(
+            HaloError::validation(
                 "Provide either artifact_reference or canvas_id for the Canvas artifact",
             )
         })
@@ -727,13 +727,13 @@ fn resolve_canvas_target(
     Ok((session_id, canvas_id))
 }
 
-fn require_session_id(context: &ToolUseContext) -> BitFunResult<CanvasSessionId> {
+fn require_session_id(context: &ToolUseContext) -> HaloResult<CanvasSessionId> {
     context
         .session_id
         .as_deref()
         .filter(|value| !value.trim().is_empty())
         .map(CanvasSessionId::new)
-        .ok_or_else(|| BitFunError::tool("session_id is required to use Canvas tools"))
+        .ok_or_else(|| HaloError::tool("session_id is required to use Canvas tools"))
 }
 
 fn workspace_id_for_context(context: &ToolUseContext) -> CanvasWorkspaceId {
@@ -744,13 +744,13 @@ fn workspace_id_for_context(context: &ToolUseContext) -> CanvasWorkspaceId {
     )
 }
 
-fn required_non_empty_string<'a>(input: &'a Value, key: &str) -> BitFunResult<&'a str> {
+fn required_non_empty_string<'a>(input: &'a Value, key: &str) -> HaloResult<&'a str> {
     input
         .get(key)
         .and_then(|value| value.as_str())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| BitFunError::validation(format!("Missing required field: {key}")))
+        .ok_or_else(|| HaloError::validation(format!("Missing required field: {key}")))
 }
 
 fn optional_non_empty_string<'a>(input: &'a Value, key: &str) -> Option<&'a str> {
@@ -796,8 +796,8 @@ fn now_millis() -> i64 {
     Utc::now().timestamp_millis()
 }
 
-fn canvas_port_error(error: bitfun_product_domains::canvas::CanvasPortError) -> BitFunError {
-    BitFunError::tool(error.to_string())
+fn canvas_port_error(error: halo_product_domains::canvas::CanvasPortError) -> HaloError {
+    HaloError::tool(error.to_string())
 }
 
 #[cfg(test)]
@@ -806,7 +806,7 @@ mod tests {
     use crate::agentic::tools::framework::Tool;
     use crate::agentic::tools::ToolRuntimeRestrictions;
     use crate::agentic::WorkspaceBinding;
-    use bitfun_runtime_ports::ToolRuntimeHandles;
+    use halo_runtime_ports::ToolRuntimeHandles;
     use std::collections::HashMap;
 
     fn test_context(session_id: &str) -> ToolUseContext {
@@ -817,7 +817,7 @@ mod tests {
             dialog_turn_id: Some("turn_1".to_string()),
             workspace: Some(WorkspaceBinding::new(
                 Some(format!("workspace_{session_id}")),
-                std::env::temp_dir().join(format!("bitfun-canvas-tool-test-{}", uuid_short())),
+                std::env::temp_dir().join(format!("halo-canvas-tool-test-{}", uuid_short())),
             )),
             loaded_deferred_tool_specs: Vec::new(),
             primary_model_facts: tool_runtime::context::PrimaryModelFacts::default(),
@@ -835,7 +835,7 @@ mod tests {
     }
 
     fn valid_source() -> &'static str {
-        "import { Stack } from 'bitfun/canvas'; export default function Canvas() { return <Stack />; }"
+        "import { Stack } from 'halo/canvas'; export default function Canvas() { return <Stack />; }"
     }
 
     #[tokio::test]
@@ -858,7 +858,7 @@ mod tests {
         let reference = data["artifactReference"]
             .as_str()
             .expect("reference should be returned");
-        assert!(reference.starts_with("bitfun-canvas://session/"));
+        assert!(reference.starts_with("halo-canvas://session/"));
         assert_eq!(
             data["compiledPayload"]["html"],
             Value::Null,
@@ -990,7 +990,7 @@ mod tests {
             .call_impl(
                 &json!({
                     "title": "Stats",
-                    "source": "import { Stat } from 'bitfun/canvas'; export default function Canvas() { return <Stat value=\"+191\" label=\"Added\" />; }",
+                    "source": "import { Stat } from 'halo/canvas'; export default function Canvas() { return <Stat value=\"+191\" label=\"Added\" />; }",
                 }),
                 &context,
             )
@@ -1039,7 +1039,7 @@ mod tests {
             .call_impl(
                 &json!({
                     "title": "Duplicate",
-                    "source": "import { Text } from 'bitfun/canvas'; export default function Canvas() { return <><Text>same</Text><Text>same</Text></>; }",
+                    "source": "import { Text } from 'halo/canvas'; export default function Canvas() { return <><Text>same</Text><Text>same</Text></>; }",
                 }),
                 &context,
             )
@@ -1207,16 +1207,16 @@ mod tests {
     #[test]
     fn normalize_canvas_source_input_strips_only_complete_cdata_wrapper() {
         assert_eq!(
-            normalize_canvas_source_input("<![CDATA[\nimport { Text } from 'bitfun/canvas';\n]]>"),
-            "import { Text } from 'bitfun/canvas';"
+            normalize_canvas_source_input("<![CDATA[\nimport { Text } from 'halo/canvas';\n]]>"),
+            "import { Text } from 'halo/canvas';"
         );
         assert_eq!(
             normalize_canvas_source_input("<![CDATA[incomplete"),
             "<![CDATA[incomplete"
         );
         assert_eq!(
-            normalize_canvas_source_input("import { Text } from 'bitfun/canvas';"),
-            "import { Text } from 'bitfun/canvas';"
+            normalize_canvas_source_input("import { Text } from 'halo/canvas';"),
+            "import { Text } from 'halo/canvas';"
         );
     }
 }

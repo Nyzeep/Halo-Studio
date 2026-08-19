@@ -2,17 +2,17 @@ use std::collections::{HashMap, HashSet, VecDeque};
 /// Chat state module
 ///
 /// Pure UI rendering state for the chat interface.
-/// All session lifecycle and persistence is handled by bitfun-core.
+/// All session lifecycle and persistence is handled by halo-core.
 /// This module only maintains transient state needed for TUI rendering.
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use bitfun_agent_runtime::prompt_markup::strip_prompt_markup;
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::prompt_markup::strip_prompt_markup;
+use halo_agent_runtime::sdk::{
     PermissionRequest, SessionTranscript, TranscriptContent, TranscriptMessage,
 };
-use bitfun_agent_tools::effective_tool_invocation;
-use bitfun_events::ToolEventData;
-use bitfun_runtime_ports::{AgentSessionWorkspaceBinding, SessionExecutionTarget};
+use halo_agent_tools::effective_tool_invocation;
+use halo_events::ToolEventData;
+use halo_runtime_ports::{AgentSessionWorkspaceBinding, SessionExecutionTarget};
 
 use crate::ui::permission::PermissionPrompt;
 use crate::ui::question::QuestionPrompt;
@@ -298,7 +298,7 @@ pub(crate) struct ChatMetadata {
 
 /// Complete UI state for the chat interface.
 /// This is the single source of truth for rendering — but NOT for persistence.
-/// All persistence is handled by bitfun-core's SessionManager.
+/// All persistence is handled by halo-core's SessionManager.
 pub(crate) struct ChatState {
     /// Core session ID (the real session managed by core)
     pub core_session_id: String,
@@ -1006,9 +1006,9 @@ impl ChatState {
     pub(crate) fn handle_subagent_event(
         &mut self,
         parent_tool_id: &str,
-        event: &bitfun_events::AgenticEvent,
+        event: &halo_events::AgenticEvent,
     ) {
-        use bitfun_events::AgenticEvent;
+        use halo_events::AgenticEvent;
 
         match event {
             AgenticEvent::ToolEvent { tool_event, .. } => match tool_event {
@@ -1373,13 +1373,13 @@ fn truncate_string(s: &str, max_len: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::{ChatState, FlowItem, ToolDisplayStatus};
-    use bitfun_agent_runtime::sdk::{
+    use halo_agent_runtime::sdk::{
         PermissionDelegationContext, PermissionRequest, PermissionRequestSource,
         PermissionRequestSourceKind, SessionTranscript, TranscriptContent, TranscriptMessage,
         TranscriptToolCall,
     };
-    use bitfun_events::{ToolEventData, ToolEventIdentity};
-    use bitfun_runtime_ports::{
+    use halo_events::{ToolEventData, ToolEventIdentity};
+    use halo_runtime_ports::{
         AgentSessionWorkspaceBinding, SessionExecutionTarget, SessionExecutionTargetKind,
         WorktreeLifecycle,
     };
@@ -1649,13 +1649,13 @@ mod tests {
         state.handle_tool_event(&ToolEventData::EarlyDetected {
             identity: ToolEventIdentity::direct(
                 "tool-1",
-                bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME,
+                halo_agent_tools::CALL_DEFERRED_TOOL_NAME,
             ),
         });
         state.handle_tool_event(&ToolEventData::Started {
             identity: ToolEventIdentity::resolved(
                 "tool-1",
-                bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME,
+                halo_agent_tools::CALL_DEFERRED_TOOL_NAME,
                 "CreatePlan",
             ),
             params: deferred_input(),
@@ -1680,7 +1680,7 @@ mod tests {
                     text: String::new(),
                     tool_calls: vec![TranscriptToolCall {
                         tool_id: "tool-1".to_string(),
-                        tool_name: bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME.to_string(),
+                        tool_name: halo_agent_tools::CALL_DEFERRED_TOOL_NAME.to_string(),
                         arguments: wire_input.clone(),
                     }],
                 },
@@ -1701,7 +1701,7 @@ mod tests {
                 TranscriptContent::Mixed { tool_calls, .. } => tool_calls[0].tool_name.as_str(),
                 _ => panic!("expected mixed transcript content"),
             },
-            bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME
+            halo_agent_tools::CALL_DEFERRED_TOOL_NAME
         );
         assert_eq!(
             match &transcript.messages[0].content {

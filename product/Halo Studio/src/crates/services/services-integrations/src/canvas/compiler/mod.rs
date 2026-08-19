@@ -16,11 +16,11 @@ mod sdk_contract;
 #[cfg(test)]
 mod tests;
 
-use bitfun_product_domains::canvas::policy::validate_canvas_source_policy;
-use bitfun_product_domains::canvas::runtime::{
-    CanvasCompileResult, BITFUN_CANVAS_RUNTIME_VERSION, BITFUN_CANVAS_SDK_VERSION,
+use halo_product_domains::canvas::policy::validate_canvas_source_policy;
+use halo_product_domains::canvas::runtime::{
+    CanvasCompileResult, HALO_CANVAS_RUNTIME_VERSION, HALO_CANVAS_SDK_VERSION,
 };
-use bitfun_product_domains::canvas::types::{
+use halo_product_domains::canvas::types::{
     CanvasCompiledPayload, CanvasDiagnostic, CanvasDiagnosticCategory, CanvasDiagnosticSeverity,
     CanvasSource,
 };
@@ -45,8 +45,8 @@ pub fn compile_canvas_source(source: &CanvasSource, compiled_at: i64) -> CanvasC
             let payload = CanvasCompiledPayload {
                 canvas_id: source.canvas_id.clone(),
                 source_revision: source.revision.clone(),
-                sdk_version: BITFUN_CANVAS_SDK_VERSION.to_string(),
-                runtime_version: BITFUN_CANVAS_RUNTIME_VERSION.to_string(),
+                sdk_version: HALO_CANVAS_SDK_VERSION.to_string(),
+                runtime_version: HALO_CANVAS_RUNTIME_VERSION.to_string(),
                 content_hash: stable_content_hash(&html),
                 html,
                 diagnostics: diagnostics.clone(),

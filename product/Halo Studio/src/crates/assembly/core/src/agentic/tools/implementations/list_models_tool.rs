@@ -5,11 +5,11 @@ use crate::agentic::tools::framework::{
 };
 use crate::service::config::global::GlobalConfigManager;
 use crate::service::config::types::{AIConfig, AIModelConfig};
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
-/// Lists enabled BitFun model configurations, optionally filtered by a fuzzy query.
+/// Lists enabled Halo model configurations, optionally filtered by a fuzzy query.
 pub struct ListModelsTool;
 
 impl Default for ListModelsTool {
@@ -131,8 +131,8 @@ fn build_list_models_result(config: &AIConfig, query: Option<&str>) -> (Value, S
 
     let assistant_result = if models.is_empty() {
         match query.filter(|value| !value.trim().is_empty()) {
-            Some(query) => format!("No enabled BitFun models matched '{}'.", query.trim()),
-            None => "No enabled BitFun models are configured.".to_string(),
+            Some(query) => format!("No enabled Halo models matched '{}'.", query.trim()),
+            None => "No enabled Halo models are configured.".to_string(),
         }
     } else {
         let rows =
@@ -172,12 +172,12 @@ impl Tool for ListModelsTool {
         "ListModels"
     }
 
-    async fn description(&self) -> BitFunResult<String> {
-        Ok("List enabled BitFun models as provider_name, model_id, and model_name. Use `query` to filter models; exact `primary` or `fast` resolves that default selector.".to_string())
+    async fn description(&self) -> HaloResult<String> {
+        Ok("List enabled Halo models as provider_name, model_id, and model_name. Use `query` to filter models; exact `primary` or `fast` resolves that default selector.".to_string())
     }
 
     fn short_description(&self) -> String {
-        "List enabled BitFun models.".to_string()
+        "List enabled Halo models.".to_string()
     }
 
     fn default_exposure(&self) -> ToolExposure {
@@ -233,9 +233,9 @@ impl Tool for ListModelsTool {
     fn render_tool_use_message(&self, input: &Value, _options: &ToolRenderOptions) -> String {
         match input.get("query").and_then(Value::as_str) {
             Some(query) if !query.trim().is_empty() => {
-                format!("Find enabled BitFun models matching {}", query.trim())
+                format!("Find enabled Halo models matching {}", query.trim())
             }
-            _ => "List enabled BitFun models".to_string(),
+            _ => "List enabled Halo models".to_string(),
         }
     }
 
@@ -251,12 +251,12 @@ impl Tool for ListModelsTool {
         &self,
         input: &Value,
         _context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         let service = GlobalConfigManager::get_service().await.map_err(|_| {
-            BitFunError::tool("BitFun model configuration is unavailable.".to_string())
+            HaloError::tool("Halo model configuration is unavailable.".to_string())
         })?;
         let config: AIConfig = service.get_config(Some("ai")).await.map_err(|_| {
-            BitFunError::tool("BitFun model configuration could not be loaded.".to_string())
+            HaloError::tool("Halo model configuration could not be loaded.".to_string())
         })?;
         let query = input.get("query").and_then(Value::as_str);
         let (data, result_for_assistant) = build_list_models_result(&config, query);

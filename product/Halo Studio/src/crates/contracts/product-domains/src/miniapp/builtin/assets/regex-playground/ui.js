@@ -34,7 +34,7 @@ Trace ID: 8f2c3a01-4e6b-4d1c-9bb1-1f3a6d2c0a55
 Releasing v1.4.0-beta.2, commit 7a3f9d2
 
 // TODO: Extract the block above into a utility function
-const userName = "Bitfun";
+const userName = "Halo";
 `;
 
 const I18N = {

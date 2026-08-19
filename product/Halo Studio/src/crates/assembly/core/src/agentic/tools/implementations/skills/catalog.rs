@@ -1,8 +1,8 @@
 //! Compatibility re-export for skill catalog facts.
 //!
-//! The provider-neutral owner lives in `bitfun-agent-runtime`.
+//! The provider-neutral owner lives in `halo-agent-runtime`.
 
-pub use bitfun_agent_runtime::skills::builtin_skill_group_key;
+pub use halo_agent_runtime::skills::builtin_skill_group_key;
 
 #[cfg(test)]
 mod tests {

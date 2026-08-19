@@ -2,7 +2,7 @@
 //!
 //! P0 deliberately selects exactly one production adapter identity. This
 //! module only wires existing owners and narrow projections; runtime state and
-//! policy remain in `bitfun-agent-runtime`.
+//! policy remain in `halo-agent-runtime`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -11,15 +11,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use bitfun_agent_runtime::halo_workbench::{
+use halo_agent_runtime::halo_workbench::{
     HaloWorkbenchInterruptionHistoryPort, HaloWorkbenchRuntime, HaloWorkbenchSessionMode,
     HaloWorkbenchSessionPhase, HaloWorkbenchSessionSnapshot,
 };
-use bitfun_pi_rpc_adapter::{
+use halo_pi_rpc_adapter::{
     JsonFilePiRuntimeConfigurationRepository, PiRpcAdapter, PiRpcConfig,
     PiRuntimeConfigurationService,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     PiCredentialSecret, PiCredentialStorePort, PiProviderReadiness, PiProviderReadinessPort,
     PiRpcPort, PiRuntimeConfigurationManagementPort, PortError, PortErrorKind, PortResult,
     WorkbenchDeliveryAttribution, WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence,
@@ -596,7 +596,7 @@ impl PiCredentialStorePort for PiSystemCredentialStore {
             ));
         }
         let credential_ref = credential_ref_for(provider_id);
-        bitfun_ai_adapters::subscription_auth::store::write_pi_credential(&credential_ref, &value)
+        halo_ai_adapters::subscription_auth::store::write_pi_credential(&credential_ref, &value)
             .await
             .map_err(|_| {
                 PortError::new(
@@ -621,7 +621,7 @@ impl PiCredentialStorePort for PiSystemCredentialStore {
             ));
         }
         let value =
-            bitfun_ai_adapters::subscription_auth::store::read_pi_credential(credential_ref)
+            halo_ai_adapters::subscription_auth::store::read_pi_credential(credential_ref)
                 .await
                 .map_err(|_| {
                     PortError::new(
@@ -647,7 +647,7 @@ impl PiCredentialStorePort for PiSystemCredentialStore {
                 "Pi credential provider does not match configuration",
             ));
         }
-        bitfun_ai_adapters::subscription_auth::store::delete_pi_credential(credential_ref)
+        halo_ai_adapters::subscription_auth::store::delete_pi_credential(credential_ref)
             .await
             .map_err(|_| {
                 PortError::new(
@@ -931,12 +931,12 @@ mod tests {
     use std::process::Command;
     use std::sync::{Arc, Mutex, OnceLock};
 
-    use bitfun_agent_runtime::halo_workbench::{
+    use halo_agent_runtime::halo_workbench::{
         HaloWorkbenchActivityKind, HaloWorkbenchActivitySnapshot, HaloWorkbenchActivityStatus,
         HaloWorkbenchInterruptionHistoryPort, HaloWorkbenchMessageRole,
         HaloWorkbenchMessageSnapshot, HaloWorkbenchSessionSnapshot,
     };
-    use bitfun_runtime_ports::{
+    use halo_runtime_ports::{
         PiCredentialSecret, PiCredentialStorePort, PiRpcCommand, PiRpcFailureKind, PiRpcPort,
         PiRpcReply, PiRpcWorkspace, PortErrorKind, WorkbenchDeliveryAttributionKind,
         WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint, WorkbenchTaskBaseline,
@@ -1104,7 +1104,7 @@ mod tests {
             .lock()
             .expect("Pi system credential test lock");
         let root = tempfile::tempdir().expect("test credential root");
-        bitfun_ai_adapters::subscription_auth::set_store_path_for_test(
+        halo_ai_adapters::subscription_auth::set_store_path_for_test(
             root.path().join("subscription_auth.json"),
         );
         let store = PiSystemCredentialStore;
@@ -1152,7 +1152,7 @@ mod tests {
             .expect("Pi system credential test lock");
         let root = tempfile::tempdir().expect("test credential root");
         let subscription_metadata = root.path().join("subscription_auth.json");
-        bitfun_ai_adapters::subscription_auth::set_store_path_for_test(
+        halo_ai_adapters::subscription_auth::set_store_path_for_test(
             subscription_metadata.clone(),
         );
 
@@ -1339,7 +1339,7 @@ mod tests {
                 .to_string()
         }
 
-        async fn capture(root: &Path) -> bitfun_runtime_ports::WorkbenchTaskBaseline {
+        async fn capture(root: &Path) -> halo_runtime_ports::WorkbenchTaskBaseline {
             CoreWorkbenchTaskBaseline
                 .capture(WorkbenchTaskBaselineRequest {
                     workspace_id: "baseline-fixture".to_string(),
@@ -1473,9 +1473,9 @@ mod tests {
     #[tokio::test]
     async fn p0_selection_is_fixed_to_the_pi_rpc_adapter() {
         let adapter: Arc<dyn PiRpcPort> = Arc::new(PiRpcAdapter::with_config(
-            bitfun_pi_rpc_adapter::PiRpcConfig {
+            halo_pi_rpc_adapter::PiRpcConfig {
                 executable: Some(PathBuf::from("C:/does-not-exist/pi.exe")),
-                ..bitfun_pi_rpc_adapter::PiRpcConfig::default()
+                ..halo_pi_rpc_adapter::PiRpcConfig::default()
             },
         ));
         let reply = adapter

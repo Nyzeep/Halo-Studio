@@ -59,7 +59,7 @@ export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   fontFamily: "'Fira Code', 'Noto Sans SC', Consolas, 'Courier New', monospace",
   fontWeight: 'normal',
   lineHeight: 1.5,
-  theme: 'bitfun-dark',
+  theme: 'halo-dark',
   cursorStyle: 'line',
   cursorBlinking: 'smooth',
   renderWhitespace: 'selection',

@@ -6,11 +6,11 @@ use agent_client_protocol::schema::{
     SessionInfo, SessionMode, SessionModeState, SetSessionModeRequest, SetSessionModeResponse,
 };
 use agent_client_protocol::{Client, ConnectionTo, Error, Result};
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     AgentSessionCreateRequest, AgentSessionDeleteRequest, AgentSessionListRequest,
     AgentSessionModeUpdateRequest, SessionStoragePathRequest,
 };
-use bitfun_core::agentic::agents::get_agent_registry;
+use halo_core::agentic::agents::get_agent_registry;
 use chrono::{DateTime, Utc};
 use dashmap::mapref::entry::Entry;
 
@@ -18,11 +18,11 @@ use super::model::{
     build_session_config_options, build_session_model_state, normalize_session_model_id,
 };
 use super::replay::replay_session_history;
-use super::{AcpSessionState, BitfunAcpRuntime};
+use super::{AcpSessionState, HaloAcpRuntime};
 
-impl BitfunAcpRuntime {
+impl HaloAcpRuntime {
     fn validate_session_target(session_id: &str, cwd: &Path) -> Result<()> {
-        bitfun_core_types::validate_session_id(session_id)
+        halo_core_types::validate_session_id(session_id)
             .map_err(|message| Error::invalid_params().data(message))?;
         if !cwd.is_absolute() {
             return Err(Error::invalid_params().data("cwd must be an absolute path"));
@@ -75,8 +75,8 @@ impl BitfunAcpRuntime {
             Err(error) => {
                 let core_cleanup_required = matches!(
                     &error,
-                    bitfun_agent_runtime::sdk::RuntimeError::Port(port_error)
-                        if port_error.kind == bitfun_agent_runtime::sdk::PortErrorKind::CleanupRequired
+                    halo_agent_runtime::sdk::RuntimeError::Port(port_error)
+                        if port_error.kind == halo_agent_runtime::sdk::PortErrorKind::CleanupRequired
                 );
                 let mcp_cleaned = self.release_mcp_servers(&mcp_server_ids).await.is_ok();
                 let core_cleaned = if core_cleanup_required {
@@ -110,7 +110,7 @@ impl BitfunAcpRuntime {
         };
         let acp_session = AcpSessionState {
             acp_session_id: session.session_id.clone(),
-            bitfun_session_id: session.session_id.clone(),
+            halo_session_id: session.session_id.clone(),
             cwd,
             mode_id: session.agent_type.clone(),
             model_id: normalize_session_model_id(None),
@@ -200,7 +200,7 @@ impl BitfunAcpRuntime {
         };
         let acp_session = AcpSessionState {
             acp_session_id: session.session_id.clone(),
-            bitfun_session_id: session.session_id.clone(),
+            halo_session_id: session.session_id.clone(),
             cwd,
             mode_id: session.agent_type.clone(),
             model_id: normalize_session_model_id(session.config.model_id.as_deref()),
@@ -297,14 +297,14 @@ impl BitfunAcpRuntime {
         let mcp_cleaned = self.cleanup_failed_session_setup(session, stage).await;
         let core_unloaded = match self
             .compatibility
-            .unload_persisted_session(&session.bitfun_session_id)
+            .unload_persisted_session(&session.halo_session_id)
             .await
         {
             Ok(_) => true,
             Err(error) => {
                 log::warn!(
                     "Failed to unload Core session after ACP load error: session_id={}, stage={}, error={}",
-                    session.bitfun_session_id,
+                    session.halo_session_id,
                     stage,
                     error
                 );
@@ -338,7 +338,7 @@ impl BitfunAcpRuntime {
     ) -> (bool, bool) {
         let mcp_cleaned = self.cleanup_failed_session_setup(session, stage).await;
         let core_cleaned = self
-            .delete_failed_new_core_session(&session.bitfun_session_id, &session.cwd, stage)
+            .delete_failed_new_core_session(&session.halo_session_id, &session.cwd, stage)
             .await;
         (mcp_cleaned, core_cleaned)
     }
@@ -395,13 +395,13 @@ impl BitfunAcpRuntime {
             })?;
         let _maintenance = self
             .compatibility
-            .begin_session_maintenance(&storage_path, &active_session.bitfun_session_id, 5_000)
+            .begin_session_maintenance(&storage_path, &active_session.halo_session_id, 5_000)
             .await
             .map_err(|error| {
                 Self::session_close_incomplete_error(&session_id, "active work drain", error, &[])
             })?;
         self.compatibility
-            .unload_persisted_session(&active_session.bitfun_session_id)
+            .unload_persisted_session(&active_session.halo_session_id)
             .await
             .map_err(|error| {
                 Self::session_close_incomplete_error(&session_id, "Core runtime unload", error, &[])
@@ -508,7 +508,7 @@ impl BitfunAcpRuntime {
         let mode_id = mode_id.trim();
         self.agent_runtime
             .update_session_mode(AgentSessionModeUpdateRequest {
-                session_id: session.bitfun_session_id.clone(),
+                session_id: session.halo_session_id.clone(),
                 mode_id: mode_id.to_string(),
             })
             .await

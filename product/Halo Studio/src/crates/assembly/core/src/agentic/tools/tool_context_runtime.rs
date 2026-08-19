@@ -21,7 +21,7 @@ use crate::agentic::tools::restrictions::{
     is_local_path_within_root, is_remote_posix_path_within_root, ToolPathOperation,
 };
 use crate::agentic::tools::workspace_paths::{
-    build_bitfun_runtime_uri, is_bitfun_tool_uri, normalize_runtime_relative_path,
+    build_halo_runtime_uri, is_halo_tool_uri, normalize_runtime_relative_path,
 };
 use crate::agentic::tools::ToolRuntimeRestrictions;
 use crate::agentic::workspace::WorkspaceServices;
@@ -30,22 +30,22 @@ use crate::infrastructure::get_path_manager_arc;
 use crate::service::git::{GitDiffParams, GitService};
 use crate::service::remote_ssh::workspace_state::remote_workspace_runtime_root;
 use crate::service::{get_workspace_runtime_service_arc, WorkspaceRuntimeContext};
-use crate::util::errors::{BitFunError, BitFunResult};
-use bitfun_agent_runtime::checkpoint::{
+use crate::util::errors::{HaloError, HaloResult};
+use halo_agent_runtime::checkpoint::{
     build_light_checkpoint as build_runtime_light_checkpoint, GitStatusCheckpointFacts,
     LightCheckpointWorkspaceFacts,
 };
-use bitfun_agent_runtime::permission::AUTO_APPROVE_ASK_CONTEXT_KEY;
-use bitfun_agent_runtime::remote_file_delivery::TOOL_CONTEXT_REMOTE_FILE_DELIVERY_KEY;
-use bitfun_agent_runtime::user_questions::USER_INPUT_AVAILABLE_CONTEXT_KEY;
-use bitfun_agent_tools::{
+use halo_agent_runtime::permission::AUTO_APPROVE_ASK_CONTEXT_KEY;
+use halo_agent_runtime::remote_file_delivery::TOOL_CONTEXT_REMOTE_FILE_DELIVERY_KEY;
+use halo_agent_runtime::user_questions::USER_INPUT_AVAILABLE_CONTEXT_KEY;
+use halo_agent_tools::{
     LoadedDeferredToolSpec, PortableToolContextProvider, ToolContextFacts, ToolWorkspaceKind,
 };
 #[cfg(feature = "canvas-runtime")]
-use bitfun_product_domains::canvas::CanvasStoragePort;
-use bitfun_runtime_ports::{DelegationPolicy, RemoteExecPort, TerminalPort, ToolRuntimeHandles};
+use halo_product_domains::canvas::CanvasStoragePort;
+use halo_runtime_ports::{DelegationPolicy, RemoteExecPort, TerminalPort, ToolRuntimeHandles};
 #[cfg(feature = "canvas-runtime")]
-use bitfun_services_integrations::canvas::CanvasService;
+use halo_services_integrations::canvas::CanvasService;
 use log::warn;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -71,7 +71,7 @@ pub struct ToolUseContext {
     pub primary_model_facts: PrimaryModelFacts,
     /// Extended context data passed from execution layer to tools.
     pub custom_data: HashMap<String, Value>,
-    /// Desktop automation (Computer use); only set in BitFun desktop.
+    /// Desktop automation (Computer use); only set in Halo desktop.
     pub computer_use_host: Option<crate::agentic::tools::computer_use_host::ComputerUseHostRef>,
     pub runtime_tool_restrictions: ToolRuntimeRestrictions,
     /// Runtime handles such as workspace I/O services and cancellation.
@@ -201,8 +201,8 @@ pub(crate) async fn call_with_tool_runtime_hooks(
     tool_name: &str,
     input: &Value,
     context: &ToolUseContext,
-    call_impl: impl Future<Output = BitFunResult<Vec<ToolResult>>>,
-) -> BitFunResult<Vec<ToolResult>> {
+    call_impl: impl Future<Output = HaloResult<Vec<ToolResult>>>,
+) -> HaloResult<Vec<ToolResult>> {
     let result = if let Some(cancellation_token) = context.cancellation_token() {
         tokio::select! {
             result = call_impl => {
@@ -210,7 +210,7 @@ pub(crate) async fn call_with_tool_runtime_hooks(
             }
 
             _ = cancellation_token.cancelled() => {
-                Err(BitFunError::Cancelled("Tool execution cancelled".to_string()))
+                Err(HaloError::Cancelled("Tool execution cancelled".to_string()))
             }
         }
     } else {
@@ -228,7 +228,7 @@ pub(crate) async fn call_tool_with_runtime_hooks<T: Tool + ?Sized>(
     tool: &T,
     input: &Value,
     context: &ToolUseContext,
-) -> BitFunResult<Vec<ToolResult>> {
+) -> HaloResult<Vec<ToolResult>> {
     call_with_tool_runtime_hooks(tool.name(), input, context, tool.call_impl(input, context)).await
 }
 
@@ -464,7 +464,7 @@ impl ToolUseContext {
         Some(hex::encode(Sha256::digest(diff.as_bytes())))
     }
 
-    pub fn enforce_tool_runtime_restrictions(&self, tool_name: &str) -> BitFunResult<()> {
+    pub fn enforce_tool_runtime_restrictions(&self, tool_name: &str) -> HaloResult<()> {
         self.runtime_tool_restrictions
             .ensure_tool_allowed(tool_name)
             .map_err(Into::into)
@@ -474,7 +474,7 @@ impl ToolUseContext {
         &self,
         operation: ToolPathOperation,
         resolution: &ToolPathResolution,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let allowed_roots = self
             .runtime_tool_restrictions
             .path_policy
@@ -491,7 +491,7 @@ impl ToolUseContext {
         let is_allowed = is_tool_path_allowed_by_resolved_roots(
             resolution,
             &resolved_roots,
-            |resolution, root| -> BitFunResult<bool> {
+            |resolution, root| -> HaloResult<bool> {
                 match resolution.backend {
                     ToolPathBackend::Local => is_local_path_within_root(
                         Path::new(&resolution.resolved_path),
@@ -509,7 +509,7 @@ impl ToolUseContext {
             return Ok(());
         }
 
-        Err(BitFunError::validation(
+        Err(HaloError::validation(
             build_tool_path_policy_denial_message(
                 &resolution.logical_path,
                 operation,
@@ -520,13 +520,13 @@ impl ToolUseContext {
 
     /// Resolve a user or model-supplied path for file/shell tools. Uses POSIX semantics when the
     /// workspace is remote SSH so Windows-hosted clients still resolve `/home/...` correctly.
-    pub fn resolve_workspace_tool_path(&self, path: &str) -> BitFunResult<String> {
+    pub fn resolve_workspace_tool_path(&self, path: &str) -> HaloResult<String> {
         let workspace_root_owned = self
             .workspace
             .as_ref()
             .map(|w| w.root_path_string())
             .ok_or_else(|| {
-                BitFunError::tool(format!(
+                HaloError::tool(format!(
                     "A workspace path is required to resolve tool path: {}",
                     path
                 ))
@@ -543,7 +543,7 @@ impl ToolUseContext {
         if self.is_remote()
             && !is_remote_posix_path_within_root(&resolved_path, &workspace_root_owned)
         {
-            return Err(BitFunError::tool(format!(
+            return Err(HaloError::tool(format!(
                 "Path '{}' resolves outside current workspace '{}': {}",
                 path, workspace_root_owned, resolved_path
             )));
@@ -552,11 +552,11 @@ impl ToolUseContext {
         Ok(resolved_path)
     }
 
-    pub fn current_workspace_runtime_root(&self) -> BitFunResult<PathBuf> {
+    pub fn current_workspace_runtime_root(&self) -> HaloResult<PathBuf> {
         #[cfg(test)]
         if let Some(path) = self
             .custom_data
-            .get("__bitfun_test_runtime_root")
+            .get("__halo_test_runtime_root")
             .and_then(|value| value.as_str())
             .filter(|path| !path.trim().is_empty())
         {
@@ -564,7 +564,7 @@ impl ToolUseContext {
         }
 
         let workspace = self.workspace.as_ref().ok_or_else(|| {
-            BitFunError::tool("A workspace is required to resolve runtime artifacts".to_string())
+            HaloError::tool("A workspace is required to resolve runtime artifacts".to_string())
         })?;
 
         if workspace.is_remote() {
@@ -584,9 +584,9 @@ impl ToolUseContext {
             .and_then(|workspace| workspace.workspace_id.clone())
     }
 
-    pub async fn ensure_current_workspace_runtime(&self) -> BitFunResult<WorkspaceRuntimeContext> {
+    pub async fn ensure_current_workspace_runtime(&self) -> HaloResult<WorkspaceRuntimeContext> {
         let workspace = self.workspace.as_ref().ok_or_else(|| {
-            BitFunError::tool("A workspace is required to ensure runtime artifacts".to_string())
+            HaloError::tool("A workspace is required to ensure runtime artifacts".to_string())
         })?;
 
         let runtime_service = get_workspace_runtime_service_arc();
@@ -600,14 +600,14 @@ impl ToolUseContext {
         self.is_remote()
     }
 
-    pub fn build_runtime_uri(&self, relative_path: &str) -> BitFunResult<String> {
+    pub fn build_runtime_uri(&self, relative_path: &str) -> HaloResult<String> {
         let scope = self
             .current_workspace_scope()
             .unwrap_or_else(|| "current".to_string());
-        build_bitfun_runtime_uri(&scope, &normalize_runtime_relative_path(relative_path)?)
+        build_halo_runtime_uri(&scope, &normalize_runtime_relative_path(relative_path)?)
     }
 
-    pub fn build_runtime_artifact_reference(&self, relative_path: &str) -> BitFunResult<String> {
+    pub fn build_runtime_artifact_reference(&self, relative_path: &str) -> HaloResult<String> {
         let runtime_root = if self.should_emit_runtime_uri() {
             None
         } else {
@@ -619,14 +619,14 @@ impl ToolUseContext {
             self.current_workspace_scope().as_deref(),
             self.should_emit_runtime_uri(),
         )
-        .map_err(|error| BitFunError::tool(error.to_string()))
+        .map_err(|error| HaloError::tool(error.to_string()))
     }
 
     pub fn build_session_runtime_artifact_reference(
         &self,
         session_id: &str,
         relative_path: &str,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let runtime_root = if self.should_emit_runtime_uri() {
             None
         } else {
@@ -639,10 +639,10 @@ impl ToolUseContext {
             self.current_workspace_scope().as_deref(),
             self.should_emit_runtime_uri(),
         )
-        .map_err(|error| BitFunError::tool(error.to_string()))
+        .map_err(|error| HaloError::tool(error.to_string()))
     }
 
-    pub fn current_workspace_session_dir(&self, session_id: &str) -> BitFunResult<PathBuf> {
+    pub fn current_workspace_session_dir(&self, session_id: &str) -> HaloResult<PathBuf> {
         Ok(self
             .current_workspace_runtime_root()?
             .join("sessions")
@@ -652,7 +652,7 @@ impl ToolUseContext {
     pub fn current_workspace_session_tool_results_dir(
         &self,
         session_id: &str,
-    ) -> BitFunResult<PathBuf> {
+    ) -> HaloResult<PathBuf> {
         Ok(self
             .current_workspace_session_dir(session_id)?
             .join("tool-results"))
@@ -662,14 +662,14 @@ impl ToolUseContext {
         &self,
         session_id: &str,
         file_name: &str,
-    ) -> BitFunResult<PathBuf> {
+    ) -> HaloResult<PathBuf> {
         Ok(self
             .current_workspace_session_tool_results_dir(session_id)?
             .join(file_name))
     }
 
-    pub fn resolve_tool_path(&self, path: &str) -> BitFunResult<ToolPathResolution> {
-        if is_bitfun_tool_uri(path) {
+    pub fn resolve_tool_path(&self, path: &str) -> HaloResult<ToolPathResolution> {
+        if is_halo_tool_uri(path) {
             let workspace_scope = self.current_workspace_scope();
             let runtime_root = if self.workspace.is_some() {
                 Some(self.current_workspace_runtime_root()?)
@@ -689,7 +689,7 @@ impl ToolUseContext {
                 runtime_root,
                 current_session_root,
             )
-            .map_err(|error| BitFunError::tool(error.to_string()));
+            .map_err(|error| HaloError::tool(error.to_string()));
         }
 
         let workspace_root_owned = self
@@ -697,7 +697,7 @@ impl ToolUseContext {
             .as_ref()
             .map(|w| w.root_path_string())
             .ok_or_else(|| {
-                BitFunError::tool(format!(
+                HaloError::tool(format!(
                     "A workspace path is required to resolve tool path: {}",
                     path
                 ))
@@ -710,7 +710,7 @@ impl ToolUseContext {
             self.current_workspace_scope().as_deref(),
             None,
         )
-        .map_err(|error| BitFunError::tool(error.to_string()))
+        .map_err(|error| HaloError::tool(error.to_string()))
     }
 
     /// Whether `path` is absolute for the active workspace (POSIX `/` for remote SSH).
@@ -720,7 +720,7 @@ impl ToolUseContext {
 }
 
 fn git_relative_path(workspace_root: &Path, path: &str) -> Option<String> {
-    if is_bitfun_tool_uri(path) {
+    if is_halo_tool_uri(path) {
         return None;
     }
 
@@ -742,7 +742,7 @@ mod context_facts_tests {
     };
     use crate::agentic::WorkspaceBinding;
     use crate::service::remote_ssh::workspace_state::workspace_session_identity;
-    use bitfun_agent_tools::LoadedDeferredToolSpec;
+    use halo_agent_tools::LoadedDeferredToolSpec;
     use std::collections::{BTreeSet, HashMap};
     use std::path::PathBuf;
     use tool_runtime::context::PrimaryModelFacts;
@@ -766,7 +766,7 @@ mod context_facts_tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         }
     }
 
@@ -788,7 +788,7 @@ mod context_facts_tests {
                 denied_tool_messages: Default::default(),
                 path_policy: Default::default(),
             },
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         };
 
         let facts = context.to_tool_context_facts();
@@ -833,7 +833,7 @@ mod context_facts_tests {
                 denied_tool_messages: Default::default(),
                 path_policy: Default::default(),
             },
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::new(
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::new(
                 None,
                 Some(tokio_util::sync::CancellationToken::new()),
             ),
@@ -890,7 +890,7 @@ mod context_facts_tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         };
 
         let facts = context.to_tool_context_facts();
@@ -943,7 +943,7 @@ mod path_resolution_tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         }
     }
 
@@ -967,7 +967,7 @@ mod path_resolution_tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         }
     }
 
@@ -993,7 +993,7 @@ mod path_resolution_tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         }
     }
 
@@ -1050,13 +1050,13 @@ mod path_resolution_tests {
         let mut context = local_context("/repo/project");
         context.session_id = Some("session-1".to_string());
         context.custom_data.insert(
-            "__bitfun_test_runtime_root".to_string(),
+            "__halo_test_runtime_root".to_string(),
             serde_json::Value::String(runtime_root.to_string_lossy().to_string()),
         );
 
         let resolved = context
             .resolve_tool_path(
-                "bitfun://current-session/artifacts/compression-transcripts/12-a3f9.txt",
+                "halo://current-session/artifacts/compression-transcripts/12-a3f9.txt",
             )
             .expect("current-session URI should resolve");
 
@@ -1070,7 +1070,7 @@ mod path_resolution_tests {
         );
         assert_eq!(
             resolved.logical_child_path(&expected_session_root.join("artifacts/other.txt")),
-            Some("bitfun://current-session/artifacts/other.txt".to_string())
+            Some("halo://current-session/artifacts/other.txt".to_string())
         );
     }
 
@@ -1081,12 +1081,12 @@ mod path_resolution_tests {
             remote_context("/home/wsp/projects/test", Some("workspace-123".to_string()));
         context.session_id = Some("session-remote".to_string());
         context.custom_data.insert(
-            "__bitfun_test_runtime_root".to_string(),
+            "__halo_test_runtime_root".to_string(),
             serde_json::Value::String(runtime_root.to_string_lossy().to_string()),
         );
 
         let resolved = context
-            .resolve_tool_path("bitfun://current-session/artifacts/transcript.txt")
+            .resolve_tool_path("halo://current-session/artifacts/transcript.txt")
             .expect("remote current-session URI should resolve to the local mirror");
 
         assert!(!resolved.uses_remote_workspace_backend());
@@ -1105,12 +1105,12 @@ mod path_resolution_tests {
         let runtime_root = PathBuf::from("/runtime/project");
         let mut context = local_context("/repo/project");
         context.custom_data.insert(
-            "__bitfun_test_runtime_root".to_string(),
+            "__halo_test_runtime_root".to_string(),
             serde_json::Value::String(runtime_root.to_string_lossy().to_string()),
         );
 
         let err = context
-            .resolve_tool_path("bitfun://current-session/artifacts/transcript.txt")
+            .resolve_tool_path("halo://current-session/artifacts/transcript.txt")
             .expect_err("current-session URI should require a session id");
 
         assert!(err.to_string().contains("current session"));
@@ -1126,7 +1126,7 @@ mod path_resolution_tests {
 
         assert_eq!(
             reference,
-            "bitfun://runtime/workspace-123/plans/demo.plan.md"
+            "halo://runtime/workspace-123/plans/demo.plan.md"
         );
     }
 
@@ -1135,7 +1135,7 @@ mod path_resolution_tests {
         let context = remote_context("/home/wsp/projects/test", Some("workspace-123".to_string()));
 
         let err = context
-            .resolve_tool_path("bitfun://runtime/workspace-456/plans/demo.plan.md")
+            .resolve_tool_path("halo://runtime/workspace-456/plans/demo.plan.md")
             .expect_err("runtime artifact scopes must match the active workspace");
 
         assert!(err
@@ -1148,7 +1148,7 @@ mod path_resolution_tests {
         let context = context_without_workspace();
 
         let err = context
-            .resolve_tool_path("bitfun://runtime/workspace-456/plans/demo.plan.md")
+            .resolve_tool_path("halo://runtime/workspace-456/plans/demo.plan.md")
             .expect_err("runtime URI scope should be validated before runtime root lookup");
 
         assert!(err
@@ -1169,7 +1169,7 @@ mod path_resolution_tests {
     #[test]
     fn path_policy_allows_only_configured_local_roots() {
         let temp_root = std::env::temp_dir().join(format!(
-            "bitfun-tool-context-policy-{}",
+            "halo-tool-context-policy-{}",
             uuid::Uuid::new_v4()
         ));
         let allowed_root = temp_root.join("allowed");
@@ -1214,7 +1214,7 @@ mod call_runtime_tests {
     use crate::agentic::tools::framework::Tool;
     use crate::agentic::tools::framework::ToolResult;
     use crate::agentic::tools::ToolRuntimeRestrictions;
-    use crate::util::errors::{BitFunError, BitFunResult};
+    use crate::util::errors::{HaloError, HaloResult};
     use async_trait::async_trait;
     use serde_json::json;
     use serde_json::Value;
@@ -1231,7 +1231,7 @@ mod call_runtime_tests {
             "Read"
         }
 
-        async fn description(&self) -> BitFunResult<String> {
+        async fn description(&self) -> HaloResult<String> {
             Ok("Read file".to_string())
         }
 
@@ -1252,7 +1252,7 @@ mod call_runtime_tests {
             &self,
             _input: &Value,
             _context: &ToolUseContext,
-        ) -> BitFunResult<Vec<ToolResult>> {
+        ) -> HaloResult<Vec<ToolResult>> {
             Ok(vec![ToolResult::ok(
                 json!({ "ok": true }),
                 Some("ok".to_string()),
@@ -1272,7 +1272,7 @@ mod call_runtime_tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::new(
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::new(
                 None,
                 Some(cancellation_token),
             ),
@@ -1292,7 +1292,7 @@ mod call_runtime_tests {
         .await;
 
         assert!(
-            matches!(result, Err(BitFunError::Cancelled(message)) if message == "Tool execution cancelled")
+            matches!(result, Err(HaloError::Cancelled(message)) if message == "Tool execution cancelled")
         );
     }
 
@@ -1309,10 +1309,10 @@ mod call_runtime_tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         };
 
-        let result: BitFunResult<Vec<ToolResult>> =
+        let result: HaloResult<Vec<ToolResult>> =
             call_with_tool_runtime_hooks("Read", &json!({}), &context, async {
                 Ok(vec![ToolResult::ok(
                     json!({ "ok": true }),
@@ -1350,7 +1350,7 @@ mod call_runtime_tests {
             custom_data,
             computer_use_host: None,
             runtime_tool_restrictions: ToolRuntimeRestrictions::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         };
         let tool = MeasurementReadTool;
 
@@ -1433,10 +1433,10 @@ mod task_context_tests {
         SubagentParentInfo, ToolExecutionContext, ToolExecutionOptions, ToolTask,
     };
     use crate::agentic::tools::ToolRuntimeRestrictions;
-    use bitfun_agent_runtime::permission::AUTO_APPROVE_ASK_CONTEXT_KEY;
-    use bitfun_agent_runtime::user_questions::USER_INPUT_AVAILABLE_CONTEXT_KEY;
-    use bitfun_agent_tools::LoadedDeferredToolSpec;
-    use bitfun_runtime_ports::DelegationPolicy;
+    use halo_agent_runtime::permission::AUTO_APPROVE_ASK_CONTEXT_KEY;
+    use halo_agent_runtime::user_questions::USER_INPUT_AVAILABLE_CONTEXT_KEY;
+    use halo_agent_tools::LoadedDeferredToolSpec;
+    use halo_runtime_ports::DelegationPolicy;
     use serde_json::json;
     use std::collections::{BTreeSet, HashMap};
     use tokio_util::sync::CancellationToken;

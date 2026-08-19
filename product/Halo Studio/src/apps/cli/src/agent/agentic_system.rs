@@ -1,14 +1,14 @@
 use anyhow::{Context, Result};
 
-use bitfun_core::product_assembly::DeliveryProfile;
-use bitfun_core::product_runtime::CoreRuntimeServicesProvider;
-use bitfun_core::runtime_ownership::CoreRuntimeOwnership;
+use halo_core::product_assembly::DeliveryProfile;
+use halo_core::product_runtime::CoreRuntimeServicesProvider;
+use halo_core::runtime_ownership::CoreRuntimeOwnership;
 use std::sync::Arc;
 
-pub(crate) use bitfun_core::agentic::system::AgenticSystem;
+pub(crate) use halo_core::agentic::system::AgenticSystem;
 
 pub(crate) fn select_agentic_system_profile(profile: DeliveryProfile) -> Result<()> {
-    bitfun_core::agentic::system::select_agentic_system_profile(profile)
+    halo_core::agentic::system::select_agentic_system_profile(profile)
         .context("Failed to select agentic system delivery profile")
 }
 
@@ -17,7 +17,7 @@ pub(crate) async fn init_agentic_system(
     runtime_ownership: Arc<CoreRuntimeOwnership>,
 ) -> Result<AgenticSystem> {
     let system =
-        bitfun_core::agentic::system::init_agentic_system_for_profile_with_runtime_ownership(
+        halo_core::agentic::system::init_agentic_system_for_profile_with_runtime_ownership(
             profile,
             runtime_ownership,
         )

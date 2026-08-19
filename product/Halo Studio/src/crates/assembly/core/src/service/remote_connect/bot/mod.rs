@@ -1,7 +1,7 @@
 //! Bot integration compatibility facade for Remote Connect.
 //!
 //! Provider-neutral bot DTOs, menu and locale rendering, persistence, and file
-//! delivery helpers live in `bitfun-services-integrations`. Core keeps the
+//! delivery helpers live in `halo-services-integrations`. Core keeps the
 //! command router and platform bot adapters because they still call concrete
 //! session, coordinator, image, and runtime services.
 
@@ -12,7 +12,7 @@ pub mod menu;
 pub mod telegram;
 pub mod weixin;
 
-pub use bitfun_services_integrations::remote_connect::bot::{
+pub use halo_services_integrations::remote_connect::bot::{
     auto_push_failed_message, auto_push_intro, auto_push_skip_too_large_message,
     collect_auto_push_files, detect_mime_type, extract_computer_file_paths,
     extract_downloadable_file_paths, format_file_size, get_file_metadata, load_bot_persistence,

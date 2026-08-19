@@ -41,7 +41,7 @@ const SceneBar: React.FC<SceneBarProps> = ({
   const settingsTabTitle = useCurrentSettingsTabTitle();
   const { t } = useI18n('common');
   const hasWindowControls = !!(onMinimize && onMaximize && onClose);
-  const sceneBarClassName = `bitfun-scene-bar ${!hasWindowControls ? 'bitfun-scene-bar--no-controls' : ''} ${className}`.trim();
+  const sceneBarClassName = `halo-scene-bar ${!hasWindowControls ? 'halo-scene-bar--no-controls' : ''} ${className}`.trim();
   const isSingleTab = openTabs.length <= 1;
   const canDragWindow = supportsNativeWindowDragging();
   const tabCount = Math.max(openTabs.length, 1);
@@ -90,7 +90,7 @@ const SceneBar: React.FC<SceneBarProps> = ({
       onMouseDown={handleBarMouseDown}
       onDoubleClick={handleBarDoubleClick}
     >
-      <div className="bitfun-scene-bar__tabs" style={tabsStyle}>
+      <div className="halo-scene-bar__tabs" style={tabsStyle}>
         {openTabs.map(tab => {
           const def = tabDefs.find(d => d.id === tab.id);
           if (!def) return null;
@@ -113,7 +113,7 @@ const SceneBar: React.FC<SceneBarProps> = ({
       </div>
 
       {hasWindowControls && (
-        <div className="bitfun-scene-bar__controls">
+        <div className="halo-scene-bar__controls">
           <WindowControls
             onMinimize={onMinimize!}
             onMaximize={onMaximize!}

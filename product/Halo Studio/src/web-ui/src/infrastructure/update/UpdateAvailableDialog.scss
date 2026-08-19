@@ -1,6 +1,6 @@
 @use '../../component-library/styles/tokens' as *;
 
-.bitfun-update-available {
+.halo-update-available {
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -9,14 +9,14 @@
   max-width: 100%;
 }
 
-.bitfun-update-available__lead {
+.halo-update-available__lead {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 16px;
 }
 
-.bitfun-update-available__lead-icon {
+.halo-update-available__lead-icon {
   flex-shrink: 0;
   width: 40px;
   height: 40px;
@@ -28,7 +28,7 @@
   color: var(--color-accent-400);
 }
 
-.bitfun-update-available__subtitle {
+.halo-update-available__subtitle {
   margin: 2px 0 0;
   flex: 1;
   min-width: 0;
@@ -37,7 +37,7 @@
   color: var(--color-text-secondary);
 }
 
-.bitfun-update-available__versions {
+.halo-update-available__versions {
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -51,7 +51,7 @@
   }
 }
 
-.bitfun-update-available__row {
+.halo-update-available__row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -68,21 +68,21 @@
   &--highlight {
     background: color-mix(in srgb, var(--color-accent-500) 6%, transparent);
 
-    .bitfun-update-available__value {
+    .halo-update-available__value {
       color: var(--color-accent-400);
       font-weight: 500;
     }
   }
 }
 
-.bitfun-update-available__label {
+.halo-update-available__label {
   color: var(--color-text-muted);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.02em;
 }
 
-.bitfun-update-available__value {
+.halo-update-available__value {
   font-family: 'Consolas', 'Monaco', 'ui-monospace', monospace;
   font-size: 12px;
   color: var(--color-text-primary);
@@ -90,11 +90,11 @@
   word-break: break-all;
 }
 
-.bitfun-update-available__notes {
+.halo-update-available__notes {
   margin-top: 18px;
 }
 
-.bitfun-update-available__notes-label {
+.halo-update-available__notes-label {
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
@@ -103,7 +103,7 @@
   margin-bottom: 8px;
 }
 
-.bitfun-update-available__notes-body {
+.halo-update-available__notes-body {
   margin: 0;
   max-height: 200px;
   overflow: auto;
@@ -118,7 +118,7 @@
   color: var(--color-text-secondary);
 }
 
-.bitfun-update-available__actions {
+.halo-update-available__actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -130,21 +130,21 @@
 }
 
 @media (max-width: 480px) {
-  .bitfun-update-available {
+  .halo-update-available {
     padding-bottom: 18px;
   }
 
-  .bitfun-update-available__row {
+  .halo-update-available__row {
     grid-template-columns: 1fr;
     gap: 6px;
     padding: 12px 14px;
   }
 
-  .bitfun-update-available__value {
+  .halo-update-available__value {
     text-align: left;
   }
 
-  .bitfun-update-available__actions {
+  .halo-update-available__actions {
     flex-direction: column-reverse;
     align-items: stretch;
     justify-content: stretch;

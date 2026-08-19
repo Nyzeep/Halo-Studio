@@ -1,6 +1,6 @@
-# BitFun CLI
+# Halo Studio CLI
 
-Terminal UI for BitFun (chat, tools, `/login` account + Peer Host).
+Terminal UI for Halo Studio (chat, tools, `/login` account + Peer Host).
 
 The local Agent paths build the CLI product profile once per invocation. Interactive chat, `exec`,
 session commands, and usage reports use that invocation-scoped runtime context and event source.
@@ -13,23 +13,23 @@ scheduler, persistence manager, or event queue. Plugin execution is not enabled 
 ## Common commands
 
 ```bash
-bitfun                                  # interactive TUI
-bitfun exec "summarize this project"   # non-interactive, rejects permission requests
-bitfun exec "run tests" --auto         # approve tool requests for this invocation
-bitfun sessions list
-bitfun usage
-bitfun doctor
-bitfun health
-bitfun mcp import                       # preview safe OpenCode / Claude Code MCP declarations
-bitfun mcp import --apply               # copy eligible declarations as disabled native entries
-bitfun mcp import --apply --candidate <candidate-id>  # repeat to select a subset
-bitfun mcp import --apply --candidate <candidate-id> --native-id <native-id>
-bitfun mcp import --format json         # versioned machine-readable plan/result
-bitfun update                           # GitHub first, openbitfun.com fallback
-bitfun update --check                   # report only; do not install
+halo                                  # interactive TUI
+halo exec "summarize this project"   # non-interactive, rejects permission requests
+halo exec "run tests" --auto         # approve tool requests for this invocation
+halo sessions list
+halo usage
+halo doctor
+halo health
+halo mcp import                       # preview safe OpenCode / Claude Code MCP declarations
+halo mcp import --apply               # copy eligible declarations as disabled native entries
+halo mcp import --apply --candidate <candidate-id>  # repeat to select a subset
+halo mcp import --apply --candidate <candidate-id> --native-id <native-id>
+halo mcp import --format json         # versioned machine-readable plan/result
+halo update                           # GitHub first, openbitfun.com fallback
+halo update --check                   # report only; do not install
 ```
 
-`bitfun mcp import` is an explicit snapshot operation, not continuous sync. It
+`halo mcp import` is an explicit snapshot operation, not continuous sync. It
 does not copy credentials, headers, environment values, or working directories,
 and Codex MCP import is not supported in the current slice. Apply revalidates the
 preview and never overwrites an existing native entry; imported entries remain
@@ -41,7 +41,7 @@ startup at most once every six hours. That check only fetches the release
 manifest — a few KB, bounded at ten seconds — and hands the actual archive to a
 detached background process, so launch never waits on a download. Set
 `behavior.auto_update = false` in the CLI config or export
-`BITFUN_CLI_DISABLE_AUTO_UPDATE=1` to disable automatic checks. Development and
+`HALO_CLI_DISABLE_AUTO_UPDATE=1` to disable automatic checks. Development and
 nightly binaries are never replaced by the stable automatic updater.
 
 Both GitHub and `https://openbitfun.com/release/linux-binaries.json` are read,
@@ -66,12 +66,12 @@ Two checks run before anything is replaced:
   to install an unsigned release; builds without the key (local, forks) fall
   back to checksum-only.
 
-`bitfun-cli` is a deprecated compatibility entrypoint. It writes
-`Warning: \`bitfun-cli\` is deprecated; use \`bitfun\` instead.` to stderr; new scripts and
-integrations must use `bitfun`. Official installers and archives ship both commands as a pair; a
+`halo-cli` is a deprecated compatibility entrypoint. It writes
+`Warning: \`halo-cli\` is deprecated; use \`halo\` instead.` to stderr; new scripts and
+integrations must use `halo`. Official installers and archives ship both commands as a pair; a
 standalone legacy launcher is an incomplete installation and reports how to reinstall the pair.
 The naming change is limited to the shell command: the Cargo package, archive prefix, service
-identifiers, and persistent paths retain the `bitfun-cli` name.
+identifiers, and persistent paths retain the `halo-cli` name.
 
 The TUI asks before protected tool calls and offers `Allow once`, `Allow always`, and `Reject`.
 `Allow always` applies only to matching tools in the current runtime context; it does not update the
@@ -108,7 +108,7 @@ returning. Cancellation, an unsuccessful completion event,
 and a requested Patch that cannot be generated or written are error outcomes. An explicit Patch
 file is created even when the diff is empty.
 
-If another BitFun process is writing the requested Session, `exec` exits non-zero without waiting
+If another Halo Studio process is writing the requested Session, `exec` exits non-zero without waiting
 or taking over. Close that Session in the other instance and run the command again. `recoverable`
 describes that later retry; it does not mean the current command retries automatically.
 
@@ -128,23 +128,23 @@ Full setup flow on a server:
 
 ```bash
 pnpm run cli:install       # build + install both entrypoints (see below)
-bitfun                     # start the TUI, then /login with your account
-bitfun daemon install      # register auto-start; device stays reachable after exit/reboot
-bitfun daemon status       # verify: daemon running + service installed/active
+halo                     # start the TUI, then /login with your account
+halo daemon install      # register auto-start; device stays reachable after exit/reboot
+halo daemon status       # verify: daemon running + service installed/active
 ```
 
 ```bash
-bitfun daemon status      # daemon liveness + auto-start service status
-bitfun daemon install     # register and start the auto-start service (requires /login first)
-bitfun daemon uninstall   # stop and remove the auto-start service
-bitfun daemon run         # foreground mode (used by the service manager; also for debugging)
+halo daemon status      # daemon liveness + auto-start service status
+halo daemon install     # register and start the auto-start service (requires /login first)
+halo daemon uninstall   # stop and remove the auto-start service
+halo daemon run         # foreground mode (used by the service manager; also for debugging)
 ```
 
 - Prerequisites: a persisted account session (`/login` inside the TUI first), and on Linux a
   working systemd user session (`systemctl --user`). Containers, WSL, and some minimal images do
   not have one; there `daemon install` reports a clear error and you can instead run
-  `bitfun daemon run` under your own supervisor (tmux, nohup, a custom unit, ...).
-- Linux: installs a systemd user unit (`~/.config/systemd/user/bitfun-cli-daemon.service`) and
+  `halo daemon run` under your own supervisor (tmux, nohup, a custom unit, ...).
+- Linux: installs a systemd user unit (`~/.config/systemd/user/halo-cli-daemon.service`) and
   enables linger, so the daemon starts at boot and keeps running without an interactive login
   session. macOS: installs a LaunchAgent. Windows is not supported for auto-start; use
   `daemon run` instead.
@@ -154,7 +154,7 @@ bitfun daemon run         # foreground mode (used by the service manager; also f
 - Logging out (`/logout`) signals the daemon to shut down so the device goes offline immediately;
   a daemon whose token is rejected by the relay exits on its own instead of staying "online" with
   a doomed token.
-- Logs land in `~/.config/bitfun/cli-logs/<session-timestamp>/app.log` (the daemon starts a new
+- Logs land in `~/.config/Halo Studio/cli-logs/<session-timestamp>/app.log` (the daemon starts a new
   session directory per process start).
 
 ### Account settings sync
@@ -162,14 +162,14 @@ bitfun daemon run         # foreground mode (used by the service manager; also f
 Both the interactive CLI and the daemon continuously sync account settings (model configs,
 default model, agent preferences, ...) with the account cloud:
 
-- Local changes (TUI model picker / model forms, `bitfun models set-default`, or a peer
+- Local changes (TUI model picker / model forms, `halo models set-default`, or a peer
   controller's `set_config`) upload after a ~5s debounce, deduped by content hash.
 - Cloud changes from other devices are pulled right after process start, then every ~30s, and
   applied to the running process (AI client cache invalidated, config reloaded).
 - While a desktop controller is attached (Peer Device Mode), the host fans out
   `account://settings-applied` after applying or uploading settings, so the controller's
   model list / settings UI refreshes without reconnecting.
-- The sync cursor persists at `~/.bitfun/account_sync/<user>.settings.json`, so restarts do not
+- The sync cursor persists at `~/.halo-studio/account_sync/<user>.settings.json`, so restarts do not
   re-apply unchanged settings.
 
 ### Upgrading
@@ -200,19 +200,19 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File src/apps/cli/install.ps1
 
 Both installers:
 
-1. `cargo build -p bitfun-cli --release` (native host CPU)
-2. Install `bitfun` and the deprecated `bitfun-cli` compatibility entrypoint
+1. `cargo build -p halo-cli --release` (native host CPU)
+2. Install `halo` and the deprecated `halo-cli` compatibility entrypoint
 3. Verify the primary command and the exact compatibility warning
 4. Add the install directory to PATH idempotently unless requested otherwise
 
 The Unix default directory is `~/.local/bin`; the Windows default is
-`%LOCALAPPDATA%\BitFun\bin`. Unix updates managed blocks in `~/.bashrc` and `~/.zshrc`;
+`%LOCALAPPDATA%\Halo Studio\bin`. Unix updates managed blocks in `~/.bashrc` and `~/.zshrc`;
 Windows updates the current user's PATH.
 
 The installer process cannot update the shell that launched it. Open a new terminal, then run:
 
 ```bash
-bitfun
+halo
 ```
 
 For the current shell, either invoke the printed direct path or temporarily prepend the install
@@ -220,13 +220,13 @@ directory to `PATH` using the copyable command printed by the installer.
 
 ### Release archives
 
-Official macOS/Linux archives contain `bitfun`, deprecated `bitfun-cli`, `README.md`, and
+Official macOS/Linux archives contain `halo`, deprecated `halo-cli`, `README.md`, and
 `PROJECT-README.md`; the Windows x64 ZIP contains the matching `.exe` pair and documents. Extract
-the whole archive and keep the two executables together in the same directory. Run `./bitfun` on
-macOS/Linux or `.\bitfun.exe` in PowerShell, then add that directory to `PATH` if desired.
+the whole archive and keep the two executables together in the same directory. Run `./halo` on
+macOS/Linux or `.\halo.exe` in PowerShell, then add that directory to `PATH` if desired.
 
-Do not copy only `bitfun-cli` from an archive. The deprecated command is intentionally a thin
-launcher for its sibling `bitfun`; if the sibling is missing, it reports an incomplete installation
+Do not copy only `halo-cli` from an archive. The deprecated command is intentionally a thin
+launcher for its sibling `halo`; if the sibling is missing, it reports an incomplete installation
 with recovery guidance instead of attempting another lookup.
 
 Every archive ships an adjacent `<archive>.sha256` — the complete verification surface across all
@@ -244,9 +244,9 @@ On a server that should stay reachable for account multi-device access, continue
 
 | Variable | Meaning |
 |----------|---------|
-| `BITFUN_CLI_BIN_DIR` | Install directory (default `~/.local/bin`) |
-| `BITFUN_CLI_SKIP_SHELLRC` | Set `1` to skip bashrc/zshrc edits |
-| `CARGO_TARGET_DIR` | Cargo target dir (e.g. `$HOME/bitfun-build/target` on shared mounts) |
+| `HALO_CLI_BIN_DIR` | Install directory (default `~/.local/bin`) |
+| `HALO_CLI_SKIP_SHELLRC` | Set `1` to skip bashrc/zshrc edits |
+| `CARGO_TARGET_DIR` | Cargo target dir (e.g. `$HOME/halo-build/target` on shared mounts) |
 | `CARGO_BUILD_JOBS` | Limit rustc parallelism on small VPS |
 
 Windows accepts `-BinDir <path>` and `-SkipPathUpdate` arguments. Unix accepts the environment

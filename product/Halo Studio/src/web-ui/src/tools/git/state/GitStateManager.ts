@@ -493,7 +493,7 @@ export class GitStateManager {
       } finally {
         const durationMs = elapsedMs(startedAt);
         if (probeError || shouldProbeReason || durationMs >= 80) {
-          if (globalThis.__BITFUN_PERF_TRACE_ENABLED__ === true) {
+          if (globalThis.__HALO_PERF_TRACE_ENABLED__ === true) {
             startupTrace.markPhase('git_state_refresh', {
               reason,
               force,

@@ -47,7 +47,7 @@ pub(crate) fn apply_headers(client: &AIClient, builder: RequestBuilder) -> Reque
         if has_custom_user_agent {
             builder
         } else {
-            builder.header("User-Agent", "BitFun-CodeAssist/1.0")
+            builder.header("User-Agent", "Halo-CodeAssist/1.0")
         }
     })
 }

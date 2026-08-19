@@ -1,17 +1,17 @@
 @use '../../../component-library/styles/tokens' as *;
 
-.bitfun-mcp-tools {
-  .bitfun-config-page-section__body {
+.halo-mcp-tools {
+  .halo-config-page-section__body {
     border: 0;
     border-radius: 0;
     background: transparent;
   }
 
-  .bitfun-config-page-row {
+  .halo-config-page-row {
     padding: $size-gap-3 0;
   }
 
-  .bitfun-collection-empty {
+  .halo-collection-empty {
     justify-content: flex-start;
     padding: $size-gap-2 0;
     font-size: var(--font-size-xs);
@@ -23,7 +23,7 @@
     display: flex;
     flex-direction: column;
     gap: $size-gap-3;
-    animation: bitfun-collection-slide-down 0.18s $easing-standard;
+    animation: halo-collection-slide-down 0.18s $easing-standard;
   }
 
   &__json-editor-header {
@@ -189,17 +189,17 @@
 }
 
 @container config-panel (max-width: 520px) {
-  .bitfun-mcp-tools__external-section > .bitfun-config-page-section__header {
+  .halo-mcp-tools__external-section > .halo-config-page-section__header {
     flex-direction: row;
     align-items: flex-start;
 
-    .bitfun-config-page-section__extra {
+    .halo-config-page-section__extra {
       width: auto;
       justify-content: flex-end;
     }
   }
 }
-.bitfun-mcp-tools__import {
+.halo-mcp-tools__import {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -224,7 +224,7 @@
   }
 }
 
-.bitfun-mcp-tools__import-actions {
+.halo-mcp-tools__import-actions {
   display: flex;
   gap: 8px;
 }

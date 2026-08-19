@@ -217,7 +217,7 @@ const AppContent: React.FC = () => {
     setPrevPage(null);
     setNavDir(null);
     clearTimeout(timerRef.current);
-    localStorage.removeItem('bitfun.mobile.user_id');
+    localStorage.removeItem('halo.mobile.user_id');
     useMobileStore.getState().resetConnectionState();
     pageStackRef.current = ['pairing'];
     setPage('pairing');

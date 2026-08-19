@@ -9,8 +9,8 @@ use crate::service::remote_ssh::workspace_state::{
     normalize_remote_workspace_path, remote_root_to_mirror_subpath,
     sanitize_ssh_hostname_for_mirror,
 };
-use crate::util::errors::{BitFunError, BitFunResult};
-use bitfun_services_core::session::{
+use crate::util::errors::{HaloError, HaloResult};
+use halo_services_core::session::{
     merge_legacy_session_store, move_legacy_path, SessionStoreMigrationError,
     SessionStoreMigrationRecord,
 };
@@ -107,7 +107,7 @@ impl WorkspaceRuntimeService {
     pub async fn ensure_workspace_runtime(
         &self,
         target: WorkspaceRuntimeTarget,
-    ) -> BitFunResult<WorkspaceRuntimeEnsureResult> {
+    ) -> HaloResult<WorkspaceRuntimeEnsureResult> {
         let context = self.context_for_target(target);
         let migration_specs = self.migration_specs_for_context(&context);
         self.ensure_runtime_context(context, migration_specs).await
@@ -116,7 +116,7 @@ impl WorkspaceRuntimeService {
     pub async fn ensure_local_workspace_runtime(
         &self,
         workspace_path: &Path,
-    ) -> BitFunResult<WorkspaceRuntimeEnsureResult> {
+    ) -> HaloResult<WorkspaceRuntimeEnsureResult> {
         self.ensure_workspace_runtime(WorkspaceRuntimeTarget::LocalWorkspace {
             workspace_root: workspace_path.to_path_buf(),
         })
@@ -127,7 +127,7 @@ impl WorkspaceRuntimeService {
         &self,
         ssh_host: &str,
         remote_root: &str,
-    ) -> BitFunResult<WorkspaceRuntimeEnsureResult> {
+    ) -> HaloResult<WorkspaceRuntimeEnsureResult> {
         self.ensure_workspace_runtime(WorkspaceRuntimeTarget::RemoteWorkspaceMirror {
             ssh_host: ssh_host.to_string(),
             remote_root: remote_root.to_string(),
@@ -139,7 +139,7 @@ impl WorkspaceRuntimeService {
     pub async fn ensure_runtime_for_workspace_binding(
         &self,
         workspace: &WorkspaceBinding,
-    ) -> BitFunResult<WorkspaceRuntimeEnsureResult> {
+    ) -> HaloResult<WorkspaceRuntimeEnsureResult> {
         if workspace.is_remote() {
             self.ensure_remote_workspace_runtime(
                 &workspace.session_identity.hostname,
@@ -156,7 +156,7 @@ impl WorkspaceRuntimeService {
         &self,
         context: WorkspaceRuntimeContext,
         migration_specs: Vec<RuntimeMigrationSpec>,
-    ) -> BitFunResult<WorkspaceRuntimeEnsureResult> {
+    ) -> HaloResult<WorkspaceRuntimeEnsureResult> {
         if self.is_runtime_verified(&context.runtime_root) {
             return Ok(Self::cached_ensure_result(context));
         }
@@ -231,7 +231,7 @@ impl WorkspaceRuntimeService {
         &self,
         context: &WorkspaceRuntimeContext,
         migrated_entries: &[RuntimeMigrationRecord],
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let target_descriptor = match &context.target {
             WorkspaceRuntimeTarget::LocalWorkspace { workspace_root } => {
                 workspace_root.display().to_string()
@@ -260,12 +260,12 @@ impl WorkspaceRuntimeService {
         };
 
         let bytes = serde_json::to_vec_pretty(&state).map_err(|e| {
-            BitFunError::service(format!("Failed to serialize runtime state: {}", e))
+            HaloError::service(format!("Failed to serialize runtime state: {}", e))
         })?;
         tokio::fs::write(&context.layout_state_file, bytes)
             .await
             .map_err(|e| {
-                BitFunError::service(format!(
+                HaloError::service(format!(
                     "Failed to write runtime layout state '{}': {}",
                     context.layout_state_file.display(),
                     e
@@ -276,7 +276,7 @@ impl WorkspaceRuntimeService {
 
     fn remote_workspace_runtime_root(&self, ssh_host: &str, remote_root_norm: &str) -> PathBuf {
         self.path_manager
-            .bitfun_home_dir()
+            .halo_home_dir()
             .join("remote_ssh")
             .join(sanitize_ssh_hostname_for_mirror(ssh_host))
             .join(remote_root_to_mirror_subpath(remote_root_norm))
@@ -314,7 +314,7 @@ impl WorkspaceRuntimeService {
                 let runtime_root = self.remote_workspace_runtime_root(ssh_host, remote_root);
                 let legacy_sessions_root = runtime_root
                     .join("sessions")
-                    .join(".bitfun")
+                    .join(".halo-studio")
                     .join("sessions");
                 vec![RuntimeMigrationSpec {
                     source: legacy_sessions_root,
@@ -328,7 +328,7 @@ impl WorkspaceRuntimeService {
     async fn apply_migration_specs(
         &self,
         specs: &[RuntimeMigrationSpec],
-    ) -> BitFunResult<Vec<RuntimeMigrationRecord>> {
+    ) -> HaloResult<Vec<RuntimeMigrationRecord>> {
         let mut migrated_entries = Vec::new();
 
         for spec in specs {
@@ -353,14 +353,14 @@ impl WorkspaceRuntimeService {
     async fn cleanup_legacy_artifacts_for_context(
         &self,
         context: &WorkspaceRuntimeContext,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if let WorkspaceRuntimeTarget::RemoteWorkspaceMirror {
             ssh_host,
             remote_root,
         } = &context.target
         {
             let runtime_root = self.remote_workspace_runtime_root(ssh_host, remote_root);
-            self.remove_dir_if_empty(&runtime_root.join("sessions").join(".bitfun"))
+            self.remove_dir_if_empty(&runtime_root.join("sessions").join(".halo-studio"))
                 .await?;
         }
 
@@ -371,7 +371,7 @@ impl WorkspaceRuntimeService {
         &self,
         source: &Path,
         target: &Path,
-    ) -> BitFunResult<Option<RuntimeMigrationRecord>> {
+    ) -> HaloResult<Option<RuntimeMigrationRecord>> {
         if !source.exists() || target.exists() {
             return Ok(None);
         }
@@ -383,7 +383,7 @@ impl WorkspaceRuntimeService {
         &self,
         source: &Path,
         target: &Path,
-    ) -> BitFunResult<RuntimeMigrationRecord> {
+    ) -> HaloResult<RuntimeMigrationRecord> {
         if let Some(parent) = target.parent() {
             self.path_manager.ensure_dir(parent).await?;
         }
@@ -398,14 +398,14 @@ impl WorkspaceRuntimeService {
         &self,
         source: &Path,
         target: &Path,
-    ) -> BitFunResult<Option<RuntimeMigrationRecord>> {
+    ) -> HaloResult<Option<RuntimeMigrationRecord>> {
         merge_legacy_session_store(source, target)
             .await
             .map(|record| record.map(runtime_migration_record))
             .map_err(session_store_migration_error)
     }
 
-    async fn remove_dir_if_empty(&self, path: &Path) -> BitFunResult<()> {
+    async fn remove_dir_if_empty(&self, path: &Path) -> HaloResult<()> {
         if !path.is_dir() {
             return Ok(());
         }
@@ -417,7 +417,7 @@ impl WorkspaceRuntimeService {
                 .map(|entry| entry.is_none())
                 .unwrap_or(false),
             Err(e) => {
-                return Err(BitFunError::service(format!(
+                return Err(HaloError::service(format!(
                     "Failed to inspect directory {}: {}",
                     path.display(),
                     e
@@ -427,7 +427,7 @@ impl WorkspaceRuntimeService {
 
         if is_empty {
             tokio::fs::remove_dir(path).await.map_err(|e| {
-                BitFunError::service(format!(
+                HaloError::service(format!(
                     "Failed to remove empty legacy directory {}: {}",
                     path.display(),
                     e
@@ -447,13 +447,13 @@ fn runtime_migration_record(record: SessionStoreMigrationRecord) -> RuntimeMigra
     }
 }
 
-fn session_store_migration_error(error: SessionStoreMigrationError) -> BitFunError {
+fn session_store_migration_error(error: SessionStoreMigrationError) -> HaloError {
     if error.is_metadata_deserialization() {
-        BitFunError::Deserialization(error.to_string())
+        HaloError::Deserialization(error.to_string())
     } else if error.is_metadata_serialization() {
-        BitFunError::serialization(error.to_string())
+        HaloError::serialization(error.to_string())
     } else {
-        BitFunError::service(error.to_string())
+        HaloError::service(error.to_string())
     }
 }
 
@@ -485,7 +485,7 @@ pub fn get_workspace_runtime_service_arc() -> Arc<WorkspaceRuntimeService> {
         .clone()
 }
 
-pub fn try_get_workspace_runtime_service_arc() -> BitFunResult<Arc<WorkspaceRuntimeService>> {
+pub fn try_get_workspace_runtime_service_arc() -> HaloResult<Arc<WorkspaceRuntimeService>> {
     Ok(get_workspace_runtime_service_arc())
 }
 
@@ -541,7 +541,7 @@ mod tests {
     #[tokio::test]
     async fn ensure_local_workspace_runtime_creates_complete_layout_without_project_dot_dir() {
         let test_root =
-            std::env::temp_dir().join(format!("bitfun-runtime-test-{}", Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo-runtime-test-{}", Uuid::new_v4()));
         let workspace_root = test_root.join("workspace");
         fs::create_dir_all(&workspace_root).expect("workspace should exist");
 
@@ -576,9 +576,9 @@ mod tests {
     #[tokio::test]
     async fn ensure_local_workspace_runtime_migrates_legacy_runtime_entries() {
         let test_root =
-            std::env::temp_dir().join(format!("bitfun-runtime-test-{}", Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo-runtime-test-{}", Uuid::new_v4()));
         let workspace_root = test_root.join("workspace");
-        let legacy_root = workspace_root.join(".bitfun");
+        let legacy_root = workspace_root.join(".halo-studio");
         fs::create_dir_all(legacy_root.join("sessions")).expect("legacy sessions should exist");
         fs::write(legacy_root.join("sessions").join("s1.json"), "{}")
             .expect("legacy session file should be written");
@@ -603,7 +603,7 @@ mod tests {
     #[tokio::test]
     async fn ensure_remote_workspace_runtime_merges_legacy_sessions_only() {
         let test_root =
-            std::env::temp_dir().join(format!("bitfun-runtime-test-{}", Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo-runtime-test-{}", Uuid::new_v4()));
         let path_manager = Arc::new(PathManager::with_user_root_for_tests(
             test_root.join("user"),
         ));
@@ -613,7 +613,7 @@ mod tests {
         let legacy_sessions_root = context
             .runtime_root
             .join("sessions")
-            .join(".bitfun")
+            .join(".halo-studio")
             .join("sessions");
 
         fs::create_dir_all(&legacy_sessions_root).expect("legacy remote sessions should exist");
@@ -659,7 +659,7 @@ mod tests {
             "agent".to_string(),
             "model".to_string(),
         );
-        hidden_metadata.session_kind = bitfun_core_types::SessionKind::Subagent;
+        hidden_metadata.session_kind = halo_core_types::SessionKind::Subagent;
         hidden_metadata.last_active_at = 250;
         write_session_metadata(
             &legacy_sessions_root.join("hidden-session"),
@@ -725,7 +725,7 @@ mod tests {
     #[tokio::test]
     async fn ensure_local_workspace_runtime_uses_verified_cache_on_repeat_calls() {
         let test_root =
-            std::env::temp_dir().join(format!("bitfun-runtime-test-{}", Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo-runtime-test-{}", Uuid::new_v4()));
         let workspace_root = test_root.join("workspace");
         fs::create_dir_all(&workspace_root).expect("workspace should exist");
 

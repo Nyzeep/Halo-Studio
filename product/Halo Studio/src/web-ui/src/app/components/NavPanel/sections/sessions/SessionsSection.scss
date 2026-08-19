@@ -1,14 +1,14 @@
 /**
  * SessionsSection styles — inline accordion shown under the Sessions nav item.
  *
- * Uses the parent BEM block (.bitfun-nav-panel) to stay consistent with the
+ * Uses the parent BEM block (.halo-nav-panel) to stay consistent with the
  * rest of the navigation styling, while being self-contained in this file.
  */
 
 @use '../../../../../component-library/styles/tokens.scss' as *;
 @use '../../../../styles/nav-panel-font-scope.scss' as nav-font;
 
-.bitfun-nav-panel {
+.halo-nav-panel {
   &__inline-list {
     display: flex;
     flex-direction: column;
@@ -17,7 +17,7 @@
     padding: 2px $size-gap-1 2px;
     gap: 0;
     // No vertical margin: spacing between assistant blocks comes from 2px top/bottom padding only
-    // (see .bitfun-nav-panel__items--session-blocks gap: 0), aligned with __workspace-item padding.
+    // (see .halo-nav-panel__items--session-blocks gap: 0), aligned with __workspace-item padding.
     margin: 0 $size-gap-1 0 calc(#{$size-gap-1} + 4px);
   }
 
@@ -69,7 +69,7 @@
 
     svg {
       flex: 0 0 auto;
-      animation: bitfun-nav-session-spin 1s linear infinite;
+      animation: halo-nav-session-spin 1s linear infinite;
     }
 
     span {
@@ -153,7 +153,7 @@
         transform: translateY(-50%);
       }
 
-      .bitfun-nav-panel__inline-item-icon {
+      .halo-nav-panel__inline-item-icon {
         opacity: 0.72;
       }
     }
@@ -195,7 +195,7 @@
     &.is-running {
       color: var(--color-text-secondary);
       transition: opacity $motion-fast $easing-standard;
-      animation: bitfun-nav-session-spin 1s linear infinite;
+      animation: halo-nav-session-spin 1s linear infinite;
     }
 
     &.is-ask-user {
@@ -204,11 +204,11 @@
       // Light theme). 70% text-primary keeps the icon readable at 14px.
       color: color-mix(in srgb, var(--color-text-primary) 70%, var(--color-warning) 30%);
       transition: opacity $motion-fast $easing-standard;
-      animation: bitfun-nav-ask-user-pulse 2s ease-in-out infinite;
+      animation: halo-nav-ask-user-pulse 2s ease-in-out infinite;
     }
 
-    .bitfun-nav-panel__inline-item:hover &,
-    .bitfun-nav-panel__inline-item.is-active & {
+    .halo-nav-panel__inline-item:hover &,
+    .halo-nav-panel__inline-item.is-active & {
       opacity: 1;
     }
   }
@@ -311,7 +311,7 @@
     white-space: nowrap;
 
     svg {
-      animation: bitfun-nav-session-spin 1s linear infinite;
+      animation: halo-nav-session-spin 1s linear infinite;
     }
   }
 
@@ -346,14 +346,14 @@
     transition: opacity $motion-fast $easing-standard, transform $motion-fast $easing-standard;
 
     &.is-bot {
-      animation: bitfun-nav-background-subagent-bot-cycle 3.6s ease-in-out infinite;
+      animation: halo-nav-background-subagent-bot-cycle 3.6s ease-in-out infinite;
     }
 
     &.is-loader {
       opacity: 0;
       animation:
-        bitfun-nav-background-subagent-loader-cycle 3.6s ease-in-out infinite,
-        bitfun-nav-session-spin 1s linear infinite;
+        halo-nav-background-subagent-loader-cycle 3.6s ease-in-out infinite,
+        halo-nav-session-spin 1s linear infinite;
     }
   }
 
@@ -443,11 +443,11 @@
 
     // Pulse animation for high-priority states
     &.is-high-priority {
-      animation: bitfun-unread-dot-pulse 2s ease-in-out infinite;
+      animation: halo-unread-dot-pulse 2s ease-in-out infinite;
     }
   }
 
-  @keyframes bitfun-unread-dot-pulse {
+  @keyframes halo-unread-dot-pulse {
     0%, 100% {
       transform: scale(1);
       opacity: 1;
@@ -472,7 +472,7 @@
     transition: opacity $motion-fast $easing-standard,
                 visibility $motion-fast $easing-standard;
 
-    .bitfun-nav-panel__inline-item:hover &,
+    .halo-nav-panel__inline-item:hover &,
     &.is-open {
       visibility: visible;
       opacity: 1;
@@ -519,7 +519,7 @@
     box-shadow: 0 4px 12px var(--color-overlay-black-30);
     z-index: 10000;
     transform-origin: top left;
-    animation: bitfun-footer-menu-in $motion-fast $easing-decelerate forwards;
+    animation: halo-footer-menu-in $motion-fast $easing-decelerate forwards;
   }
 
   &__inline-item-menu-item {
@@ -571,7 +571,7 @@
     flex: 1;
     min-width: 0;
 
-    .bitfun-input-container {
+    .halo-input-container {
       height: 18px;
       min-height: 18px;
       padding: 0 6px;
@@ -580,12 +580,12 @@
       background: color-mix(in srgb, var(--element-bg-soft) 55%, transparent);
     }
 
-    .bitfun-input {
+    .halo-input {
       font-size: var(--font-size-xs);
       line-height: 16px;
     }
 
-    .bitfun-input-container:focus-within {
+    .halo-input-container:focus-within {
       border-color: color-mix(in srgb, var(--color-text-primary) 35%, var(--border-subtle));
       box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-text-primary) 12%, transparent);
     }
@@ -625,7 +625,7 @@
 
   &__inline-toggle-spinner {
     flex: 0 0 auto;
-    animation: bitfun-nav-session-spin 1s linear infinite;
+    animation: halo-nav-session-spin 1s linear infinite;
   }
 
   &__inline-toggle-dots {
@@ -722,7 +722,7 @@
 
   // Unhealthy MCP server indicator
   &__inline-item.is-unhealthy {
-    .bitfun-nav-panel__inline-item-icon {
+    .halo-nav-panel__inline-item-icon {
       color: var(--color-warning);
       opacity: 0.9;
     }
@@ -730,7 +730,7 @@
 }
 
 // Session running spin animation
-@keyframes bitfun-nav-session-spin {
+@keyframes halo-nav-session-spin {
   from {
     transform: rotate(0deg);
   }
@@ -739,7 +739,7 @@
   }
 }
 
-@keyframes bitfun-nav-ask-user-pulse {
+@keyframes halo-nav-ask-user-pulse {
   0%,
   100% {
     opacity: 0.9;
@@ -751,7 +751,7 @@
   }
 }
 
-@keyframes bitfun-nav-background-subagent-bot-cycle {
+@keyframes halo-nav-background-subagent-bot-cycle {
   0%,
   62%,
   100% {
@@ -766,7 +766,7 @@
   }
 }
 
-@keyframes bitfun-nav-background-subagent-loader-cycle {
+@keyframes halo-nav-background-subagent-loader-cycle {
   0%,
   62%,
   100% {
@@ -780,28 +780,28 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-nav-panel {
+  .halo-nav-panel {
     &__inline-item,
     &__inline-action {
       transition: none;
     }
   }
 
-  .bitfun-nav-panel__inline-item-icon.is-running {
+  .halo-nav-panel__inline-item-icon.is-running {
     animation: none;
     opacity: 0.8;
   }
 
-  .bitfun-nav-panel__inline-item-icon.is-ask-user {
+  .halo-nav-panel__inline-item-icon.is-ask-user {
     animation: none;
     opacity: 0.9;
   }
 
-  .bitfun-nav-panel__inline-item-review-badge svg {
+  .halo-nav-panel__inline-item-review-badge svg {
     animation: none;
   }
 
-  .bitfun-nav-panel__inline-item-background-subagent-icon {
+  .halo-nav-panel__inline-item-background-subagent-icon {
     animation: none;
 
     &.is-bot {
@@ -814,11 +814,11 @@
     }
   }
 
-  .bitfun-nav-panel__items--session-blocks .bitfun-nav-panel__inline-item:hover .bitfun-nav-panel__inline-item-icon:not(.is-running):not(.is-ask-user) {
+  .halo-nav-panel__items--session-blocks .halo-nav-panel__inline-item:hover .halo-nav-panel__inline-item-icon:not(.is-running):not(.is-ask-user) {
     transform: scale(1);
   }
 
-  .bitfun-nav-panel__items--session-blocks .bitfun-nav-panel__inline-item-icon:not(.is-running):not(.is-ask-user) {
+  .halo-nav-panel__items--session-blocks .halo-nav-panel__inline-item-icon:not(.is-running):not(.is-ask-user) {
     transition: opacity $motion-fast $easing-standard;
   }
 }

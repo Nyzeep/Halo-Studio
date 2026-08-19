@@ -117,8 +117,8 @@ function BasicsLaunchAtLoginSection() {
   }
 
   return (
-    <div className="bitfun-launch-at-login-config">
-      <div className="bitfun-launch-at-login-config__content">
+    <div className="halo-launch-at-login-config">
+      <div className="halo-launch-at-login-config__content">
         <ConfigPageMessage message={message} />
         <ConfigPageSection
           title={t('launchAtLogin.sections.title')}
@@ -214,8 +214,8 @@ function BasicsAutoUpdateSection() {
   }
 
   return (
-    <div className="bitfun-auto-update-config">
-      <div className="bitfun-auto-update-config__content">
+    <div className="halo-auto-update-config">
+      <div className="halo-auto-update-config__content">
         <ConfigPageMessage message={message} />
         <ConfigPageSection
           title={t('autoUpdate.sections.title')}
@@ -494,8 +494,8 @@ function BasicsLoggingSection() {
   }
 
   return (
-    <div className="bitfun-logging-config">
-      <div className="bitfun-logging-config__content">
+    <div className="halo-logging-config">
+      <div className="halo-logging-config__content">
         <ConfigPageMessage message={message} />
 
         <ConfigPageSection
@@ -525,7 +525,7 @@ function BasicsLoggingSection() {
             description={t('logging.level.description')}
             align="center"
           >
-            <div className="bitfun-logging-config__select-wrapper">
+            <div className="halo-logging-config__select-wrapper">
               <Select
                 value={configLevel}
                 onChange={(v) => handleLevelChange(v as string)}
@@ -565,14 +565,14 @@ function BasicsLoggingSection() {
             description={t('logging.path.description')}
             multiline
           >
-            <div className="bitfun-logging-config__path-row">
-              <div className="bitfun-logging-config__path-box">
+            <div className="halo-logging-config__path-row">
+              <div className="halo-logging-config__path-box">
                 {runtimeInfo?.sessionLogDir || '-'}
               </div>
               <Tooltip content={t('logging.actions.openFolderTooltip')} placement="top">
                 <button
                   type="button"
-                  className="bitfun-logging-config__open-btn"
+                  className="halo-logging-config__open-btn"
                   onClick={handleOpenFolder}
                   disabled={openingFolder || !runtimeInfo?.sessionLogDir}
                 >
@@ -709,22 +709,22 @@ function BasicsTerminalSection() {
   const selectedShellValue = selectedShell?.path ?? defaultShell;
 
   const renderShellDetails = useCallback((shell: ShellInfo) => (
-    <div className="bitfun-terminal-config__shell-tooltip">
-      <div className="bitfun-terminal-config__shell-tooltip-name">{formatShellLabel(shell)}</div>
-      <div className="bitfun-terminal-config__shell-tooltip-path">{shell.path}</div>
+    <div className="halo-terminal-config__shell-tooltip">
+      <div className="halo-terminal-config__shell-tooltip-name">{formatShellLabel(shell)}</div>
+      <div className="halo-terminal-config__shell-tooltip-path">{shell.path}</div>
     </div>
   ), []);
 
   const renderShellOption = useCallback((option: SelectOption) => {
     const shellOption = option as TerminalShellOption;
     if (!shellOption.shell) {
-      return <div className="bitfun-terminal-config__shell-option-name">{option.label}</div>;
+      return <div className="halo-terminal-config__shell-option-name">{option.label}</div>;
     }
 
     const { shell } = shellOption;
     const content = (
-      <div className="bitfun-terminal-config__shell-option">
-        <div className="bitfun-terminal-config__shell-option-name">{formatShellLabel(shell)}</div>
+      <div className="halo-terminal-config__shell-option">
+        <div className="halo-terminal-config__shell-option-name">{formatShellLabel(shell)}</div>
       </div>
     );
 
@@ -742,8 +742,8 @@ function BasicsTerminalSection() {
 
     return (
       <Tooltip content={renderShellDetails(shell)} placement="top">
-        <span className="select__value bitfun-terminal-config__shell-value">
-          <span className="bitfun-terminal-config__shell-value-name">{formatShellLabel(shell)}</span>
+        <span className="select__value halo-terminal-config__shell-value">
+          <span className="halo-terminal-config__shell-value-name">{formatShellLabel(shell)}</span>
         </span>
       </Tooltip>
     );
@@ -763,8 +763,8 @@ function BasicsTerminalSection() {
   }
 
   return (
-    <div className="bitfun-terminal-config">
-      <div className="bitfun-terminal-config__content">
+    <div className="halo-terminal-config">
+      <div className="halo-terminal-config__content">
         <ConfigPageMessage message={message} />
 
         <ConfigPageSection
@@ -782,7 +782,7 @@ function BasicsTerminalSection() {
             description={t('terminal.controls.description')}
             align="center"
           >
-            <div className="bitfun-terminal-config__select-wrapper">
+            <div className="halo-terminal-config__select-wrapper">
               {availableShells.length > 0 ? (
                 <Select
                   value={selectedShellValue}
@@ -794,7 +794,7 @@ function BasicsTerminalSection() {
                   disabled={saving}
                 />
               ) : (
-                <div className="bitfun-terminal-config__no-shells">{t('terminal.controls.noShells')}</div>
+                <div className="halo-terminal-config__no-shells">{t('terminal.controls.noShells')}</div>
               )}
             </div>
           </ConfigPageRow>
@@ -804,7 +804,7 @@ function BasicsTerminalSection() {
             description={t('terminal.panelPosition.description')}
             align="center"
           >
-            <div className="bitfun-terminal-config__select-wrapper">
+            <div className="halo-terminal-config__select-wrapper">
               <Select
                 value={terminalPanelPosition}
                 onChange={(v) => handleTerminalPanelPositionChange(v as TerminalPanelPosition)}
@@ -891,8 +891,8 @@ function BasicsWindowBehaviorSection() {
   }
 
   return (
-    <div className="bitfun-window-behavior-config">
-      <div className="bitfun-window-behavior-config__content">
+    <div className="halo-window-behavior-config">
+      <div className="halo-window-behavior-config__content">
         <ConfigPageMessage message={message} />
         <ConfigPageSection
           title={t('windowBehavior.sections.title')}
@@ -903,7 +903,7 @@ function BasicsWindowBehaviorSection() {
             description={t('windowBehavior.closeButtonDescription')}
             align="center"
           >
-            <div className="bitfun-window-behavior-config__select-wrapper">
+            <div className="halo-window-behavior-config__select-wrapper">
               <Select
                 value={behavior}
                 onChange={(v) => { void handleChange(v as string); }}
@@ -1031,9 +1031,9 @@ const BasicsConfig: React.FC = () => {
   const { t } = useTranslation('settings/basics');
 
   return (
-    <ConfigPageLayout className="bitfun-basics-config">
+    <ConfigPageLayout className="halo-basics-config">
       <ConfigPageHeader title={t('title')} subtitle={t('subtitle')} />
-      <ConfigPageContent className="bitfun-basics-config__content">
+      <ConfigPageContent className="halo-basics-config__content">
         <BasicsLaunchAtLoginSection />
         <BasicsPreventSleepSection />
         <BasicsAutoUpdateSection />

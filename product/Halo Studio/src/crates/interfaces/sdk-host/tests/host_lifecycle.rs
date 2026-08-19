@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use bitfun_agent_runtime::event_queue::{EventQueue, EventQueueConfig};
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::event_queue::{EventQueue, EventQueueConfig};
+use halo_agent_runtime::sdk::{
     AgentDialogTurnPort, AgentDialogTurnRequest, AgentEventSource, AgentRuntimeBuilder,
     AgentSessionClosePort, AgentSessionCreateRequest, AgentSessionCreateResult,
     AgentSessionDeleteRequest, AgentSessionListRequest, AgentSessionManagementPort,
@@ -14,14 +14,14 @@ use bitfun_agent_runtime::sdk::{
     DialogSubmitOutcome, PermissionRequest, PermissionRequestManager, PermissionRequestSource,
     PermissionRequestSourceKind, PortError, PortErrorKind, PortResult,
 };
-use bitfun_core_types::ErrorCategory;
-use bitfun_events::AgenticEvent;
-use bitfun_runtime_ports::{
+use halo_core_types::ErrorCategory;
+use halo_events::AgenticEvent;
+use halo_runtime_ports::{
     ClockPort, PermissionAuditRecord, PermissionAuditStorePort, PermissionGrant,
     PermissionReplyStorePort, RuntimeServiceCapability, RuntimeServicePort,
 };
-use bitfun_sdk_host::host::{ConnectionControl, HostOutput, SdkHostConfig, SdkHostConnection};
-use bitfun_sdk_host::protocol::{JsonRpcRequest, PROTOCOL_VERSION};
+use halo_sdk_host::host::{ConnectionControl, HostOutput, SdkHostConfig, SdkHostConnection};
+use halo_sdk_host::protocol::{JsonRpcRequest, PROTOCOL_VERSION};
 use tokio::sync::{mpsc, Notify};
 
 #[derive(Default)]
@@ -2131,7 +2131,7 @@ async fn permission_without_callback_is_rejected_and_finishes_action_required() 
         .unwrap();
     assert!(matches!(
         unrelated.wait().await,
-        bitfun_agent_runtime::permission::PermissionWaitOutcome::Cancelled { .. }
+        halo_agent_runtime::permission::PermissionWaitOutcome::Cancelled { .. }
     ));
 
     let pending = permissions
@@ -2152,8 +2152,8 @@ async fn permission_without_callback_is_rejected_and_finishes_action_required() 
     let resolution = pending.wait().await;
     assert!(matches!(
         resolution,
-        bitfun_agent_runtime::permission::PermissionWaitOutcome::Replied(
-            bitfun_agent_runtime::sdk::PermissionReply::Reject { .. }
+        halo_agent_runtime::permission::PermissionWaitOutcome::Replied(
+            halo_agent_runtime::sdk::PermissionReply::Reject { .. }
         )
     ));
 }

@@ -497,20 +497,20 @@ const SessionScene: React.FC<SessionSceneProps> = ({
     <div
       ref={containerRef}
       className={[
-        'bitfun-session-scene',
-        isDragging && 'bitfun-session-scene--dragging',
-        isDraggingBottom && 'bitfun-session-scene--dragging-bottom',
-        isTerminalDockedBottom && 'bitfun-session-scene--terminal-bottom',
+        'halo-session-scene',
+        isDragging && 'halo-session-scene--dragging',
+        isDraggingBottom && 'halo-session-scene--dragging-bottom',
+        isTerminalDockedBottom && 'halo-session-scene--terminal-bottom',
         isEntering && 'layout-entering',
       ].filter(Boolean).join(' ')}
       style={panelCollapseHintStyles}
       data-testid="session-scene"
     >
-      <div className="bitfun-session-scene__main-row">
+      <div className="halo-session-scene__main-row">
         {/* ChatPane — FlowChat conversation */}
         {!isChatHidden && (
           <div
-            className={`bitfun-session-scene__chat-pane ${isDragging ? 'bitfun-session-scene__chat-pane--dragging' : ''}`}
+            className={`halo-session-scene__chat-pane ${isDragging ? 'halo-session-scene__chat-pane--dragging' : ''}`}
             data-testid="session-chat-pane"
           >
             <ChatPane
@@ -529,10 +529,10 @@ const SessionScene: React.FC<SessionSceneProps> = ({
           <div
             ref={resizerRef}
             className={[
-              'bitfun-pane-resizer',
-              state.layout.rightPanelCollapsed && 'bitfun-pane-resizer--collapsed',
-              isDraggingRight && 'bitfun-pane-resizer--dragging',
-              isHovering && 'bitfun-pane-resizer--hovering',
+              'halo-pane-resizer',
+              state.layout.rightPanelCollapsed && 'halo-pane-resizer--collapsed',
+              isDraggingRight && 'halo-pane-resizer--dragging',
+              isHovering && 'halo-pane-resizer--hovering',
             ].filter(Boolean).join(' ')}
             onMouseDown={handleMouseDownResizer}
             onDoubleClick={handleDoubleClick}
@@ -548,9 +548,9 @@ const SessionScene: React.FC<SessionSceneProps> = ({
             title={t('layout.resizer.title', { mode: panelModeLabels[rightPanelMode] })}
             data-testid="session-right-pane-resizer"
           >
-            <div className="bitfun-pane-resizer__line" />
-            <div className="bitfun-pane-resizer__handle">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="bitfun-pane-resizer__icon">
+            <div className="halo-pane-resizer__line" />
+            <div className="halo-pane-resizer__handle">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="halo-pane-resizer__icon">
                 <circle cx="6" cy="4" r="1" fill="currentColor" />
                 <circle cx="6" cy="8" r="1" fill="currentColor" />
                 <circle cx="6" cy="12" r="1" fill="currentColor" />
@@ -566,11 +566,11 @@ const SessionScene: React.FC<SessionSceneProps> = ({
         <div
           ref={auxPaneElementRef}
           className={[
-            'bitfun-session-scene__aux-pane',
-            state.layout.rightPanelCollapsed         && 'bitfun-session-scene__aux-pane--collapsed',
-            isDraggingRight                          && 'bitfun-session-scene__aux-pane--dragging',
-            isRightAsMain                            && 'bitfun-session-scene__aux-pane--editor-mode',
-            isAuxPaneExpandingImmediate              && 'bitfun-session-scene__aux-pane--no-animation',
+            'halo-session-scene__aux-pane',
+            state.layout.rightPanelCollapsed         && 'halo-session-scene__aux-pane--collapsed',
+            isDraggingRight                          && 'halo-session-scene__aux-pane--dragging',
+            isRightAsMain                            && 'halo-session-scene__aux-pane--editor-mode',
+            isAuxPaneExpandingImmediate              && 'halo-session-scene__aux-pane--no-animation',
           ].filter(Boolean).join(' ')}
           style={{
             width: state.layout.rightPanelCollapsed
@@ -594,10 +594,10 @@ const SessionScene: React.FC<SessionSceneProps> = ({
         <>
           <div
             className={[
-              'bitfun-bottom-pane-resizer',
-              state.layout.bottomTerminalPanelCollapsed && 'bitfun-bottom-pane-resizer--collapsed',
-              isDraggingBottom && 'bitfun-bottom-pane-resizer--dragging',
-              isHoveringBottom && 'bitfun-bottom-pane-resizer--hovering',
+              'halo-bottom-pane-resizer',
+              state.layout.bottomTerminalPanelCollapsed && 'halo-bottom-pane-resizer--collapsed',
+              isDraggingBottom && 'halo-bottom-pane-resizer--dragging',
+              isHoveringBottom && 'halo-bottom-pane-resizer--hovering',
             ].filter(Boolean).join(' ')}
             onMouseDown={handleMouseDownBottomResizer}
             onDoubleClick={handleBottomDoubleClick}
@@ -612,9 +612,9 @@ const SessionScene: React.FC<SessionSceneProps> = ({
             aria-valuemax={BOTTOM_TERMINAL_PANEL_CONFIG.MAX_WIDTH}
             title={t('layout.resizer.title', { mode: panelModeLabels[bottomTerminalPanelMode] })}
           >
-            <div className="bitfun-bottom-pane-resizer__line" />
-            <div className="bitfun-bottom-pane-resizer__handle">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="bitfun-bottom-pane-resizer__icon">
+            <div className="halo-bottom-pane-resizer__line" />
+            <div className="halo-bottom-pane-resizer__handle">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="halo-bottom-pane-resizer__icon">
                 <circle cx="4" cy="6" r="1" fill="currentColor" />
                 <circle cx="8" cy="6" r="1" fill="currentColor" />
                 <circle cx="12" cy="6" r="1" fill="currentColor" />
@@ -628,9 +628,9 @@ const SessionScene: React.FC<SessionSceneProps> = ({
           <div
             ref={bottomTerminalPaneElementRef}
             className={[
-              'bitfun-session-scene__bottom-terminal-pane',
-              state.layout.bottomTerminalPanelCollapsed && 'bitfun-session-scene__bottom-terminal-pane--collapsed',
-              isDraggingBottom && 'bitfun-session-scene__bottom-terminal-pane--dragging',
+              'halo-session-scene__bottom-terminal-pane',
+              state.layout.bottomTerminalPanelCollapsed && 'halo-session-scene__bottom-terminal-pane--collapsed',
+              isDraggingBottom && 'halo-session-scene__bottom-terminal-pane--dragging',
             ].filter(Boolean).join(' ')}
             style={{
               height: state.layout.bottomTerminalPanelCollapsed ? undefined : `${currentBottomHeight}px`,

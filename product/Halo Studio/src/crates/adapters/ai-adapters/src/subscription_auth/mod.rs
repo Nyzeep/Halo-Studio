@@ -1,6 +1,6 @@
 //! In-app subscription authentication.
 //!
-//! Lets BitFun sign in to another product's subscription (Codex/ChatGPT,
+//! Lets Halo sign in to another product's subscription (Codex/ChatGPT,
 //! Antigravity/Google, OpenCode Zen) with an OpenCode-style in-app OAuth flow,
 //! and use the resulting tokens to authenticate AI requests. Secret material
 //! is stored in the operating-system credential vault; the local JSON file
@@ -30,7 +30,7 @@ use tokio_util::sync::CancellationToken;
 /// Maximum lifetime of a pending login session (matches OpenCode).
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
-/// One of the subscription providers BitFun can sign in to.
+/// One of the subscription providers Halo can sign in to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SubscriptionProvider {
@@ -262,7 +262,7 @@ pub(crate) fn require_current_store_revision(
     match outcome {
         store::ConditionalCommitOutcome::Committed { revision } => Ok(revision),
         store::ConditionalCommitOutcome::Conflict { current_revision } => Err(anyhow!(
-            "{} credentials changed in another BitFun process (current revision {current_revision}); retry the operation",
+            "{} credentials changed in another Halo process (current revision {current_revision}); retry the operation",
             provider.display_label()
         )),
     }
@@ -664,10 +664,10 @@ mod tests {
     use super::store::{self, StoredCredential};
     use super::*;
 
-    const STALE_LOGIN_CHILD_METADATA_ENV: &str = "BITFUN_SUBAUTH_CAS_CHILD_METADATA";
-    const STALE_LOGIN_CHILD_LOADED_ENV: &str = "BITFUN_SUBAUTH_CAS_CHILD_LOADED";
-    const STALE_LOGIN_CHILD_RESUME_ENV: &str = "BITFUN_SUBAUTH_CAS_CHILD_RESUME";
-    const STALE_LOGIN_CHILD_OUTCOME_ENV: &str = "BITFUN_SUBAUTH_CAS_CHILD_OUTCOME";
+    const STALE_LOGIN_CHILD_METADATA_ENV: &str = "HALO_SUBAUTH_CAS_CHILD_METADATA";
+    const STALE_LOGIN_CHILD_LOADED_ENV: &str = "HALO_SUBAUTH_CAS_CHILD_LOADED";
+    const STALE_LOGIN_CHILD_RESUME_ENV: &str = "HALO_SUBAUTH_CAS_CHILD_RESUME";
+    const STALE_LOGIN_CHILD_OUTCOME_ENV: &str = "HALO_SUBAUTH_CAS_CHILD_OUTCOME";
 
     /// Serializes tests that rely on the process-global store path override.
     fn test_lock() -> &'static Mutex<()> {
@@ -676,7 +676,7 @@ mod tests {
     }
 
     fn temp_store_path() -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("bitfun-subauth-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("halo-subauth-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         dir.join("subscription_auth.json")
     }

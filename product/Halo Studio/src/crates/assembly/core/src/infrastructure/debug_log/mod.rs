@@ -15,6 +15,6 @@ pub use types::{
 
 pub use http_server::IngestServerManager;
 
-pub use bitfun_services_integrations::debug_log::{
+pub use halo_services_integrations::debug_log::{
     append_log_async, DebugLogConfig, DebugLogEntry,
 };

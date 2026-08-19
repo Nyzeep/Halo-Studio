@@ -15,12 +15,12 @@ use crate::agentic::tools::tool_context_runtime::ToolUseContext;
 use crate::agentic::tools::tool_result_storage;
 use crate::native_hooks::{self, NativeHookSessionFacts};
 use crate::util::elapsed_ms_u64;
-use crate::util::errors::{BitFunError, BitFunResult};
-use bitfun_agent_runtime::permission::{
+use crate::util::errors::{HaloError, HaloResult};
+use halo_agent_runtime::permission::{
     PendingPermissionReceiver, PermissionRequestManager, PermissionWaitOutcome,
 };
-use bitfun_agent_stream::ToolArgumentRepairKind;
-use bitfun_agent_tools::{
+use halo_agent_stream::ToolArgumentRepairKind;
+use halo_agent_tools::{
     build_invalid_tool_call_error_message, build_normal_tool_json_repair_notice,
     build_permission_denied_tool_presentation, build_tool_execution_error_presentation,
     build_tool_execution_timeout_presentation,
@@ -31,7 +31,7 @@ use bitfun_agent_tools::{
     ResolvedToolInvocation, ToolExecutionAdmissionRejection, ToolExecutionAdmissionRequest,
     ToolExecutionErrorPresentation, GET_TOOL_SPEC_TOOL_NAME, USER_STEERING_INTERRUPTED_MESSAGE,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     wildcard_matches, PermissionEffect, PermissionGrant, PermissionReply, PermissionRequest,
     PermissionRequestSource, PermissionRequestSourceKind, PermissionResourceCaseSensitivity,
     PermissionRule, RoundInjectionToolPreemption,
@@ -186,12 +186,12 @@ fn elapsed_ms_since(time: SystemTime) -> u64 {
         .unwrap_or(0)
 }
 
-fn classify_tool_error(error: &BitFunError) -> &'static str {
+fn classify_tool_error(error: &HaloError) -> &'static str {
     match error {
-        BitFunError::Validation(_) => "invalid_arguments",
-        BitFunError::Cancelled(_) => "cancelled",
-        BitFunError::Timeout(_) => "timeout",
-        BitFunError::NotFound(_) => "not_found",
+        HaloError::Validation(_) => "invalid_arguments",
+        HaloError::Cancelled(_) => "cancelled",
+        HaloError::Timeout(_) => "timeout",
+        HaloError::NotFound(_) => "not_found",
         _ => "execution_error",
     }
 }
@@ -199,7 +199,7 @@ fn classify_tool_error(error: &BitFunError) -> &'static str {
 fn build_error_execution_result(
     task_id: &str,
     task: Option<ToolTask>,
-    error: &BitFunError,
+    error: &HaloError,
 ) -> ToolExecutionResult {
     let (tool_id, wire_tool_name, effective_tool_name, execution_time_ms, provided_arguments) =
         if let Some(task) = task {
@@ -376,20 +376,20 @@ fn build_permission_rejected_tool_result(
 const ROUND_INJECTION_RUNNING_TOOL_CANCELLED_MESSAGE: &str =
     "Tool execution cancelled because a pending round injection requested running-tool preemption for this turn.";
 
-fn should_retry_tool_error(error: &BitFunError) -> bool {
+fn should_retry_tool_error(error: &HaloError) -> bool {
     matches!(
         error,
-        BitFunError::Timeout(_)
-            | BitFunError::Io(_)
-            | BitFunError::Http(_)
-            | BitFunError::Service(_)
-            | BitFunError::MCPError(_)
-            | BitFunError::ProcessError(_)
-            | BitFunError::Other(_)
+        HaloError::Timeout(_)
+            | HaloError::Io(_)
+            | HaloError::Http(_)
+            | HaloError::Service(_)
+            | HaloError::MCPError(_)
+            | HaloError::ProcessError(_)
+            | HaloError::Other(_)
     )
 }
 
-fn classify_tool_retry_error(error: &BitFunError) -> ToolExecutionErrorClass {
+fn classify_tool_retry_error(error: &HaloError) -> ToolExecutionErrorClass {
     if should_retry_tool_error(error) {
         ToolExecutionErrorClass::Retryable
     } else {
@@ -397,14 +397,14 @@ fn classify_tool_retry_error(error: &BitFunError) -> ToolExecutionErrorClass {
     }
 }
 
-fn map_tool_execution_admission_rejection(error: ToolExecutionAdmissionRejection) -> BitFunError {
+fn map_tool_execution_admission_rejection(error: ToolExecutionAdmissionRejection) -> HaloError {
     match error {
         ToolExecutionAdmissionRejection::RuntimeRestriction(error) => error.into(),
         ToolExecutionAdmissionRejection::AllowedList(error) => {
-            BitFunError::Validation(error.to_string())
+            HaloError::Validation(error.to_string())
         }
         ToolExecutionAdmissionRejection::Deferred(error) => {
-            BitFunError::Validation(error.to_string())
+            HaloError::Validation(error.to_string())
         }
     }
 }
@@ -455,10 +455,10 @@ enum PermissionPlanDraft {
 pub fn permission_project_id_for_workspace_identity(
     identity: &crate::service::remote_ssh::workspace_state::WorkspaceSessionIdentity,
     is_remote: bool,
-) -> BitFunResult<String> {
+) -> HaloResult<String> {
     if !is_remote {
         return Ok(
-            bitfun_services_integrations::remote_ssh::paths::local_workspace_stable_storage_id(
+            halo_services_integrations::remote_ssh::paths::local_workspace_stable_storage_id(
                 identity.logical_workspace_path(),
             ),
         );
@@ -466,12 +466,12 @@ pub fn permission_project_id_for_workspace_identity(
 
     if identity.hostname == "_unresolved" {
         let connection_id = identity.remote_connection_id.as_deref().ok_or_else(|| {
-            BitFunError::validation(
+            HaloError::validation(
                 "Unresolved remote workspace permission identity has no connection id".to_string(),
             )
         })?;
         let key =
-            bitfun_services_integrations::remote_ssh::paths::unresolved_remote_session_storage_key(
+            halo_services_integrations::remote_ssh::paths::unresolved_remote_session_storage_key(
                 connection_id,
                 identity.logical_workspace_path(),
             );
@@ -479,23 +479,23 @@ pub fn permission_project_id_for_workspace_identity(
     }
 
     Ok(
-        bitfun_services_integrations::remote_ssh::paths::remote_workspace_stable_id(
+        halo_services_integrations::remote_ssh::paths::remote_workspace_stable_id(
             &identity.hostname,
             identity.logical_workspace_path(),
         ),
     )
 }
 
-fn permission_project_id(context: &ToolUseContext) -> BitFunResult<String> {
+fn permission_project_id(context: &ToolUseContext) -> HaloResult<String> {
     let workspace = context.workspace.as_ref().ok_or_else(|| {
-        BitFunError::validation("A workspace is required for file permissions".to_string())
+        HaloError::validation("A workspace is required for file permissions".to_string())
     })?;
     permission_project_id_for_workspace_identity(&workspace.session_identity, workspace.is_remote())
 }
 
-fn permission_project_path(context: &ToolUseContext) -> BitFunResult<String> {
+fn permission_project_path(context: &ToolUseContext) -> HaloResult<String> {
     let workspace = context.workspace.as_ref().ok_or_else(|| {
-        BitFunError::validation("A workspace is required for file permissions".to_string())
+        HaloError::validation("A workspace is required for file permissions".to_string())
     })?;
     Ok(workspace
         .session_identity
@@ -504,13 +504,13 @@ fn permission_project_path(context: &ToolUseContext) -> BitFunResult<String> {
 }
 
 const ACCOUNT_PERMISSION_SCOPE: &str = "account";
-const ACCOUNT_PERMISSION_PROJECT_ID: &str = "__bitfun_account_actions__";
-const ACCOUNT_PERMISSION_PROJECT_PATH: &str = "BitFun account";
+const ACCOUNT_PERMISSION_PROJECT_ID: &str = "__halo_account_actions__";
+const ACCOUNT_PERMISSION_PROJECT_PATH: &str = "Halo account";
 
 fn permission_scope(
     context: &ToolUseContext,
     intents: &[PermissionIntent],
-) -> BitFunResult<(String, String)> {
+) -> HaloResult<(String, String)> {
     if context.workspace.is_some() {
         return Ok((
             permission_project_id(context)?,
@@ -532,7 +532,7 @@ fn permission_scope(
         ));
     }
 
-    Err(BitFunError::validation(
+    Err(HaloError::validation(
         "A workspace is required for file permissions".to_string(),
     ))
 }
@@ -553,7 +553,7 @@ fn permission_intent_effect(
     grants: &[PermissionGrant],
     case_sensitivity: PermissionResourceCaseSensitivity,
 ) -> PermissionEffect {
-    let evaluator = bitfun_runtime_ports::PermissionEvaluator::new(case_sensitivity);
+    let evaluator = halo_runtime_ports::PermissionEvaluator::new(case_sensitivity);
     let mut aggregate = PermissionEffect::Allow;
 
     for resource in &intent.resources {
@@ -694,7 +694,7 @@ impl ToolPipeline {
         tool_name: String,
         intents: Vec<PermissionIntent>,
         context: ToolUseContext,
-    ) -> BitFunResult<PermissionPlanDraft> {
+    ) -> HaloResult<PermissionPlanDraft> {
         if intents.is_empty() {
             return Ok(PermissionPlanDraft::Allowed);
         }
@@ -717,7 +717,7 @@ impl ToolPipeline {
             Some(ref manager) => manager
                 .list_project_grants(&project_id)
                 .await
-                .map_err(|error| BitFunError::service(error.to_string()))?,
+                .map_err(|error| HaloError::service(error.to_string()))?,
             None => Vec::new(),
         };
         let mut asks = Vec::new();
@@ -777,7 +777,7 @@ impl ToolPipeline {
         }
 
         if manager.is_none() {
-            return Err(BitFunError::service(
+            return Err(HaloError::service(
                 "Permission request manager is unavailable for a file tool request".to_string(),
             ));
         }
@@ -813,9 +813,9 @@ impl ToolPipeline {
         requests: Vec<PermissionRequest>,
         dialog_turn_id: &str,
         auto_approve: bool,
-    ) -> BitFunResult<Vec<PendingPermissionReceiver>> {
+    ) -> HaloResult<Vec<PendingPermissionReceiver>> {
         let manager = self.permission_request_manager.as_ref().ok_or_else(|| {
-            BitFunError::service(
+            HaloError::service(
                 "Permission request manager is unavailable for a file tool request".to_string(),
             )
         })?;
@@ -832,7 +832,7 @@ impl ToolPipeline {
                 .register_batch_for_turn(requests.clone(), dialog_turn_id.to_string())
                 .await
         }
-        .map_err(|error| BitFunError::service(error.to_string()))?;
+        .map_err(|error| HaloError::service(error.to_string()))?;
 
         if auto_approve {
             for request in &requests {
@@ -840,7 +840,7 @@ impl ToolPipeline {
                     .reply(
                         &request.request_id,
                         PermissionReply::Once,
-                        bitfun_runtime_ports::PermissionReplySource::AutoApprove,
+                        halo_runtime_ports::PermissionReplySource::AutoApprove,
                     )
                     .await
                 {
@@ -852,7 +852,7 @@ impl ToolPipeline {
                         "Automatic permission approval failed".to_string(),
                     )
                     .await;
-                    return Err(BitFunError::service(error.to_string()));
+                    return Err(HaloError::service(error.to_string()));
                 }
             }
         }
@@ -964,7 +964,7 @@ impl ToolPipeline {
         });
     }
 
-    async fn prepare_permission_plans(&self, task_ids: &[String]) -> BitFunResult<()> {
+    async fn prepare_permission_plans(&self, task_ids: &[String]) -> HaloResult<()> {
         let mut drafts = Vec::with_capacity(task_ids.len());
         let mut ordered_requests = Vec::new();
 
@@ -1053,7 +1053,7 @@ impl ToolPipeline {
                 .and_then(|task_id| self.state_manager.get_task(task_id))
                 .map(|task| task.context.dialog_turn_id)
                 .ok_or_else(|| {
-                    BitFunError::service("Permission batch lost its owning Dialog Turn".to_string())
+                    HaloError::service("Permission batch lost its owning Dialog Turn".to_string())
                 })?;
             let receivers = self
                 .register_permission_requests(batch_requests, &dialog_turn_id, auto_approve)
@@ -1066,7 +1066,7 @@ impl ToolPipeline {
             for (task_id, draft) in &drafts {
                 if let PermissionPlanDraft::Requests(_) = draft {
                     let receivers = receivers_by_task.remove(task_id).ok_or_else(|| {
-                        BitFunError::service(format!(
+                        HaloError::service(format!(
                             "Permission plan lost its pending receivers for tool task '{task_id}'"
                         ))
                     })?;
@@ -1103,7 +1103,7 @@ impl ToolPipeline {
         &self,
         task_id: &str,
         cancellation_token: &CancellationToken,
-    ) -> BitFunResult<PermissionAuthorization> {
+    ) -> HaloResult<PermissionAuthorization> {
         let Some(plan) = self.permission_plans.lock().await.remove(task_id) else {
             return Ok(PermissionAuthorization::Allowed);
         };
@@ -1116,7 +1116,7 @@ impl ToolPipeline {
         &self,
         plan: PermissionExecutionPlan,
         cancellation_token: &CancellationToken,
-    ) -> BitFunResult<PermissionAuthorization> {
+    ) -> HaloResult<PermissionAuthorization> {
         let receivers = match plan {
             PermissionExecutionPlan::Allowed => return Ok(PermissionAuthorization::Allowed),
             PermissionExecutionPlan::Rejected { reason } => {
@@ -1138,7 +1138,7 @@ impl ToolPipeline {
                         "Tool execution was cancelled".to_string(),
                     )
                     .await;
-                    return Err(BitFunError::Cancelled(
+                    return Err(HaloError::Cancelled(
                         "Tool execution was cancelled while awaiting permission".to_string(),
                     ));
                 }
@@ -1168,7 +1168,7 @@ impl ToolPipeline {
                         "Another permission request for this tool was cancelled".to_string(),
                     )
                     .await;
-                    return Err(BitFunError::Cancelled(reason));
+                    return Err(HaloError::Cancelled(reason));
                 }
             }
 
@@ -1180,7 +1180,7 @@ impl ToolPipeline {
                     "Tool execution was cancelled".to_string(),
                 )
                 .await;
-                return Err(BitFunError::Cancelled(
+                return Err(HaloError::Cancelled(
                     "Tool execution was cancelled after permission reply".to_string(),
                 ));
             }
@@ -1236,7 +1236,7 @@ impl ToolPipeline {
         intents: Vec<PermissionIntent>,
         context: &ToolUseContext,
         cancellation_token: &CancellationToken,
-    ) -> BitFunResult<PermissionAuthorization> {
+    ) -> HaloResult<PermissionAuthorization> {
         let draft = self
             .draft_permission_plan(
                 task.clone(),
@@ -1308,7 +1308,7 @@ impl ToolPipeline {
     fn append_execution_result(
         &self,
         task_id: &str,
-        result: BitFunResult<ToolExecutionResult>,
+        result: HaloResult<ToolExecutionResult>,
         all_results: &mut Vec<ToolExecutionResult>,
     ) {
         match result {
@@ -1328,7 +1328,7 @@ impl ToolPipeline {
     async fn cancel_tools_for_round_injection(
         &self,
         task_ids: impl IntoIterator<Item = String>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         for task_id in task_ids {
             self.cancel_tool(
                 &task_id,
@@ -1373,7 +1373,7 @@ impl ToolPipeline {
         tool_calls: Vec<ToolCall>,
         context: ToolExecutionContext,
         options: ToolExecutionOptions,
-    ) -> BitFunResult<Vec<ToolExecutionResult>> {
+    ) -> HaloResult<Vec<ToolExecutionResult>> {
         if tool_calls.is_empty() {
             return Ok(vec![]);
         }
@@ -1543,7 +1543,7 @@ impl ToolPipeline {
     async fn execute_parallel(
         &self,
         task_ids: Vec<String>,
-    ) -> BitFunResult<Vec<ToolExecutionResult>> {
+    ) -> HaloResult<Vec<ToolExecutionResult>> {
         let batch_interrupt = task_ids
             .first()
             .and_then(|task_id| self.state_manager.get_task(task_id))
@@ -1576,7 +1576,7 @@ impl ToolPipeline {
     async fn execute_sequential(
         &self,
         task_ids: Vec<String>,
-    ) -> BitFunResult<Vec<ToolExecutionResult>> {
+    ) -> HaloResult<Vec<ToolExecutionResult>> {
         let mut results = Vec::new();
 
         let mut task_iter = task_ids.into_iter().peekable();
@@ -1609,7 +1609,7 @@ impl ToolPipeline {
     }
 
     /// Execute single tool
-    async fn execute_single_tool(&self, tool_id: String) -> BitFunResult<ToolExecutionResult> {
+    async fn execute_single_tool(&self, tool_id: String) -> HaloResult<ToolExecutionResult> {
         let start_time = Instant::now();
 
         debug!("Starting tool execution: tool_id={}", tool_id);
@@ -1618,7 +1618,7 @@ impl ToolPipeline {
         let task = self
             .state_manager
             .get_task(&tool_id)
-            .ok_or_else(|| BitFunError::NotFound(format!("Tool task not found: {}", tool_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Tool task not found: {}", tool_id)))?;
 
         let wire_tool_name = task.tool_call.tool_name.clone();
         let tool_name = task.invocation.effective_tool_name.clone();
@@ -1679,7 +1679,7 @@ impl ToolPipeline {
                 )
                 .await;
 
-            return Err(BitFunError::Validation(error_msg));
+            return Err(HaloError::Validation(error_msg));
         }
 
         match repair_kind {
@@ -1745,7 +1745,7 @@ impl ToolPipeline {
         let registered_tool = tool.ok_or_else(|| {
             let error_msg = format!("Tool '{}' is not registered or enabled.", tool_name);
             error!("{}", error_msg);
-            BitFunError::tool(error_msg)
+            HaloError::tool(error_msg)
         })?;
 
         let cancellation_token = CancellationToken::new();
@@ -1773,7 +1773,7 @@ impl ToolPipeline {
                     },
                 )
                 .await;
-            return Err(BitFunError::Validation(error_msg));
+            return Err(HaloError::Validation(error_msg));
         }
         if let Some(message) = validation
             .message
@@ -1869,7 +1869,7 @@ impl ToolPipeline {
                 )
                 .await;
             self.cancellation_tokens.remove(&tool_id);
-            return Err(BitFunError::Cancelled(
+            return Err(HaloError::Cancelled(
                 "Tool was cancelled before execution".to_string(),
             ));
         }
@@ -1978,7 +1978,7 @@ impl ToolPipeline {
                 // Cancellation is a first-class terminal state, not a failure.
                 // Preserve Cancelled here so a late cancel cannot be overwritten
                 // by the generic Failed branch below.
-                if let BitFunError::Cancelled(reason) = &e {
+                if let HaloError::Cancelled(reason) = &e {
                     self.state_manager
                         .update_state(
                             &tool_id,
@@ -2007,7 +2007,7 @@ impl ToolPipeline {
                     return Err(e);
                 }
 
-                if matches!(e, BitFunError::Timeout(_)) {
+                if matches!(e, HaloError::Timeout(_)) {
                     let duration_ms = elapsed_ms_u64(start_time);
                     let presentation = build_tool_execution_timeout_presentation(
                         &tool_name,
@@ -2101,14 +2101,14 @@ impl ToolPipeline {
         task: &ToolTask,
         cancellation_token: CancellationToken,
         tool: Arc<dyn crate::agentic::tools::framework::Tool>,
-    ) -> BitFunResult<ModelToolResult> {
+    ) -> HaloResult<ModelToolResult> {
         let mut attempts = 0;
         let max_attempts = task.options.max_retries + 1;
 
         loop {
             // Check cancellation token
             if cancellation_token.is_cancelled() {
-                return Err(BitFunError::Cancelled(
+                return Err(HaloError::Cancelled(
                     "Tool execution was cancelled".to_string(),
                 ));
             }
@@ -2148,10 +2148,10 @@ impl ToolPipeline {
         task: &ToolTask,
         cancellation_token: CancellationToken,
         tool: Arc<dyn crate::agentic::tools::framework::Tool>,
-    ) -> BitFunResult<ModelToolResult> {
+    ) -> HaloResult<ModelToolResult> {
         // Check cancellation token
         if cancellation_token.is_cancelled() {
-            return Err(BitFunError::Cancelled(
+            return Err(HaloError::Cancelled(
                 "Tool execution was cancelled".to_string(),
             ));
         }
@@ -2182,7 +2182,7 @@ impl ToolPipeline {
                 let result = timeout(timeout_duration, execution_future)
                     .await
                     .map_err(|_| {
-                        BitFunError::Timeout(format!(
+                        HaloError::Timeout(format!(
                             "Tool execution timeout: {}",
                             task.effective_tool_name()
                         ))
@@ -2208,7 +2208,7 @@ impl ToolPipeline {
                 )
             })
             .ok_or_else(|| {
-                BitFunError::Tool(format!(
+                HaloError::Tool(format!(
                     "Tool did not return result: {}",
                     task.effective_tool_name()
                 ))
@@ -2232,7 +2232,7 @@ impl ToolPipeline {
         &self,
         task: &ToolTask,
         results: &[FrameworkToolResult],
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let mut chunks_received = 0;
 
         for result in results {
@@ -2257,7 +2257,7 @@ impl ToolPipeline {
 
                 // Send StreamChunk event
                 let _event_data = ToolEventData::StreamChunk {
-                    identity: bitfun_events::ToolEventIdentity::resolved(
+                    identity: halo_events::ToolEventIdentity::resolved(
                         task.tool_call.tool_id.clone(),
                         task.invocation.wire_tool_name.clone(),
                         task.effective_tool_name().to_string(),
@@ -2271,7 +2271,7 @@ impl ToolPipeline {
     }
 
     /// Cancel tool execution
-    pub async fn cancel_tool(&self, tool_id: &str, reason: String) -> BitFunResult<()> {
+    pub async fn cancel_tool(&self, tool_id: &str, reason: String) -> HaloResult<()> {
         let Some(task) = self.state_manager.get_task(tool_id) else {
             debug!(
                 "Ignoring cancel request for unknown tool: tool_id={}",
@@ -2321,7 +2321,7 @@ impl ToolPipeline {
     }
 
     /// Cancel all tools for a dialog turn
-    pub async fn cancel_dialog_turn_tools(&self, dialog_turn_id: &str) -> BitFunResult<()> {
+    pub async fn cancel_dialog_turn_tools(&self, dialog_turn_id: &str) -> HaloResult<()> {
         info!(
             "Cancelling all tools for dialog turn: dialog_turn_id={}",
             dialog_turn_id
@@ -2372,10 +2372,10 @@ mod tests {
     use crate::agentic::tools::ToolRuntimeRestrictions;
     use crate::agentic::WorkspaceBinding;
     use async_trait::async_trait;
-    use bitfun_agent_tools::{
+    use halo_agent_tools::{
         LoadedDeferredToolSpec, CALL_DEFERRED_TOOL_NAME, USER_REJECTED_TOOL_MESSAGE,
     };
-    use bitfun_runtime_ports::{
+    use halo_runtime_ports::{
         ClockPort, PermissionAuditEvent, PermissionAuditRecord, PermissionAuditStorePort,
         PermissionGrant, PermissionGrantKey, PermissionGrantStorePort, PermissionPolicyPreset,
         PermissionReplyStorePort, PortResult, RoundInjection, RoundInjectionExecutionPolicy,
@@ -2588,7 +2588,7 @@ mod tests {
             true
         }
 
-        async fn description(&self) -> BitFunResult<String> {
+        async fn description(&self) -> HaloResult<String> {
             Ok("File permission test tool".to_string())
         }
 
@@ -2604,7 +2604,7 @@ mod tests {
             &self,
             _input: &serde_json::Value,
             _context: &ToolUseContext,
-        ) -> BitFunResult<Vec<PermissionIntent>> {
+        ) -> HaloResult<Vec<PermissionIntent>> {
             Ok(self.intents.clone())
         }
 
@@ -2612,7 +2612,7 @@ mod tests {
             &self,
             _input: &serde_json::Value,
             _context: &ToolUseContext,
-        ) -> BitFunResult<Vec<ToolResult>> {
+        ) -> HaloResult<Vec<ToolResult>> {
             self.call_count.fetch_add(1, Ordering::SeqCst);
             Ok(vec![ToolResult::Result {
                 data: json!({ "written": true }),
@@ -2734,7 +2734,7 @@ mod tests {
             &self.name
         }
 
-        async fn description(&self) -> BitFunResult<String> {
+        async fn description(&self) -> HaloResult<String> {
             Ok("capturing test tool".to_string())
         }
 
@@ -2779,7 +2779,7 @@ mod tests {
             &self,
             input: &serde_json::Value,
             _context: &ToolUseContext,
-        ) -> BitFunResult<Vec<ToolResult>> {
+        ) -> HaloResult<Vec<ToolResult>> {
             *self
                 .received_arguments
                 .lock()
@@ -2798,7 +2798,7 @@ mod tests {
             &self.name
         }
 
-        async fn description(&self) -> BitFunResult<String> {
+        async fn description(&self) -> HaloResult<String> {
             Ok("static test tool".to_string())
         }
 
@@ -2831,7 +2831,7 @@ mod tests {
             &self,
             _input: &serde_json::Value,
             _context: &ToolUseContext,
-        ) -> BitFunResult<Vec<ToolResult>> {
+        ) -> HaloResult<Vec<ToolResult>> {
             if self.delay_ms > 0 {
                 sleep(Duration::from_millis(self.delay_ms)).await;
             }
@@ -2879,7 +2879,7 @@ mod tests {
             context_vars: HashMap::new(),
             subagent_parent_info: None,
             permission_delegation: None,
-            delegation_policy: bitfun_runtime_ports::DelegationPolicy::top_level(),
+            delegation_policy: halo_runtime_ports::DelegationPolicy::top_level(),
             deferred_tools: Vec::new(),
             loaded_deferred_tool_specs: Vec::new(),
             allowed_tools: Vec::new(),
@@ -3000,7 +3000,7 @@ mod tests {
         let mut context = test_tool_execution_context();
         context.workspace = Some(WorkspaceBinding::new(
             None,
-            std::env::temp_dir().join("bitfun-permission-test"),
+            std::env::temp_dir().join("halo-permission-test"),
         ));
         context
     }
@@ -3075,7 +3075,7 @@ mod tests {
 
     async fn wait_for_permission_request(
         manager: &PermissionRequestManager,
-    ) -> bitfun_runtime_ports::PermissionRequest {
+    ) -> halo_runtime_ports::PermissionRequest {
         for _ in 0..100 {
             if let Some(request) = manager.pending_requests().into_iter().next() {
                 return request;
@@ -3088,7 +3088,7 @@ mod tests {
     async fn wait_for_permission_request_count(
         manager: &PermissionRequestManager,
         expected: usize,
-    ) -> Vec<bitfun_runtime_ports::PermissionRequest> {
+    ) -> Vec<halo_runtime_ports::PermissionRequest> {
         for _ in 0..100 {
             let requests = manager.pending_requests();
             if requests.len() >= expected {
@@ -3283,7 +3283,7 @@ mod tests {
         let requests = wait_for_permission_request_count(&manager, 2).await;
         assert_eq!(requests.len(), 2);
         let expected_project_path = std::env::temp_dir()
-            .join("bitfun-permission-test")
+            .join("halo-permission-test")
             .to_string_lossy()
             .to_string();
         assert_eq!(
@@ -3302,7 +3302,7 @@ mod tests {
         .zip(requests.iter())
         {
             match event {
-                bitfun_runtime_ports::PermissionRequestEvent::Asked { request } => {
+                halo_runtime_ports::PermissionRequestEvent::Asked { request } => {
                     assert_eq!(request.request_id, expected_request.request_id);
                 }
                 other => panic!("expected asked event, got {other:?}"),
@@ -3321,7 +3321,7 @@ mod tests {
             .reply(
                 &rejected_request.request_id,
                 PermissionReply::Reject { feedback: None },
-                bitfun_runtime_ports::PermissionReplySource::User,
+                halo_runtime_ports::PermissionReplySource::User,
             )
             .await
             .expect("reject one tool");
@@ -3338,7 +3338,7 @@ mod tests {
             .reply(
                 &sibling_request.request_id,
                 PermissionReply::Once,
-                bitfun_runtime_ports::PermissionReplySource::User,
+                halo_runtime_ports::PermissionReplySource::User,
             )
             .await
             .expect("allow sibling tool");
@@ -3392,7 +3392,7 @@ mod tests {
                 PermissionReply::Reject {
                     feedback: Some("Use a read-only path".to_string()),
                 },
-                bitfun_runtime_ports::PermissionReplySource::User,
+                halo_runtime_ports::PermissionReplySource::User,
             )
             .await
             .expect("reject request with feedback");
@@ -3461,7 +3461,7 @@ mod tests {
             .reply(
                 &request.request_id,
                 PermissionReply::Once,
-                bitfun_runtime_ports::PermissionReplySource::User,
+                halo_runtime_ports::PermissionReplySource::User,
             )
             .await
             .expect("allow child request");
@@ -3491,7 +3491,7 @@ mod tests {
         let mut context = permission_test_context();
         context.session_id = "subagent-session".to_string();
         context.agent_type = "Explore".to_string();
-        context.permission_delegation = Some(bitfun_runtime_ports::PermissionDelegationContext {
+        context.permission_delegation = Some(halo_runtime_ports::PermissionDelegationContext {
             parent_session_id: "parent-session".to_string(),
             parent_dialog_turn_id: None,
             parent_tool_call_id: "parent-task-call".to_string(),
@@ -3522,7 +3522,7 @@ mod tests {
             .reply(
                 &request.request_id,
                 PermissionReply::Once,
-                bitfun_runtime_ports::PermissionReplySource::User,
+                halo_runtime_ports::PermissionReplySource::User,
             )
             .await
             .expect("allow child request");
@@ -3566,7 +3566,7 @@ mod tests {
             .reply(
                 &request.request_id,
                 PermissionReply::Once,
-                bitfun_runtime_ports::PermissionReplySource::User,
+                halo_runtime_ports::PermissionReplySource::User,
             )
             .await
             .expect("once reply");
@@ -3588,7 +3588,7 @@ mod tests {
             .reply(
                 &request.request_id,
                 PermissionReply::Always,
-                bitfun_runtime_ports::PermissionReplySource::User,
+                halo_runtime_ports::PermissionReplySource::User,
             )
             .await
             .expect("always reply");
@@ -3617,7 +3617,7 @@ mod tests {
         let mut other_project_context = permission_test_context();
         other_project_context.workspace = Some(WorkspaceBinding::new(
             None,
-            std::env::temp_dir().join("bitfun-permission-other-project"),
+            std::env::temp_dir().join("halo-permission-other-project"),
         ));
         let other_pipeline = pipeline.clone();
         let other_project = tokio::spawn(async move {
@@ -3643,7 +3643,7 @@ mod tests {
             .reply(
                 &other_request.request_id,
                 PermissionReply::Reject { feedback: None },
-                bitfun_runtime_ports::PermissionReplySource::User,
+                halo_runtime_ports::PermissionReplySource::User,
             )
             .await
             .expect("reject other project request");
@@ -3691,7 +3691,7 @@ mod tests {
             .reply(
                 &remote_request.request_id,
                 PermissionReply::Reject { feedback: None },
-                bitfun_runtime_ports::PermissionReplySource::User,
+                halo_runtime_ports::PermissionReplySource::User,
             )
             .await
             .expect("reject remote project request");
@@ -3768,7 +3768,7 @@ mod tests {
             audit[1].event,
             PermissionAuditEvent::Replied {
                 reply: PermissionReply::Once,
-                source: bitfun_runtime_ports::PermissionReplySource::AutoApprove,
+                source: halo_runtime_ports::PermissionReplySource::AutoApprove,
             }
         ));
         assert!(matches!(
@@ -4075,7 +4075,7 @@ mod tests {
         let result = build_error_execution_result(
             "tool_1",
             Some(task),
-            &BitFunError::Validation("Arguments are invalid JSON.".to_string()),
+            &HaloError::Validation("Arguments are invalid JSON.".to_string()),
         );
 
         assert_eq!(

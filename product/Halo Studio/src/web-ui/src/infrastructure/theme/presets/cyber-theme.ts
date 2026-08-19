@@ -31,13 +31,13 @@ const CYBER_SURFACE_SECONDARY = '#1c1c1f';
 
 const cyberAccent = (alpha: number | string) => rgbaFromHex(CYBER_ACCENT, alpha);
 
-export const bitfunCyberTheme: ThemeConfig = {
+export const haloCyberTheme: ThemeConfig = {
 
-  id: 'bitfun-cyber',
+  id: 'halo-cyber',
   name: 'Cyber',
   type: 'dark',
   description: 'Tech-style theme - Deep black hole, neon future, ultimate tech aesthetics',
-  author: 'BitFun Team',
+  author: 'Halo Studio Team',
   version: '1.0.0',
 
 

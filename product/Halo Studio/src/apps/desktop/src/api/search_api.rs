@@ -1,7 +1,7 @@
 use crate::api::app_state::AppState;
-use bitfun_core::infrastructure::{FileSearchResult, FileSearchResultGroup, SearchMatchType};
-use bitfun_core::service::remote_ssh::workspace_state::{is_remote_path, lookup_remote_connection};
-use bitfun_core::service::search::{
+use halo_core::infrastructure::{FileSearchResult, FileSearchResultGroup, SearchMatchType};
+use halo_core::service::remote_ssh::workspace_state::{is_remote_path, lookup_remote_connection};
+use halo_core::service::search::{
     remote_workspace_search_service_for_path, workspace_search_daemon_available,
     workspace_search_feature_enabled, ContentSearchRequest, ContentSearchResult,
     RemoteWorkspaceSearchService, WorkspaceSearchBackend, WorkspaceSearchRepoPhase,
@@ -29,7 +29,7 @@ pub struct SearchMetadataResponse {
 
 #[derive(Clone)]
 pub(crate) enum WorkspaceContentSearchRunner {
-    Local(Arc<bitfun_core::service::search::WorkspaceSearchService>),
+    Local(Arc<halo_core::service::search::WorkspaceSearchService>),
     Remote(RemoteWorkspaceSearchService),
 }
 
@@ -58,11 +58,11 @@ pub(crate) async fn remote_workspace_search_service(
         .get_remote_workspace_async()
         .await
         .and_then(|workspace| {
-            let remote_root = bitfun_core::service::remote_ssh::normalize_remote_workspace_path(
+            let remote_root = halo_core::service::remote_ssh::normalize_remote_workspace_path(
                 &workspace.remote_path,
             );
             let root_path =
-                bitfun_core::service::remote_ssh::normalize_remote_workspace_path(root_path);
+                halo_core::service::remote_ssh::normalize_remote_workspace_path(root_path);
             if root_path == remote_root || root_path.starts_with(&format!("{remote_root}/")) {
                 Some(workspace.connection_id)
             } else {
@@ -79,7 +79,7 @@ async fn workspace_search_unavailable_message(
 ) -> Option<String> {
     if is_remote_path(root_path.trim()).await {
         if lookup_remote_connection(root_path.trim()).await.is_none() {
-            return Some("Remote workspace is not registered with BitFun SSH state".to_string());
+            return Some("Remote workspace is not registered with Halo SSH state".to_string());
         }
         if state.get_ssh_manager_async().await.is_err()
             || state.get_remote_file_service_async().await.is_err()
@@ -97,7 +97,7 @@ async fn workspace_search_unavailable_message(
 
     if !workspace_search_daemon_available() {
         return Some(
-            "Workspace search daemon is unavailable. BitFun will continue using legacy search."
+            "Workspace search daemon is unavailable. Halo will continue using legacy search."
                 .to_string(),
         );
     }
@@ -137,7 +137,7 @@ pub(crate) async fn search_file_contents_via_workspace_search(
     use_regex: bool,
     whole_word: bool,
     max_results: usize,
-) -> Result<bitfun_core::service::search::ContentSearchResult, String> {
+) -> Result<halo_core::service::search::ContentSearchResult, String> {
     search_content_request_via_workspace_search(
         state,
         build_content_search_request(
@@ -164,7 +164,7 @@ pub(crate) fn build_content_search_request(
         repo_root: root_path.into(),
         search_path: None,
         pattern: pattern.to_string(),
-        output_mode: bitfun_core::service::search::ContentSearchOutputMode::Content,
+        output_mode: halo_core::service::search::ContentSearchOutputMode::Content,
         case_sensitive,
         use_regex,
         whole_word,

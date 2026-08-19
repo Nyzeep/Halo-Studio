@@ -34,7 +34,7 @@ const FileViewerScene = lazy(() => import('./file-viewer/FileViewerScene'));
 const ShellScene      = lazy(() => import('./shell/ShellScene'));
 const WelcomeScene    = lazy(() => import('./welcome/WelcomeScene'));
 
-// Keep in sync with bitfun-motion-view-exit in app/styles/motion.scss.
+// Keep in sync with halo-motion-view-exit in app/styles/motion.scss.
 const SCENE_EXIT_DURATION_MS = 140;
 
 interface SceneTransition {
@@ -144,20 +144,20 @@ const SceneViewport: React.FC<SceneViewportProps> = ({ workspacePath, isEntering
   // All tabs closed — show empty state
   if (openTabs.length === 0) {
     return (
-      <div className="bitfun-scene-viewport" data-testid="scene-viewport">
+      <div className="halo-scene-viewport" data-testid="scene-viewport">
         <div
-          className="bitfun-scene-viewport__clip bitfun-scene-viewport__clip--empty"
+          className="halo-scene-viewport__clip halo-scene-viewport__clip--empty"
           data-testid="scene-viewport-empty"
         >
-          <p className="bitfun-scene-viewport__empty-hint">{t('welcomeScene.emptyHint')}</p>
+          <p className="halo-scene-viewport__empty-hint">{t('welcomeScene.emptyHint')}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bitfun-scene-viewport" data-testid="scene-viewport">
-      <div className="bitfun-scene-viewport__clip" data-testid="scene-viewport-clip">
+    <div className="halo-scene-viewport" data-testid="scene-viewport">
+      <div className="halo-scene-viewport__clip" data-testid="scene-viewport-clip">
         {renderedTabIds.map(tabId => {
           const isActive = tabId === activeTabId;
           const isOutgoing = !isActive && tabId === outgoingTabId;
@@ -166,10 +166,10 @@ const SceneViewport: React.FC<SceneViewportProps> = ({ workspacePath, isEntering
             <div
               key={tabId}
               className={[
-                'bitfun-scene-viewport__scene',
-                isActive && 'bitfun-scene-viewport__scene--active',
-                isOutgoing && 'bitfun-scene-viewport__scene--outgoing',
-                isExiting && 'bitfun-scene-viewport__scene--exiting',
+                'halo-scene-viewport__scene',
+                isActive && 'halo-scene-viewport__scene--active',
+                isOutgoing && 'halo-scene-viewport__scene--outgoing',
+                isExiting && 'halo-scene-viewport__scene--exiting',
               ].filter(Boolean).join(' ')}
               aria-hidden={!isActive}
               data-testid="scene-viewport-scene"
@@ -181,7 +181,7 @@ const SceneViewport: React.FC<SceneViewportProps> = ({ workspacePath, isEntering
                 fallback={
                   isActive ? (
                     <div
-                      className="bitfun-scene-viewport__lazy-fallback"
+                      className="halo-scene-viewport__lazy-fallback"
                       role="status"
                       aria-busy="true"
                       aria-label={t('loading.scenes')}

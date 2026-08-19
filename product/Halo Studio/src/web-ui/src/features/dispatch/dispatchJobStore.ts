@@ -324,7 +324,7 @@ export const useDispatchJobStore = create<DispatchJobStoreState>()(
       clear: () => set({ jobs: {}, transportByJobId: {}, dismissedJobIds: [] }),
     }),
     {
-      name: 'bitfun-dispatch-jobs-v1',
+      name: 'halo-dispatch-jobs-v1',
       version: 1,
       storage: createJSONStorage(() => (
         typeof localStorage === 'undefined' ? fallbackStorage : localStorage

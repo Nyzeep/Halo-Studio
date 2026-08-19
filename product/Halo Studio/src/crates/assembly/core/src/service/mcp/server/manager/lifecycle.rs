@@ -1,10 +1,10 @@
 use super::*;
-use bitfun_services_integrations::mcp::server::{
+use halo_services_integrations::mcp::server::{
     mcp_server_is_running, mcp_should_start_after_config_update, resolve_mcp_local_command,
 };
 
 impl MCPServerManager {
-    async fn runtime_server_config(&self, server_id: &str) -> BitFunResult<MCPServerConfig> {
+    async fn runtime_server_config(&self, server_id: &str) -> HaloResult<MCPServerConfig> {
         if let Some(config) = self.config_service.get_server_config(server_id).await? {
             return Ok(config);
         }
@@ -13,18 +13,18 @@ impl MCPServerManager {
             .get_runtime_config(server_id)
             .await
             .ok_or_else(|| {
-                BitFunError::NotFound(format!("MCP server config not found: {}", server_id))
+                HaloError::NotFound(format!("MCP server config not found: {}", server_id))
             })
     }
 
-    fn resolve_local_command(command: &str) -> BitFunResult<(String, &'static str)> {
+    fn resolve_local_command(command: &str) -> HaloResult<(String, &'static str)> {
         let runtime_root = crate::infrastructure::get_path_manager_arc().managed_runtimes_dir();
         let resolved = resolve_mcp_local_command(command, runtime_root)?;
         Ok((resolved.command, resolved.source_label))
     }
 
     /// Initializes all servers.
-    pub async fn initialize_all(&self) -> BitFunResult<()> {
+    pub async fn initialize_all(&self) -> HaloResult<()> {
         info!("Initializing all MCP servers");
         let _lifecycle_guard = self.ephemeral_lifecycle.lock().await;
 
@@ -116,7 +116,7 @@ impl MCPServerManager {
     /// Initializes servers without shutting down existing ones.
     ///
     /// This is safe to call multiple times (e.g., from multiple frontend windows).
-    pub async fn initialize_non_destructive(&self) -> BitFunResult<()> {
+    pub async fn initialize_non_destructive(&self) -> HaloResult<()> {
         info!("Initializing MCP servers (non-destructive)");
 
         let configs = self.config_service.load_all_configs().await?;
@@ -162,7 +162,7 @@ impl MCPServerManager {
     ///
     /// This is useful after config changes (e.g. importing MCP servers) where the registry
     /// hasn't been re-initialized yet.
-    pub async fn ensure_registered(&self, server_id: &str) -> BitFunResult<()> {
+    pub async fn ensure_registered(&self, server_id: &str) -> HaloResult<()> {
         if self.runtime.contains(server_id).await {
             return Ok(());
         }
@@ -178,7 +178,7 @@ impl MCPServerManager {
     }
 
     /// Starts a server.
-    pub async fn start_server(&self, server_id: &str) -> BitFunResult<()> {
+    pub async fn start_server(&self, server_id: &str) -> HaloResult<()> {
         self.start_server_with_external_token(server_id, None).await
     }
 
@@ -186,7 +186,7 @@ impl MCPServerManager {
         &self,
         server_id: &str,
         expected_external_start_token: Option<Arc<()>>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.start_reconnect_monitor_if_needed();
         info!("Starting MCP server: id={}", server_id);
 
@@ -199,7 +199,7 @@ impl MCPServerManager {
 
         if !config.enabled {
             warn!("MCP server is disabled: id={}", server_id);
-            return Err(BitFunError::Configuration(format!(
+            return Err(HaloError::Configuration(format!(
                 "MCP server is disabled: {}",
                 server_id
             )));
@@ -209,7 +209,7 @@ impl MCPServerManager {
 
         let process = self.runtime.get_process(server_id).await.ok_or_else(|| {
             error!("MCP server not registered: id={}", server_id);
-            BitFunError::NotFound(format!("MCP server not registered: {}", server_id))
+            HaloError::NotFound(format!("MCP server not registered: {}", server_id))
         })?;
 
         let mut proc = process.write().await;
@@ -224,7 +224,7 @@ impl MCPServerManager {
             super::super::MCPServerType::Local => {
                 let command = config.command.as_ref().ok_or_else(|| {
                     error!("Missing command for local MCP server: id={}", server_id);
-                    BitFunError::Configuration("Missing command for local MCP server".to_string())
+                    HaloError::Configuration("Missing command for local MCP server".to_string())
                 })?;
 
                 let (resolved_command, source_label) = Self::resolve_local_command(command)?;
@@ -258,7 +258,7 @@ impl MCPServerManager {
                         server_id,
                         transport.as_str()
                     );
-                    return Err(BitFunError::NotImplemented(format!(
+                    return Err(HaloError::NotImplemented(format!(
                         "Remote MCP transport '{}' is not yet supported",
                         transport.as_str()
                     )));
@@ -266,7 +266,7 @@ impl MCPServerManager {
 
                 config.url.as_ref().ok_or_else(|| {
                     error!("Missing URL for remote MCP server: id={}", server_id);
-                    BitFunError::Configuration("Missing URL for remote MCP server".to_string())
+                    HaloError::Configuration("Missing URL for remote MCP server".to_string())
                 })?;
 
                 info!(
@@ -306,7 +306,7 @@ impl MCPServerManager {
                 .await
                 .contains_key(server_id),
         ) {
-            return Err(BitFunError::Configuration(format!(
+            return Err(HaloError::Configuration(format!(
                 "External MCP server was retired during startup: {}",
                 server_id
             )));
@@ -314,7 +314,7 @@ impl MCPServerManager {
         if let Some(expected_token) = expected_external_start_token.as_ref() {
             let start_tokens = self.ephemeral_start_tokens.read().await;
             if !external_start_token_is_current(start_tokens.get(server_id), expected_token) {
-                return Err(BitFunError::Configuration(format!(
+                return Err(HaloError::Configuration(format!(
                     "External MCP server startup was superseded: {}",
                     server_id
                 )));
@@ -363,7 +363,7 @@ impl MCPServerManager {
                 server_id
             );
             if external_workspace_scope.is_some() {
-                return Err(BitFunError::MCPError(
+                return Err(HaloError::MCPError(
                     "External MCP server did not establish a connection".to_string(),
                 ));
             }
@@ -375,14 +375,14 @@ impl MCPServerManager {
     }
 
     /// Stops a server.
-    pub async fn stop_server(&self, server_id: &str) -> BitFunResult<()> {
+    pub async fn stop_server(&self, server_id: &str) -> HaloResult<()> {
         info!("Stopping MCP server: id={}", server_id);
 
         self.stop_connection_event_listener(server_id).await;
 
         let process =
             self.runtime.get_process(server_id).await.ok_or_else(|| {
-                BitFunError::NotFound(format!("MCP server not found: {}", server_id))
+                HaloError::NotFound(format!("MCP server not found: {}", server_id))
             })?;
 
         let mut proc = process.write().await;
@@ -397,7 +397,7 @@ impl MCPServerManager {
     }
 
     /// Restarts a server.
-    pub async fn restart_server(&self, server_id: &str) -> BitFunResult<()> {
+    pub async fn restart_server(&self, server_id: &str) -> HaloResult<()> {
         info!("Restarting MCP server: id={}", server_id);
 
         let config = self.runtime_server_config(server_id).await?;
@@ -407,14 +407,14 @@ impl MCPServerManager {
                 self.ensure_registered(server_id).await?;
 
                 let process = self.runtime.get_process(server_id).await.ok_or_else(|| {
-                    BitFunError::NotFound(format!("MCP server not found: {}", server_id))
+                    HaloError::NotFound(format!("MCP server not found: {}", server_id))
                 })?;
                 let mut proc = process.write().await;
 
                 let command = config
                     .command
                     .as_ref()
-                    .ok_or_else(|| BitFunError::Configuration("Missing command".to_string()))?;
+                    .ok_or_else(|| HaloError::Configuration("Missing command".to_string()))?;
                 proc.restart_with_environment_policy(
                     command,
                     &config.args,
@@ -435,14 +435,14 @@ impl MCPServerManager {
     }
 
     /// Returns server status.
-    pub async fn get_server_status(&self, server_id: &str) -> BitFunResult<MCPServerStatus> {
+    pub async fn get_server_status(&self, server_id: &str) -> HaloResult<MCPServerStatus> {
         if !self.runtime.contains(server_id).await {
             let _ = self.ensure_registered(server_id).await;
         }
 
         let process =
             self.runtime.get_process(server_id).await.ok_or_else(|| {
-                BitFunError::NotFound(format!("MCP server not found: {}", server_id))
+                HaloError::NotFound(format!("MCP server not found: {}", server_id))
             })?;
 
         let proc = process.read().await;
@@ -450,14 +450,14 @@ impl MCPServerManager {
     }
 
     /// Returns the current status detail/message for one server.
-    pub async fn get_server_status_message(&self, server_id: &str) -> BitFunResult<Option<String>> {
+    pub async fn get_server_status_message(&self, server_id: &str) -> HaloResult<Option<String>> {
         if !self.runtime.contains(server_id).await {
             let _ = self.ensure_registered(server_id).await;
         }
 
         let process =
             self.runtime.get_process(server_id).await.ok_or_else(|| {
-                BitFunError::NotFound(format!("MCP server not found: {}", server_id))
+                HaloError::NotFound(format!("MCP server not found: {}", server_id))
             })?;
 
         let proc = process.read().await;
@@ -480,7 +480,7 @@ impl MCPServerManager {
     }
 
     /// Adds a server.
-    pub async fn add_server(&self, config: MCPServerConfig) -> BitFunResult<()> {
+    pub async fn add_server(&self, config: MCPServerConfig) -> HaloResult<()> {
         config.validate()?;
 
         if self
@@ -489,7 +489,7 @@ impl MCPServerManager {
             .await?
             .is_some()
         {
-            return Err(BitFunError::Configuration(format!(
+            return Err(HaloError::Configuration(format!(
                 "MCP server already exists: {}",
                 config.id
             )));
@@ -509,12 +509,12 @@ impl MCPServerManager {
     }
 
     /// Adds a runtime-only MCP server without saving it to user or project config.
-    pub async fn add_ephemeral_server(&self, config: MCPServerConfig) -> BitFunResult<()> {
+    pub async fn add_ephemeral_server(&self, config: MCPServerConfig) -> HaloResult<()> {
         config.validate()?;
 
         let server_id = config.id.clone();
         if self.runtime.contains(&server_id).await {
-            return Err(BitFunError::Configuration(format!(
+            return Err(HaloError::Configuration(format!(
                 "MCP server already exists: {}",
                 server_id
             )));
@@ -559,7 +559,7 @@ impl MCPServerManager {
         &self,
         config: MCPServerConfig,
         workspace_key: String,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         config.validate()?;
         let _lifecycle_guard = self.ephemeral_lifecycle.lock().await;
         let server_id = config.id.clone();
@@ -617,7 +617,7 @@ impl MCPServerManager {
                     .insert(server_id.clone());
             } else {
                 let _ = self.remove_ephemeral_server(&server_id).await;
-                return Err(BitFunError::MCPError(
+                return Err(HaloError::MCPError(
                     "External MCP server did not retain its connection".to_string(),
                 ));
             }
@@ -629,7 +629,7 @@ impl MCPServerManager {
                 .await
                 .remove(&server_id);
             self.ephemeral_start_tokens.write().await.remove(&server_id);
-            return Err(BitFunError::Configuration(format!(
+            return Err(HaloError::Configuration(format!(
                 "MCP server already exists: {}",
                 server_id
             )));
@@ -710,7 +710,7 @@ impl MCPServerManager {
     /// Withdraws new tool/resource access immediately, then lets already-held
     /// connection users finish before the process is reclaimed. The grace is
     /// bounded so a deleted or malicious server cannot remain indefinitely.
-    pub async fn retire_external_ephemeral_server(&self, server_id: &str) -> BitFunResult<()> {
+    pub async fn retire_external_ephemeral_server(&self, server_id: &str) -> HaloResult<()> {
         const RETIREMENT_GRACE: std::time::Duration = std::time::Duration::from_secs(30);
         const RETIREMENT_RECLAIM_ATTEMPTS: usize = 3;
         const RETIREMENT_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(250);
@@ -829,7 +829,7 @@ impl MCPServerManager {
     }
 
     /// Removes a runtime-only MCP server and its registered tools without touching persisted config.
-    pub async fn remove_ephemeral_server(&self, server_id: &str) -> BitFunResult<()> {
+    pub async fn remove_ephemeral_server(&self, server_id: &str) -> HaloResult<()> {
         info!("Removing ephemeral MCP server: id={}", server_id);
 
         if !self.runtime.contains(server_id).await {
@@ -866,7 +866,7 @@ impl MCPServerManager {
     }
 
     /// Removes a server.
-    pub async fn remove_server(&self, server_id: &str) -> BitFunResult<()> {
+    pub async fn remove_server(&self, server_id: &str) -> HaloResult<()> {
         info!("Removing MCP server: id={}", server_id);
 
         let _ = self.clear_remote_oauth_credentials(server_id).await;
@@ -893,7 +893,7 @@ impl MCPServerManager {
     }
 
     /// Updates server configuration.
-    pub async fn update_server_config(&self, config: MCPServerConfig) -> BitFunResult<()> {
+    pub async fn update_server_config(&self, config: MCPServerConfig) -> HaloResult<()> {
         config.validate()?;
 
         self.config_service.save_server_config(&config).await?;
@@ -921,7 +921,7 @@ impl MCPServerManager {
         &self,
         server_id: &str,
         authorization_value: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.clear_remote_oauth_credentials(server_id).await?;
         let config = self
             .config_service
@@ -939,7 +939,7 @@ impl MCPServerManager {
     }
 
     /// Clears remote MCP authorization and stops the current connection so stale credentials are dropped.
-    pub async fn clear_remote_server_auth(&self, server_id: &str) -> BitFunResult<()> {
+    pub async fn clear_remote_server_auth(&self, server_id: &str) -> HaloResult<()> {
         self.clear_remote_oauth_credentials(server_id).await?;
         self.config_service
             .clear_remote_authorization(server_id)
@@ -950,7 +950,7 @@ impl MCPServerManager {
     }
 
     /// Shuts down all servers.
-    pub async fn shutdown(&self) -> BitFunResult<()> {
+    pub async fn shutdown(&self) -> HaloResult<()> {
         info!("Shutting down all MCP servers");
 
         for (_, cancelled) in self.ephemeral_retirements.write().await.drain() {

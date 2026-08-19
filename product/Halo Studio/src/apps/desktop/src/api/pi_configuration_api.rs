@@ -6,7 +6,7 @@
 
 use std::fmt;
 
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     PiCredentialSecret, PiProviderReadiness, PiRuntimeConfiguration, PiRuntimeConfigurationView,
     PortError, PortErrorKind,
 };

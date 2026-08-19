@@ -258,7 +258,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!(
-            "bitfun-product-domains-{label}-{}-{nanos}",
+            "halo-product-domains-{label}-{}-{nanos}",
             std::process::id()
         ))
     }

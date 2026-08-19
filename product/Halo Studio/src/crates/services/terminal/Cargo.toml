@@ -10,7 +10,7 @@ name = "terminal_core"
 path = "src/lib.rs"
 
 [dependencies]
-bitfun-runtime-ports = { path = "../../contracts/runtime-ports" }
+halo-runtime-ports = { path = "../../contracts/runtime-ports" }
 
 # Async runtime
 tokio = { workspace = true }

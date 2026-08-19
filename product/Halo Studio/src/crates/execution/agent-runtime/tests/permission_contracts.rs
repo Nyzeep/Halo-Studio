@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use bitfun_agent_runtime::permission::{
+use halo_agent_runtime::permission::{
     PermissionRequestManager, PermissionRequestManagerError, PermissionWaitOutcome,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     ClockPort, PermissionAuditRecord, PermissionAuditStorePort, PermissionGrant,
     PermissionGrantKey, PermissionGrantStorePort, PermissionReply, PermissionReplySource,
     PermissionReplyStorePort, PermissionRequest, PermissionRequestEvent, PermissionRequestSource,

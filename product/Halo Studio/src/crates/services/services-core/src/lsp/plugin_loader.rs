@@ -7,7 +7,7 @@ use log::{debug, error, info, warn};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
-use bitfun_core_types::lsp::LspPlugin;
+use halo_core_types::lsp::LspPlugin;
 
 /// Plugin loader.
 pub struct PluginLoader {

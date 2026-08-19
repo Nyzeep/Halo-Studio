@@ -209,10 +209,10 @@ impl AgentRegistry {
     }
 }
 
-impl bitfun_agent_runtime::sdk::RuntimeAgentRegistry for AgentRegistry {
+impl halo_agent_runtime::sdk::RuntimeAgentRegistry for AgentRegistry {
     fn agent_ids(
         &self,
-        query: bitfun_agent_runtime::sdk::RuntimeAgentRegistryQuery<'_>,
+        query: halo_agent_runtime::sdk::RuntimeAgentRegistryQuery<'_>,
     ) -> Vec<String> {
         let mut ids = self.read_agents().keys().cloned().collect::<Vec<_>>();
         if let Some(workspace_root) = query.workspace_root {

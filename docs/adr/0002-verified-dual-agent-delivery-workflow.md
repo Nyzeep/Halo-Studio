@@ -2,7 +2,7 @@
 status: superseded by ADR-0072 for P0 executor scope
 ---
 
-> Historical dual-executor context. The current P0 vertical slice uses only the Pi RPC Adapter; historical OpenCode Server, BitFun Code Agent, and cross-executor handoff are not production paths.
+> Historical dual-executor context. The current P0 vertical slice uses only the Pi RPC Adapter; historical OpenCode Server, Halo Studio Code Agent, and cross-executor handoff are not production paths.
 
 # 可验证双 Agent 编码交付工作流
 
@@ -10,10 +10,10 @@ status: superseded by ADR-0072 for P0 executor scope
 
 ## Considered Options
 
-- 扩展为 BitFun 式通用 AI 应用平台，覆盖办公、Mini App、远程与多端协作。
+- 扩展为 Halo Studio 式通用 AI 应用平台，覆盖办公、Mini App、远程与多端协作。
 - 在 Halo 内实现自动委派、自动重试和跨 Agent 故障转移。
 - 将 Agent 文件写入、Git 提交和验证命令统一代理到 Halo。
 
 这些选项都会扩大权限和兼容性边界，并掩盖 Pi/OpenCode 的原生语义，因此不进入首个交付工作流。
 
-ADR-0072 进一步取消 P0 双 Agent 范围：当前首个纵切只通过 Pi RPC Adapter 交付；历史 OpenCode Server、BitFun 内置 Code Agent 和跨执行器交接留待独立决策。
+ADR-0072 进一步取消 P0 双 Agent 范围：当前首个纵切只通过 Pi RPC Adapter 交付；历史 OpenCode Server、上游（原 BitFun）内置 Code Agent 和跨执行器交接留待独立决策。

@@ -1,12 +1,12 @@
 [package]
-name = "bitfun-harness"
+name = "halo-harness"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Harness workflow contracts and registry for BitFun"
+description = "Harness workflow contracts and registry for Halo"
 
 [lib]
-name = "bitfun_harness"
+name = "halo_harness"
 crate-type = ["rlib"]
 
 [dependencies]

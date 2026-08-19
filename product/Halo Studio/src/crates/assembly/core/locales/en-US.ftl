@@ -1,10 +1,10 @@
-# BitFun English Language Pack
+# Halo Studio English Language Pack
 # English (US) (en-US) Fluent Translation File
 
 # ==================== General ====================
 app-version = Version { $version }
 loading = Loading...
-welcome = Welcome to BitFun
+welcome = Welcome to Halo Studio
 
 # ==================== Actions ====================
 action-confirm = Confirm

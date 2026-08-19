@@ -1,6 +1,6 @@
 //! Logging Configuration
 
-use bitfun_core::infrastructure::get_path_manager_arc;
+use halo_core::infrastructure::get_path_manager_arc;
 use chrono::Local;
 use serde::Serialize;
 use serde_json::Value;
@@ -48,7 +48,7 @@ pub struct LogConfig {
 
 fn is_embedded_webdriver_mode() -> bool {
     (cfg!(debug_assertions) || cfg!(feature = "devtools"))
-        && std::env::var_os("BITFUN_WEBDRIVER_PORT").is_some()
+        && std::env::var_os("HALO_WEBDRIVER_PORT").is_some()
 }
 
 fn resolve_logs_root() -> PathBuf {
@@ -56,16 +56,16 @@ fn resolve_logs_root() -> PathBuf {
         return path.clone();
     }
 
-    if let Some(path) = std::env::var_os("BITFUN_LOG_DIR").map(PathBuf::from) {
+    if let Some(path) = std::env::var_os("HALO_LOG_DIR").map(PathBuf::from) {
         return path;
     }
 
-    if let Some(path) = std::env::var_os("BITFUN_E2E_LOG_DIR").map(PathBuf::from) {
+    if let Some(path) = std::env::var_os("HALO_E2E_LOG_DIR").map(PathBuf::from) {
         return path;
     }
 
     if is_embedded_webdriver_mode() {
-        return std::env::temp_dir().join("bitfun-e2e-logs");
+        return std::env::temp_dir().join("halo-e2e-logs");
     }
 
     get_path_manager_arc().logs_dir()
@@ -73,7 +73,7 @@ fn resolve_logs_root() -> PathBuf {
 
 /// Set the product-owned log root before desktop startup creates its session.
 ///
-/// The shared desktop crate keeps BitFun's historical path as its default, but
+/// The shared desktop crate keeps Halo's historical path as its default, but
 /// product shells can provide an explicit root before `LogConfig::new` runs.
 pub fn set_logs_root_override(path: PathBuf) {
     let _ = LOGS_ROOT_OVERRIDE.set(path);
@@ -84,7 +84,7 @@ pub fn logs_root() -> PathBuf {
     resolve_logs_root()
 }
 
-/// Resolve a product-specific log root without consulting BitFun's path manager.
+/// Resolve a product-specific log root without consulting Halo's path manager.
 pub fn product_logs_root(product_name: &str) -> PathBuf {
     if let Some(path) = std::env::var_os("HALO_LOG_DIR") {
         return PathBuf::from(path);
@@ -462,16 +462,16 @@ pub fn build_log_plugin<R: Runtime>(log_targets: Vec<Target>) -> TauriPlugin<R> 
         // routing. Keep debug diagnostics, warnings, and errors, but avoid
         // drowning useful app traces in mechanical noise.
         .level_for(
-            "bitfun_core::agentic::events::queue",
+            "halo_core::agentic::events::queue",
             log::LevelFilter::Debug,
         )
         .level_for(
-            "bitfun_core::agentic::events::router",
+            "halo_core::agentic::events::router",
             log::LevelFilter::Debug,
         )
-        .level_for("bitfun_agent_runtime::event_queue", log::LevelFilter::Debug)
+        .level_for("halo_agent_runtime::event_queue", log::LevelFilter::Debug)
         .level_for(
-            "bitfun_agent_runtime::event_router",
+            "halo_agent_runtime::event_router",
             log::LevelFilter::Debug,
         )
         .level_for("hyper_util", log::LevelFilter::Info)

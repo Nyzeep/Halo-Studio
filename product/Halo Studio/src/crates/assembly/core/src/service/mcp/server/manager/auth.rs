@@ -19,7 +19,7 @@ use crate::service::mcp::auth::{
     MCPRemoteOAuthSessionSnapshot, MCPRemoteOAuthStatus,
 };
 use crate::service::mcp::server::MCPServerType;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 
 use super::{ActiveRemoteOAuthSession, MCPServerManager};
 
@@ -81,68 +81,68 @@ impl OAuthCallbackLocale {
         match self {
             Self::ZhCN => OAuthCallbackPageCopy {
                 html_lang: "zh-CN",
-                page_title: "BitFun OAuth 回调",
-                brand_label: "BitFun Desktop",
+                page_title: "Halo OAuth 回调",
+                brand_label: "Halo Desktop",
                 badge_success: "已收到授权",
                 badge_warning: "回调参数不完整",
                 badge_error: "授权失败",
-                success_title: "BitFun 已收到 OAuth 回调",
-                success_message: "可以返回 BitFun。应用正在交换授权码并重新连接 MCP 服务器。",
+                success_title: "Halo 已收到 OAuth 回调",
+                success_message: "可以返回 Halo。应用正在交换授权码并重新连接 MCP 服务器。",
                 success_detail_title: "接下来会发生什么",
                 success_detail_body:
-                    "这个页面可以直接关闭。如果 BitFun 没有自动完成重连，请回到 MCP 设置页后重试 OAuth。",
-                warning_title: "BitFun 收到的 OAuth 回调缺少必要参数",
+                    "这个页面可以直接关闭。如果 Halo 没有自动完成重连，请回到 MCP 设置页后重试 OAuth。",
+                warning_title: "Halo 收到的 OAuth 回调缺少必要参数",
                 warning_message:
-                    "OAuth 提供方已跳转回来，但缺少必须的参数。请返回 BitFun 重新发起登录流程。",
+                    "OAuth 提供方已跳转回来，但缺少必须的参数。请返回 Halo 重新发起登录流程。",
                 warning_detail_title: "缺少的参数",
-                error_title: "BitFun 未能完成 OAuth 授权",
+                error_title: "Halo 未能完成 OAuth 授权",
                 error_message:
-                    "请返回 BitFun，并根据下面的提供方返回信息检查问题后重新发起 OAuth。",
+                    "请返回 Halo，并根据下面的提供方返回信息检查问题后重新发起 OAuth。",
                 error_detail_title: "提供方返回",
                 close_hint: "处理完成后，这个页面可以直接关闭。",
             },
             Self::ZhTW => OAuthCallbackPageCopy {
                 html_lang: "zh-TW",
-                page_title: "BitFun OAuth 回調",
-                brand_label: "BitFun Desktop",
+                page_title: "Halo OAuth 回調",
+                brand_label: "Halo Desktop",
                 badge_success: "已收到授權",
                 badge_warning: "回調參數不完整",
                 badge_error: "授權失敗",
-                success_title: "BitFun 已收到 OAuth 回調",
-                success_message: "可以返回 BitFun。應用正在交換授權碼並重新連接 MCP 服務器。",
+                success_title: "Halo 已收到 OAuth 回調",
+                success_message: "可以返回 Halo。應用正在交換授權碼並重新連接 MCP 服務器。",
                 success_detail_title: "接下來會發生什麼",
                 success_detail_body:
-                    "這個頁面可以直接關閉。如果 BitFun 沒有自動完成重連，請回到 MCP 設置頁後重試 OAuth。",
-                warning_title: "BitFun 收到的 OAuth 回調缺少必要參數",
+                    "這個頁面可以直接關閉。如果 Halo 沒有自動完成重連，請回到 MCP 設置頁後重試 OAuth。",
+                warning_title: "Halo 收到的 OAuth 回調缺少必要參數",
                 warning_message:
-                    "OAuth 提供方已跳轉回來，但缺少必須的參數。請返回 BitFun 重新發起登錄流程。",
+                    "OAuth 提供方已跳轉回來，但缺少必須的參數。請返回 Halo 重新發起登錄流程。",
                 warning_detail_title: "缺少的參數",
-                error_title: "BitFun 未能完成 OAuth 授權",
+                error_title: "Halo 未能完成 OAuth 授權",
                 error_message:
-                    "請返回 BitFun，並根據下面的提供方返回信息檢查問題後重新發起 OAuth。",
+                    "請返回 Halo，並根據下面的提供方返回信息檢查問題後重新發起 OAuth。",
                 error_detail_title: "提供方返回",
                 close_hint: "處理完成後，這個頁面可以直接關閉。",
             },
             Self::EnUS => OAuthCallbackPageCopy {
                 html_lang: "en-US",
-                page_title: "BitFun OAuth Callback",
-                brand_label: "BitFun Desktop",
+                page_title: "Halo OAuth Callback",
+                brand_label: "Halo Desktop",
                 badge_success: "Authorization received",
                 badge_warning: "Callback incomplete",
                 badge_error: "Authorization failed",
-                success_title: "BitFun received the OAuth callback",
+                success_title: "Halo received the OAuth callback",
                 success_message:
-                    "You can return to BitFun now. The app is exchanging the authorization code and reconnecting the MCP server.",
+                    "You can return to Halo now. The app is exchanging the authorization code and reconnecting the MCP server.",
                 success_detail_title: "What happens next",
                 success_detail_body:
-                    "This page can be closed now. If BitFun does not finish reconnecting automatically, return to MCP settings and retry OAuth.",
-                warning_title: "BitFun received an OAuth callback with missing parameters",
+                    "This page can be closed now. If Halo does not finish reconnecting automatically, return to MCP settings and retry OAuth.",
+                warning_title: "Halo received an OAuth callback with missing parameters",
                 warning_message:
-                    "The provider redirected back, but required OAuth parameters were missing. Return to BitFun and start the sign-in flow again.",
+                    "The provider redirected back, but required OAuth parameters were missing. Return to Halo and start the sign-in flow again.",
                 warning_detail_title: "Missing parameters",
-                error_title: "BitFun could not finish the OAuth authorization",
+                error_title: "Halo could not finish the OAuth authorization",
                 error_message:
-                    "Return to BitFun and review the provider response below before retrying OAuth.",
+                    "Return to Halo and review the provider response below before retrying OAuth.",
                 error_detail_title: "Provider response",
                 close_hint: "This page can be closed after you review the status.",
             },
@@ -562,17 +562,17 @@ impl MCPServerManager {
     pub async fn start_remote_oauth_authorization(
         &self,
         server_id: &str,
-    ) -> BitFunResult<MCPRemoteOAuthSessionSnapshot> {
+    ) -> HaloResult<MCPRemoteOAuthSessionSnapshot> {
         let config = self
             .config_service
             .get_server_config(server_id)
             .await?
             .ok_or_else(|| {
-                BitFunError::NotFound(format!("MCP server config not found: {}", server_id))
+                HaloError::NotFound(format!("MCP server config not found: {}", server_id))
             })?;
 
         if config.server_type != MCPServerType::Remote {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "MCP server '{}' is not a remote server",
                 server_id
             )));
@@ -585,7 +585,7 @@ impl MCPServerManager {
         let prepared = prepare_remote_oauth_authorization(&config).await?;
         let callback_path = Url::parse(&prepared.redirect_uri)
             .map_err(|error| {
-                BitFunError::MCPError(format!(
+                HaloError::MCPError(format!(
                     "Invalid OAuth redirect URI for server '{}': {}",
                     server_id, error
                 ))
@@ -656,7 +656,7 @@ impl MCPServerManager {
             let _ = MCPServerManager::update_oauth_snapshot(&callback_session, |snapshot| {
                 snapshot.status = MCPRemoteOAuthStatus::AwaitingCallback;
                 snapshot.message =
-                    Some("Waiting for the OAuth provider to redirect back to BitFun.".to_string());
+                    Some("Waiting for the OAuth provider to redirect back to Halo.".to_string());
             })
             .await;
 
@@ -786,7 +786,7 @@ impl MCPServerManager {
         Some(snapshot)
     }
 
-    pub async fn cancel_remote_oauth_authorization(&self, server_id: &str) -> BitFunResult<()> {
+    pub async fn cancel_remote_oauth_authorization(&self, server_id: &str) -> HaloResult<()> {
         let session = self.oauth_sessions.write().await.remove(server_id);
         if let Some(session) = session {
             let _ = MCPServerManager::update_oauth_snapshot(&session, |snapshot| {
@@ -799,7 +799,7 @@ impl MCPServerManager {
         Ok(())
     }
 
-    pub async fn clear_remote_oauth_credentials(&self, server_id: &str) -> BitFunResult<()> {
+    pub async fn clear_remote_oauth_credentials(&self, server_id: &str) -> HaloResult<()> {
         self.cancel_remote_oauth_authorization(server_id).await?;
         clear_stored_oauth_credentials(server_id).await
     }

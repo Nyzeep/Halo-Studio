@@ -13,7 +13,7 @@ use crate::infrastructure::get_path_manager_arc;
 use crate::service::config::get_global_config_service;
 use crate::service::config::AppConfig;
 use crate::service::i18n::LocaleId;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use crate::util::types::{GeminiResponse, GeminiUsage, Message, ToolDefinition};
 use log::{debug, info, warn};
 use serde_json::Value;
@@ -114,11 +114,11 @@ impl GenerationUsageTracker {
 pub struct InsightsService;
 
 impl InsightsService {
-    fn validate_days(days: u32) -> BitFunResult<()> {
+    fn validate_days(days: u32) -> HaloResult<()> {
         if (1..=3650).contains(&days) {
             Ok(())
         } else {
-            Err(BitFunError::validation(
+            Err(HaloError::validation(
                 "Insights range must be between 1 and 3650 days",
             ))
         }
@@ -167,7 +167,7 @@ impl InsightsService {
     pub async fn generate(
         days: u32,
         model_selector: Option<String>,
-    ) -> BitFunResult<InsightsReport> {
+    ) -> HaloResult<InsightsReport> {
         Self::validate_days(days)?;
         let registration = cancellation::register().await;
         let result =
@@ -185,7 +185,7 @@ impl InsightsService {
         days: u32,
         model_selector: Option<&str>,
         token: &CancellationToken,
-    ) -> BitFunResult<InsightsReport> {
+    ) -> HaloResult<InsightsReport> {
         let user_lang = Self::get_user_language().await;
         let lang_instruction = Self::build_language_instruction(&user_lang);
         debug!("Insights generation using language: {}", user_lang);
@@ -195,7 +195,7 @@ impl InsightsService {
         let (base_stats, transcripts) = InsightsCollector::collect(days).await?;
 
         if transcripts.is_empty() {
-            return Err(BitFunError::service(
+            return Err(HaloError::service(
                 "No sessions found in the specified time range",
             ));
         }
@@ -211,7 +211,7 @@ impl InsightsService {
         // Stage 2: Parallel Facet Extraction (fast model)
         let ai_factory = get_global_ai_client_factory()
             .await
-            .map_err(|e| BitFunError::service(format!("Failed to get AI client factory: {}", e)))?;
+            .map_err(|e| HaloError::service(format!("Failed to get AI client factory: {}", e)))?;
         let explicit_model = model_selector
             .map(str::trim)
             .filter(|selector| !selector.is_empty() && *selector != "auto");
@@ -220,7 +220,7 @@ impl InsightsService {
                 .get_client_resolved(selector)
                 .await
                 .map_err(|e| {
-                    BitFunError::service(format!(
+                    HaloError::service(format!(
                         "Failed to resolve selected insights model '{}': {}",
                         selector, e
                     ))
@@ -228,7 +228,7 @@ impl InsightsService {
             (client.clone(), client)
         } else {
             let fast = ai_factory.get_client_resolved("fast").await.map_err(|e| {
-                BitFunError::service(format!("Failed to resolve fast model: {}", e))
+                HaloError::service(format!("Failed to resolve fast model: {}", e))
             })?;
 
             // Primary model for analysis stages — falls back to fast if not configured.
@@ -314,9 +314,9 @@ impl InsightsService {
         Ok(report)
     }
 
-    fn check_cancelled(token: &CancellationToken) -> BitFunResult<()> {
+    fn check_cancelled(token: &CancellationToken) -> HaloResult<()> {
         if token.is_cancelled() {
-            Err(BitFunError::service("Insights generation cancelled"))
+            Err(HaloError::service("Insights generation cancelled"))
         } else {
             Ok(())
         }
@@ -329,7 +329,7 @@ impl InsightsService {
         transcripts: &[SessionTranscript],
         lang_instruction: &str,
         token: &CancellationToken,
-    ) -> BitFunResult<Vec<SessionFacet>> {
+    ) -> HaloResult<Vec<SessionFacet>> {
         let total = transcripts.len();
         let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_FACET_EXTRACTIONS));
         let counter = Arc::new(AtomicUsize::new(0));
@@ -353,14 +353,14 @@ impl InsightsService {
                     let _permit = sem
                         .acquire()
                         .await
-                        .map_err(|e| BitFunError::service(format!("Semaphore error: {}", e)))?;
+                        .map_err(|e| HaloError::service(format!("Semaphore error: {}", e)))?;
 
                     if cl.load(Ordering::Relaxed) || child_token.is_cancelled() {
-                        return Err(BitFunError::service("Insights generation cancelled"));
+                        return Err(HaloError::service("Insights generation cancelled"));
                     }
 
                     if rl.load(Ordering::Relaxed) {
-                        return Err(BitFunError::service("skipped_rate_limited"));
+                        return Err(HaloError::service("skipped_rate_limited"));
                     }
 
                     let n = cnt.fetch_add(1, Ordering::Relaxed) + 1;
@@ -391,7 +391,7 @@ impl InsightsService {
 
         for (idx, handle) in handles.into_iter().enumerate() {
             if token.is_cancelled() {
-                return Err(BitFunError::service("Insights generation cancelled"));
+                return Err(HaloError::service("Insights generation cancelled"));
             }
             match handle.await {
                 Ok(Ok((_orig_idx, facet))) => facets.push(facet),
@@ -461,7 +461,7 @@ impl InsightsService {
         ai_client: &TrackedAIClient,
         transcript: &SessionTranscript,
         lang_instruction: &str,
-    ) -> BitFunResult<SessionFacet> {
+    ) -> HaloResult<SessionFacet> {
         if let Ok(Some(cached)) = facet_cache::try_load_cached_facet(transcript).await {
             return Ok(cached);
         }
@@ -486,11 +486,11 @@ impl InsightsService {
         let response = ai_client
             .send_message(messages, None)
             .await
-            .map_err(|e| BitFunError::service(format!("AI call failed: {}", e)))?;
+            .map_err(|e| HaloError::service(format!("AI call failed: {}", e)))?;
 
         let json_str = extract_json_from_response(&response.text)?;
         let value: Value = serde_json::from_str(&json_str).map_err(|e| {
-            BitFunError::Deserialization(format!("Failed to parse facet JSON: {}", e))
+            HaloError::Deserialization(format!("Failed to parse facet JSON: {}", e))
         })?;
 
         let facet = SessionFacet {
@@ -761,19 +761,19 @@ impl InsightsService {
     ///
     /// Retries on rate-limit errors, empty AI responses, and JSON extraction failures.
     async fn resolve_with_retry<T, RetryFut, RetryFn, DefaultFn>(
-        handle: tokio::task::JoinHandle<BitFunResult<T>>,
+        handle: tokio::task::JoinHandle<HaloResult<T>>,
         label: &str,
         retry_fn: RetryFn,
         default_fn: DefaultFn,
     ) -> T
     where
-        RetryFut: std::future::Future<Output = BitFunResult<T>>,
+        RetryFut: std::future::Future<Output = HaloResult<T>>,
         RetryFn: FnOnce() -> RetryFut,
         DefaultFn: FnOnce() -> T,
     {
         let result = handle
             .await
-            .map_err(|e| BitFunError::service(format!("{} task panicked: {}", label, e)));
+            .map_err(|e| HaloError::service(format!("{} task panicked: {}", label, e)));
 
         match result {
             Ok(Ok(val)) => val,
@@ -853,7 +853,7 @@ impl InsightsService {
         ai_client: &TrackedAIClient,
         aggregate: &InsightsAggregate,
         lang_instruction: &str,
-    ) -> BitFunResult<InsightsSuggestions> {
+    ) -> HaloResult<InsightsSuggestions> {
         let aggregate_json = aggregate_stats_json_for_prompt(aggregate);
         let summaries = summaries_block(aggregate);
         let friction_details = friction_block(aggregate);
@@ -873,7 +873,7 @@ impl InsightsService {
         let response = ai_client
             .send_message(messages, None)
             .await
-            .map_err(|e| BitFunError::service(format!("Suggestions AI call failed: {}", e)))?;
+            .map_err(|e| HaloError::service(format!("Suggestions AI call failed: {}", e)))?;
 
         info!(
             "Suggestions response: len={}, finish={:?}",
@@ -884,7 +884,7 @@ impl InsightsService {
 
         let json_str = extract_json_from_response(&response.text)?;
         let value: Value = serde_json::from_str(&json_str).map_err(|e| {
-            BitFunError::Deserialization(format!(
+            HaloError::Deserialization(format!(
                 "Failed to parse suggestions JSON: {}. Raw: {}",
                 e,
                 safe_truncate(&json_str, 500)
@@ -893,7 +893,7 @@ impl InsightsService {
 
         debug!(
             "Suggestions parsed: md_additions={}, features={}, patterns={}",
-            value["bitfun_md_additions"]
+            value["halo_md_additions"]
                 .as_array()
                 .map(|a| a.len())
                 .unwrap_or(0),
@@ -908,7 +908,7 @@ impl InsightsService {
         );
 
         Ok(InsightsSuggestions {
-            bitfun_md_additions: value["bitfun_md_additions"]
+            halo_md_additions: value["halo_md_additions"]
                 .as_array()
                 .map(|arr| {
                     arr.iter()
@@ -985,7 +985,7 @@ impl InsightsService {
         ai_client: &TrackedAIClient,
         aggregate: &InsightsAggregate,
         lang_instruction: &str,
-    ) -> BitFunResult<Vec<ProjectArea>> {
+    ) -> HaloResult<Vec<ProjectArea>> {
         let aggregate_json = aggregate_stats_json_for_prompt(aggregate);
         let summaries = summaries_block(aggregate);
 
@@ -1001,7 +1001,7 @@ impl InsightsService {
         let response = ai_client
             .send_message(messages, None)
             .await
-            .map_err(|e| BitFunError::service(format!("Areas AI call failed: {}", e)))?;
+            .map_err(|e| HaloError::service(format!("Areas AI call failed: {}", e)))?;
 
         info!(
             "Areas response: len={}, finish={:?}",
@@ -1012,7 +1012,7 @@ impl InsightsService {
 
         let json_str = extract_json_from_response(&response.text)?;
         let value: Value = serde_json::from_str(&json_str).map_err(|e| {
-            BitFunError::Deserialization(format!("Failed to parse areas JSON: {}", e))
+            HaloError::Deserialization(format!("Failed to parse areas JSON: {}", e))
         })?;
 
         Ok(value["areas"]
@@ -1036,7 +1036,7 @@ impl InsightsService {
         aggregate_json: &str,
         summaries: &str,
         lang_instruction: &str,
-    ) -> BitFunResult<WinsResult> {
+    ) -> HaloResult<WinsResult> {
         let prompt = format!(
             "{}{}",
             WINS_PROMPT_TEMPLATE
@@ -1049,7 +1049,7 @@ impl InsightsService {
         let response = ai_client
             .send_message(messages, None)
             .await
-            .map_err(|e| BitFunError::service(format!("Wins AI call failed: {}", e)))?;
+            .map_err(|e| HaloError::service(format!("Wins AI call failed: {}", e)))?;
 
         info!(
             "Wins response: len={}, finish={:?}",
@@ -1060,7 +1060,7 @@ impl InsightsService {
 
         let json_str = extract_json_from_response(&response.text)?;
         let value: Value = serde_json::from_str(&json_str).map_err(|e| {
-            BitFunError::Deserialization(format!("Failed to parse wins JSON: {}", e))
+            HaloError::Deserialization(format!("Failed to parse wins JSON: {}", e))
         })?;
 
         Ok(WinsResult {
@@ -1088,7 +1088,7 @@ impl InsightsService {
         summaries: &str,
         friction_details: &str,
         lang_instruction: &str,
-    ) -> BitFunResult<FrictionResult> {
+    ) -> HaloResult<FrictionResult> {
         let prompt = format!(
             "{}{}",
             FRICTION_PROMPT_TEMPLATE
@@ -1102,7 +1102,7 @@ impl InsightsService {
         let response = ai_client
             .send_message(messages, None)
             .await
-            .map_err(|e| BitFunError::service(format!("Friction AI call failed: {}", e)))?;
+            .map_err(|e| HaloError::service(format!("Friction AI call failed: {}", e)))?;
 
         info!(
             "Friction response: len={}, finish={:?}",
@@ -1113,7 +1113,7 @@ impl InsightsService {
 
         let json_str = extract_json_from_response(&response.text)?;
         let value: Value = serde_json::from_str(&json_str).map_err(|e| {
-            BitFunError::Deserialization(format!("Failed to parse friction JSON: {}", e))
+            HaloError::Deserialization(format!("Failed to parse friction JSON: {}", e))
         })?;
 
         Ok(FrictionResult {
@@ -1149,7 +1149,7 @@ impl InsightsService {
         aggregate_json: &str,
         summaries: &str,
         lang_instruction: &str,
-    ) -> BitFunResult<InteractionStyleResult> {
+    ) -> HaloResult<InteractionStyleResult> {
         let prompt = format!(
             "{}{}",
             INTERACTION_STYLE_PROMPT_TEMPLATE
@@ -1160,7 +1160,7 @@ impl InsightsService {
 
         let messages = vec![Message::user(prompt)];
         let response = ai_client.send_message(messages, None).await.map_err(|e| {
-            BitFunError::service(format!("Interaction Style AI call failed: {}", e))
+            HaloError::service(format!("Interaction Style AI call failed: {}", e))
         })?;
 
         info!(
@@ -1175,7 +1175,7 @@ impl InsightsService {
 
         let json_str = extract_json_from_response(&response.text)?;
         let value: Value = serde_json::from_str(&json_str).map_err(|e| {
-            BitFunError::Deserialization(format!("Failed to parse interaction style JSON: {}", e))
+            HaloError::Deserialization(format!("Failed to parse interaction style JSON: {}", e))
         })?;
 
         Ok(InteractionStyleResult {
@@ -1199,7 +1199,7 @@ impl InsightsService {
         wins_friction_text: &str,
         interaction_text: &str,
         lang_instruction: &str,
-    ) -> BitFunResult<AtAGlance> {
+    ) -> HaloResult<AtAGlance> {
         let prompt = format!(
             "{}{}",
             AT_A_GLANCE_PROMPT_TEMPLATE
@@ -1215,7 +1215,7 @@ impl InsightsService {
         let response = ai_client
             .send_message(messages, None)
             .await
-            .map_err(|e| BitFunError::service(format!("At a Glance AI call failed: {}", e)))?;
+            .map_err(|e| HaloError::service(format!("At a Glance AI call failed: {}", e)))?;
 
         info!(
             "At a Glance response: len={}, finish={:?}",
@@ -1226,7 +1226,7 @@ impl InsightsService {
 
         let json_str = extract_json_from_response(&response.text)?;
         let value: Value = serde_json::from_str(&json_str).map_err(|e| {
-            BitFunError::Deserialization(format!("Failed to parse at-a-glance JSON: {}", e))
+            HaloError::Deserialization(format!("Failed to parse at-a-glance JSON: {}", e))
         })?;
 
         let looking_ahead = {
@@ -1252,7 +1252,7 @@ impl InsightsService {
         summaries: &str,
         friction_details: &str,
         lang_instruction: &str,
-    ) -> BitFunResult<HorizonResult> {
+    ) -> HaloResult<HorizonResult> {
         let prompt = format!(
             "{}{}",
             HORIZON_PROMPT_TEMPLATE
@@ -1266,7 +1266,7 @@ impl InsightsService {
         let response = ai_client
             .send_message(messages, None)
             .await
-            .map_err(|e| BitFunError::service(format!("Horizon AI call failed: {}", e)))?;
+            .map_err(|e| HaloError::service(format!("Horizon AI call failed: {}", e)))?;
 
         info!(
             "Horizon response: len={}, finish={:?}",
@@ -1277,7 +1277,7 @@ impl InsightsService {
 
         let json_str = extract_json_from_response(&response.text)?;
         let value: Value = serde_json::from_str(&json_str).map_err(|e| {
-            BitFunError::Deserialization(format!("Failed to parse horizon JSON: {}", e))
+            HaloError::Deserialization(format!("Failed to parse horizon JSON: {}", e))
         })?;
 
         Ok(HorizonResult {
@@ -1308,7 +1308,7 @@ impl InsightsService {
         aggregate_json: &str,
         summaries: &str,
         lang_instruction: &str,
-    ) -> BitFunResult<Option<FunEnding>> {
+    ) -> HaloResult<Option<FunEnding>> {
         let prompt = format!(
             "{}{}",
             FUN_ENDING_PROMPT_TEMPLATE
@@ -1321,7 +1321,7 @@ impl InsightsService {
         let response = ai_client
             .send_message(messages, None)
             .await
-            .map_err(|e| BitFunError::service(format!("Fun Ending AI call failed: {}", e)))?;
+            .map_err(|e| HaloError::service(format!("Fun Ending AI call failed: {}", e)))?;
 
         info!(
             "Fun Ending response: len={}, finish={:?}",
@@ -1332,7 +1332,7 @@ impl InsightsService {
 
         let json_str = extract_json_from_response(&response.text)?;
         let value: Value = serde_json::from_str(&json_str).map_err(|e| {
-            BitFunError::Deserialization(format!("Failed to parse fun ending JSON: {}", e))
+            HaloError::Deserialization(format!("Failed to parse fun ending JSON: {}", e))
         })?;
 
         Ok(Some(FunEnding {
@@ -1444,12 +1444,12 @@ impl InsightsService {
 
     // ============ Save / Load / Utility ============
 
-    async fn save_report(mut report: InsightsReport, locale: &str) -> BitFunResult<InsightsReport> {
+    async fn save_report(mut report: InsightsReport, locale: &str) -> HaloResult<InsightsReport> {
         let path_manager = get_path_manager_arc();
         let usage_dir = path_manager.user_data_dir().join("usage-data");
         tokio::fs::create_dir_all(&usage_dir)
             .await
-            .map_err(|e| BitFunError::io(format!("Failed to create usage-data dir: {}", e)))?;
+            .map_err(|e| HaloError::io(format!("Failed to create usage-data dir: {}", e)))?;
 
         let timestamp = report.generated_at;
 
@@ -1457,17 +1457,17 @@ impl InsightsService {
         let html_path = usage_dir.join(format!("insights-{}.html", timestamp));
         tokio::fs::write(&html_path, &html_content)
             .await
-            .map_err(|e| BitFunError::io(format!("Failed to write HTML report: {}", e)))?;
+            .map_err(|e| HaloError::io(format!("Failed to write HTML report: {}", e)))?;
 
         report.html_report_path = Some(html_path.to_string_lossy().to_string());
 
         let json_path = usage_dir.join(format!("insights-{}.json", timestamp));
         let json_str = serde_json::to_string_pretty(&report).map_err(|e| {
-            BitFunError::serialization(format!("Failed to serialize report: {}", e))
+            HaloError::serialization(format!("Failed to serialize report: {}", e))
         })?;
         tokio::fs::write(&json_path, &json_str)
             .await
-            .map_err(|e| BitFunError::io(format!("Failed to write report JSON: {}", e)))?;
+            .map_err(|e| HaloError::io(format!("Failed to write report JSON: {}", e)))?;
 
         info!(
             "Report saved: json={}, html={}",
@@ -1504,13 +1504,13 @@ impl InsightsService {
         }
     }
 
-    pub async fn has_data(days: u32) -> BitFunResult<bool> {
+    pub async fn has_data(days: u32) -> HaloResult<bool> {
         Self::validate_days(days)?;
         let (_, transcripts) = InsightsCollector::collect(days).await?;
         Ok(!transcripts.is_empty())
     }
 
-    pub async fn load_report(path: &str) -> BitFunResult<InsightsReport> {
+    pub async fn load_report(path: &str) -> HaloResult<InsightsReport> {
         let path_manager = get_path_manager_arc();
         let usage_dir = path_manager.user_data_dir().join("usage-data");
         let requested_path = std::path::PathBuf::from(path);
@@ -1519,30 +1519,30 @@ impl InsightsService {
             .and_then(|name| name.to_str())
             .is_some_and(|name| name.starts_with("insights-") && name.ends_with(".json"));
         if !valid_name {
-            return Err(BitFunError::validation("Invalid insights report path"));
+            return Err(HaloError::validation("Invalid insights report path"));
         }
 
         let canonical_usage_dir = tokio::fs::canonicalize(&usage_dir)
             .await
-            .map_err(|e| BitFunError::io(format!("Failed to resolve insights directory: {}", e)))?;
+            .map_err(|e| HaloError::io(format!("Failed to resolve insights directory: {}", e)))?;
         let canonical_path = tokio::fs::canonicalize(&requested_path)
             .await
-            .map_err(|e| BitFunError::io(format!("Failed to resolve insights report: {}", e)))?;
+            .map_err(|e| HaloError::io(format!("Failed to resolve insights report: {}", e)))?;
         if !canonical_path.starts_with(&canonical_usage_dir) {
-            return Err(BitFunError::validation(
+            return Err(HaloError::validation(
                 "Insights report path is outside the report directory",
             ));
         }
 
         let json_str = tokio::fs::read_to_string(&canonical_path)
             .await
-            .map_err(|e| BitFunError::io(format!("Failed to read report file: {}", e)))?;
+            .map_err(|e| HaloError::io(format!("Failed to read report file: {}", e)))?;
         let report: InsightsReport = serde_json::from_str(&json_str)
-            .map_err(|e| BitFunError::Deserialization(format!("Failed to parse report: {}", e)))?;
+            .map_err(|e| HaloError::Deserialization(format!("Failed to parse report: {}", e)))?;
         Ok(report)
     }
 
-    pub async fn load_latest_reports() -> BitFunResult<Vec<InsightsReportMeta>> {
+    pub async fn load_latest_reports() -> HaloResult<Vec<InsightsReportMeta>> {
         let path_manager = get_path_manager_arc();
         let usage_dir = path_manager.user_data_dir().join("usage-data");
 
@@ -1552,7 +1552,7 @@ impl InsightsService {
 
         let mut entries = tokio::fs::read_dir(&usage_dir)
             .await
-            .map_err(|e| BitFunError::io(format!("Failed to read usage-data dir: {}", e)))?;
+            .map_err(|e| HaloError::io(format!("Failed to read usage-data dir: {}", e)))?;
 
         let mut json_files: Vec<std::path::PathBuf> = Vec::new();
         while let Ok(Some(entry)) = entries.next_entry().await {
@@ -1717,7 +1717,7 @@ impl AtAGlance {
 
 // ============ Helper functions ============
 
-fn is_rate_limit_error(e: &BitFunError) -> bool {
+fn is_rate_limit_error(e: &HaloError) -> bool {
     let msg = e.to_string().to_lowercase();
     msg.contains("429")
         || msg.contains("rate limit")
@@ -1725,7 +1725,7 @@ fn is_rate_limit_error(e: &BitFunError) -> bool {
         || msg.contains("rate_limit")
 }
 
-fn is_retryable_error(e: &BitFunError) -> bool {
+fn is_retryable_error(e: &HaloError) -> bool {
     if is_rate_limit_error(e) {
         return true;
     }
@@ -1738,7 +1738,7 @@ fn is_retryable_error(e: &BitFunError) -> bool {
 
 fn default_suggestions() -> InsightsSuggestions {
     InsightsSuggestions {
-        bitfun_md_additions: Vec::new(),
+        halo_md_additions: Vec::new(),
         features_to_try: Vec::new(),
         usage_patterns: Vec::new(),
     }
@@ -1769,9 +1769,9 @@ fn safe_truncate(s: &str, max_bytes: usize) -> &str {
     &s[..end]
 }
 
-fn extract_json_from_response(response: &str) -> BitFunResult<String> {
+fn extract_json_from_response(response: &str) -> HaloResult<String> {
     crate::util::extract_json_from_ai_response(response)
-        .ok_or_else(|| BitFunError::service("Cannot extract JSON from AI response"))
+        .ok_or_else(|| HaloError::service("Cannot extract JSON from AI response"))
 }
 
 /// Extract a string from a JSON value that may be a plain string or a nested object.

@@ -1,6 +1,6 @@
 //! PID-file based liveness tracking for the CLI daemon.
 //!
-//! The daemon records its pid in `~/.bitfun/cli_daemon.pid` so interactive
+//! The daemon records its pid in `~/.halo-studio/cli_daemon.pid` so interactive
 //! CLI processes can detect a running daemon and yield device routing to it
 //! (same-machine processes share one `device_id`; last AuthConnect wins).
 
@@ -10,7 +10,7 @@ use anyhow::{anyhow, Context, Result};
 
 fn default_pid_file_path() -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow!("cannot determine home directory"))?;
-    Ok(home.join(".bitfun").join("cli_daemon.pid"))
+    Ok(home.join(".halo-studio").join("cli_daemon.pid"))
 }
 
 fn write_pid_file_to(path: &Path, pid: u32) -> Result<()> {

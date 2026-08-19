@@ -1,7 +1,7 @@
 #![cfg(feature = "workspace-runtime")]
 
-use bitfun_services_core::workspace::LocalWorkspaceFs;
-use bitfun_services_core::workspace_instructions::read_workspace_instruction_files_with_fs;
+use halo_services_core::workspace::LocalWorkspaceFs;
+use halo_services_core::workspace_instructions::read_workspace_instruction_files_with_fs;
 use std::fs;
 
 #[tokio::test]

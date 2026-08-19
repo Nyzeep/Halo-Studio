@@ -99,12 +99,12 @@ const ExternalMcpDetail: React.FC<{
   value: string;
   code?: boolean;
 }> = ({ label, value, code = false }) => (
-  <div className="bitfun-mcp-tools__server-detail-item">
-    <span className="bitfun-mcp-tools__server-detail-label">{label}:</span>
+  <div className="halo-mcp-tools__server-detail-item">
+    <span className="halo-mcp-tools__server-detail-label">{label}:</span>
     {code ? (
-      <code className="bitfun-mcp-tools__server-detail-value">{value}</code>
+      <code className="halo-mcp-tools__server-detail-value">{value}</code>
     ) : (
-      <span className="bitfun-mcp-tools__server-detail-value">{value}</span>
+      <span className="halo-mcp-tools__server-detail-value">{value}</span>
     )}
   </div>
 );
@@ -331,21 +331,21 @@ const ExternalMcpOverview: React.FC = () => {
     const sourceStatus = sourceState(source);
     const badges = (
       <>
-        <span className="bitfun-collection-item__badge bitfun-mcp-tools__external-source-badge">
+        <span className="halo-collection-item__badge halo-mcp-tools__external-source-badge">
           {ecosystemLabel}
         </span>
-        <span className="bitfun-collection-item__badge">
+        <span className="halo-collection-item__badge">
           {scopeLabel(sourceRecord?.scope)}
         </span>
         {sourceStatus ? (
-          <span className={`bitfun-mcp-tools__status-badge ${sourceStatus === 'stale' ? 'is-pending' : 'is-error'}`}>
+          <span className={`halo-mcp-tools__status-badge ${sourceStatus === 'stale' ? 'is-pending' : 'is-error'}`}>
             {t(`external.status.${sourceStatus}`)}
           </span>
         ) : null}
       </>
     );
     const details = (
-      <div className="bitfun-mcp-tools__server-details">
+      <div className="halo-mcp-tools__server-details">
         <ExternalMcpDetail label={t('external.details.source')} value={sourceRecord?.displayName ?? ecosystemLabel} />
         <ExternalMcpDetail label={t('external.details.scope')} value={scopeLabel(sourceRecord?.scope)} />
         <ExternalMcpDetail
@@ -369,7 +369,7 @@ const ExternalMcpOverview: React.FC = () => {
         badge={badges}
         badgePlacement="below"
         control={(
-          <span className={`bitfun-mcp-tools__status-badge ${statusTone(entry.activationState)}`}>
+          <span className={`halo-mcp-tools__status-badge ${statusTone(entry.activationState)}`}>
             {activationLabel(entry.activationState)}
           </span>
         )}
@@ -380,27 +380,27 @@ const ExternalMcpOverview: React.FC = () => {
 
   return (
     <ConfigPageSection
-      className="bitfun-mcp-tools__external-section"
+      className="halo-mcp-tools__external-section"
       title={t('external.title')}
       titleSuffix={snapshot ? (
-        <span className="bitfun-mcp-tools__external-summary">
+        <span className="halo-mcp-tools__external-summary">
           {snapshot.discoveryPending ? (
-            <span className="bitfun-mcp-tools__status-badge is-pending">
+            <span className="halo-mcp-tools__status-badge is-pending">
               {t('external.status.checking')}
             </span>
           ) : null}
           {hostReadOnly ? (
-            <span className="bitfun-mcp-tools__status-badge is-muted">
+            <span className="halo-mcp-tools__status-badge is-muted">
               {t('external.status.readOnly')}
             </span>
           ) : null}
           {loadFailed && snapshot ? (
-            <span className="bitfun-mcp-tools__status-badge is-pending">
+            <span className="halo-mcp-tools__status-badge is-pending">
               {t('external.status.stale')}
             </span>
           ) : null}
           {hasMcpDiagnostics ? (
-            <span className="bitfun-mcp-tools__status-badge is-error">
+            <span className="halo-mcp-tools__status-badge is-error">
               {t('external.status.degraded')}
             </span>
           ) : null}
@@ -432,7 +432,7 @@ const ExternalMcpOverview: React.FC = () => {
       )}
     >
       {entries.length > 0 && !hostReadOnly && importSupported ? (
-        <div className="bitfun-mcp-tools__import" data-testid="external-mcp-import">
+        <div className="halo-mcp-tools__import" data-testid="external-mcp-import">
           {importPlan ? (
             <>
               <p>{t('external.import.confirm', { count: eligibleImportItems.length })}</p>
@@ -443,7 +443,7 @@ const ExternalMcpOverview: React.FC = () => {
                   </li>
                 ))}
               </ul>
-              <div className="bitfun-mcp-tools__import-actions">
+              <div className="halo-mcp-tools__import-actions">
                 <button type="button" disabled={importBusy || eligibleImportItems.length === 0} onClick={() => void applyImport()}>
                   {t('external.import.apply')}
                 </button>
@@ -461,13 +461,13 @@ const ExternalMcpOverview: React.FC = () => {
         </div>
       ) : null}
       {scopedLoading && !snapshot ? (
-        <div className="bitfun-collection-empty"><p>{t('external.loading')}</p></div>
+        <div className="halo-collection-empty"><p>{t('external.loading')}</p></div>
       ) : loadFailed && !snapshot ? (
-        <div className="bitfun-collection-empty" role="status"><p>{t('external.unavailable')}</p></div>
+        <div className="halo-collection-empty" role="status"><p>{t('external.unavailable')}</p></div>
       ) : snapshot?.discoveryPending && entries.length === 0 ? (
-        <div className="bitfun-collection-empty" role="status"><p>{t('external.loading')}</p></div>
+        <div className="halo-collection-empty" role="status"><p>{t('external.loading')}</p></div>
       ) : entries.length === 0 ? (
-        <div className="bitfun-collection-empty"><p>{t('external.empty')}</p></div>
+        <div className="halo-collection-empty"><p>{t('external.empty')}</p></div>
       ) : entries.map(renderEntry)}
     </ConfigPageSection>
   );

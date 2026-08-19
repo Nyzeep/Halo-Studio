@@ -150,42 +150,42 @@ describe('builtin theme preset output', () => {
       [
         {
           "hash": "18bde3b1b694643489ccf854d6a4ec2f92b6522925b1afae71c053c84fe018a8",
-          "id": "bitfun-light",
+          "id": "halo-light",
           "type": "light",
         },
         {
           "hash": "7def888a159fe62da73f21717777cad2fd13a048853b9264cda683220e899677",
-          "id": "bitfun-slate",
+          "id": "halo-slate",
           "type": "dark",
         },
         {
           "hash": "c7a28e7fde81910bb796e18afabdb7b2840a5c0ae7a471b583990b43ce804921",
-          "id": "bitfun-dark",
+          "id": "halo-dark",
           "type": "dark",
         },
         {
           "hash": "b3447ec7218ad3f9bfe9749ca5ed567aee733f8555c86fb9dbca712294484b7c",
-          "id": "bitfun-midnight",
+          "id": "halo-midnight",
           "type": "dark",
         },
         {
           "hash": "438f2ae26c4d1ebecbfa98e020d8e7d6559668fbf8e2c56b2dc6aa6bcadc3537",
-          "id": "bitfun-china-style",
+          "id": "halo-china-style",
           "type": "light",
         },
         {
           "hash": "9caa3cc0deac7cf940ab550c79ea0a5d747f9496095af8ef78e4df1a64abf842",
-          "id": "bitfun-china-night",
+          "id": "halo-china-night",
           "type": "dark",
         },
         {
           "hash": "6443493750d1b48805d6392fd17c11347f4f02af88943326522efee29330b417",
-          "id": "bitfun-cyber",
+          "id": "halo-cyber",
           "type": "dark",
         },
         {
           "hash": "34e5b2c1ea244d28dffa9be172d3d48e65e82100b39125b21e3760b4316192d3",
-          "id": "bitfun-tokyo-night",
+          "id": "halo-tokyo-night",
           "type": "dark",
         },
       ]

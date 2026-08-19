@@ -1,9 +1,9 @@
 //! Shared, runtime-free bounded file and parser support for ecosystem source adapters.
 
-use bitfun_product_domains::external_hook_catalog::{
+use halo_product_domains::external_hook_catalog::{
     ExternalHookHandlerKind, ExternalHookMatcherSummary,
 };
-use bitfun_product_domains::external_hook_import::{
+use halo_product_domains::external_hook_import::{
     ExternalHookImportDependencyV1, MANAGED_HOOK_ROOT_PLACEHOLDER, MAX_EXTERNAL_HOOK_IMPORT_ASSETS,
     MAX_EXTERNAL_HOOK_IMPORT_ASSET_BYTES, MAX_EXTERNAL_HOOK_IMPORT_ASSET_DEPTH,
     MAX_EXTERNAL_HOOK_IMPORT_TOTAL_ASSET_BYTES,

@@ -19,10 +19,10 @@ use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
 use crate::infrastructure::events::EventEmitter;
-use bitfun_core_types::lsp::{CompletionItem, InlayHint};
-use bitfun_services_core::lsp::config_watcher::ConfigWatcher;
-use bitfun_services_core::lsp::manager::LspManager;
-use bitfun_services_core::lsp::project_detector::{ProjectDetector, ProjectInfo};
+use halo_core_types::lsp::{CompletionItem, InlayHint};
+use halo_services_core::lsp::config_watcher::ConfigWatcher;
+use halo_services_core::lsp::manager::LspManager;
+use halo_services_core::lsp::project_detector::{ProjectDetector, ProjectInfo};
 
 /// LSP event types (pushed to the frontend).
 #[derive(Debug, Clone, Serialize, Deserialize)]

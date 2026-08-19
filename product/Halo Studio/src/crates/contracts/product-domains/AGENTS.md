@@ -4,13 +4,13 @@
 
 Scope: this guide applies to `src/crates/contracts/product-domains`.
 
-`bitfun-product-domains` owns platform-agnostic product-domain contracts that can
+`halo-product-domains` owns platform-agnostic product-domain contracts that can
 compile without the full core runtime. Keep it focused on pure state, DTOs,
 policies, and narrow ports; concrete runtime behavior belongs outside this crate.
 
 ## Guardrails
 
-- Do not add a dependency from `bitfun-product-domains` to `bitfun-core`.
+- Do not add a dependency from `halo-product-domains` to `halo-core`.
 - Keep the default feature lightweight. Default builds must not pull runtime,
   service, desktop, network, process, AI, or tool-runtime dependencies.
 - This crate may own pure DTOs, enums, serialization contracts, search plans,
@@ -32,7 +32,7 @@ policies, and narrow ports; concrete runtime behavior belongs outside this crate
   facts, marker wire formats, host primitive call plans, and narrow ports.
 - `function-agents` may own function-agent DTOs, prompt/domain policies,
   response parsing and repair rules, file-shape analysis, and Git/AI port traits.
-- `plugin-source` may own BitFun package manifest shapes, source identity,
+- `plugin-source` may own Halo Studio package manifest shapes, source identity,
   fixed package input data, workspace trust records, and pure trust epoch
   transitions.
 - `external-sources` may own open ecosystem/source identifiers, typed
@@ -49,10 +49,10 @@ policies, and narrow ports; concrete runtime behavior belongs outside this crate
 Use the smallest matching check for the changed surface:
 
 ```bash
-cargo test -p bitfun-product-domains --no-default-features
-cargo test -p bitfun-product-domains --features product-full
+cargo test -p halo-product-domains --no-default-features
+cargo test -p halo-product-domains --features product-full
 node scripts/check-core-boundaries.mjs
-cargo check -p bitfun-core --features product-full
+cargo check -p halo-core --features product-full
 ```
 
 For documentation-only changes, run `git diff --check`.

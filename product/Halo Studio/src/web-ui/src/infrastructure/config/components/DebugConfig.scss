@@ -1,6 +1,6 @@
 @use '../../../component-library/styles/tokens' as *;
 
-.bitfun-debug-config {
+.halo-debug-config {
   &__content {
     display: flex;
     flex-direction: column;
@@ -14,16 +14,16 @@
     width: 100%;
     min-width: 0;
 
-    .bitfun-input-wrapper {
+    .halo-input-wrapper {
       flex: 1;
       min-width: 0;
     }
 
-    .bitfun-input-container {
+    .halo-input-container {
       min-width: 0;
     }
 
-    .bitfun-icon-button {
+    .halo-icon-button {
       flex-shrink: 0;
     }
   }
@@ -178,7 +178,7 @@
 }
 
 @container config-panel (max-width: 520px) {
-  .bitfun-debug-config {
+  .halo-debug-config {
     &__settings-actions {
       justify-content: flex-start;
       flex-wrap: wrap;
@@ -187,7 +187,7 @@
 }
 
 @media (max-width: 520px) {
-  .bitfun-debug-config {
+  .halo-debug-config {
     &__template-content {
       padding: $size-gap-3;
     }

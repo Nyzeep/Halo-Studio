@@ -49,7 +49,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-const repositoryPath = 'D:/workspace/BitFun';
+const repositoryPath = 'D:/workspace/Halo';
 
 describe('GitStateManager refresh performance guards', () => {
   let manager: GitStateManager;
@@ -63,7 +63,7 @@ describe('GitStateManager refresh performance guards', () => {
     gitApiMocks.isGitRepository.mockResolvedValue(true);
     gitApiMocks.getRepositoryBasic.mockResolvedValue({
       path: repositoryPath,
-      name: 'BitFun',
+      name: 'Halo',
       current_branch: 'main',
       is_bare: false,
       has_changes: false,
@@ -71,7 +71,7 @@ describe('GitStateManager refresh performance guards', () => {
     });
     gitApiMocks.getRepository.mockResolvedValue({
       path: repositoryPath,
-      name: 'BitFun',
+      name: 'Halo',
       current_branch: 'main',
       is_bare: false,
       has_changes: true,

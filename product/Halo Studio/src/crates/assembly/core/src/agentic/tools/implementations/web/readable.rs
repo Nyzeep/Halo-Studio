@@ -1,4 +1,4 @@
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 
 #[cfg(test)]
 pub(crate) use tool_runtime::web_readable::{html_to_text, looks_noisy};
@@ -6,16 +6,16 @@ pub(crate) use tool_runtime::web_readable::{
     is_html, ReadableWebOutput as ReadableOutput, RequestedWebFetchFormat as RequestedFormat,
 };
 
-pub(crate) fn normalize_requested_format(format: Option<&str>) -> BitFunResult<RequestedFormat> {
-    tool_runtime::web_readable::normalize_requested_format(format).map_err(BitFunError::tool)
+pub(crate) fn normalize_requested_format(format: Option<&str>) -> HaloResult<RequestedFormat> {
+    tool_runtime::web_readable::normalize_requested_format(format).map_err(HaloError::tool)
 }
 
 pub(crate) fn extract_markdown_with_text_fallback(
     html: &str,
     base_url: &str,
-) -> BitFunResult<ReadableOutput> {
+) -> HaloResult<ReadableOutput> {
     tool_runtime::web_readable::extract_markdown_with_text_fallback(html, base_url)
-        .map_err(BitFunError::tool)
+        .map_err(HaloError::tool)
 }
 
 pub(crate) fn extract_html_title(html: &str) -> Option<String> {

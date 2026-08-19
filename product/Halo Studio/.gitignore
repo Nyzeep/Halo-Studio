@@ -73,8 +73,8 @@ tests/e2e/reports/
 tmp/
 Cross.toml
 
-# BitFun sandbox data - auto managed
-.bitfun/
+# Halo sandbox data - auto managed
+.halo-studio/
 .cursor
 .cursor/rules/no-cargo.mdc
 .sisyphus/
@@ -94,6 +94,6 @@ external/
 !vendor/cargo/**/Cross.toml
 !vendor/cargo/**/tests/
 !vendor/cargo/**/tests/**
-/.bitfun/search/flashgrep-index/
+/.halo-studio/search/flashgrep-index/
 .agents/
 /.flashgrep-index-engine/

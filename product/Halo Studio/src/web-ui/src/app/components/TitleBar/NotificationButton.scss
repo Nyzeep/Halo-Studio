@@ -4,7 +4,7 @@
 
 @use '../../../component-library/styles/tokens.scss' as *;
 
-.bitfun-notification-btn {
+.halo-notification-btn {
   display: flex;
   align-items: center;
   gap: $size-gap-1;
@@ -87,10 +87,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-notification-btn__spinner {
+  .halo-notification-btn__spinner {
     animation: none;
   }
-  .bitfun-notification-btn {
+  .halo-notification-btn {
     transition: none;
   }
 }

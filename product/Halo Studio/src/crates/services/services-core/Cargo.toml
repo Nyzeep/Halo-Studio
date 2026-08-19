@@ -1,20 +1,20 @@
 [package]
-name = "bitfun-services-core"
+name = "halo-services-core"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "BitFun core service owner crate"
+description = "Halo core service owner crate"
 
 [lib]
-name = "bitfun_services_core"
+name = "halo_services_core"
 crate-type = ["rlib"]
 
 [dependencies]
 anyhow = { workspace = true, optional = true }
 async-trait = { workspace = true, optional = true }
-bitfun-core-types = { path = "../../contracts/core-types" }
-bitfun-events = { path = "../../contracts/events" }
-bitfun-runtime-ports = { path = "../../contracts/runtime-ports", optional = true }
+halo-core-types = { path = "../../contracts/core-types" }
+halo-events = { path = "../../contracts/events" }
+halo-runtime-ports = { path = "../../contracts/runtime-ports", optional = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -55,9 +55,9 @@ libc = { workspace = true }
 default = ["lsp"]
 lsp = ["dep:anyhow", "dep:notify", "dep:zip"]
 markdown = ["dep:serde_yaml"]
-workspace-runtime = ["dep:anyhow", "dep:async-trait", "dep:bitfun-runtime-ports", "dep:dunce"]
+workspace-runtime = ["dep:anyhow", "dep:async-trait", "dep:halo-runtime-ports", "dep:dunce"]
 runtime-ownership = ["dep:dunce"]
-permission = ["dep:async-trait", "dep:bitfun-runtime-ports", "dep:rusqlite", "bitfun-runtime-ports/permission"]
+permission = ["dep:async-trait", "dep:halo-runtime-ports", "dep:rusqlite", "halo-runtime-ports/permission"]
 
 [dev-dependencies]
 filetime = { workspace = true }

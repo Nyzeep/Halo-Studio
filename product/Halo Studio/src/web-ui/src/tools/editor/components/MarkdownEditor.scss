@@ -3,7 +3,7 @@
 @use '../../../component-library/styles/flowchat-markdown-table-vars' as markdownTable;
 @use '../styles/markdown-editor-layout' as markdownLayout;
 
-.bitfun-markdown-editor {
+.halo-markdown-editor {
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -13,7 +13,7 @@
   overflow: hidden;
 }
 
-.bitfun-markdown-editor__notice-bar {
+.halo-markdown-editor__notice-bar {
   display: flex;
   align-items: flex-start;
   gap: $size-gap-3;
@@ -24,7 +24,7 @@
   flex-shrink: 0;
 }
 
-.bitfun-markdown-editor__notice-icon {
+.halo-markdown-editor__notice-icon {
   width: 16px;
   height: 16px;
   margin-top: 2px;
@@ -32,7 +32,7 @@
   flex-shrink: 0;
 }
 
-.bitfun-markdown-editor__notice-copy {
+.halo-markdown-editor__notice-copy {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -44,7 +44,7 @@
   }
 }
 
-.bitfun-markdown-editor__mode-toolbar {
+.halo-markdown-editor__mode-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -56,21 +56,21 @@
   flex-shrink: 0;
 }
 
-.bitfun-markdown-editor__mode-toggle {
+.halo-markdown-editor__mode-toggle {
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
 
-.bitfun-markdown-editor__toolbar-actions {
+.halo-markdown-editor__toolbar-actions {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   margin-left: auto;
 }
 
-.bitfun-markdown-editor__toolbar-button.btn-sm,
-.bitfun-markdown-editor__toolbar-button {
+.halo-markdown-editor__toolbar-button.btn-sm,
+.halo-markdown-editor__toolbar-button {
   min-height: 26px;
   height: 26px;
   padding: 0 8px;
@@ -79,18 +79,18 @@
   line-height: 1;
 }
 
-.bitfun-markdown-editor__copy-button.btn-icon-only,
-.bitfun-markdown-editor__copy-button {
+.halo-markdown-editor__copy-button.btn-icon-only,
+.halo-markdown-editor__copy-button {
   width: 26px;
   padding: 0;
 }
 
-.bitfun-markdown-editor__unsafe-body {
+.halo-markdown-editor__unsafe-body {
   min-height: 0;
   flex: 1;
 }
 
-.bitfun-markdown-editor-loading {
+.halo-markdown-editor-loading {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -100,7 +100,7 @@
   color: var(--color-text-primary);
 }
 
-.bitfun-markdown-editor-error {
+.halo-markdown-editor-error {
   display: flex;
   align-items: center;
   justify-content: center;

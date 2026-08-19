@@ -482,7 +482,7 @@ const MiniAppMarketView: React.FC = () => {
                 {detail.releases.map((release) => (
                   <div key={release.releaseId}>
                     <span>v{release.releaseNumber}</span>
-                    <span>{release.minBitfunVersion}+</span>
+                    <span>{release.minHaloVersion}+</span>
                     {release.yanked ? <Badge variant="warning">{t('market.detail.yanked')}</Badge> : <Check size={14} />}
                   </div>
                 ))}

@@ -418,7 +418,7 @@ export interface LanguageDebugTemplate {
 }
 
 export const DEFAULT_DEBUG_MODE_CONFIG: DebugModeConfig = {
-  log_path: '.bitfun/debug.log',
+  log_path: '.halo-studio/debug.log',
   ingest_port: 7242,
   enabled_languages: [],
   language_templates: {}

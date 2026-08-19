@@ -6,7 +6,7 @@ build retained as an automatic fallback. Account import remains optional.
 
 Entry points:
 
-- Remote Connect → My BitFun → login form → “一键部署到自己的服务器”
+- Remote Connect → My Halo Studio → login form → “一键部署到自己的服务器”
 - Remote Connect → Network Relay → Self-Hosted → same action (must open this
   wizard, not an external README)
 
@@ -18,7 +18,7 @@ Desktop Tauri surface: `src/apps/desktop/src/api/relay_deploy_api.rs`
 
 1. **Published binary first, source fallback.** Download the matching stable
    `v<desktop-version>` asset or the `nightly` asset for nightly Desktop builds.
-   Verify its `.sha256` and preserve the existing `bitfun-relay` container,
+   Verify its `.sha256` and preserve the existing `halo-relay` container,
    volumes, ports, and `/app/relay-admin` contract. A download, checksum,
    runtime-image, startup, or health failure restores the previous container
    before falling back to source.
@@ -42,8 +42,8 @@ Desktop Tauri surface: `src/apps/desktop/src/api/relay_deploy_api.rs`
    cannot check a signature. It does not need to: the release signs the
    `.sha256` file too, Desktop verifies that signature locally (a couple of
    hundred bytes) and exports the resulting hash into the generated script as
-   `BITFUN_EXPECTED_SHA256_<TARGET>`. The remote then needs only `sha256sum`,
-   and no origin can override that hash. Requires `BITFUN_RELEASE_PUBKEY` at
+   `HALO_EXPECTED_SHA256_<TARGET>`. The remote then needs only `sha256sum`,
+   and no origin can override that hash. Requires `HALO_RELEASE_PUBKEY` at
    Desktop build time.
 
 5. **Without a verified hash, bind to a checksum from a different origin than
@@ -59,9 +59,9 @@ Desktop Tauri surface: `src/apps/desktop/src/api/relay_deploy_api.rs`
    `mirror.sh` is shared. Do not fork this logic back into the Rust template —
    manual and one-click deploys must not drift.
 
-7. **Fallback source path is `~/.bitfun/relay-src`**, never `$HOME/BitFun` /
-   `$HOME/bitfun`. Sync always passes an explicit clone destination. Destructive
-   replace is only safe under `~/.bitfun/`.
+7. **Fallback source path is `~/.halo-studio/relay-src`**, never `$HOME/Halo Studio` /
+   `$HOME/halo`. Sync always passes an explicit clone destination. Destructive
+   replace is only safe under `~/.halo-studio/`.
 
 8. **Git first, tarball fallback.** When `.git` already exists, deploy must
    `fetch` + checkout, not re-clone from scratch (preserves BuildKit layers
@@ -76,12 +76,12 @@ Desktop Tauri surface: `src/apps/desktop/src/api/relay_deploy_api.rs`
    passwords to the remote as env/script args.
 
 11. **“Already deployed” is container-aware, not only selected-port health.**
-   Changing the listen port must not hide a running `bitfun-relay`. Use
+   Changing the listen port must not hide a running `halo-relay`. Use
    `container_running` / `existing_relay_port` / `relay_healthy` (health on
    selected **or** existing port). “Create account” must hit the running port.
 
 12. **Port conflict ≠ our relay.** `port_busy && !port_owned_by_relay` blocks
-   deploy; busy-because-bitfun-relay does not.
+   deploy; busy-because-halo-relay does not.
 
 13. **Privilege / Docker install.** Do not call `sudo -v` unconditionally.
    Detect root / passwordless sudo / interactive elevate. Docker install must
@@ -91,12 +91,12 @@ Desktop Tauri surface: `src/apps/desktop/src/api/relay_deploy_api.rs`
    static repo `.sh` alone on the server until the desktop binary re-stages.
 
 15. **China mirrors before overseas downloads.** Desktop orchestration embeds
-   `src/apps/relay-server/mirror.sh` and runs `bitfun_mirror_init` before apt
+   `src/apps/relay-server/mirror.sh` and runs `halo_mirror_init` before apt
    tool install, Docker Engine install, and GitHub sync. `deploy.sh` sources
    the same file so manual and one-click paths stay aligned. Force with
-   `BITFUN_MIRROR=cn|global`. Docker daemon metadata must stay outside
+   `HALO_MIRROR=cn|global`. Docker daemon metadata must stay outside
    `daemon.json`; host Cargo config must remain untouched; global mode rolls
-   back only BitFun-managed apt and Docker entries.
+   back only Halo Studio-managed apt and Docker entries.
 
 16. **Scripts on the relay host are LF-only, in three independent layers.**
    `include_str!` and the `r#"..."#` remote templates both inherit the
@@ -114,14 +114,14 @@ Desktop Tauri surface: `src/apps/desktop/src/api/relay_deploy_api.rs`
 
 17. **`sg -c` takes a single string, so quote every argument.** `sg docker -c
    "docker $*"` re-parses through a second shell and loses argument boundaries.
-   Use `bitfun_shell_join` (`shell_join` in `common.sh`).
+   Use `halo_shell_join` (`shell_join` in `common.sh`).
 
 18. **`DOCKER_CONFIG` must be usable by whoever runs docker.** The Docker-install
-   task runs as root with the SSH user's `HOME`, so it must hand `~/.bitfun`
+   task runs as root with the SSH user's `HOME`, so it must hand `~/.halo-studio`
    back to that user, and no `sudo` invocation may forward the user's
    `DOCKER_CONFIG` to root. A root-owned `config.json` makes the CLI warn and
    then mis-dispatch the build. Deploy repairs the config unconditionally — it
-   cannot rely on `bitfun_resolve_docker_mode`, which is skipped when the driver
+   cannot rely on `halo_resolve_docker_mode`, which is skipped when the driver
    already resolved a non-direct mode.
 
 19. **Losing the runtime image build costs 20 minutes.** Retry it (clean Docker
@@ -141,7 +141,7 @@ Desktop Tauri surface: `src/apps/desktop/src/api/relay_deploy_api.rs`
    as a probe because it has no `--version` and just starts serving.
 
 19b. **The source-build fallback must not redo the release path.**
-   `bitfun_run_deploy_sh` is reached only after `bitfun_try_release_deploy`
+   `halo_run_deploy_sh` is reached only after `halo_try_release_deploy`
    failed, and `deploy.sh` begins with that same release path — so it must be
    invoked with `--build-from-source`. Otherwise the published-binary attempt
    runs twice, visibly, before the source build.

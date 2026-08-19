@@ -1,4 +1,4 @@
-use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_sources::{
     EcosystemId, ExternalSourceAssetKind, ExternalSourceContext, ExternalSourceDiagnostic,
     ExternalSourceHealth, ExternalSourceProviderError, ExternalSourceRecord, ExternalSourceScope,
     ExternalToolCapability, ExternalToolDefinition, ExternalToolProviderIdentity,
@@ -23,7 +23,7 @@ const MAX_TOOL_FILES: usize = 1024;
 const MAX_TOOL_FILE_BYTES: u64 = 512 * 1024;
 
 const TOOL_SHIM: &str = r#"
-const __bitfunSchema = (schema) => Object.assign(schema, {
+const __haloSchema = (schema) => Object.assign(schema, {
   describe(description) { this.description = description; return this; },
   optional() { this.__optional = true; return this; },
   default(value) { this.__default = value; this.__optional = true; return this; },
@@ -43,12 +43,12 @@ const __bitfunSchema = (schema) => Object.assign(schema, {
 });
 const tool = (definition) => definition;
 tool.schema = {
-  string: () => __bitfunSchema({ type: "string" }),
-  number: () => __bitfunSchema({ type: "number" }),
-  boolean: () => __bitfunSchema({ type: "boolean" }),
-  enum: (values) => __bitfunSchema({ type: "string", enum: values }),
-  array: (items) => __bitfunSchema({ type: "array", items }),
-  object: (properties) => __bitfunSchema({ type: "object", properties, additionalProperties: false }),
+  string: () => __haloSchema({ type: "string" }),
+  number: () => __haloSchema({ type: "number" }),
+  boolean: () => __haloSchema({ type: "boolean" }),
+  enum: (values) => __haloSchema({ type: "string", enum: values }),
+  array: (items) => __haloSchema({ type: "array", items }),
+  object: (properties) => __haloSchema({ type: "object", properties, additionalProperties: false }),
 };
 "#;
 
@@ -878,7 +878,7 @@ mod tests {
         });
         let context = ExternalSourceContext {
             workspace_root: Some(workspace),
-            execution_domain_id: bitfun_product_domains::external_sources::ExecutionDomainId::new(
+            execution_domain_id: halo_product_domains::external_sources::ExecutionDomainId::new(
                 "local-user",
             )
             .unwrap(),

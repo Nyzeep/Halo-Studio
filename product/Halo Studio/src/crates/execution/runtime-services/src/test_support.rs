@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     ClockPort, FileSystemPort, GitPort, McpCatalogPort, NetworkPort, PortError, PortErrorKind,
     PortResult, RemoteAssistantWorkspaceFacts, RemoteCapabilityPort, RemoteConnectionPort,
     RemoteExecCommandRequest, RemoteExecCommandResponse, RemoteExecControlRequest,

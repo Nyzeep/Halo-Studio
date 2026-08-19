@@ -176,7 +176,7 @@ function checkSourceAssembly(rootDir, scope) {
   requireContains(appLayoutSource, 'if (isHaloLocalCodingScope()) return;', 'AppLayout.tsx');
   requireContains(appLayoutSource, "type: 'openWorkspace'", 'AppLayout.tsx');
   requireNoMatch(appLayoutSource, /import\s+\{\s*FlowChatManager\s*\}/, 'AppLayout.tsx');
-  requireNoMatch(appLayoutSource, /FloatingMiniChat|MCPInteractionDialog|SSHContext|WorkspaceKind|bitfun:create-acp-session|bitfun:acp-session-creation|createAcpChatSession|ensureAssistantBootstrap|agent-companion|MiniApp/, 'AppLayout.tsx');
+  requireNoMatch(appLayoutSource, /FloatingMiniChat|MCPInteractionDialog|SSHContext|WorkspaceKind|halo:create-acp-session|halo:acp-session-creation|createAcpChatSession|ensureAssistantBootstrap|agent-companion|MiniApp/, 'AppLayout.tsx');
 
   const registrySource = readText(files.registry);
   const registeredScenes = Array.from(registrySource.matchAll(/id:\s*'([^']+)'/g), match => match[1]);
@@ -335,7 +335,7 @@ export function verifyHaloScope(rootDir = ROOT) {
   if (scope.displayName !== 'Halo Studio') fail('displayName must be Halo Studio');
   if (scope.bundleIdentifier !== 'com.halostudio.desktop') fail('bundle identifier changed without a product decision');
   if (scope.desktopRoot !== 'src/apps/halo-desktop') fail('desktopRoot must stay on the Halo Tauri shell');
-  if (scope.frontendRoot !== 'src/web-ui') fail('frontendRoot must be the BitFun Web UI source root');
+  if (scope.frontendRoot !== 'src/web-ui') fail('frontendRoot must be the Halo Web UI source root');
   if (scope.developmentEntry !== 'node scripts/halo-tauri.mjs dev') fail('developmentEntry is not the Halo Tauri wrapper');
   if (scope.packagingEntry !== 'node scripts/halo-tauri.mjs build') fail('packagingEntry is not the Halo Tauri wrapper');
   if (!Array.isArray(scope.excludedRoutes) || scope.excludedRoutes.length === 0) fail('excludedRoutes must be declared');
@@ -365,17 +365,17 @@ export function verifyHaloScope(rootDir = ROOT) {
     fail('desktop preview must use the Halo Web UI preview wrapper');
   }
   if (packageJson.scripts?.['type-check:web'] !== 'pnpm --dir src/web-ui run type-check') {
-    fail('type-check:web must target the BitFun Web UI package');
+    fail('type-check:web must target the Halo Web UI package');
   }
 
   if (config.productName !== scope.displayName) fail('Tauri productName diverges from scope');
   if (config.identifier !== scope.bundleIdentifier) fail('Tauri identifier diverges from scope');
   if (config.build?.beforeDevCommand !== 'node ../../scripts/halo-web-ui-dev-server.mjs') fail('Tauri dev command is not the Halo Web UI wrapper');
-  if (config.build?.devUrl !== 'http://localhost:1422') fail('Tauri devUrl must match BitFun Web UI Vite');
+  if (config.build?.devUrl !== 'http://localhost:1422') fail('Tauri devUrl must match Halo Web UI Vite');
   if (config.build?.beforeBuildCommand !== 'node ../../scripts/halo-web-ui-build.mjs') fail('Tauri build command is not the Halo Web UI wrapper');
-  if (config.build?.frontendDist !== '../../../dist') fail('Tauri frontendDist must load the BitFun Web UI build output');
-  if (config.app?.security?.csp !== null) fail('BitFun Web UI requires the inherited desktop CSP compatibility setting');
-  if (config.app?.withGlobalTauri !== true) fail('BitFun Web UI requires withGlobalTauri');
+  if (config.build?.frontendDist !== '../../../dist') fail('Tauri frontendDist must load the Halo Web UI build output');
+  if (config.app?.security?.csp !== null) fail('Halo Web UI requires the inherited desktop CSP compatibility setting');
+  if (config.app?.withGlobalTauri !== true) fail('Halo Web UI requires withGlobalTauri');
   if (config.app?.windows?.[0]?.visible !== true) fail('Halo main window must be visible by default');
   if (!String(config.app?.windows?.[0]?.title ?? '').includes('Halo Studio')) fail('Halo window title must use Halo Studio');
   if (!Array.isArray(config.bundle?.icon) || !config.bundle.icon.includes('icons/halo-icon.ico')) fail('Tauri bundle must use the Halo desktop icon');
@@ -407,12 +407,12 @@ export function verifyHaloScope(rootDir = ROOT) {
   const haloDesktopMain = readText(desktopMain);
   requireContains(
     haloDesktopMain,
-    'bitfun_desktop_lib::run_with_context_and_options',
+    'halo_desktop_lib::run_with_context_and_options',
     'src/apps/halo-desktop/src/main.rs',
   );
   requireContains(
     haloDesktopMain,
-    'bitfun_desktop_lib::DesktopRunOptions::with_logs_root',
+    'halo_desktop_lib::DesktopRunOptions::with_logs_root',
     'src/apps/halo-desktop/src/main.rs',
   );
   requireNoMatch(haloDesktopMain, /tauri::Builder::default\(\)\s*\.run/, 'src/apps/halo-desktop/src/main.rs');
@@ -423,10 +423,10 @@ export function verifyHaloScope(rootDir = ROOT) {
   requireMatch(viteConfig, /port:\s*1421/, 'src/web-ui/vite.config.ts', 'HMR port 1421');
   requireContains(viteConfig, "outDir: '../../dist'", 'src/web-ui/vite.config.ts');
 
-  if (webPackageJson.scripts?.dev !== 'vite') fail('BitFun Web UI dev script must be vite');
-  if (webPackageJson.scripts?.['build:desktop'] !== 'vite build --mode desktop') fail('BitFun Web UI desktop build script changed');
-  if (webPackageJson.scripts?.['type-check'] !== 'tsc --noEmit') fail('BitFun Web UI type-check script changed');
-  if (webPackageJson.scripts?.['test:run'] !== 'vitest run') fail('BitFun Web UI test script changed');
+  if (webPackageJson.scripts?.dev !== 'vite') fail('Halo Web UI dev script must be vite');
+  if (webPackageJson.scripts?.['build:desktop'] !== 'vite build --mode desktop') fail('Halo Web UI desktop build script changed');
+  if (webPackageJson.scripts?.['type-check'] !== 'tsc --noEmit') fail('Halo Web UI type-check script changed');
+  if (webPackageJson.scripts?.['test:run'] !== 'vitest run') fail('Halo Web UI test script changed');
 
   const wrapperFiles = [
     packageJsonPath,

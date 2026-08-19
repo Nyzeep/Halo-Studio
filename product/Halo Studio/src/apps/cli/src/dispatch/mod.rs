@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{anyhow, bail, Context, Result};
-use bitfun_core::infrastructure::ai::AIClientFactory;
-use bitfun_core::service::config::{AuthConfig, GlobalConfig};
+use halo_core::infrastructure::ai::AIClientFactory;
+use halo_core::service::config::{AuthConfig, GlobalConfig};
 use serde::de::DeserializeOwned;
 
 use protocol::{
@@ -97,7 +97,7 @@ async fn submit(mut request: DispatchSubmitRequest) -> Result<DispatchSubmitResp
     if !runner::is_supported() {
         bail!("dispatch detached workers are supported only on Linux and macOS");
     }
-    bitfun_agent_runtime::session_control::validate_session_id(&request.session_id)
+    halo_agent_runtime::session_control::validate_session_id(&request.session_id)
         .map_err(anyhow::Error::msg)?;
     let intent = request.clone();
     let store = DispatchStore::open_default()?;
@@ -310,10 +310,10 @@ fn reconcile_worker_liveness_with_spawn(
 }
 
 async fn inspect_model_readiness() -> Result<ModelReadiness> {
-    bitfun_core::service::config::initialize_global_config()
+    halo_core::service::config::initialize_global_config()
         .await
         .map_err(|error| anyhow!("Failed to initialize target model configuration: {error}"))?;
-    let config_service = bitfun_core::service::config::get_global_config_service()
+    let config_service = halo_core::service::config::get_global_config_service()
         .await
         .map_err(|error| anyhow!("Failed to read target model configuration: {error}"))?;
     let config: GlobalConfig = config_service

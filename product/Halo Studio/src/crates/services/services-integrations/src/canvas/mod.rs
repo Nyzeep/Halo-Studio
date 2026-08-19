@@ -6,7 +6,7 @@
 
 mod compiler;
 
-use bitfun_product_domains::canvas::{
+use halo_product_domains::canvas::{
     is_safe_canvas_ref_segment, CanvasArtifact, CanvasCompileResult, CanvasCompiledPayload,
     CanvasDiagnostic, CanvasDiagnosticSeverity, CanvasId, CanvasPortError, CanvasPortErrorKind,
     CanvasPortFuture, CanvasPortResult, CanvasSessionId, CanvasSnapshot, CanvasSource, CanvasState,
@@ -42,8 +42,8 @@ impl CanvasMemoryStore {
         }
     }
 
-    pub fn capability_status() -> bitfun_product_domains::canvas::CanvasCapabilityStatus {
-        bitfun_product_domains::canvas::CanvasCapabilityStatus::supported()
+    pub fn capability_status() -> halo_product_domains::canvas::CanvasCapabilityStatus {
+        halo_product_domains::canvas::CanvasCapabilityStatus::supported()
     }
 
     fn key(session_id: CanvasSessionId, canvas_id: CanvasId) -> (CanvasSessionId, CanvasId) {
@@ -188,7 +188,7 @@ impl CanvasStoragePort for CanvasMemoryStore {
         &self,
         artifact: CanvasArtifact,
         source: CanvasSource,
-        diagnostics: Vec<bitfun_product_domains::canvas::CanvasDiagnostic>,
+        diagnostics: Vec<halo_product_domains::canvas::CanvasDiagnostic>,
     ) -> CanvasPortFuture<'_, CanvasSnapshot> {
         let store = self.clone();
         Box::pin(async move {
@@ -479,7 +479,7 @@ impl CanvasStoragePort for CanvasMemoryStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitfun_product_domains::canvas::{
+    use halo_product_domains::canvas::{
         CanvasDiagnosticCategory, CanvasDiagnosticSeverity, CanvasRevision, CanvasScope,
         CanvasWorkspaceId,
     };
@@ -507,7 +507,7 @@ mod tests {
             CanvasId::new(canvas_id),
             CanvasRevision::new("rev_1"),
             "canvas.tsx",
-            "import { Stack } from 'bitfun/canvas'; export default function C() { return <Stack />; }",
+            "import { Stack } from 'halo/canvas'; export default function C() { return <Stack />; }",
             "0.1.0",
             1,
         )
@@ -616,7 +616,7 @@ mod tests {
     #[tokio::test]
     async fn canvas_store_persists_snapshots_by_session() {
         let sessions_dir =
-            std::env::temp_dir().join(format!("bitfun-canvas-store-test-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo-canvas-store-test-{}", uuid::Uuid::new_v4()));
         let store = CanvasMemoryStore::persistent(&sessions_dir);
         store
             .save_source(
@@ -678,7 +678,7 @@ mod tests {
     #[tokio::test]
     async fn persistent_canvas_store_rejects_unsafe_path_segments() {
         let sessions_dir =
-            std::env::temp_dir().join(format!("bitfun-canvas-store-test-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo-canvas-store-test-{}", uuid::Uuid::new_v4()));
         let store = CanvasMemoryStore::persistent(&sessions_dir);
 
         let error = store
@@ -822,8 +822,8 @@ mod tests {
         assert!(result.compiled, "{:?}", result.diagnostics);
         let html = result.payload.unwrap().html;
 
-        assert!(html.contains("bitfun-canvas-root"));
-        assert!(html.contains("BitfunCanvasRuntime.mount"));
+        assert!(html.contains("halo-canvas-root"));
+        assert!(html.contains("HaloCanvasRuntime.mount"));
         assert!(html.contains("connect-src 'none'"));
         assert!(!html.contains("</script><unsafe>"));
     }

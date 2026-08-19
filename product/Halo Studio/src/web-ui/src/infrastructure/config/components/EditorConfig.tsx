@@ -343,7 +343,7 @@ const EditorConfig: React.FC<EditorConfigProps> = () => {
 
   if (isLoading) {
     return (
-      <ConfigPageLayout className="bitfun-editor-config">
+      <ConfigPageLayout className="halo-editor-config">
         <ConfigPageHeader
           title={t('title')}
           subtitle={t('subtitle')}
@@ -356,13 +356,13 @@ const EditorConfig: React.FC<EditorConfigProps> = () => {
   }
 
   return (
-    <ConfigPageLayout className="bitfun-editor-config">
+    <ConfigPageLayout className="halo-editor-config">
       <ConfigPageHeader
         title={t('title')}
         subtitle={t('subtitle')}
       />
 
-      <ConfigPageContent className="bitfun-editor-config__content">
+      <ConfigPageContent className="halo-editor-config__content">
         <ConfigPageSection
           title={t('sections.appearance.title')}
           description={t('sections.appearance.description')}
@@ -572,7 +572,7 @@ const EditorConfig: React.FC<EditorConfigProps> = () => {
           description={t('actions.saveDesc')}
         >
           <ConfigPageRow label={t('actions.reset')} description={t('messages.confirmReset')} align="center">
-            <div className="bitfun-editor-config__actions">
+            <div className="halo-editor-config__actions">
               <Button
                 variant="secondary"
                 size="small"
@@ -582,7 +582,7 @@ const EditorConfig: React.FC<EditorConfigProps> = () => {
                 {t('actions.reset')}
               </Button>
               {isSaving && (
-                <span className="bitfun-editor-config__saving">{t('messages.saving')}</span>
+                <span className="halo-editor-config__saving">{t('messages.saving')}</span>
               )}
             </div>
           </ConfigPageRow>

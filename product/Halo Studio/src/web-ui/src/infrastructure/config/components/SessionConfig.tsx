@@ -481,11 +481,11 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
   ];
 
   const subagentBatchPolicyLabel = (
-    <span className="bitfun-func-agent-config__label-with-tooltip">
+    <span className="halo-func-agent-config__label-with-tooltip">
       <span>{tTools('config.subagentBatchPolicy.label')}</span>
       <Tooltip
         content={
-          <span className="bitfun-func-agent-config__policy-tooltip">
+          <span className="halo-func-agent-config__policy-tooltip">
             <strong>{tTools('config.subagentBatchPolicy.safeOnly')}</strong>
             <span>{tTools('config.subagentBatchPolicy.safeOnlyDesc')}</span>
             <strong>{tTools('config.subagentBatchPolicy.forceParallel')}</strong>
@@ -494,7 +494,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
         }
         placement="top"
       >
-        <span className="bitfun-func-agent-config__label-tooltip-icon" aria-label={tTools('config.subagentBatchPolicy.tooltipLabel')}>
+        <span className="halo-func-agent-config__label-tooltip-icon" aria-label={tTools('config.subagentBatchPolicy.tooltipLabel')}>
           <Info size={14} />
         </span>
       </Tooltip>
@@ -876,9 +876,9 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
 
   if (isLoading || !settings) {
     return (
-      <ConfigPageLayout className="bitfun-func-agent-config">
+      <ConfigPageLayout className="halo-func-agent-config">
         <ConfigPageHeader title={pageTitle} subtitle={pageSubtitle} />
-        <ConfigPageContent className="bitfun-func-agent-config__content">
+        <ConfigPageContent className="halo-func-agent-config__content">
           <ConfigPageLoading text={t('loading.text')} />
         </ConfigPageContent>
       </ConfigPageLayout>
@@ -886,10 +886,10 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
   }
 
   return (
-    <ConfigPageLayout className="bitfun-func-agent-config">
+    <ConfigPageLayout className="halo-func-agent-config">
       <ConfigPageHeader title={pageTitle} subtitle={pageSubtitle} />
 
-      <ConfigPageContent className="bitfun-func-agent-config__content">
+      <ConfigPageContent className="halo-func-agent-config__content">
 
         {variant === 'personalization' ? (
           <>
@@ -900,7 +900,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
           description={t('features.agentCompanion.subtitle')}
         >
           <ConfigPageRow label={t('features.agentCompanion.enable')} align="center">
-            <div className="bitfun-func-agent-config__row-control">
+            <div className="halo-func-agent-config__row-control">
               <Switch
                 checked={settings.enable_agent_companion}
                 onChange={(e) => updateSetting('enable_agent_companion', e.target.checked)}
@@ -914,7 +914,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
             align="center"
           >
             <Select
-              className="bitfun-func-agent-config__pet-select"
+              className="halo-func-agent-config__pet-select"
               size="small"
               options={companionDisplayModeOptions}
               value={settings.agent_companion_display_mode}
@@ -929,16 +929,16 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
           </ConfigPageRow>
           <ConfigPageRow
             label={(
-              <span className="bitfun-func-agent-config__pet-row-heading">
-                <span className="bitfun-func-agent-config__pet-row-copy">
-                  <span className="bitfun-func-agent-config__pet-row-title">
+              <span className="halo-func-agent-config__pet-row-heading">
+                <span className="halo-func-agent-config__pet-row-copy">
+                  <span className="halo-func-agent-config__pet-row-title">
                     {t('features.agentCompanion.petLabel')}
                   </span>
-                  <span className="bitfun-func-agent-config__pet-row-description">
+                  <span className="halo-func-agent-config__pet-row-description">
                     {t('features.agentCompanion.petDescription')}
                   </span>
                 </span>
-                <span className="bitfun-func-agent-config__pet-actions">
+                <span className="halo-func-agent-config__pet-actions">
                   <IconButton
                     type="button"
                     size="small"
@@ -965,41 +965,41 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
             )}
             align="start"
             multiline
-            className="bitfun-func-agent-config__pet-row"
+            className="halo-func-agent-config__pet-row"
           >
-            <div className="bitfun-func-agent-config__pet-picker">
-              <div className="bitfun-func-agent-config__pet-chooser">
+            <div className="halo-func-agent-config__pet-picker">
+              <div className="halo-func-agent-config__pet-chooser">
                 <button
                   type="button"
-                  className="bitfun-func-agent-config__pet-expand-button"
+                  className="halo-func-agent-config__pet-expand-button"
                   aria-expanded={companionPetListExpanded}
-                  aria-controls="bitfun-companion-pet-list"
+                  aria-controls="halo-companion-pet-list"
                   onClick={() => setCompanionPetListExpanded((expanded) => !expanded)}
                 >
-                  <span className="bitfun-func-agent-config__pet-expand-current">
-                    <span className="bitfun-func-agent-config__pet-select-thumb" aria-hidden>
+                  <span className="halo-func-agent-config__pet-expand-current">
+                    <span className="halo-func-agent-config__pet-select-thumb" aria-hidden>
                       {selectedCompanionPetPackage ? (
                         <span
-                          className="bitfun-func-agent-config__pet-preview-sprite"
-                          style={{ '--bitfun-pet-preview-src': `url("${selectedCompanionPetPackage.previewSrc}")` } as React.CSSProperties}
+                          className="halo-func-agent-config__pet-preview-sprite"
+                          style={{ '--halo-pet-preview-src': `url("${selectedCompanionPetPackage.previewSrc}")` } as React.CSSProperties}
                         />
                       ) : (
-                        <ChatInputPixelPet mood="rest" pet={selectedCompanionPet} className="bitfun-func-agent-config__pet-select-panda" />
+                        <ChatInputPixelPet mood="rest" pet={selectedCompanionPet} className="halo-func-agent-config__pet-select-panda" />
                       )}
                     </span>
-                    <span className="bitfun-func-agent-config__pet-select-value">
+                    <span className="halo-func-agent-config__pet-select-value">
                       {selectedCompanionPetOption?.label ?? t('features.agentCompanion.petPlaceholder')}
                     </span>
                   </span>
                   <ChevronDown
                     size={14}
-                    className={companionPetListExpanded ? 'bitfun-func-agent-config__pet-expand-chevron--open' : undefined}
+                    className={companionPetListExpanded ? 'halo-func-agent-config__pet-expand-chevron--open' : undefined}
                   />
                 </button>
                 {companionPetListExpanded && (
                   <div
-                    id="bitfun-companion-pet-list"
-                    className="bitfun-func-agent-config__pet-list"
+                    id="halo-companion-pet-list"
+                    className="halo-func-agent-config__pet-list"
                     role="radiogroup"
                     aria-label={t('features.agentCompanion.petLabel')}
                   >
@@ -1012,12 +1012,12 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                       return (
                         <React.Fragment key={String(option.value)}>
                           {showGroup && (
-                            <div className="bitfun-func-agent-config__pet-list-group">
+                            <div className="halo-func-agent-config__pet-list-group">
                               {option.group}
                             </div>
                           )}
                           <div
-                            className={`bitfun-func-agent-config__pet-select-option${isSelected ? ' bitfun-func-agent-config__pet-select-option--selected' : ''}`}
+                            className={`halo-func-agent-config__pet-select-option${isSelected ? ' halo-func-agent-config__pet-select-option--selected' : ''}`}
                             role="radio"
                             tabIndex={0}
                             aria-checked={isSelected}
@@ -1029,38 +1029,38 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                               }
                             }}
                           >
-                            <div className="bitfun-func-agent-config__pet-select-option-main">
-                              <span className="bitfun-func-agent-config__pet-select-thumb" aria-hidden>
+                            <div className="halo-func-agent-config__pet-select-option-main">
+                              <span className="halo-func-agent-config__pet-select-thumb" aria-hidden>
                                 {pet ? (
                                   <span
-                                    className="bitfun-func-agent-config__pet-preview-sprite"
-                                    style={{ '--bitfun-pet-preview-src': `url("${pet.previewSrc}")` } as React.CSSProperties}
+                                    className="halo-func-agent-config__pet-preview-sprite"
+                                    style={{ '--halo-pet-preview-src': `url("${pet.previewSrc}")` } as React.CSSProperties}
                                   />
                                 ) : (
                                   <ChatInputPixelPet
                                     mood="rest"
                                     pet={DEFAULT_AGENT_COMPANION_PET}
-                                    className="bitfun-func-agent-config__pet-select-panda"
+                                    className="halo-func-agent-config__pet-select-panda"
                                   />
                                 )}
                               </span>
-                              <span className="bitfun-func-agent-config__pet-select-text">
-                                <span className="bitfun-func-agent-config__pet-select-label">{option.label}</span>
+                              <span className="halo-func-agent-config__pet-select-text">
+                                <span className="halo-func-agent-config__pet-select-label">{option.label}</span>
                                 {option.description && (
-                                  <span className="bitfun-func-agent-config__pet-select-description">{option.description}</span>
+                                  <span className="halo-func-agent-config__pet-select-description">{option.description}</span>
                                 )}
                               </span>
                             </div>
-                            <div className={`bitfun-func-agent-config__pet-select-actions${isUserPet && IS_TAURI_DESKTOP && pet ? ' bitfun-func-agent-config__pet-select-actions--deletable' : ''}`}>
+                            <div className={`halo-func-agent-config__pet-select-actions${isUserPet && IS_TAURI_DESKTOP && pet ? ' halo-func-agent-config__pet-select-actions--deletable' : ''}`}>
                               {isSelected && (
-                                <Check className="bitfun-func-agent-config__pet-select-check" size={14} aria-hidden />
+                                <Check className="halo-func-agent-config__pet-select-check" size={14} aria-hidden />
                               )}
                               {isUserPet && IS_TAURI_DESKTOP && pet && (
                                 <IconButton
                                   type="button"
                                   size="small"
                                   variant="danger"
-                                  className="bitfun-func-agent-config__pet-select-delete"
+                                  className="halo-func-agent-config__pet-select-delete"
                                   disabled={isDeleting}
                                   aria-label={t('features.agentCompanion.delete')}
                                   tooltip={t('features.agentCompanion.delete')}
@@ -1093,7 +1093,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
           description={t('features.workspaceSearch.subtitle')}
         >
           <ConfigPageRow label={t('features.workspaceSearch.enable')} align="center">
-            <div className="bitfun-func-agent-config__row-control">
+            <div className="halo-func-agent-config__row-control">
               <Switch
                 checked={settings.enable_workspace_search}
                 onChange={(e) => updateSetting('enable_workspace_search', e.target.checked)}
@@ -1116,7 +1116,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                 : t('permissionPolicy.askDescription')}
             align="center"
           >
-            <div className="bitfun-func-agent-config__row-control">
+            <div className="halo-func-agent-config__row-control">
               <Select
                 size="small"
                 value={resolveToolPermissionMode(toolPermissionConfig)}
@@ -1135,7 +1135,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
             description={t('permissionPolicy.showInChatInputDescription')}
             align="center"
           >
-            <div className="bitfun-func-agent-config__row-control">
+            <div className="halo-func-agent-config__row-control">
               <Switch
                 checked={showPermissionModeControl}
                 disabled={permissionModeControlVisibilitySaving}
@@ -1149,7 +1149,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
             description={t('permissionPolicy.globalRulesDescription')}
             align="center"
           >
-            <div className="bitfun-func-agent-config__row-control">
+            <div className="halo-func-agent-config__row-control">
               <Button
                 type="button"
                 size="small"
@@ -1178,11 +1178,11 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
         >
           <ConfigPageRow
             label={(
-              <span className="bitfun-func-agent-config__inline-label">
+              <span className="halo-func-agent-config__inline-label">
                 <span>{tTools('config.executionTimeout')}</span>
                 <Tooltip content={tTools('config.executionTimeoutHint')} placement="top">
                   <span
-                    className="bitfun-func-agent-config__inline-info"
+                    className="halo-func-agent-config__inline-info"
                     role="button"
                     tabIndex={0}
                     aria-label={tTools('config.executionTimeoutHint')}
@@ -1195,7 +1195,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
             description={tTools('config.executionTimeoutDesc')}
             align="center"
           >
-            <div className="bitfun-func-agent-config__row-control">
+            <div className="halo-func-agent-config__row-control">
               <NumberInput
                 value={executionTimeout === '' ? 0 : parseInt(executionTimeout, 10)}
                 onChange={(val) => handleToolTimeoutChange(val === 0 ? '' : String(val))}
@@ -1209,7 +1209,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
             </div>
           </ConfigPageRow>
           <ConfigPageRow label={subagentBatchPolicyLabel} description={tTools('config.subagentBatchPolicy.desc')} align="center">
-            <div className="bitfun-func-agent-config__row-control">
+            <div className="halo-func-agent-config__row-control">
               <Select
                 value={subagentBatchExecutionPolicy}
                 options={subagentBatchExecutionPolicyOptions}
@@ -1221,14 +1221,14 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
           </ConfigPageRow>
           <ConfigPageRow
             label={(
-              <span className="bitfun-func-agent-config__inline-label">
+              <span className="halo-func-agent-config__inline-label">
                 <span>{tTools('config.subagentMaxConcurrency')}</span>
               </span>
             )}
             description={tTools('config.subagentMaxConcurrencyDesc')}
             align="center"
           >
-            <div className="bitfun-func-agent-config__row-control">
+            <div className="halo-func-agent-config__row-control">
               <NumberInput
                 value={subagentMaxConcurrency}
                 onChange={(val) => void handleSubagentMaxConcurrencyChange(val)}
@@ -1251,7 +1251,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
             description={!enableDeferredToolLoading ? t('deferredToolLoading.warning') : undefined}
             align="center"
           >
-            <div className="bitfun-func-agent-config__row-control">
+            <div className="halo-func-agent-config__row-control">
               <Switch
                 checked={enableDeferredToolLoading}
                 onChange={(event) => handleDeferredToolLoadingChange(event.target.checked)}
@@ -1272,7 +1272,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
           {IS_TAURI_DESKTOP ? (
             <>
               <ConfigPageRow label={t('computerUse.enable')} description={t('computerUse.enableDesc')} align="center">
-                <div className="bitfun-func-agent-config__row-control">
+                <div className="halo-func-agent-config__row-control">
                   <Switch
                     checked={computerUseEnabled}
                     onChange={(e) => handleComputerUseEnabledChange(e.target.checked)}
@@ -1288,7 +1288,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                 balanced
               >
                 <div
-                  className="bitfun-func-agent-config__row-control"
+                  className="halo-func-agent-config__row-control"
                   style={{
                     display: 'flex',
                     flexDirection: 'row',
@@ -1299,7 +1299,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                   }}
                 >
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    <span className={!computerUseStatusLoading && computerUseAccess ? 'bitfun-func-agent-config__perm-status--granted' : undefined}>
+                    <span className={!computerUseStatusLoading && computerUseAccess ? 'halo-func-agent-config__perm-status--granted' : undefined}>
                       {computerUseAccessLabel}
                     </span>
                     <IconButton
@@ -1316,7 +1316,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                   </span>
                   {platform === 'macos' && (
                     <Button
-                      className="bitfun-func-agent-config__row-action-btn"
+                      className="halo-func-agent-config__row-action-btn"
                       size="small"
                       variant="secondary"
                       disabled={computerUseBusy || computerUseStatusLoading}
@@ -1334,7 +1334,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                 balanced
               >
                 <div
-                  className="bitfun-func-agent-config__row-control"
+                  className="halo-func-agent-config__row-control"
                   style={{
                     display: 'flex',
                     flexDirection: 'row',
@@ -1345,7 +1345,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                   }}
                 >
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    <span className={!computerUseStatusLoading && computerUseScreen ? 'bitfun-func-agent-config__perm-status--granted' : undefined}>
+                    <span className={!computerUseStatusLoading && computerUseScreen ? 'halo-func-agent-config__perm-status--granted' : undefined}>
                       {computerUseScreenLabel}
                     </span>
                     <IconButton
@@ -1362,7 +1362,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                   </span>
                   {platform === 'macos' && (
                     <Button
-                      className="bitfun-func-agent-config__row-action-btn"
+                      className="halo-func-agent-config__row-action-btn"
                       size="small"
                       variant="secondary"
                       disabled={computerUseBusy || computerUseStatusLoading}
@@ -1375,7 +1375,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
               </ConfigPageRow>
               {computerUsePlatformNote && (
                 <div
-                  className="bitfun-func-agent-config__platform-note"
+                  className="halo-func-agent-config__platform-note"
                   style={{
                     display: 'flex',
                     alignItems: 'flex-start',
@@ -1384,7 +1384,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                   }}
                 >
                   <Info size={14} style={{ flexShrink: 0, marginTop: 2, opacity: 0.7 }} />
-                  <p className="bitfun-config-page-row__description" style={{ margin: 0 }}>
+                  <p className="halo-config-page-row__description" style={{ margin: 0 }}>
                     <strong>{t('computerUse.platformNote')}: </strong>
                     {computerUsePlatformNote}
                   </p>
@@ -1411,7 +1411,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                 align="center"
                 balanced
               >
-                <div className="bitfun-func-agent-config__row-control">
+                <div className="halo-func-agent-config__row-control">
                   <Select
                     value={preferredBrowser}
                     options={browserSelectOptions}
@@ -1431,7 +1431,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                 balanced
               >
                 <div
-                  className="bitfun-func-agent-config__row-control"
+                  className="halo-func-agent-config__row-control"
                   style={{
                     display: 'flex',
                     flexDirection: 'row',
@@ -1453,7 +1453,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                     title={browserCdpAvailable && browserVersion ? `${browserKind} ${browserVersion}` : undefined}
                   >
                     <span
-                      className={!browserStatusLoading && browserCdpAvailable ? 'bitfun-func-agent-config__perm-status--granted' : undefined}
+                      className={!browserStatusLoading && browserCdpAvailable ? 'halo-func-agent-config__perm-status--granted' : undefined}
                       style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
                     >
                       {browserStatusLabel}
@@ -1472,7 +1472,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                   </span>
                   {!browserCdpAvailable && (
                     <Button
-                      className="bitfun-func-agent-config__row-action-btn"
+                      className="halo-func-agent-config__row-action-btn"
                       size="small"
                       variant="secondary"
                       disabled={browserControlBusy || browserStatusLoading}
@@ -1489,9 +1489,9 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                   description={t('browserControl.createLauncherDesc')}
                   align="center"
                 >
-                  <div className="bitfun-func-agent-config__row-control">
+                  <div className="halo-func-agent-config__row-control">
                     <Button
-                      className="bitfun-func-agent-config__row-action-btn"
+                      className="halo-func-agent-config__row-action-btn"
                       size="small"
                       variant="secondary"
                       disabled={browserControlBusy}
@@ -1516,7 +1516,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
             label={tDebug('settings.logPath.label')}
             description={tDebug('settings.logPath.description')}
           >
-            <div className="bitfun-debug-config__input-group">
+            <div className="halo-debug-config__input-group">
               <Input
                 value={debugConfig.log_path}
                 onChange={(e) => updateDebugConfig({ log_path: e.target.value })}
@@ -1553,7 +1553,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
           {/* Save / cancel for basic settings changes (not shown while modal is open) */}
           {debugHasChanges && !isTemplatesModalOpen && (
             <ConfigPageRow label={tDebug('actions.save')} align="center">
-              <div className="bitfun-debug-config__settings-actions">
+              <div className="halo-debug-config__settings-actions">
                 <Button
                   variant="primary"
                   size="small"
@@ -1600,7 +1600,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
               type="button"
               variant="ghost"
               size="xs"
-              className="bitfun-debug-config__modal-reset-icon"
+              className="halo-debug-config__modal-reset-icon"
               onClick={resetDebugTemplates}
               tooltip={tDebug('templates.reset')}
               aria-label={tDebug('templates.reset')}
@@ -1610,7 +1610,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
           )}
           size="large"
         >
-          <div className="bitfun-debug-config__modal-body">
+          <div className="halo-debug-config__modal-body">
             {templateEntries.map(([language, template]) => {
               const isExpanded = expandedTemplates.has(language);
               return (
@@ -1619,13 +1619,13 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                   variant="default"
                   padding="none"
                   interactive
-                  className={`bitfun-debug-config__template-card${isExpanded ? ' is-expanded' : ''}`}
+                  className={`halo-debug-config__template-card${isExpanded ? ' is-expanded' : ''}`}
                 >
                   <div
-                    className="bitfun-debug-config__template-header"
+                    className="halo-debug-config__template-header"
                     onClick={() => toggleTemplateExpand(language)}
                   >
-                    <div className="bitfun-debug-config__template-info">
+                    <div className="halo-debug-config__template-info">
                       <div onClick={(e) => e.stopPropagation()}>
                         <Switch
                           checked={template.enabled}
@@ -1633,19 +1633,19 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                           size="small"
                         />
                       </div>
-                      <span className="bitfun-debug-config__template-name">
+                      <span className="halo-debug-config__template-name">
                         {template.display_name || LANGUAGE_TEMPLATE_LABELS[language] || language}
                       </span>
                     </div>
                     <ChevronDown
                       size={16}
-                      className={`bitfun-debug-config__template-arrow${isExpanded ? ' is-expanded' : ''}`}
+                      className={`halo-debug-config__template-arrow${isExpanded ? ' is-expanded' : ''}`}
                     />
                   </div>
 
                   {isExpanded && (
-                    <CardBody className="bitfun-debug-config__template-content">
-                      <div className="bitfun-debug-config__template-field">
+                    <CardBody className="halo-debug-config__template-content">
+                      <div className="halo-debug-config__template-field">
                         <Textarea
                           label={tDebug('templates.instrumentation.label')}
                           value={template.instrumentation_template}
@@ -1656,11 +1656,11 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                           autoResize
                         />
                       </div>
-                      <div className="bitfun-debug-config__template-field">
-                        <label className="bitfun-debug-config__template-label">
+                      <div className="halo-debug-config__template-field">
+                        <label className="halo-debug-config__template-label">
                           {tDebug('templates.region.label')}
                         </label>
-                        <div className="bitfun-debug-config__region-inputs">
+                        <div className="halo-debug-config__region-inputs">
                           <Input
                             value={template.region_start}
                             onChange={(e) => updateTemplate(language, { region_start: e.target.value })}
@@ -1678,13 +1678,13 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
                         </div>
                       </div>
                       {template.notes && template.notes.length > 0 && (
-                        <div className="bitfun-debug-config__template-field">
-                          <label className="bitfun-debug-config__template-label">
+                        <div className="halo-debug-config__template-field">
+                          <label className="halo-debug-config__template-label">
                             {tDebug('templates.notes')}
                           </label>
-                          <div className="bitfun-debug-config__template-notes">
+                          <div className="halo-debug-config__template-notes">
                             {template.notes.map((note, idx) => (
-                              <span key={idx} className="bitfun-debug-config__template-note">
+                              <span key={idx} className="halo-debug-config__template-note">
                                 {note}
                               </span>
                             ))}
@@ -1699,7 +1699,7 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
           </div>
 
           {debugHasChanges && (
-            <div className="bitfun-debug-config__modal-footer">
+            <div className="halo-debug-config__modal-footer">
               <Button
                 variant="primary"
                 size="small"
@@ -1729,14 +1729,14 @@ const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }
           size="small"
           closeOnOverlayClick={!browserControlBusy}
         >
-          <div className="bitfun-debug-config__modal-body">
+          <div className="halo-debug-config__modal-body">
             <p>{t('browserControl.restartModal.description', { browser: browserRestartPrompt?.browserKind || browserKind })}</p>
             <p>{t('browserControl.restartModal.warning')}</p>
             {browserRestartPrompt?.message ? (
-              <p className="bitfun-func-agent-config__hint">{browserRestartPrompt.message}</p>
+              <p className="halo-func-agent-config__hint">{browserRestartPrompt.message}</p>
             ) : null}
           </div>
-          <div className="bitfun-debug-config__modal-footer">
+          <div className="halo-debug-config__modal-footer">
             <Button
               variant="secondary"
               size="small"

@@ -1,7 +1,7 @@
-# BitFun HarmonyOS
+# Halo Studio HarmonyOS
 
-Native HarmonyOS phone client for BitFun. The application provides general
-chat and remote control of BitFun desktop sessions.
+Native HarmonyOS phone client for Halo Studio. The application provides general
+chat and remote control of Halo Studio desktop sessions.
 
 ## Project Layout
 

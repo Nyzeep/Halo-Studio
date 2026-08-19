@@ -50,7 +50,7 @@ export const ReproductionStepsBlock: React.FC<ReproductionStepsBlockProps> = ({
       const { FlowChatManager } = await import('../../../flow_chat/services/FlowChatManager');
       const flowChatManager = FlowChatManager.getInstance();
       
-      // Log collection note: read .bitfun/debug.log
+      // Log collection note: read .halo-studio/debug.log
       await flowChatManager.sendMessage(
         t('reproductionSteps.userCompleted'),
         undefined,

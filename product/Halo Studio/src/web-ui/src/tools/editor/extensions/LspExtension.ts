@@ -34,7 +34,7 @@ export function createLspExtension(config: LspExtensionConfig = { enabled: true 
   ]);
   
   return {
-    id: 'bitfun.lsp',
+    id: 'halo.lsp',
     name: 'LSP Extension',
     priority: ExtensionPriority.HIGH,
     

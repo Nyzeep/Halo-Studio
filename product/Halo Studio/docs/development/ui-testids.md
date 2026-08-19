@@ -2,7 +2,7 @@
 
 # UI Test IDs
 
-This document records stable `data-testid` values used by BitFun UI automation.
+This document records stable `data-testid` values used by Halo Studio UI automation.
 Test IDs are grouped by product area and should be added only when an automated
 workflow needs a stable locator.
 

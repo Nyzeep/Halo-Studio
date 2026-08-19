@@ -1,8 +1,8 @@
 [中文](E2E-TESTING-GUIDE.zh-CN.md) | **English**
 
-# BitFun E2E Testing Guide
+# Halo Studio E2E Testing Guide
 
-Complete guide for E2E testing in BitFun project using WebDriverIO + BitFun embedded WebDriver.
+Complete guide for E2E testing in Halo Studio project using WebDriverIO + Halo Studio embedded WebDriver.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ Complete guide for E2E testing in BitFun project using WebDriverIO + BitFun embe
 
 ## Testing Philosophy
 
-BitFun E2E tests focus on **user journeys** and **critical paths** to ensure the desktop application works correctly from the user's perspective. We use a layered testing approach to balance coverage and execution speed.
+Halo Studio E2E tests focus on **user journeys** and **critical paths** to ensure the desktop application works correctly from the user's perspective. We use a layered testing approach to balance coverage and execution speed.
 
 ### Key Principles
 
@@ -28,7 +28,7 @@ BitFun E2E tests focus on **user journeys** and **critical paths** to ensure the
 
 ## Test Levels
 
-BitFun uses a 3-tier test classification system:
+Halo Studio uses a 3-tier test classification system:
 
 ### L0 - Smoke Tests (Critical Path)
 
@@ -122,15 +122,15 @@ pnpm install
 
 # Build the application (from project root)
 cd ../..
-cargo build -p bitfun-desktop
+cargo build -p halo-desktop
 ```
 
 ### 2. Verify Installation
 
 Check that the app binary exists:
 
-**Windows**: `target/debug/bitfun-desktop.exe`
-**Linux/macOS**: `target/debug/bitfun-desktop`
+**Windows**: `target/debug/halo-desktop.exe`
+**Linux/macOS**: `target/debug/halo-desktop`
 
 ### 3. Run Tests
 
@@ -157,12 +157,12 @@ The default test framework runs in debug/dev mode. Performance runs can use
 while still enabling the embedded WebDriver through the `devtools` feature.
 
 #### Debug Mode (Default)
-- **Application Path**: `target/debug/bitfun-desktop.exe`
+- **Application Path**: `target/debug/halo-desktop.exe`
 - **Characteristics**: Includes debug symbols, requires dev server (port 1422)
 - **Use Case**: Local development, rapid iteration
 
 #### Release-Fast Performance Mode
-- **Application Path**: `target/release-fast/bitfun-desktop.exe`
+- **Application Path**: `target/release-fast/halo-desktop.exe`
 - **Characteristics**: Production web bundle, release-like Rust profile, embedded WebDriver enabled by `--features devtools`
 - **Use Case**: Startup and historical-session performance measurements
 
@@ -172,19 +172,19 @@ When running tests, check the first few lines of output:
 
 ```bash
 # Debug Mode Output
-application: <PROJECT_ROOT>\target\debug\bitfun-desktop.exe
+application: <PROJECT_ROOT>\target\debug\halo-desktop.exe
 Debug build detected, checking dev server...
 ```
 
-**Core Principle**: Functional E2E still defaults to `target/debug/bitfun-desktop.exe`.
-Performance E2E should explicitly set `BITFUN_E2E_APP_MODE=release-fast` after
+**Core Principle**: Functional E2E still defaults to `target/debug/halo-desktop.exe`.
+Performance E2E should explicitly set `HALO_E2E_APP_MODE=release-fast` after
 building `pnpm run desktop:build:release-fast`.
 
-Do not manually start `target/release-fast/bitfun-desktop.exe` for performance
+Do not manually start `target/release-fast/halo-desktop.exe` for performance
 validation. A direct launch uses the normal user profile unless isolated storage
-environment variables are provided. The E2E launcher sets `BITFUN_USER_ROOT`,
-`BITFUN_HOME`, and `BITFUN_E2E_STORAGE_GUARD=1` automatically so performance
-runs cannot silently write into the real BitFun profile.
+environment variables are provided. The E2E launcher sets `HALO_USER_ROOT`,
+`HALO_HOME`, and `HALO_E2E_STORAGE_GUARD=1` automatically so performance
+runs cannot silently write into the real Halo Studio profile.
 
 ### 5. Startup and Long-Session Performance E2E
 
@@ -198,7 +198,7 @@ Build and run the release-like performance spec:
 
 ```bash
 pnpm run desktop:build:release-fast
-cross-env E2E_TEST_WORKSPACE=<workspace-path> BITFUN_E2E_PERF_SESSION_ID=perf-long-session-000 pnpm run e2e:test:perf:release-fast
+cross-env E2E_TEST_WORKSPACE=<workspace-path> HALO_E2E_PERF_SESSION_ID=perf-long-session-000 pnpm run e2e:test:perf:release-fast
 ```
 
 For cold-start outlier checks, prefer the focused stability runner instead of
@@ -210,17 +210,17 @@ cross-env E2E_TEST_WORKSPACE=<workspace-path> pnpm run e2e:test:perf:startup-sta
 ```
 
 It repeats only the startup telemetry case. Tune sample count and threshold gates
-with `BITFUN_E2E_PERF_STARTUP_ITERATIONS`,
-`BITFUN_E2E_PERF_STARTUP_MAX_INTERACTIVE_MS`,
-`BITFUN_E2E_PERF_STARTUP_MAX_FIRST_SCRIPT_MS`, and
-`BITFUN_E2E_PERF_STARTUP_MAX_MAIN_SHOWN_TO_INTERACTIVE_MS`.
+with `HALO_E2E_PERF_STARTUP_ITERATIONS`,
+`HALO_E2E_PERF_STARTUP_MAX_INTERACTIVE_MS`,
+`HALO_E2E_PERF_STARTUP_MAX_FIRST_SCRIPT_MS`, and
+`HALO_E2E_PERF_STARTUP_MAX_MAIN_SHOWN_TO_INTERACTIVE_MS`.
 The runner prints concise summaries by default; set
-`BITFUN_E2E_PERF_RUNNER_STREAM_LOGS=1` only when debugging a failing run.
+`HALO_E2E_PERF_RUNNER_STREAM_LOGS=1` only when debugging a failing run.
 
 For long-session interaction risk, run the smallest matching profile:
 
 ```bash
-cross-env E2E_TEST_WORKSPACE=<workspace-path> BITFUN_E2E_PERF_SESSION_ID=perf-long-session-000 BITFUN_E2E_PERF_MATRIX_PROFILE=core pnpm run e2e:test:perf:long-session-interactions:release-fast
+cross-env E2E_TEST_WORKSPACE=<workspace-path> HALO_E2E_PERF_SESSION_ID=perf-long-session-000 HALO_E2E_PERF_MATRIX_PROFILE=core pnpm run e2e:test:perf:long-session-interactions:release-fast
 ```
 
 Profiles are `core`, `scroll`, `resize`, and `full`. Use `core` for general
@@ -231,20 +231,20 @@ matches the touched surface plus any nearby unit/contract tests; it does not nee
 every E2E suite unless the change broadens the runtime or product surface.
 The matrix fails when an expected performance report is missing so skipped
 fixtures are not mistaken for valid data; use
-`BITFUN_E2E_PERF_ALLOW_MISSING_REPORTS=1` only for runner plumbing checks.
+`HALO_E2E_PERF_ALLOW_MISSING_REPORTS=1` only for runner plumbing checks.
 
 For debug-only comparison, build the debug binary and run:
 
 ```bash
-cargo build -p bitfun-desktop
-cross-env E2E_TEST_WORKSPACE=<workspace-path> BITFUN_E2E_PERF_SESSION_ID=perf-long-session-000 pnpm run e2e:test:perf:debug
+cargo build -p halo-desktop
+cross-env E2E_TEST_WORKSPACE=<workspace-path> HALO_E2E_PERF_SESSION_ID=perf-long-session-000 pnpm run e2e:test:perf:debug
 ```
 
 The spec writes JSON reports under `tests/e2e/reports/performance/`. It records
 startup milestones, Tauri API aggregates, first-open session hydration timings,
 and background full-hydrate timings when they occur. Optional threshold gates can
-be enabled with `BITFUN_E2E_PERF_MAX_INTERACTIVE_MS` and
-`BITFUN_E2E_PERF_MAX_SESSION_FRAME_MS`.
+be enabled with `HALO_E2E_PERF_MAX_INTERACTIVE_MS` and
+`HALO_E2E_PERF_MAX_SESSION_FRAME_MS`.
 
 ## Test Structure
 
@@ -449,7 +449,7 @@ await waitForStreamingComplete('[data-testid="model-response"]', 2000, 30000);
 3. **Don't test internal implementation** - Focus on user-visible behavior
 4. **Don't ignore flaky tests** - Fix or mark as skipped with reason
 5. **Don't use complex selectors** - Prefer data-testid
-6. **Don't test third-party code** - Only test BitFun functionality
+6. **Don't test third-party code** - Only test Halo Studio functionality
 7. **Don't mix test levels** - Keep L0/L1/L2 separate
 
 ### Conditional Tests
@@ -479,28 +479,28 @@ it('should test feature when workspace is open', async function () {
 **Solution**:
 ```bash
 # Build the debug desktop app
-cargo build -p bitfun-desktop
+cargo build -p halo-desktop
 
-# Run tests in debug mode so the embedded driver starts inside BitFun
-BITFUN_E2E_APP_MODE=debug pnpm --dir tests/e2e run test:l0:protocol
+# Run tests in debug mode so the embedded driver starts inside Halo Studio
+HALO_E2E_APP_MODE=debug pnpm --dir tests/e2e run test:l0:protocol
 
 # Verify the app process is allowed to bind 127.0.0.1:4445
 ```
 
 #### 2. App not built
 
-**Symptom**: `Application not found at target/debug/bitfun-desktop.exe`
+**Symptom**: `Application not found at target/debug/halo-desktop.exe`
 
 **Solution**:
 ```bash
 # Build the app (from project root)
-cargo build -p bitfun-desktop
+cargo build -p halo-desktop
 
 # Verify binary exists
 # Windows
-dir target\debug\bitfun-desktop.exe
+dir target\debug\halo-desktop.exe
 # Linux/macOS
-ls -la target/debug/bitfun-desktop
+ls -la target/debug/halo-desktop
 ```
 
 #### 3. Test timeouts
@@ -642,11 +642,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Build app
-        run: cargo build -p bitfun-desktop
+        run: cargo build -p halo-desktop
       - name: Install test dependencies
         run: cd tests/e2e && pnpm install
       - name: Run L0 tests
-        run: cd tests/e2e && BITFUN_E2E_APP_MODE=debug pnpm run test:l0:all
+        run: cd tests/e2e && HALO_E2E_APP_MODE=debug pnpm run test:l0:all
         
   l1-tests:
     runs-on: windows-latest
@@ -666,11 +666,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Build app
-        run: cargo build -p bitfun-desktop
+        run: cargo build -p halo-desktop
       - name: Install test dependencies
         run: cd tests/e2e && pnpm install
       - name: Run L1 tests
-        run: cd tests/e2e && BITFUN_E2E_APP_MODE=debug pnpm run test:l1
+        run: cd tests/e2e && HALO_E2E_APP_MODE=debug pnpm run test:l1
 ```
 
 ### Test Execution Matrix
@@ -705,7 +705,7 @@ jobs:
 - [WebDriverIO Documentation](https://webdriver.io/)
 - [Tauri Testing Guide](https://tauri.app/v1/guides/testing/)
 - [Page Object Model Pattern](https://webdriver.io/docs/pageobjects/)
-- [BitFun Project Structure](../../AGENTS.md)
+- [Halo Studio Project Structure](../../AGENTS.md)
 
 ## Contributing
 

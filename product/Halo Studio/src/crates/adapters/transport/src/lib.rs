@@ -1,6 +1,6 @@
 pub mod adapters;
 pub mod emitter;
-/// BitFun Transport Layer
+/// Halo Transport Layer
 ///
 /// Event delivery abstraction used by current product hosts.
 pub mod traits;

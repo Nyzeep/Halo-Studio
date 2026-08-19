@@ -35,13 +35,13 @@ impl ConfigProvider for AIConfigProvider {
         serialize_default_config("ai", AIConfig::default())
     }
 
-    async fn validate_config(&self, config: &serde_json::Value) -> BitFunResult<Vec<String>> {
+    async fn validate_config(&self, config: &serde_json::Value) -> HaloResult<Vec<String>> {
         let mut warnings = Vec::new();
 
         if let Ok(ai_config) = serde_json::from_value::<AIConfig>(config.clone()) {
             if let Some(stream_idle_timeout_secs) = ai_config.stream_idle_timeout_secs {
                 if stream_idle_timeout_secs == 0 {
-                    return Err(BitFunError::validation(
+                    return Err(HaloError::validation(
                         "AI stream_idle_timeout_secs must be greater than 0".to_string(),
                     ));
                 }
@@ -49,7 +49,7 @@ impl ConfigProvider for AIConfigProvider {
 
             if let Some(stream_ttft_timeout_secs) = ai_config.stream_ttft_timeout_secs {
                 if stream_ttft_timeout_secs == 0 {
-                    return Err(BitFunError::validation(
+                    return Err(HaloError::validation(
                         "AI stream_ttft_timeout_secs must be greater than 0".to_string(),
                     ));
                 }
@@ -57,13 +57,13 @@ impl ConfigProvider for AIConfigProvider {
 
             for (index, model) in ai_config.models.iter().enumerate() {
                 if model.name.trim().is_empty() {
-                    return Err(BitFunError::validation(format!(
+                    return Err(HaloError::validation(format!(
                         "Model name is required at index {}",
                         index
                     )));
                 }
                 if model.provider.trim().is_empty() {
-                    return Err(BitFunError::validation(format!(
+                    return Err(HaloError::validation(format!(
                         "Model provider is required at index {}",
                         index
                     )));
@@ -73,7 +73,7 @@ impl ConfigProvider for AIConfigProvider {
                 }
                 if let Some(context_window) = model.context_window {
                     if context_window < MIN_MODEL_CONTEXT_WINDOW_TOKENS {
-                        return Err(BitFunError::validation(format!(
+                        return Err(HaloError::validation(format!(
                             "Model '{}' context_window must be at least {}",
                             model.name, MIN_MODEL_CONTEXT_WINDOW_TOKENS
                         )));
@@ -81,7 +81,7 @@ impl ConfigProvider for AIConfigProvider {
                 }
                 if let Some(max_tokens) = model.max_tokens {
                     if max_tokens == 0 {
-                        return Err(BitFunError::validation(format!(
+                        return Err(HaloError::validation(format!(
                             "Model '{}' max_tokens must be greater than 0",
                             model.name
                         )));
@@ -102,14 +102,14 @@ impl ConfigProvider for AIConfigProvider {
                     && model_id != "primary"
                     && model_id != "fast"
                 {
-                    return Err(BitFunError::validation(format!(
+                    return Err(HaloError::validation(format!(
                         "Function Agent '{}' configured model '{}' does not exist",
                         func_agent_name, model_id
                     )));
                 }
             }
         } else {
-            return Err(BitFunError::validation(
+            return Err(HaloError::validation(
                 "Invalid AI config format".to_string(),
             ));
         }
@@ -121,7 +121,7 @@ impl ConfigProvider for AIConfigProvider {
         &self,
         _old_config: &serde_json::Value,
         new_config: &serde_json::Value,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if let Ok(ai_config) = serde_json::from_value::<AIConfig>(new_config.clone()) {
             info!(
                 "AI config changed: {} models configured",
@@ -141,7 +141,7 @@ impl ConfigProvider for AIConfigProvider {
         &self,
         version: &str,
         config: serde_json::Value,
-    ) -> BitFunResult<serde_json::Value> {
+    ) -> HaloResult<serde_json::Value> {
         match version {
             "0.1.0" => {
                 if let Ok(mut ai_config) = serde_json::from_value::<AIConfig>(config.clone()) {
@@ -199,12 +199,12 @@ impl ConfigProvider for ThemesConfigProvider {
         serialize_default_config("themes", ThemesConfig::default())
     }
 
-    async fn validate_config(&self, config: &serde_json::Value) -> BitFunResult<Vec<String>> {
+    async fn validate_config(&self, config: &serde_json::Value) -> HaloResult<Vec<String>> {
         let warnings = Vec::new();
 
         if let Ok(_themes_config) = serde_json::from_value::<ThemesConfig>(config.clone()) {
         } else {
-            return Err(BitFunError::validation(
+            return Err(HaloError::validation(
                 "Invalid themes config format".to_string(),
             ));
         }
@@ -216,7 +216,7 @@ impl ConfigProvider for ThemesConfigProvider {
         &self,
         _old_config: &serde_json::Value,
         new_config: &serde_json::Value,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if let Ok(themes_config) = serde_json::from_value::<ThemesConfig>(new_config.clone()) {
             info!(
                 "Themes config changed: current theme = {}",
@@ -230,7 +230,7 @@ impl ConfigProvider for ThemesConfigProvider {
         &self,
         _version: &str,
         config: serde_json::Value,
-    ) -> BitFunResult<serde_json::Value> {
+    ) -> HaloResult<serde_json::Value> {
         Ok(config)
     }
 }
@@ -248,7 +248,7 @@ impl ConfigProvider for EditorConfigProvider {
         serialize_default_config("editor", EditorConfig::default())
     }
 
-    async fn validate_config(&self, config: &serde_json::Value) -> BitFunResult<Vec<String>> {
+    async fn validate_config(&self, config: &serde_json::Value) -> HaloResult<Vec<String>> {
         let mut warnings = Vec::new();
 
         if let Ok(editor_config) = serde_json::from_value::<EditorConfig>(config.clone()) {
@@ -264,7 +264,7 @@ impl ConfigProvider for EditorConfigProvider {
                 warnings.push("Line height should be between 1.0 and 3.0".to_string());
             }
         } else {
-            return Err(BitFunError::validation(
+            return Err(HaloError::validation(
                 "Invalid editor config format".to_string(),
             ));
         }
@@ -276,7 +276,7 @@ impl ConfigProvider for EditorConfigProvider {
         &self,
         _old_config: &serde_json::Value,
         new_config: &serde_json::Value,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if let Ok(editor_config) = serde_json::from_value::<EditorConfig>(new_config.clone()) {
             info!(
                 "Editor config changed: font_size={}, theme={}",
@@ -290,7 +290,7 @@ impl ConfigProvider for EditorConfigProvider {
         &self,
         _version: &str,
         config: serde_json::Value,
-    ) -> BitFunResult<serde_json::Value> {
+    ) -> HaloResult<serde_json::Value> {
         Ok(config)
     }
 }
@@ -308,7 +308,7 @@ impl ConfigProvider for TerminalConfigProvider {
         serialize_default_config("terminal", TerminalConfig::default())
     }
 
-    async fn validate_config(&self, config: &serde_json::Value) -> BitFunResult<Vec<String>> {
+    async fn validate_config(&self, config: &serde_json::Value) -> HaloResult<Vec<String>> {
         let mut warnings = Vec::new();
 
         if let Ok(terminal_config) = serde_json::from_value::<TerminalConfig>(config.clone()) {
@@ -328,7 +328,7 @@ impl ConfigProvider for TerminalConfigProvider {
                 );
             }
         } else {
-            return Err(BitFunError::validation(
+            return Err(HaloError::validation(
                 "Invalid terminal config format".to_string(),
             ));
         }
@@ -340,7 +340,7 @@ impl ConfigProvider for TerminalConfigProvider {
         &self,
         _old_config: &serde_json::Value,
         new_config: &serde_json::Value,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if let Ok(terminal_config) = serde_json::from_value::<TerminalConfig>(new_config.clone()) {
             info!(
                 "Terminal config changed: shell={}, font_size={}",
@@ -354,7 +354,7 @@ impl ConfigProvider for TerminalConfigProvider {
         &self,
         _version: &str,
         config: serde_json::Value,
-    ) -> BitFunResult<serde_json::Value> {
+    ) -> HaloResult<serde_json::Value> {
         Ok(config)
     }
 }
@@ -372,7 +372,7 @@ impl ConfigProvider for WorkspaceConfigProvider {
         serialize_default_config("workspace", WorkspaceConfig::default())
     }
 
-    async fn validate_config(&self, config: &serde_json::Value) -> BitFunResult<Vec<String>> {
+    async fn validate_config(&self, config: &serde_json::Value) -> HaloResult<Vec<String>> {
         let mut warnings = Vec::new();
 
         if let Ok(workspace_config) = serde_json::from_value::<WorkspaceConfig>(config.clone()) {
@@ -385,7 +385,7 @@ impl ConfigProvider for WorkspaceConfigProvider {
                     .push("No exclude patterns defined, may scan unnecessary files".to_string());
             }
         } else {
-            return Err(BitFunError::validation(
+            return Err(HaloError::validation(
                 "Invalid workspace config format".to_string(),
             ));
         }
@@ -397,7 +397,7 @@ impl ConfigProvider for WorkspaceConfigProvider {
         &self,
         _old_config: &serde_json::Value,
         new_config: &serde_json::Value,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if let Ok(workspace_config) = serde_json::from_value::<WorkspaceConfig>(new_config.clone())
         {
             info!(
@@ -412,7 +412,7 @@ impl ConfigProvider for WorkspaceConfigProvider {
         &self,
         _version: &str,
         config: serde_json::Value,
-    ) -> BitFunResult<serde_json::Value> {
+    ) -> HaloResult<serde_json::Value> {
         Ok(config)
     }
 }
@@ -430,7 +430,7 @@ impl ConfigProvider for AppConfigProvider {
         serialize_default_config("app", AppConfig::default())
     }
 
-    async fn validate_config(&self, config: &serde_json::Value) -> BitFunResult<Vec<String>> {
+    async fn validate_config(&self, config: &serde_json::Value) -> HaloResult<Vec<String>> {
         let mut warnings = Vec::new();
 
         if let Ok(app_config) = serde_json::from_value::<AppConfig>(config.clone()) {
@@ -447,13 +447,13 @@ impl ConfigProvider for AppConfigProvider {
                 "trace" | "debug" | "info" | "warn" | "error" | "off"
             );
             if !valid_log_level {
-                return Err(BitFunError::validation(format!(
+                return Err(HaloError::validation(format!(
                     "Invalid app.logging.level '{}': expected one of trace/debug/info/warn/error/off",
                     app_config.logging.level
                 )));
             }
         } else {
-            return Err(BitFunError::validation(
+            return Err(HaloError::validation(
                 "Invalid app config format".to_string(),
             ));
         }
@@ -465,7 +465,7 @@ impl ConfigProvider for AppConfigProvider {
         &self,
         _old_config: &serde_json::Value,
         new_config: &serde_json::Value,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if let Ok(app_config) = serde_json::from_value::<AppConfig>(new_config.clone()) {
             info!(
                 "App config changed: language={}, zoom_level={}, log_level={}",
@@ -479,7 +479,7 @@ impl ConfigProvider for AppConfigProvider {
         &self,
         _version: &str,
         config: serde_json::Value,
-    ) -> BitFunResult<serde_json::Value> {
+    ) -> HaloResult<serde_json::Value> {
         Ok(config)
     }
 }
@@ -531,7 +531,7 @@ impl ConfigProviderRegistry {
     pub async fn validate_config(
         &self,
         config: &GlobalConfig,
-    ) -> BitFunResult<ConfigValidationResult> {
+    ) -> HaloResult<ConfigValidationResult> {
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
 
@@ -570,7 +570,7 @@ impl ConfigProviderRegistry {
         path: &str,
         old_config: &GlobalConfig,
         new_config: &GlobalConfig,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let provider_name = path.split('.').next().unwrap_or(path);
 
         if let Some(provider) = self.get_provider(provider_name) {
@@ -588,7 +588,7 @@ impl ConfigProviderRegistry {
         &self,
         section: &str,
         config: &GlobalConfig,
-    ) -> BitFunResult<serde_json::Value> {
+    ) -> HaloResult<serde_json::Value> {
         match section {
             "app" => Ok(serde_json::to_value(&config.app)?),
             "themes" => Ok(serde_json::to_value(&config.themes)?),
@@ -596,7 +596,7 @@ impl ConfigProviderRegistry {
             "terminal" => Ok(serde_json::to_value(&config.terminal)?),
             "workspace" => Ok(serde_json::to_value(&config.workspace)?),
             "ai" => Ok(serde_json::to_value(&config.ai)?),
-            _ => Err(BitFunError::validation(format!(
+            _ => Err(HaloError::validation(format!(
                 "Unknown config section: {}",
                 section
             ))),

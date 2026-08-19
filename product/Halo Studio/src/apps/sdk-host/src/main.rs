@@ -14,17 +14,17 @@ async fn run_host() -> Result<()> {
     runtime::SdkHostRuntime::select_process_profile()?;
     runtime::initialize_terminal_service().await;
 
-    bitfun_core::service::config::initialize_global_config()
+    halo_core::service::config::initialize_global_config()
         .await
         .context("Failed to initialize global config service")?;
-    bitfun_core::infrastructure::ai::AIClientFactory::initialize_global()
+    halo_core::infrastructure::ai::AIClientFactory::initialize_global()
         .await
         .context("Failed to initialize global AI client factory")?;
 
     let host = runtime::SdkHostRuntime::build(&workspace_root)
         .await
         .context("Failed to assemble Agent SDK Host")?;
-    bitfun_sdk_host_app::transport::serve_stdio(
+    halo_sdk_host_app::transport::serve_stdio(
         host.agent_runtime().clone(),
         host.workspace_root().to_string_lossy().into_owned(),
     )
@@ -33,9 +33,9 @@ async fn run_host() -> Result<()> {
 }
 
 fn main() {
-    bitfun_sdk_host_app::initialize_process_runtime();
+    halo_sdk_host_app::initialize_process_runtime();
 
-    let worker = bitfun_sdk_host_app::spawn_sdk_host_worker(|| {
+    let worker = halo_sdk_host_app::spawn_sdk_host_worker(|| {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()

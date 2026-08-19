@@ -43,7 +43,7 @@ export const TabPane: React.FC<TabPaneProps> = ({ children, className = '' }) =>
   const context = useContext(TabsContext);
   if (!context) return null;
 
-  return <div className={`bitfun-tab-pane ${className}`}>{children}</div>;
+  return <div className={`halo-tab-pane ${className}`}>{children}</div>;
 };
 
 TabPane.displayName = 'TabPane';
@@ -105,10 +105,10 @@ export const Tabs: React.FC<TabsProps> = ({
   };
 
   const containerClass = [
-    'bitfun-tabs',
-    `bitfun-tabs--${type}`,
-    `bitfun-tabs--${size}`,
-    stretch && 'bitfun-tabs--stretch',
+    'halo-tabs',
+    `halo-tabs--${type}`,
+    `halo-tabs--${size}`,
+    stretch && 'halo-tabs--stretch',
     className
   ].filter(Boolean).join(' ');
 
@@ -120,23 +120,23 @@ export const Tabs: React.FC<TabsProps> = ({
   return (
     <TabsContext.Provider value={contextValue}>
       <div className={containerClass} style={style}>
-        <div className="bitfun-tabs__nav">
-          <div className="bitfun-tabs__nav-list">
+        <div className="halo-tabs__nav">
+          <div className="halo-tabs__nav-list">
             {tabs.map((tab) => (
               <div
                 key={tab.key}
                 className={[
-                  'bitfun-tabs__tab',
-                  activeKey === tab.key && 'bitfun-tabs__tab--active',
-                  tab.disabled && 'bitfun-tabs__tab--disabled',
+                  'halo-tabs__tab',
+                  activeKey === tab.key && 'halo-tabs__tab--active',
+                  tab.disabled && 'halo-tabs__tab--disabled',
                 ].filter(Boolean).join(' ')}
                 onClick={() => handleTabClick(tab.key, tab.disabled)}
               >
-                {tab.icon && <span className="bitfun-tabs__tab-icon">{tab.icon}</span>}
-                <span className="bitfun-tabs__tab-label">{tab.label}</span>
+                {tab.icon && <span className="halo-tabs__tab-icon">{tab.icon}</span>}
+                <span className="halo-tabs__tab-label">{tab.label}</span>
                 {tab.closable && (
                   <span
-                    className="bitfun-tabs__tab-close"
+                    className="halo-tabs__tab-close"
                     onClick={(e) => handleTabClose(e, tab.key)}
                   >
                     ×
@@ -145,9 +145,9 @@ export const Tabs: React.FC<TabsProps> = ({
               </div>
             ))}
           </div>
-          {type === 'line' && <div className="bitfun-tabs__ink-bar" />}
+          {type === 'line' && <div className="halo-tabs__ink-bar" />}
         </div>
-        <div className="bitfun-tabs__content">
+        <div className="halo-tabs__content">
           {panes[activeKey]}
         </div>
       </div>

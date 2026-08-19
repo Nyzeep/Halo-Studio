@@ -4,19 +4,19 @@ use crate::agentic::tools::framework::{DynamicToolInfo, Tool};
 use crate::agentic::tools::product_runtime::{
     resolve_product_readonly_enabled_tools, ProductToolRuntime,
 };
-use crate::util::errors::BitFunResult;
-use bitfun_agent_tools::{
+use crate::util::errors::HaloResult;
+use halo_agent_tools::{
     DynamicToolDescriptor, DynamicToolProvider, PortResult, ToolDecoratorRef,
     ToolRegistry as AgentToolRegistry,
 };
-use bitfun_product_capabilities::DeliveryProfile;
+use halo_product_capabilities::DeliveryProfile;
 use log::{debug, info, trace, warn};
 use std::sync::Arc;
 
 pub(in crate::agentic::tools) type ToolRef = Arc<dyn Tool>;
 pub(in crate::agentic::tools) type ProductToolDecoratorRef = ToolDecoratorRef<dyn Tool>;
 
-pub use bitfun_agent_tools::GET_TOOL_SPEC_TOOL_NAME;
+pub use halo_agent_tools::GET_TOOL_SPEC_TOOL_NAME;
 
 /// Tool registry - manages all available tools (using IndexMap to maintain registration order)
 pub struct ToolRegistry {
@@ -43,7 +43,7 @@ impl ToolRegistry {
     ///
     /// The default production decorator preserves snapshot-aware wrapping while
     /// allowing future owner crates to replace this concrete service coupling
-    /// through the `bitfun-runtime-ports` interface.
+    /// through the `halo-runtime-ports` interface.
     pub fn with_tool_decorator(tool_decorator: ProductToolDecoratorRef) -> Self {
         ProductToolRuntime::with_tool_decorator(tool_decorator).create_registry()
     }
@@ -230,7 +230,7 @@ pub async fn get_all_tools() -> Vec<Arc<dyn Tool>> {
 }
 
 /// Get readonly tools
-pub async fn get_readonly_tools() -> BitFunResult<Vec<Arc<dyn Tool>>> {
+pub async fn get_readonly_tools() -> HaloResult<Vec<Arc<dyn Tool>>> {
     Ok(resolve_product_readonly_enabled_tools().await)
 }
 
@@ -328,7 +328,7 @@ mod tests {
     };
     use crate::agentic::tools::product_runtime::ProductToolRuntime;
     use async_trait::async_trait;
-    use bitfun_agent_tools::{DynamicToolProvider, ToolDecorator};
+    use halo_agent_tools::{DynamicToolProvider, ToolDecorator};
     use serde_json::json;
     use serde_json::Value;
     use std::sync::Arc;
@@ -345,7 +345,7 @@ mod tests {
             &self.name
         }
 
-        async fn description(&self) -> crate::util::errors::BitFunResult<String> {
+        async fn description(&self) -> crate::util::errors::HaloResult<String> {
             Ok("dynamic test tool".to_string())
         }
 
@@ -388,7 +388,7 @@ mod tests {
             &self,
             _input: &Value,
             _context: &ToolUseContext,
-        ) -> crate::util::errors::BitFunResult<Vec<ToolResult>> {
+        ) -> crate::util::errors::HaloResult<Vec<ToolResult>> {
             Ok(Vec::new())
         }
     }
@@ -452,7 +452,7 @@ mod tests {
             &self.name
         }
 
-        async fn description(&self) -> crate::util::errors::BitFunResult<String> {
+        async fn description(&self) -> crate::util::errors::HaloResult<String> {
             Ok("decorated test tool".to_string())
         }
 
@@ -476,7 +476,7 @@ mod tests {
             &self,
             _input: &Value,
             _context: &ToolUseContext,
-        ) -> crate::util::errors::BitFunResult<Vec<ToolResult>> {
+        ) -> crate::util::errors::HaloResult<Vec<ToolResult>> {
             Ok(Vec::new())
         }
     }
@@ -570,7 +570,7 @@ mod tests {
 
     #[test]
     fn product_capability_provider_plan_covers_registry_manifest_in_order() {
-        let assembly = bitfun_product_capabilities::default_product_capability_assembly();
+        let assembly = halo_product_capabilities::default_product_capability_assembly();
         let provider_tools = assembly
             .tool_provider_group_plan()
             .iter()
@@ -587,7 +587,7 @@ mod tests {
 
     #[test]
     fn product_capability_provider_plan_keeps_owner_group_order() {
-        let assembly = bitfun_product_capabilities::default_product_capability_assembly();
+        let assembly = halo_product_capabilities::default_product_capability_assembly();
         let provider_ids = assembly
             .tool_provider_group_plan()
             .iter()
@@ -940,16 +940,16 @@ mod tests {
         let refreshed_generation = registry.current_snapshot_generation();
 
         assert!(refreshed_generation > removed_generation);
-        let error = bitfun_agent_tools::validate_deferred_tool_usage(
+        let error = halo_agent_tools::validate_deferred_tool_usage(
             "mcp__github__search_repos",
             true,
             &["mcp__github__search_repos".to_string()],
-            &[bitfun_agent_tools::LoadedDeferredToolSpec {
+            &[halo_agent_tools::LoadedDeferredToolSpec {
                 tool_name: "mcp__github__search_repos".to_string(),
                 catalog_generation: loaded_generation,
             }],
             refreshed_generation,
-            bitfun_agent_tools::GET_TOOL_SPEC_TOOL_NAME,
+            halo_agent_tools::GET_TOOL_SPEC_TOOL_NAME,
         )
         .expect_err("refresh must invalidate the previously loaded MCP spec");
 

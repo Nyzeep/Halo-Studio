@@ -1,4 +1,4 @@
-use bitfun_agent_runtime::post_call_hooks::{
+use halo_agent_runtime::post_call_hooks::{
     successful_tool_post_call_hooks, RuntimeHookErrorPolicy, RuntimeHookKind, RuntimeHookPlan,
     RuntimeHookRegistry, RuntimeHookRegistryBuildError,
 };

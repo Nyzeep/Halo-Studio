@@ -216,7 +216,7 @@ function loadProductNames(rootDir, localeRoot, displayNameKeys) {
 export function resolveProductDefinition({ rootDir, productConfig, member }) {
   if (!['desktop', 'cli'].includes(member)) fail('invalid_member', `Unsupported product member: ${member}`, 'Use desktop or cli.');
   const canonicalRoot = realpathSync.native(resolve(rootDir));
-  const defaultPath = realpathSync.native(join(canonicalRoot, 'products', 'bitfun', 'product.jsonc'));
+  const defaultPath = realpathSync.native(join(canonicalRoot, 'products', 'halo', 'product.jsonc'));
   const selectedPath = resolve(productConfig || defaultPath);
   let sourcePath;
   try {

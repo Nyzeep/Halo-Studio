@@ -22,7 +22,7 @@ export const NON_USER_CUSTOMIZABLE_SHORTCUT_IDS = new Set<string>([
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-/** Build a ShortcutConfig using BitFun's logical primary modifier.
+/** Build a ShortcutConfig using Halo's logical primary modifier.
  * ShortcutManager maps it to Ctrl on Windows/Linux and Command on macOS.
  */
 function mod(

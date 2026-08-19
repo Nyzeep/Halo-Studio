@@ -1,5 +1,5 @@
 use super::unified::{UnifiedResponse, UnifiedTokenUsage, UnifiedToolCall};
-use bitfun_agent_stream::ToolCallCompletion;
+use halo_agent_stream::ToolCallCompletion;
 use serde::Deserialize;
 
 pub(crate) fn map_openai_finish_reason(reason: &str) -> ToolCallCompletion {
@@ -289,7 +289,7 @@ impl From<OpenAISSEData> for UnifiedResponse {
 #[cfg(test)]
 mod tests {
     use super::{map_openai_finish_reason, OpenAISSEData};
-    use bitfun_agent_stream::ToolCallCompletion;
+    use halo_agent_stream::ToolCallCompletion;
 
     #[test]
     fn maps_documented_openai_chat_finish_reasons_conservatively() {

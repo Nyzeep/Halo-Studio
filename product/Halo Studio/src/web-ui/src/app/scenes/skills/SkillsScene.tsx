@@ -229,7 +229,7 @@ const SkillsScene: React.FC = () => {
   }, [installedTotalPages]);
 
   return (
-    <div className="bitfun-skills-scene" data-testid="agent-skill-panel">
+    <div className="halo-skills-scene" data-testid="agent-skill-panel">
       <div className="skills-tabs-bar" data-testid="skills-tabs">
         <div className="skills-tabs-bar__tabs">
           <button
@@ -615,7 +615,7 @@ const SkillsScene: React.FC = () => {
                             </Badge>
                           ) : null}
                           meta={(
-                            <span className="bitfun-skills-scene__market-meta">
+                            <span className="halo-skills-scene__market-meta">
                               <TrendingUp size={12} />
                               {skill.installs ?? 0}
                             </span>
@@ -729,7 +729,7 @@ const SkillsScene: React.FC = () => {
         descriptionTestId="skill-detail-description"
         closeButtonTestId="skill-detail-close"
         meta={selectedMarketSkill ? (
-          <span className="bitfun-skills-scene__market-meta">
+          <span className="halo-skills-scene__market-meta">
             <TrendingUp size={12} />
             {selectedMarketSkill.installs ?? 0}
           </span>
@@ -779,16 +779,16 @@ const SkillsScene: React.FC = () => {
       >
         {selectedInstalledSkill ? (
           <>
-            <div className="bitfun-skills-scene__detail-row">
-              <span className="bitfun-skills-scene__detail-label">{t('list.item.sourceLabel')}</span>
-              <span className="bitfun-skills-scene__detail-value">
+            <div className="halo-skills-scene__detail-row">
+              <span className="halo-skills-scene__detail-label">{t('list.item.sourceLabel')}</span>
+              <span className="halo-skills-scene__detail-value">
                 {getSkillSourceLabel(selectedInstalledSkill, t('list.item.unknownSource'))}
               </span>
             </div>
             {selectedInstalledSkill.isShadowed && (
-              <div className="bitfun-skills-scene__detail-row">
-                <span className="bitfun-skills-scene__detail-label">{t('list.item.shadowedLabel')}</span>
-                <span className="bitfun-skills-scene__detail-value">
+              <div className="halo-skills-scene__detail-row">
+                <span className="halo-skills-scene__detail-label">{t('list.item.shadowedLabel')}</span>
+                <span className="halo-skills-scene__detail-value">
                   {t('list.item.shadowedDetail', {
                     source: coverageSourceBySkillKey.get(selectedInstalledSkill.key)
                       ?? t('list.item.unknownSource'),
@@ -796,12 +796,12 @@ const SkillsScene: React.FC = () => {
                 </span>
               </div>
             )}
-            <div className="bitfun-skills-scene__detail-row" data-testid="skill-detail-capabilities-section">
-              <span className="bitfun-skills-scene__detail-label">{t('list.item.pathLabel')}</span>
+            <div className="halo-skills-scene__detail-row" data-testid="skill-detail-capabilities-section">
+              <span className="halo-skills-scene__detail-label">{t('list.item.pathLabel')}</span>
               {canRevealSkillPath ? (
                 <button
                   type="button"
-                  className="bitfun-skills-scene__detail-path-btn"
+                  className="halo-skills-scene__detail-path-btn"
                   title={t('list.item.openPathInExplorer')}
                   onClick={() => void handleRevealSkillPath(selectedInstalledSkill.path)}
                   data-testid="skills-detail-path-btn"
@@ -809,34 +809,34 @@ const SkillsScene: React.FC = () => {
                   {selectedInstalledSkill.path}
                 </button>
               ) : (
-                <code className="bitfun-skills-scene__detail-value">{selectedInstalledSkill.path}</code>
+                <code className="halo-skills-scene__detail-value">{selectedInstalledSkill.path}</code>
               )}
             </div>
           </>
         ) : null}
 
         {selectedMarketSkill?.source ? (
-          <div className="bitfun-skills-scene__detail-row" data-testid="skill-detail-capabilities-section">
-            <span className="bitfun-skills-scene__detail-label">{t('market.item.sourceLabel')}</span>
-            <span className="bitfun-skills-scene__detail-value">{selectedMarketSkill.source}</span>
+          <div className="halo-skills-scene__detail-row" data-testid="skill-detail-capabilities-section">
+            <span className="halo-skills-scene__detail-label">{t('market.item.sourceLabel')}</span>
+            <span className="halo-skills-scene__detail-value">{selectedMarketSkill.source}</span>
           </div>
         ) : null}
 
         {selectedMarketSkill ? (
-          <div className="bitfun-skills-scene__detail-row">
-            <span className="bitfun-skills-scene__detail-label">{t('market.detail.installsLabel')}</span>
-            <span className="bitfun-skills-scene__detail-value">{selectedMarketSkill.installs ?? 0}</span>
+          <div className="halo-skills-scene__detail-row">
+            <span className="halo-skills-scene__detail-label">{t('market.detail.installsLabel')}</span>
+            <span className="halo-skills-scene__detail-value">{selectedMarketSkill.installs ?? 0}</span>
           </div>
         ) : null}
 
         {selectedMarketSkill?.url ? (
-          <div className="bitfun-skills-scene__detail-row">
-            <span className="bitfun-skills-scene__detail-label">{t('market.detail.linkLabel')}</span>
+          <div className="halo-skills-scene__detail-row">
+            <span className="halo-skills-scene__detail-label">{t('market.detail.linkLabel')}</span>
             <a
               href={selectedMarketSkill.url}
               target="_blank"
               rel="noreferrer"
-              className="bitfun-skills-scene__detail-link"
+              className="halo-skills-scene__detail-link"
               data-testid="skills-detail-external-link"
             >
               {selectedMarketSkill.url}
@@ -854,7 +854,7 @@ const SkillsScene: React.FC = () => {
         title={t('form.title')}
         size="small"
       >
-        <div className="bitfun-skills-scene__modal-form">
+        <div className="halo-skills-scene__modal-form">
           <Select
             label={t('form.level.label')}
             options={[
@@ -871,12 +871,12 @@ const SkillsScene: React.FC = () => {
           />
 
           {installed.formLevel === 'project' && installed.hasWorkspace ? (
-            <div className="bitfun-skills-scene__form-hint">
+            <div className="halo-skills-scene__form-hint">
               {t('form.level.selectedProjectPath', { path: installed.workspacePath })}
             </div>
           ) : null}
 
-          <div className="bitfun-skills-scene__path-input">
+          <div className="halo-skills-scene__path-input">
             <Input
               label={t('form.path.label')}
               placeholder={t('form.path.placeholder')}
@@ -893,39 +893,39 @@ const SkillsScene: React.FC = () => {
               <FolderOpen size={15} />
             </button>
           </div>
-          <div className="bitfun-skills-scene__path-hint">
+          <div className="halo-skills-scene__path-hint">
             {t('form.path.hint')}
           </div>
 
           {installed.isValidating ? (
-            <div className="bitfun-skills-scene__validating">{t('form.validating')}</div>
+            <div className="halo-skills-scene__validating">{t('form.validating')}</div>
           ) : null}
 
           {installed.validationResult ? (
             <div
               className={[
-                'bitfun-skills-scene__validation',
+                'halo-skills-scene__validation',
                 installed.validationResult.valid ? 'is-valid' : 'is-invalid',
               ].filter(Boolean).join(' ')}
             >
               {installed.validationResult.valid ? (
                 <>
-                  <div className="bitfun-skills-scene__validation-name">
+                  <div className="halo-skills-scene__validation-name">
                     {installed.validationResult.name}
                   </div>
-                  <div className="bitfun-skills-scene__validation-desc">
+                  <div className="halo-skills-scene__validation-desc">
                     {installed.validationResult.description}
                   </div>
                 </>
               ) : (
-                <div className="bitfun-skills-scene__validation-error">
+                <div className="halo-skills-scene__validation-error">
                   {installed.validationResult.error}
                 </div>
               )}
             </div>
           ) : null}
 
-          <div className="bitfun-skills-scene__modal-form-actions">
+          <div className="halo-skills-scene__modal-form-actions">
             <Button
               variant="secondary"
               size="small"

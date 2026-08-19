@@ -120,18 +120,18 @@ export const CreateBranchDialog: React.FC<CreateBranchDialogProps> = ({
 
   return (
     <Modal isOpen={isOpen} onClose={handleCancel} title={t('dialog.createNewBranch.title')} size="small">
-      <div className="bitfun-create-branch-dialog" onKeyDown={handleKeyDown}>
-        <div className="bitfun-create-branch-dialog__base-info">
-          <div className="bitfun-create-branch-dialog__base-label">
+      <div className="halo-create-branch-dialog" onKeyDown={handleKeyDown}>
+        <div className="halo-create-branch-dialog__base-info">
+          <div className="halo-create-branch-dialog__base-label">
             <GitBranch size={14} />
             <span>{t('dialog.createNewBranch.baseBranch')}</span>
           </div>
-          <div className="bitfun-create-branch-dialog__base-value">
+          <div className="halo-create-branch-dialog__base-value">
             {baseBranch}
           </div>
         </div>
 
-        <div className="bitfun-create-branch-dialog__form">
+        <div className="halo-create-branch-dialog__form">
           <Input
             label={t('dialog.createNewBranch.nameLabel')}
             value={branchName}
@@ -142,7 +142,7 @@ export const CreateBranchDialog: React.FC<CreateBranchDialogProps> = ({
             error={!!error}
             errorMessage={error}
           />
-          <div className="bitfun-create-branch-dialog__hint">
+          <div className="halo-create-branch-dialog__hint">
             <div>{t('dialog.createNewBranch.namingHintTitle')}</div>
             <ul>
               <li>
@@ -161,7 +161,7 @@ export const CreateBranchDialog: React.FC<CreateBranchDialogProps> = ({
           </div>
         </div>
 
-        <div className="bitfun-create-branch-dialog__actions">
+        <div className="halo-create-branch-dialog__actions">
           <Button 
             variant="secondary"
             size="small"
@@ -182,7 +182,7 @@ export const CreateBranchDialog: React.FC<CreateBranchDialogProps> = ({
           </Button>
         </div>
 
-        <div className="bitfun-create-branch-dialog__shortcuts">
+        <div className="halo-create-branch-dialog__shortcuts">
           <span>Esc</span> {t('dialog.createNewBranch.cancel')} · <span>Enter</span> {t('dialog.createNewBranch.confirm')}
         </div>
       </div>

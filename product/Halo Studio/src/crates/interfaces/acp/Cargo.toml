@@ -1,19 +1,19 @@
 [package]
-name = "bitfun-acp"
+name = "halo-acp"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "BitFun Agent Client Protocol surface"
+description = "Halo Agent Client Protocol surface"
 
 [lib]
-name = "bitfun_acp"
+name = "halo_acp"
 
 [dependencies]
-bitfun-core = { path = "../../assembly/core", default-features = false, features = ["product-full"] }
-bitfun-agent-runtime = { path = "../../execution/agent-runtime" }
-bitfun-agent-tools = { path = "../../execution/tool-contracts" }
-bitfun-events = { path = "../../contracts/events" }
-bitfun-core-types = { path = "../../contracts/core-types" }
+halo-core = { path = "../../assembly/core", default-features = false, features = ["product-full"] }
+halo-agent-runtime = { path = "../../execution/agent-runtime" }
+halo-agent-tools = { path = "../../execution/tool-contracts" }
+halo-events = { path = "../../contracts/events" }
+halo-core-types = { path = "../../contracts/core-types" }
 
 agent-client-protocol = { workspace = true }
 tokio = { workspace = true }

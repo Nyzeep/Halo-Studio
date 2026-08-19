@@ -134,7 +134,7 @@ describe('ExternalSourcesAPI', () => {
       'behavior-v1',
       [{
         commandName: 'review',
-        candidateId: 'bitfun.desktop:action:review',
+        candidateId: 'halo.desktop:action:review',
         behaviorVersion: 'action:review:v1',
       }],
       {
@@ -150,7 +150,7 @@ describe('ExternalSourcesAPI', () => {
         arguments: 'focus on auth',
         nativeCommands: [{
           commandName: 'review',
-          candidateId: 'bitfun.desktop:action:review',
+          candidateId: 'halo.desktop:action:review',
           behaviorVersion: 'action:review:v1',
         }],
         candidateId: 'claude-code.commands:project:review',
@@ -165,7 +165,7 @@ describe('ExternalSourcesAPI', () => {
     invokeMock.mockResolvedValueOnce({ preferenceRevision: 3, conflicts: [] });
     const nativeCommands = [{
       commandName: 'review',
-      candidateId: 'bitfun.desktop:action:review',
+      candidateId: 'halo.desktop:action:review',
       behaviorVersion: 'action:review:v1',
     }];
 
@@ -186,14 +186,14 @@ describe('ExternalSourcesAPI', () => {
     invokeMock.mockResolvedValueOnce({ preferenceRevision: 4, conflicts: [] });
     const nativeCommands = [{
       commandName: 'review',
-      candidateId: 'bitfun.desktop:action:review',
+      candidateId: 'halo.desktop:action:review',
       behaviorVersion: 'action:review:v1',
     }];
 
     await externalSourcesAPI.setNativePromptCommandConflictChoice(
       'D:/workspace/project',
       nativeCommands,
-      'bitfun.desktop:action:review',
+      'halo.desktop:action:review',
       3,
     );
 
@@ -203,7 +203,7 @@ describe('ExternalSourcesAPI', () => {
         request: {
           workspacePath: 'D:/workspace/project',
           nativeCommands,
-          selectedCandidateId: 'bitfun.desktop:action:review',
+          selectedCandidateId: 'halo.desktop:action:review',
           expectedPreferenceRevision: 3,
         },
       },

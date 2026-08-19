@@ -1,28 +1,28 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use bitfun_agent_runtime::skills::{
+use halo_agent_runtime::skills::{
     annotate_shadowed_skills, build_mode_skill_infos, builtin_skill_group_key,
     filter_candidates_for_mode, filter_implicitly_invocable_skills, is_skill_globally_enabled,
     render_loaded_skill_for_assistant, resolve_builtin_default_enabled,
     resolve_default_hidden_builtin_for_explicit_invocation, resolve_skill_default_enabled_for_mode,
     resolve_skill_state_for_mode, resolve_user_config_skill_root, resolve_visible_skills,
     sort_skills, ExplicitSkillInvocationResolution, ModeSkillStateReason, SkillCandidate,
-    SkillData, SkillInfo, SkillLocation, UserModeSkillOverrides, BITFUN_SYSTEM_SKILL_DIR,
-    BITFUN_SYSTEM_SKILL_SLOT, BITFUN_USER_SKILL_SLOT, PROJECT_SKILL_KEY_PREFIX,
+    SkillData, SkillInfo, SkillLocation, UserModeSkillOverrides, HALO_SYSTEM_SKILL_DIR,
+    HALO_SYSTEM_SKILL_SLOT, HALO_USER_SKILL_SLOT, PROJECT_SKILL_KEY_PREFIX,
     PROJECT_SKILL_ROOTS, USER_CONFIG_SKILL_ROOTS, USER_HOME_SKILL_ROOTS, USER_SKILL_KEY_PREFIX,
 };
 
 fn builtin_skill(dir_name: &str) -> SkillInfo {
     SkillInfo {
-        key: format!("user::bitfun-system::{}", dir_name),
+        key: format!("user::halo-system::{}", dir_name),
         name: dir_name.to_string(),
         description: String::new(),
         path: format!("/tmp/{}", dir_name),
         level: SkillLocation::User,
-        source_slot: "bitfun-system".to_string(),
-        source_id: "bitfun".to_string(),
-        source_label: "BitFun".to_string(),
+        source_slot: "halo-system".to_string(),
+        source_id: "halo".to_string(),
+        source_label: "Halo".to_string(),
         dir_name: dir_name.to_string(),
         is_builtin: true,
         group_key: builtin_skill_group_key(dir_name).map(str::to_string),
@@ -34,14 +34,14 @@ fn builtin_skill(dir_name: &str) -> SkillInfo {
 
 fn custom_user_skill(dir_name: &str) -> SkillInfo {
     SkillInfo {
-        key: format!("user::bitfun::{}", dir_name),
+        key: format!("user::halo::{}", dir_name),
         name: dir_name.to_string(),
         description: String::new(),
         path: format!("/tmp/{}", dir_name),
         level: SkillLocation::User,
-        source_slot: "bitfun".to_string(),
-        source_id: "bitfun".to_string(),
-        source_label: "BitFun".to_string(),
+        source_slot: "halo".to_string(),
+        source_id: "halo".to_string(),
+        source_label: "Halo".to_string(),
         dir_name: dir_name.to_string(),
         is_builtin: false,
         group_key: None,
@@ -53,14 +53,14 @@ fn custom_user_skill(dir_name: &str) -> SkillInfo {
 
 fn project_skill(dir_name: &str) -> SkillInfo {
     SkillInfo {
-        key: format!("project::bitfun::{}", dir_name),
+        key: format!("project::halo::{}", dir_name),
         name: dir_name.to_string(),
         description: String::new(),
-        path: format!("/workspace/.bitfun/skills/{}", dir_name),
+        path: format!("/workspace/.halo-studio/skills/{}", dir_name),
         level: SkillLocation::Project,
-        source_slot: "bitfun".to_string(),
-        source_id: "bitfun".to_string(),
-        source_label: "BitFun".to_string(),
+        source_slot: "halo".to_string(),
+        source_id: "halo".to_string(),
+        source_label: "Halo".to_string(),
         dir_name: dir_name.to_string(),
         is_builtin: false,
         group_key: None,
@@ -80,7 +80,7 @@ fn builtin_skill_catalog_and_mode_policy_are_runtime_owned() {
         Some("computer-use")
     );
     assert_eq!(builtin_skill_group_key("agent-eval-canvas"), Some("canvas"));
-    assert_eq!(builtin_skill_group_key("bitfun-canvas"), Some("canvas"));
+    assert_eq!(builtin_skill_group_key("halo-canvas"), Some("canvas"));
     assert_eq!(builtin_skill_group_key("pr-review-canvas"), Some("canvas"));
     assert_eq!(builtin_skill_group_key("docs-canvas"), Some("canvas"));
     assert_eq!(builtin_skill_group_key("gstack-review"), Some("gstack"));
@@ -119,7 +119,7 @@ fn builtin_skill_catalog_and_mode_policy_are_runtime_owned() {
         Some(false)
     );
     assert_eq!(
-        resolve_builtin_default_enabled("bitfun-canvas", "agentic"),
+        resolve_builtin_default_enabled("halo-canvas", "agentic"),
         Some(true)
     );
 }
@@ -128,9 +128,9 @@ fn builtin_skill_catalog_and_mode_policy_are_runtime_owned() {
 fn skill_discovery_root_facts_are_runtime_owned() {
     assert_eq!(USER_SKILL_KEY_PREFIX, "user");
     assert_eq!(PROJECT_SKILL_KEY_PREFIX, "project");
-    assert_eq!(BITFUN_USER_SKILL_SLOT, "bitfun");
-    assert_eq!(BITFUN_SYSTEM_SKILL_SLOT, "bitfun-system");
-    assert_eq!(BITFUN_SYSTEM_SKILL_DIR, ".system");
+    assert_eq!(HALO_USER_SKILL_SLOT, "halo");
+    assert_eq!(HALO_SYSTEM_SKILL_SLOT, "halo-system");
+    assert_eq!(HALO_SYSTEM_SKILL_DIR, ".system");
 
     let project_roots = PROJECT_SKILL_ROOTS
         .iter()
@@ -139,7 +139,7 @@ fn skill_discovery_root_facts_are_runtime_owned() {
     assert_eq!(
         project_roots,
         [
-            (".bitfun", "bitfun", "bitfun", "BitFun"),
+            (".halo-studio", "halo", "halo", "Halo"),
             (".claude", "claude", "claude-code", "Claude Code"),
             (".codex", "codex", "codex", "Codex"),
             (".cursor", "cursor", "cursor", "Cursor"),
@@ -177,13 +177,13 @@ fn skill_discovery_root_facts_are_runtime_owned() {
 #[test]
 fn skill_source_identity_is_serialized_without_changing_slot_identity() {
     let mut info = project_skill("pdf");
-    info.source_id = "bitfun".to_string();
-    info.source_label = "BitFun".to_string();
+    info.source_id = "halo".to_string();
+    info.source_label = "Halo".to_string();
 
     let value = serde_json::to_value(info).expect("skill info should serialize");
-    assert_eq!(value["sourceSlot"], "bitfun");
-    assert_eq!(value["sourceId"], "bitfun");
-    assert_eq!(value["sourceLabel"], "BitFun");
+    assert_eq!(value["sourceSlot"], "halo");
+    assert_eq!(value["sourceId"], "halo");
+    assert_eq!(value["sourceLabel"], "Halo");
 }
 
 #[test]
@@ -250,21 +250,21 @@ fn skill_resolution_applies_builtin_and_user_override_rules() {
 
 #[test]
 fn user_mode_skill_overrides_share_key_normalization_rules() {
-    let overrides = bitfun_agent_runtime::skills::normalize_user_mode_skill_overrides(
+    let overrides = halo_agent_runtime::skills::normalize_user_mode_skill_overrides(
         vec![
-            " user::bitfun::pdf ".to_string(),
+            " user::halo::pdf ".to_string(),
             String::new(),
-            "user::bitfun::pdf".to_string(),
+            "user::halo::pdf".to_string(),
         ],
         vec![
-            "user::bitfun::pdf".to_string(),
-            " user::bitfun::docx ".to_string(),
-            "user::bitfun::docx".to_string(),
+            "user::halo::pdf".to_string(),
+            " user::halo::docx ".to_string(),
+            "user::halo::docx".to_string(),
         ],
     );
 
-    assert_eq!(overrides.disabled_skills, vec!["user::bitfun::pdf"]);
-    assert_eq!(overrides.enabled_skills, vec!["user::bitfun::docx"]);
+    assert_eq!(overrides.disabled_skills, vec!["user::halo::pdf"]);
+    assert_eq!(overrides.enabled_skills, vec!["user::halo::docx"]);
 }
 
 #[test]
@@ -277,14 +277,14 @@ description: Work with PDF files.
 Use the pdf workflow.
 "#;
     let mut data = SkillData::from_markdown(
-        "/workspace/.bitfun/skills/pdf".to_string(),
+        "/workspace/.halo-studio/skills/pdf".to_string(),
         markdown,
         SkillLocation::Project,
         true,
     )
     .expect("valid skill markdown should parse");
-    data.key = "project::bitfun::pdf".to_string();
-    data.source_slot = "bitfun".to_string();
+    data.key = "project::halo::pdf".to_string();
+    data.source_slot = "halo".to_string();
 
     assert_eq!(data.name, "pdf");
     assert_eq!(data.description, "Work with PDF files.");
@@ -293,12 +293,12 @@ Use the pdf workflow.
 
     let assistant = render_loaded_skill_for_assistant(&data, false);
     assert!(assistant.contains("Skill 'pdf' loaded successfully."));
-    assert!(assistant.contains("relative to /workspace/.bitfun/skills/pdf"));
+    assert!(assistant.contains("relative to /workspace/.halo-studio/skills/pdf"));
     assert!(assistant.contains("<skill_content>\nUse the pdf workflow.\n\n</skill_content>"));
     assert!(!assistant.contains("from stable key"));
 
     let stable_assistant = render_loaded_skill_for_assistant(&data, true);
-    assert!(stable_assistant.contains("from stable key 'project::bitfun::pdf'"));
+    assert!(stable_assistant.contains("from stable key 'project::halo::pdf'"));
 }
 
 #[test]
@@ -404,17 +404,17 @@ description: Work with PDF files.
 Use the pdf workflow.
 "#;
     let data = SkillData::from_markdown(
-        "/tmp/bitfun-system/pdf".to_string(),
+        "/tmp/halo-system/pdf".to_string(),
         markdown,
         SkillLocation::User,
         false,
     )
     .expect("valid built-in skill markdown should parse");
     let candidate =
-        SkillCandidate::from_data(data, "bitfun-system", "bitfun", "BitFun", "user", 10, true);
+        SkillCandidate::from_data(data, "halo-system", "halo", "Halo", "user", 10, true);
 
-    assert_eq!(candidate.info.key, "user::bitfun-system::pdf");
-    assert_eq!(candidate.info.source_slot, "bitfun-system");
+    assert_eq!(candidate.info.key, "user::halo-system::pdf");
+    assert_eq!(candidate.info.source_slot, "halo-system");
     assert_eq!(candidate.info.group_key.as_deref(), Some("office"));
 
     let project_pdf = SkillCandidate {
@@ -423,17 +423,17 @@ Use the pdf workflow.
     };
     let visible = resolve_visible_skills(vec![candidate.clone(), project_pdf.clone()]);
     assert_eq!(visible.len(), 1);
-    assert_eq!(visible[0].key, "project::bitfun::pdf");
+    assert_eq!(visible[0].key, "project::halo::pdf");
 
     let annotated = sort_skills(annotate_shadowed_skills(vec![candidate, project_pdf]));
     let user_pdf = annotated
         .iter()
-        .find(|skill| skill.key == "user::bitfun-system::pdf")
+        .find(|skill| skill.key == "user::halo-system::pdf")
         .expect("user built-in skill should be present");
     assert!(user_pdf.is_shadowed);
     assert_eq!(
         user_pdf.shadowed_by_key.as_deref(),
-        Some("project::bitfun::pdf")
+        Some("project::halo::pdf")
     );
 }
 
@@ -515,7 +515,7 @@ fn mode_skill_candidate_filtering_and_info_are_runtime_owned() {
 
     let project_doc = infos
         .iter()
-        .find(|skill| skill.skill.key == "project::bitfun::project-doc")
+        .find(|skill| skill.skill.key == "project::halo::project-doc")
         .expect("project skill should be listed");
     assert!(!project_doc.effective_enabled);
     assert!(!project_doc.selected_for_runtime);
@@ -665,7 +665,7 @@ fn explicit_invocation_hidden_builtin_fallback_is_runtime_owned() {
         Some("agentic"),
     ) {
         ExplicitSkillInvocationResolution::Found(skill) => {
-            assert_eq!(skill.key, "user::bitfun-system::gstack-review");
+            assert_eq!(skill.key, "user::halo-system::gstack-review");
         }
         other => panic!("expected hidden gstack fallback, got {other:?}"),
     }
@@ -709,7 +709,7 @@ fn explicit_invocation_reaches_default_hidden_agent_browser() {
             Some(mode_id),
         ) {
             ExplicitSkillInvocationResolution::Found(skill) => {
-                assert_eq!(skill.key, "user::bitfun-system::agent-browser");
+                assert_eq!(skill.key, "user::halo-system::agent-browser");
             }
             other => {
                 panic!("expected hidden agent-browser fallback for mode {mode_id}, got {other:?}")

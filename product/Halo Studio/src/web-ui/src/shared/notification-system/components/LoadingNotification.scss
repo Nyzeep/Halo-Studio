@@ -13,7 +13,7 @@
   display: flex;
   align-items: flex-start;
   gap: $size-gap-2;
-  animation: bitfun-notification-slide-in 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: halo-notification-slide-in 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   
   
   &--completed {
@@ -43,7 +43,7 @@
   
   &__spinner {
     color: var(--color-warning);
-    animation: bitfun-spin 1s linear infinite;
+    animation: halo-spin 1s linear infinite;
   }
 
   
@@ -115,7 +115,7 @@
 }
 
 
-@keyframes bitfun-spin {
+@keyframes halo-spin {
   from {
     transform: rotate(0deg);
   }
@@ -125,7 +125,7 @@
 }
 
 
-@keyframes bitfun-notification-slide-in {
+@keyframes halo-notification-slide-in {
   from {
     opacity: 0;
     transform: translateX(-100%);

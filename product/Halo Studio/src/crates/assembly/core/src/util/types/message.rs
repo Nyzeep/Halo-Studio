@@ -1,1 +1,1 @@
-pub use bitfun_core_types::Message;
+pub use halo_core_types::Message;

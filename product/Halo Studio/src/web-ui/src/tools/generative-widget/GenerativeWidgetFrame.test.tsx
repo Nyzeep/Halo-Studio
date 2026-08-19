@@ -61,6 +61,6 @@ describe('GenerativeWidgetFrame shell', () => {
     expect(iframe.getAttribute('src')).toBe('about:blank');
     expect(iframe.getAttribute('srcdoc')).toBeNull();
     expect(iframe.getAttribute('sandbox')).toContain('allow-same-origin');
-    expect(iframe.contentDocument?.documentElement.outerHTML).toContain('bitfun-widget');
+    expect(iframe.contentDocument?.documentElement.outerHTML).toContain('halo-widget');
   });
 });

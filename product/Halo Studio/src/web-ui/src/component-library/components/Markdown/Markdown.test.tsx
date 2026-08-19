@@ -130,7 +130,7 @@ describe('Markdown file links', () => {
   });
 
   it('opens chat http links in the built-in browser by default', async () => {
-    container.className = 'bitfun-session-scene modern-flowchat-container';
+    container.className = 'halo-session-scene modern-flowchat-container';
     const onCreateTab = vi.fn();
     window.addEventListener('agent-create-tab', onCreateTab);
 
@@ -164,8 +164,8 @@ describe('Markdown file links', () => {
 
   it('expands a collapsed right panel before creating a browser tab', async () => {
     vi.useFakeTimers();
-    container.className = 'bitfun-session-scene modern-flowchat-container';
-    (window as any).__BITFUN_LAYOUT_STATE__ = { rightPanelCollapsed: true };
+    container.className = 'halo-session-scene modern-flowchat-container';
+    (window as any).__HALO_LAYOUT_STATE__ = { rightPanelCollapsed: true };
     const onExpandPanel = vi.fn();
     const onCreateTab = vi.fn();
     window.addEventListener('expand-right-panel', onExpandPanel);
@@ -193,7 +193,7 @@ describe('Markdown file links', () => {
 
       expect(onCreateTab).toHaveBeenCalledTimes(1);
     } finally {
-      delete (window as any).__BITFUN_LAYOUT_STATE__;
+      delete (window as any).__HALO_LAYOUT_STATE__;
       window.removeEventListener('expand-right-panel', onExpandPanel);
       window.removeEventListener('agent-create-tab', onCreateTab);
       vi.useRealTimers();
@@ -201,7 +201,7 @@ describe('Markdown file links', () => {
   });
 
   it('opens modified chat link clicks in the external browser', async () => {
-    container.className = 'bitfun-session-scene modern-flowchat-container';
+    container.className = 'halo-session-scene modern-flowchat-container';
     const onCreateTab = vi.fn();
     window.addEventListener('agent-create-tab', onCreateTab);
 

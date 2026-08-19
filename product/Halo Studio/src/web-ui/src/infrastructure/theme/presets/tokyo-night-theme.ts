@@ -40,13 +40,13 @@ const tokyoScrollbar = (alpha: number | string) => rgbaFromHex(TOKYO_SCROLLBAR, 
 const tokyoPrimaryButton = (alpha: number | string) => rgbaFromHex(TOKYO_PRIMARY_BUTTON, alpha);
 
 /** Colors aligned with the Tokyo Night palette (Enkia / VS Code Tokyo Night). */
-export const bitfunTokyoNightTheme: ThemeConfig = {
-  id: 'bitfun-tokyo-night',
+export const haloTokyoNightTheme: ThemeConfig = {
+  id: 'halo-tokyo-night',
   name: 'Tokyo Night',
   type: 'dark',
   description:
     'Tokyo Night — deep indigo base, soft blue and magenta accents (palette from the Tokyo Night theme family)',
-  author: 'BitFun Team',
+  author: 'Halo Studio Team',
   version: '1.0.0',
 
   colors: {

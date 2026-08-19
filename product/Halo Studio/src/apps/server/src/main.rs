@@ -1,5 +1,5 @@
 use anyhow::Result;
-/// BitFun Server
+/// Halo Server
 ///
 /// Web server with support for:
 /// - RESTful API
@@ -18,8 +18,8 @@ use tower_http::cors::CorsLayer;
 mod routes;
 
 pub(crate) struct DispatchHostState {
-    path_manager: Arc<bitfun_core::infrastructure::PathManager>,
-    ssh_manager: Arc<bitfun_core::service::remote_ssh::SSHConnectionManager>,
+    path_manager: Arc<halo_core::infrastructure::PathManager>,
+    ssh_manager: Arc<halo_core::service::remote_ssh::SSHConnectionManager>,
 }
 
 /// Application state
@@ -34,14 +34,14 @@ const DEFAULT_ALLOWED_BROWSER_ORIGINS: [&str; 2] =
     ["http://localhost:1422", "http://127.0.0.1:1422"];
 
 #[derive(Debug, Parser)]
-#[command(name = "bitfun-server")]
+#[command(name = "halo-server")]
 struct ServerArgs {
     /// Project workspace owned by this Server Host.
     #[arg(long, value_name = "PATH")]
     workspace: Option<PathBuf>,
 
     /// Browser origin allowed to connect to this Server Host. Repeat to allow more than one.
-    /// When omitted, only BitFun's local Web development origins are allowed.
+    /// When omitted, only Halo's local Web development origins are allowed.
     #[arg(long = "allowed-origin", value_name = "ORIGIN")]
     allowed_origins: Vec<String>,
 }
@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    tracing::info!("BitFun Server v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!("Halo Server v{}", env!("CARGO_PKG_VERSION"));
 
     let args = ServerArgs::parse();
     let external_workspace_root = args
@@ -104,14 +104,14 @@ async fn main() -> Result<()> {
 
     // This is a narrow controller/observer capability. It deliberately does
     // not initialize the Server Host's dormant Agent Runtime: authoritative
-    // sessions and execution stay inside the target-side `bitfun dispatch`
+    // sessions and execution stay inside the target-side `halo dispatch`
     // worker.
-    let path_manager = Arc::new(bitfun_core::infrastructure::PathManager::new()?);
+    let path_manager = Arc::new(halo_core::infrastructure::PathManager::new()?);
     let ssh_data_dir = dirs::data_local_dir()
         .ok_or_else(|| anyhow::anyhow!("Could not resolve the local data directory"))?
-        .join("BitFun")
+        .join("Halo")
         .join("ssh");
-    let ssh_manager = Arc::new(bitfun_core::service::remote_ssh::SSHConnectionManager::new(
+    let ssh_manager = Arc::new(halo_core::service::remote_ssh::SSHConnectionManager::new(
         ssh_data_dir,
     ));
     if let Err(error) = ssh_manager.load_saved_connections().await {

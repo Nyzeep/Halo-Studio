@@ -1,4 +1,4 @@
-use bitfun_agent_runtime::deep_research::renumber_research_report;
+use halo_agent_runtime::deep_research::renumber_research_report;
 
 #[test]
 fn deep_research_citation_renumber_owner_preserves_report_and_display_map_contracts() {

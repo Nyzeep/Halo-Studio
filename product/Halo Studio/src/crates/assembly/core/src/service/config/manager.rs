@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
 
-type ConfigMigrationFn = fn(Value) -> BitFunResult<Value>;
+type ConfigMigrationFn = fn(Value) -> HaloResult<Value>;
 type ConfigMigration = (&'static str, &'static str, ConfigMigrationFn);
 
 fn canonical_config_path(path: &str) -> &str {
@@ -27,8 +27,8 @@ fn canonical_config_path(path: &str) -> &str {
 
 fn normalize_legacy_theme_id(theme_id: &str) -> String {
     match theme_id.trim() {
-        "dark" => "bitfun-dark".to_string(),
-        "light" => "bitfun-light".to_string(),
+        "dark" => "halo-dark".to_string(),
+        "light" => "halo-light".to_string(),
         normalized => normalized.to_string(),
     }
 }
@@ -167,9 +167,9 @@ fn normalize_legacy_config_value(config: Value) -> Value {
     )
 }
 
-fn config_value_for_persistence(config: &GlobalConfig) -> BitFunResult<Value> {
+fn config_value_for_persistence(config: &GlobalConfig) -> HaloResult<Value> {
     let mut value = serde_json::to_value(config)
-        .map_err(|e| BitFunError::config(format!("Failed to serialize config: {}", e)))?;
+        .map_err(|e| HaloError::config(format!("Failed to serialize config: {}", e)))?;
     prune_default_ai_tool_argument_json_repair(&mut value);
     prune_default_memories_config(&mut value)?;
     Ok(value)
@@ -185,7 +185,7 @@ fn prune_default_ai_tool_argument_json_repair(config_value: &mut Value) {
     }
 }
 
-fn prune_default_memories_config(config_value: &mut Value) -> BitFunResult<()> {
+fn prune_default_memories_config(config_value: &mut Value) -> HaloResult<()> {
     let Some(config_object) = config_value.as_object_mut() else {
         return Ok(());
     };
@@ -194,7 +194,7 @@ fn prune_default_memories_config(config_value: &mut Value) -> BitFunResult<()> {
     };
 
     let default_memories = serde_json::to_value(MemoriesConfig::default()).map_err(|e| {
-        BitFunError::config(format!(
+        HaloError::config(format!(
             "Failed to serialize default memories config: {}",
             e
         ))
@@ -244,7 +244,7 @@ impl Default for ConfigManagerSettings {
 
 impl ConfigManager {
     /// Creates a new unified configuration manager.
-    pub async fn new(settings: ConfigManagerSettings) -> BitFunResult<Self> {
+    pub async fn new(settings: ConfigManagerSettings) -> HaloResult<Self> {
         let path_manager = match settings.path_manager {
             Some(path_manager) => path_manager,
             None => try_get_path_manager_arc()?,
@@ -268,7 +268,7 @@ impl ConfigManager {
         manager.load_or_create_config().await?;
         #[cfg(feature = "ai-adapter-runtime")]
         {
-            bitfun_ai_adapters::diagnostics::set_include_sensitive_diagnostics(
+            halo_ai_adapters::diagnostics::set_include_sensitive_diagnostics(
                 manager.config.app.logging.include_sensitive_diagnostics,
             );
         }
@@ -283,7 +283,7 @@ impl ConfigManager {
     }
 
     /// Loads or creates the configuration file.
-    async fn load_or_create_config(&mut self) -> BitFunResult<()> {
+    async fn load_or_create_config(&mut self) -> HaloResult<()> {
         if self.config_file.exists() {
             self.load_existing_config().await?;
         } else {
@@ -294,7 +294,7 @@ impl ConfigManager {
     }
 
     /// Creates the first config file using the already initialized defaults.
-    async fn create_default_config(&mut self) -> BitFunResult<()> {
+    async fn create_default_config(&mut self) -> HaloResult<()> {
         Self::add_default_func_agent_models_config(&mut self.config.ai.func_agent_models);
         self.config.version = env!("CARGO_PKG_VERSION").to_string();
         self.save_config().await?;
@@ -303,13 +303,13 @@ impl ConfigManager {
     }
 
     /// Loads an existing config file and migrates it if needed.
-    async fn load_existing_config(&mut self) -> BitFunResult<()> {
+    async fn load_existing_config(&mut self) -> HaloResult<()> {
         let content = fs::read_to_string(&self.config_file)
             .await
-            .map_err(|e| BitFunError::config(format!("Failed to read config file: {}", e)))?;
+            .map_err(|e| HaloError::config(format!("Failed to read config file: {}", e)))?;
 
         let mut config_value: Value = serde_json::from_str(&content).map_err(|e| {
-            BitFunError::config(format!("Failed to parse config file as JSON: {}", e))
+            HaloError::config(format!("Failed to parse config file as JSON: {}", e))
         })?;
         let normalized_config_value = normalize_legacy_config_value(config_value.clone());
         let legacy_config_normalized = normalized_config_value != config_value;
@@ -370,17 +370,17 @@ impl ConfigManager {
     }
 
     /// Performs a smart merge from a JSON value.
-    async fn smart_merge_config_from_value(&mut self, user_value: Value) -> BitFunResult<()> {
+    async fn smart_merge_config_from_value(&mut self, user_value: Value) -> HaloResult<()> {
         let user_value = normalize_legacy_config_value(user_value);
         let base_config = self.providers.get_default_config();
 
         let base_value = serde_json::to_value(&base_config).map_err(|e| {
-            BitFunError::config(format!("Failed to serialize default config: {}", e))
+            HaloError::config(format!("Failed to serialize default config: {}", e))
         })?;
         let merged_value = deep_merge(base_value, user_value);
 
         let mut config: GlobalConfig = serde_json::from_value(merged_value).map_err(|e| {
-            BitFunError::config(format!("Failed to deserialize merged config: {}", e))
+            HaloError::config(format!("Failed to deserialize merged config: {}", e))
         })?;
 
         Self::ensure_models_config(&mut config.ai.models);
@@ -429,7 +429,7 @@ impl ConfigManager {
         &self,
         from_version: &str,
         mut config: Value,
-    ) -> BitFunResult<Value> {
+    ) -> HaloResult<Value> {
         let migrations: Vec<ConfigMigration> = vec![("0.0.0", "1.0.0", migrate_0_0_0_to_1_0_0)];
 
         let mut current_version = from_version.to_string();
@@ -446,14 +446,14 @@ impl ConfigManager {
     }
 
     /// Saves the configuration file.
-    async fn save_config(&self) -> BitFunResult<()> {
+    async fn save_config(&self) -> HaloResult<()> {
         let content = serde_json::to_string_pretty(&config_value_for_persistence(&self.config)?)
-            .map_err(|e| BitFunError::config(format!("Config serialization failed: {}", e)))?;
+            .map_err(|e| HaloError::config(format!("Config serialization failed: {}", e)))?;
 
         if let Some(parent) = self.config_file.parent() {
             if !parent.exists() {
                 fs::create_dir_all(parent).await.map_err(|e| {
-                    BitFunError::config(format!(
+                    HaloError::config(format!(
                         "Failed to create config directory {:?}: {}",
                         parent, e
                     ))
@@ -462,7 +462,7 @@ impl ConfigManager {
         }
 
         fs::write(&self.config_file, content).await.map_err(|e| {
-            BitFunError::config(format!(
+            HaloError::config(format!(
                 "Failed to write config file {:?}: {}",
                 self.config_file, e
             ))
@@ -471,14 +471,14 @@ impl ConfigManager {
     }
 
     /// Gets a configuration value (supports dot-paths).
-    pub fn get<T>(&self, path: &str) -> BitFunResult<T>
+    pub fn get<T>(&self, path: &str) -> HaloResult<T>
     where
         T: serde::de::DeserializeOwned,
     {
         let path = canonical_config_path(path);
         let value = self.get_value_by_path(path)?;
         serde_json::from_value(value).map_err(|e| {
-            BitFunError::config(format!(
+            HaloError::config(format!(
                 "Failed to deserialize config value at '{}': {}",
                 path, e
             ))
@@ -486,13 +486,13 @@ impl ConfigManager {
     }
 
     /// Sets a configuration value (supports dot-paths).
-    pub async fn set<T>(&mut self, path: &str, value: T) -> BitFunResult<()>
+    pub async fn set<T>(&mut self, path: &str, value: T) -> HaloResult<()>
     where
         T: serde::Serialize,
     {
         let old_config = self.config.clone();
         let mut json_value = serde_json::to_value(value)
-            .map_err(|e| BitFunError::config(format!("Failed to serialize config value: {}", e)))?;
+            .map_err(|e| HaloError::config(format!("Failed to serialize config value: {}", e)))?;
 
         let original_path = path;
         let path = canonical_config_path(path);
@@ -515,7 +515,7 @@ impl ConfigManager {
     }
 
     /// Resets configuration (supports dot-paths).
-    pub async fn reset(&mut self, path: Option<&str>) -> BitFunResult<()> {
+    pub async fn reset(&mut self, path: Option<&str>) -> HaloResult<()> {
         let old_config = self.config.clone();
 
         if let Some(path) = path {
@@ -550,23 +550,23 @@ impl ConfigManager {
     }
 
     /// Validates configuration.
-    pub async fn validate_config(&self) -> BitFunResult<ConfigValidationResult> {
+    pub async fn validate_config(&self) -> HaloResult<ConfigValidationResult> {
         self.providers.validate_config(&self.config).await
     }
 
     /// Exports configuration.
-    pub fn export_config(&self) -> BitFunResult<serde_json::Value> {
+    pub fn export_config(&self) -> HaloResult<serde_json::Value> {
         serde_json::to_value(&self.config)
-            .map_err(|e| BitFunError::config(format!("Failed to export config: {}", e)))
+            .map_err(|e| HaloError::config(format!("Failed to export config: {}", e)))
     }
 
     /// Imports configuration.
-    pub async fn import_config(&mut self, config_data: serde_json::Value) -> BitFunResult<()> {
+    pub async fn import_config(&mut self, config_data: serde_json::Value) -> HaloResult<()> {
         let old_config = self.config.clone();
         let config_data = normalize_legacy_config_value(config_data);
 
         let imported_config: GlobalConfig = serde_json::from_value(config_data)
-            .map_err(|e| BitFunError::config(format!("Failed to parse imported config: {}", e)))?;
+            .map_err(|e| HaloError::config(format!("Failed to parse imported config: {}", e)))?;
 
         let validation_result = self.providers.validate_config(&imported_config).await?;
         if !validation_result.valid {
@@ -575,7 +575,7 @@ impl ConfigManager {
                 .iter()
                 .map(|e| e.message.clone())
                 .collect();
-            return Err(BitFunError::validation(format!(
+            return Err(HaloError::validation(format!(
                 "Invalid imported config: {}",
                 error_messages.join(", ")
             )));
@@ -596,24 +596,24 @@ impl ConfigManager {
     }
 
     /// Creates a configuration backup.
-    pub async fn create_backup(&self) -> BitFunResult<PathBuf> {
+    pub async fn create_backup(&self) -> HaloResult<PathBuf> {
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let backup_dir = self.config_dir.join("backups");
 
         if !backup_dir.exists() {
             fs::create_dir_all(&backup_dir).await.map_err(|e| {
-                BitFunError::config(format!("Failed to create backup directory: {}", e))
+                HaloError::config(format!("Failed to create backup directory: {}", e))
             })?;
         }
 
         let backup_file = backup_dir.join(format!("config_backup_{}.json", timestamp));
 
         let content = serde_json::to_string_pretty(&config_value_for_persistence(&self.config)?)
-            .map_err(|e| BitFunError::config(format!("Failed to serialize backup: {}", e)))?;
+            .map_err(|e| HaloError::config(format!("Failed to serialize backup: {}", e)))?;
 
         fs::write(&backup_file, content)
             .await
-            .map_err(|e| BitFunError::config(format!("Failed to write backup: {}", e)))?;
+            .map_err(|e| HaloError::config(format!("Failed to write backup: {}", e)))?;
 
         info!("Created config backup: {:?}", backup_file);
         Ok(backup_file)
@@ -636,7 +636,7 @@ impl ConfigManager {
     }
 
     /// Gets a configuration value by dot-path.
-    fn get_value_by_path(&self, path: &str) -> BitFunResult<serde_json::Value> {
+    fn get_value_by_path(&self, path: &str) -> HaloResult<serde_json::Value> {
         self.get_value_by_path_from_config(&self.config, path)
     }
 
@@ -645,16 +645,16 @@ impl ConfigManager {
         &self,
         config: &GlobalConfig,
         path: &str,
-    ) -> BitFunResult<serde_json::Value> {
+    ) -> HaloResult<serde_json::Value> {
         let config_value = serde_json::to_value(config)
-            .map_err(|e| BitFunError::config(format!("Failed to serialize config: {}", e)))?;
+            .map_err(|e| HaloError::config(format!("Failed to serialize config: {}", e)))?;
 
         let keys: Vec<&str> = path.split('.').collect();
         let mut current = &config_value;
 
         for key in keys {
             current = current.get(key).ok_or_else(|| {
-                BitFunError::NotFound(format!("Config path '{}' not found", path))
+                HaloError::NotFound(format!("Config path '{}' not found", path))
             })?;
         }
 
@@ -662,46 +662,46 @@ impl ConfigManager {
     }
 
     /// Sets a configuration value by dot-path.
-    fn set_value_by_path(&mut self, path: &str, value: serde_json::Value) -> BitFunResult<()> {
+    fn set_value_by_path(&mut self, path: &str, value: serde_json::Value) -> HaloResult<()> {
         if path.is_empty() {
             self.config = serde_json::from_value(value)
-                .map_err(|e| BitFunError::config(format!("Failed to deserialize config: {}", e)))?;
+                .map_err(|e| HaloError::config(format!("Failed to deserialize config: {}", e)))?;
             return Ok(());
         }
 
         let mut config_value = serde_json::to_value(&self.config)
-            .map_err(|e| BitFunError::config(format!("Failed to serialize config: {}", e)))?;
+            .map_err(|e| HaloError::config(format!("Failed to serialize config: {}", e)))?;
 
         let keys: Vec<&str> = path.split('.').filter(|k| !k.is_empty()).collect();
         if keys.is_empty() {
             self.config = serde_json::from_value(value)
-                .map_err(|e| BitFunError::config(format!("Failed to deserialize config: {}", e)))?;
+                .map_err(|e| HaloError::config(format!("Failed to deserialize config: {}", e)))?;
             return Ok(());
         }
 
         let last_key = keys.last().ok_or_else(|| {
-            BitFunError::config(format!("Config path '{}' does not contain any keys", path))
+            HaloError::config(format!("Config path '{}' does not contain any keys", path))
         })?;
         let parent_keys = &keys[..keys.len() - 1];
 
         let mut current = &mut config_value;
         for key in parent_keys {
             current = current.get_mut(key).ok_or_else(|| {
-                BitFunError::NotFound(format!("Config path '{}' not found", path))
+                HaloError::NotFound(format!("Config path '{}' not found", path))
             })?;
         }
 
         if let Some(obj) = current.as_object_mut() {
             obj.insert(last_key.to_string(), value);
         } else {
-            return Err(BitFunError::config(format!(
+            return Err(HaloError::config(format!(
                 "Cannot set value at path '{}': parent is not an object",
                 path
             )));
         }
 
         self.config = serde_json::from_value(config_value).map_err(|e| {
-            BitFunError::config(format!("Failed to deserialize updated config: {}", e))
+            HaloError::config(format!("Failed to deserialize updated config: {}", e))
         })?;
 
         Ok(())
@@ -712,7 +712,7 @@ impl ConfigManager {
         &self,
         path: &str,
         old_config: &GlobalConfig,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.check_and_broadcast_app_change(path).await;
         self.check_and_broadcast_debug_mode_change(old_config).await;
         self.check_and_broadcast_log_level_change(old_config).await;
@@ -787,7 +787,7 @@ impl ConfigManager {
 
             #[cfg(feature = "ai-adapter-runtime")]
             {
-                bitfun_ai_adapters::diagnostics::set_include_sensitive_diagnostics(new_include);
+                halo_ai_adapters::diagnostics::set_include_sensitive_diagnostics(new_include);
             }
 
             use super::global::{ConfigUpdateEvent, GlobalConfigManager};
@@ -860,7 +860,7 @@ pub(crate) fn parse_version(version: &str) -> (u32, u32, u32) {
 /// Migration function: `0.0.0 -> 1.0.0`.
 ///
 /// This migration is an example showing how to handle configuration upgrades.
-pub(crate) fn migrate_0_0_0_to_1_0_0(mut config: Value) -> BitFunResult<Value> {
+pub(crate) fn migrate_0_0_0_to_1_0_0(mut config: Value) -> HaloResult<Value> {
     debug!("Executing config migration: 0.0.0 -> 1.0.0");
 
     if let Some(app) = config.get_mut("app").and_then(|v| v.as_object_mut()) {
@@ -924,7 +924,7 @@ mod tests {
             }
         }));
 
-        assert_eq!(normalized["themes"]["current"], "bitfun-dark");
+        assert_eq!(normalized["themes"]["current"], "halo-dark");
         assert!(
             normalized.get("theme").is_none(),
             "legacy GUI theme payload should not survive normalization"
@@ -935,14 +935,14 @@ mod tests {
     fn legacy_theme_id_does_not_override_existing_theme_selection() {
         let normalized = normalize_legacy_theme_config_value(serde_json::json!({
             "theme": {
-                "id": "bitfun-dark"
+                "id": "halo-dark"
             },
             "themes": {
-                "current": "bitfun-cyber"
+                "current": "halo-cyber"
             }
         }));
 
-        assert_eq!(normalized["themes"]["current"], "bitfun-cyber");
+        assert_eq!(normalized["themes"]["current"], "halo-cyber");
         assert!(normalized.get("theme").is_none());
     }
 
@@ -957,7 +957,7 @@ mod tests {
             }
         }));
 
-        assert_eq!(normalized["themes"]["current"], "bitfun-light");
+        assert_eq!(normalized["themes"]["current"], "halo-light");
         assert!(normalized.get("theme").is_none());
     }
 

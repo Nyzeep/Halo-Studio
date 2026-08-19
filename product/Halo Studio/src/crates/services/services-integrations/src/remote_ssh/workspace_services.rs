@@ -5,7 +5,7 @@
 //! used; this crate owns the concrete SSH-backed implementation.
 
 use async_trait::async_trait;
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     WorkspaceCommandOptions, WorkspaceCommandResult, WorkspaceDirEntry, WorkspaceFileSystem,
     WorkspaceServices, WorkspaceShell,
 };

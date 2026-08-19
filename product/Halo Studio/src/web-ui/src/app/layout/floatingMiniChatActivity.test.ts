@@ -63,7 +63,7 @@ describe('floating MiniApp chat activity', () => {
 
     expect(component).toContain('trackedSession: activeMiniAppSession');
     expect(component).toContain('isMiniAppSessionExecuting && (');
-    expect(component).toContain('className="bitfun-fmc__button-activity"');
+    expect(component).toContain('className="halo-fmc__button-activity"');
     expect(component).toContain('aria-busy={isMiniAppSessionExecuting || undefined}');
     expect(stylesheet).toContain('@keyframes fmc-button-activity-spin');
     expect(stylesheet).toContain('@keyframes fmc-button-activity-glow');

@@ -1,7 +1,7 @@
 ---
 status: superseded by ADR-0072
 related: ADR-0065 deep Workbench Runtime seam; ADR-0072 active Pi RPC P0 adapter
-supersedes: 0002-bitfun-runtime-as-the-single-managed-coding-owner.md execution ownership; 0002-verified-dual-agent-delivery-workflow.md and 0023-use-locally-installed-pi-and-opencode-executors.md for P0 executor scope
+supersedes: 0002-halo-runtime-as-the-single-managed-coding-owner.md execution ownership; 0002-verified-dual-agent-delivery-workflow.md and 0023-use-locally-installed-pi-and-opencode-executors.md for P0 executor scope
 ---
 
 # 使用 OpenCode Server 作为 P0 唯一受管执行 Adapter（历史决策）
@@ -12,4 +12,4 @@ supersedes: 0002-bitfun-runtime-as-the-single-managed-coding-owner.md execution 
 
 Halo 从未因本 ADR 获得复制或分叉 OpenCode 内部 Provider、模型注册表、Session 数据库或 Agent 循环源码的授权。`D:\opencode-dev` 和旧 `opencode.rs` 仅保留为历史协议/行为参考；它们不是新的构建依赖、运行时依赖或 P0 生产路径。
 
-Pi 与 BitFun 内置 Code Agent 当时被排除在 P0 之外；该排除已由 ADR-0072 更新为 Pi RPC 的唯一 P0 生产路径。BitFun 内置 Code Agent 和 OpenCode Server 仍不进入当前选择器、配置、测试矩阵或发布门槛。
+Pi 与上游（原 BitFun）内置 Code Agent 当时被排除在 P0 之外；该排除已由 ADR-0072 更新为 Pi RPC 的唯一 P0 生产路径。上游（原 BitFun）内置 Code Agent 和 OpenCode Server 仍不进入当前选择器、配置、测试矩阵或发布门槛。

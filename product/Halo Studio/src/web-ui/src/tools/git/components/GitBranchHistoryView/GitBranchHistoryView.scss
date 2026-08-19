@@ -421,7 +421,7 @@
 }
 
 
-.bitfun-right-panel[data-mode="compact"] {
+.halo-right-panel[data-mode="compact"] {
   .git-branch-history-view {
     &__header {
       padding: 8px 10px;
@@ -510,7 +510,7 @@
   }
 }
 
-.bitfun-right-panel[data-mode="expanded"] {
+.halo-right-panel[data-mode="expanded"] {
   .git-branch-history-view {
     &__commit-message {
       white-space: normal;

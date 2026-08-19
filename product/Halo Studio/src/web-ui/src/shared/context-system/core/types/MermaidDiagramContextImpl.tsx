@@ -102,20 +102,20 @@ export class MermaidDiagramCardRenderer implements ContextCardRenderer<'mermaid-
     const { compact = false, interactive = true } = options || {};
     
     return (
-      <div className={`bitfun-context-card bitfun-context-card--mermaid ${compact ? 'bitfun-context-card--compact' : ''}`}>
-        <div className="bitfun-context-card__icon">
+      <div className={`halo-context-card halo-context-card--mermaid ${compact ? 'halo-context-card--compact' : ''}`}>
+        <div className="halo-context-card__icon">
           <Network size={compact ? 16 : 20} />
         </div>
         
-        <div className="bitfun-context-card__content">
-          <div className="bitfun-context-card__title">
+        <div className="halo-context-card__content">
+          <div className="halo-context-card__title">
             {context.diagramTitle || i18nService.t('components:contextSystem.diagram.defaultTitle')}
           </div>
           
           {!compact && (
-            <div className="bitfun-context-card__subtitle">
+            <div className="halo-context-card__subtitle">
               {this.getDiagramTypeLabel(context.diagramType)}
-              <span className="bitfun-context-card__meta">
+              <span className="halo-context-card__meta">
                 {' • '}{this.formatCodeSize(context.diagramCode.length)}
               </span>
             </div>
@@ -123,7 +123,7 @@ export class MermaidDiagramCardRenderer implements ContextCardRenderer<'mermaid-
         </div>
         
         {interactive && (
-          <div className="bitfun-context-card__actions">
+          <div className="halo-context-card__actions">
             {this.renderValidationIndicator(context)}
           </div>
         )}
@@ -158,8 +158,8 @@ export class MermaidDiagramCardRenderer implements ContextCardRenderer<'mermaid-
     
     
     return (
-      <div className="bitfun-context-card__status">
-        <CheckCircle size={16} className="bitfun-context-card__status-icon--success" />
+      <div className="halo-context-card__status">
+        <CheckCircle size={16} className="halo-context-card__status-icon--success" />
       </div>
     );
   }

@@ -13,7 +13,7 @@ use std::sync::Arc;
 const TOKEN_USAGE_DIR: &str = "token_usage";
 
 pub struct TokenUsageService {
-    inner: bitfun_services_core::token_usage::TokenUsageService,
+    inner: halo_services_core::token_usage::TokenUsageService,
 }
 
 impl TokenUsageService {
@@ -22,7 +22,7 @@ impl TokenUsageService {
     }
 
     pub async fn new_in_base_dir(base_dir: PathBuf) -> Result<Self> {
-        let inner = bitfun_services_core::token_usage::TokenUsageService::new(base_dir)
+        let inner = halo_services_core::token_usage::TokenUsageService::new(base_dir)
             .await
             .map_err(anyhow::Error::msg)?;
         Ok(Self { inner })

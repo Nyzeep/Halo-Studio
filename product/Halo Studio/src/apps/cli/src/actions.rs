@@ -112,9 +112,9 @@ pub(crate) enum ActionHandler {
 }
 
 pub(crate) const SHARED_TUI_EMBEDDED_HANDOFF: &str =
-    "Exit all Shared TUI clients, wait up to 30 seconds for their Runtime to stop, then use default Embedded `bitfun chat`";
+    "Exit all Shared TUI clients, wait up to 30 seconds for their Runtime to stop, then use default Embedded `halo chat`";
 pub(crate) const SHARED_TUI_HELP_NOTE: &str =
-    "Shared TUI: start with `bitfun chat --shared`. Multiple TUI processes reuse one workspace Runtime, while each TUI controls at most one Session and each Session has one controller. Session/turn interaction is available; model, agent, MCP, extension, account-sync, usage, and other management remain Embedded. Exit all Shared TUI clients and wait up to 30 seconds before returning to default Embedded `bitfun chat`.";
+    "Shared TUI: start with `halo chat --shared`. Multiple TUI processes reuse one workspace Runtime, while each TUI controls at most one Session and each Session has one controller. Session/turn interaction is available; model, agent, MCP, extension, account-sync, usage, and other management remain Embedded. Exit all Shared TUI clients and wait up to 30 seconds before returning to default Embedded `halo chat`.";
 
 impl ActionHandler {
     pub(crate) const fn available_in_shared_tui_preview(self) -> bool {
@@ -596,7 +596,7 @@ static ACTION_SPECS: &[ActionSpec] = &[
         id: "logout",
         name: "Logout",
         aliases: &["/logout"],
-        description: "Log out of BitFun account",
+        description: "Log out of Halo account",
         contexts: BOTH,
         availability: ActionAvailability::Always,
         handler: ActionHandler::Logout,
@@ -1227,7 +1227,7 @@ impl ResolvedKeymap {
                 keymap.push_binding(
                     spec,
                     binding,
-                    "BitFun safety".to_string(),
+                    "Halo safety".to_string(),
                     BindingPolicy {
                         availability,
                         modifier_match: built_in_modifier_match(spec, binding),
@@ -1270,7 +1270,7 @@ impl ResolvedKeymap {
                 }
                 Err(error) => keymap.push_diagnostic(
                     format!(
-                        "Invalid {} ({}); using BitFun default",
+                        "Invalid {} ({}); using Halo default",
                         field.source(),
                         binding_error_summary(&error)
                     ),
@@ -1290,7 +1290,7 @@ impl ResolvedKeymap {
                 keymap.push_binding(
                     spec,
                     binding,
-                    "BitFun default".to_string(),
+                    "Halo default".to_string(),
                     BindingPolicy {
                         availability: spec.availability,
                         modifier_match: built_in_modifier_match(spec, binding),
@@ -1786,7 +1786,7 @@ mod tests {
         ] {
             assert!(!action.available_in_shared_tui_preview(), "{action:?}");
         }
-        assert!(SHARED_TUI_HELP_NOTE.contains("bitfun chat --shared"));
+        assert!(SHARED_TUI_HELP_NOTE.contains("halo chat --shared"));
         assert!(SHARED_TUI_HELP_NOTE.contains("one Session"));
         assert!(SHARED_TUI_HELP_NOTE.contains("remain Embedded"));
     }
@@ -2077,7 +2077,7 @@ mod tests {
             Some("exit")
         );
         let diagnostic = keymap.diagnostics().join("\n");
-        assert!(diagnostic.contains("BitFun safety"));
+        assert!(diagnostic.contains("Halo safety"));
         assert!(diagnostic.contains("shortcuts.menu"));
         assert!(diagnostic.contains("Quit"));
         assert!(diagnostic.contains("Interrupt"));
@@ -2242,7 +2242,7 @@ mod tests {
         let diagnostic = keymap.diagnostics().join("\n");
         assert!(diagnostic.contains("Ctrl+Esc"));
         assert!(diagnostic.contains("shortcuts.menu"));
-        assert!(diagnostic.contains("BitFun safety"));
+        assert!(diagnostic.contains("Halo safety"));
     }
 
     #[test]
@@ -2434,7 +2434,7 @@ mod tests {
             help.lines().all(|line| line.chars().count() <= 74),
             "{help}"
         );
-        assert!(help.contains("BitFun safety"));
+        assert!(help.contains("Halo safety"));
     }
 
     #[test]
@@ -2447,7 +2447,7 @@ mod tests {
         let help = keymap.help_text(ActionState::chat(false, false));
 
         assert!(help.contains("shortcuts.send_message"), "{help}");
-        assert!(help.contains("BitFun default"), "{help}");
+        assert!(help.contains("Halo default"), "{help}");
         assert!(help.contains("Commands"), "{help}");
         assert!(!help.contains("open_palette"), "{help}");
         assert!(help.lines().all(|line| line.chars().count() <= 74));
@@ -2482,7 +2482,7 @@ mod tests {
 
         assert!(help.contains("Invalid shortcuts.send_message"), "{help}");
         assert!(help.contains("unsupported key"), "{help}");
-        assert!(help.contains("using BitFun default"), "{help}");
+        assert!(help.contains("using Halo default"), "{help}");
         assert!(!help.contains("more shortcut notices"), "{help}");
         assert!(help.lines().count() <= 19, "{help}");
         assert!(help.lines().all(|line| line.chars().count() <= 74));

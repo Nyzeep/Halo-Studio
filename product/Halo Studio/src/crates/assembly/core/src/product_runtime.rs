@@ -1,6 +1,6 @@
 //! Core product-full runtime adapter boundary.
 //!
-//! Product runtime assembly facts live in `bitfun-product-capabilities`. Core
+//! Product runtime assembly facts live in `halo-product-capabilities`. Core
 //! keeps only compatibility exports and adapter wiring that still depends on
 //! existing concrete core paths.
 
@@ -11,21 +11,21 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use bitfun_agent_runtime::permission::PermissionRequestManager;
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::permission::PermissionRequestManager;
+use halo_agent_runtime::sdk::{
     AgentEventReceiver, AgentEventSource, AgentRuntime, AgentSessionForkAtTurnRequest,
     AgentSessionForkPort, AgentSessionForkRequest, AgentSessionForkResult, AgentSessionUsagePort,
     AgentSessionUsageRequest, AgentTurnSettlementPort, AgentTurnSettlementRequest,
 };
-use bitfun_harness::HarnessRegistry;
-use bitfun_runtime_ports::{
+use halo_harness::HarnessRegistry;
+use halo_runtime_ports::{
     ClockPort, LocalWorkspaceSnapshotPort, LocalWorkspaceSnapshotSessionRequest,
     LocalWorkspaceSnapshotStats, LocalWorkspaceSnapshotTurnRequest, PortError, PortErrorKind,
     PortResult, RuntimeServiceCapability, RuntimeServicePort, SessionStoragePathRequest,
     SessionStorePort, SessionViewRestoreTiming,
 };
-use bitfun_runtime_services::RuntimeServices;
-use bitfun_services_core::permission_store::ProjectPermissionSqliteStore;
+use halo_runtime_services::RuntimeServices;
+use halo_services_core::permission_store::ProjectPermissionSqliteStore;
 
 use crate::agentic::coordination::{
     ConversationCoordinator, DialogScheduler, SessionMaintenancePermit,
@@ -44,9 +44,9 @@ use crate::service::snapshot::{
 };
 use crate::service::token_usage::TokenUsageService;
 use crate::service_agent_runtime::CoreServiceAgentRuntime;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 
-pub use bitfun_product_capabilities::ProductRuntimeAssembly as CoreProductRuntimeAssembly;
+pub use halo_product_capabilities::ProductRuntimeAssembly as CoreProductRuntimeAssembly;
 pub use runtime_services::{build_local_runtime_services, CoreRuntimeServicesProvider};
 
 struct ProductEventQueueDrain {
@@ -96,7 +96,7 @@ impl CoreProductEventQueueOwner {
 ///
 /// First-party hosts must retain [`CoreProductEventQueueOwner`] and subscribe
 /// through `AgentRuntime`. This wrapper remains only to avoid silently breaking
-/// existing `bitfun-core` consumers during the migration.
+/// existing `halo-core` consumers during the migration.
 #[deprecated(note = "use CoreProductEventQueueOwner and subscribe through AgentRuntime instead")]
 #[derive(Clone)]
 pub struct CoreProductAgentEventSource {
@@ -173,9 +173,9 @@ pub fn core_permission_request_manager() -> Result<Arc<PermissionRequestManager>
     let store = Arc::new(ProjectPermissionSqliteStore::new(
         path_manager.user_data_dir().join("permissions"),
     ));
-    let audit_store: Arc<dyn bitfun_runtime_ports::PermissionAuditStorePort> = store.clone();
-    let reply_store: Arc<dyn bitfun_runtime_ports::PermissionReplyStorePort> = store.clone();
-    let grant_store: Arc<dyn bitfun_runtime_ports::PermissionGrantStorePort> = store;
+    let audit_store: Arc<dyn halo_runtime_ports::PermissionAuditStorePort> = store.clone();
+    let reply_store: Arc<dyn halo_runtime_ports::PermissionReplyStorePort> = store.clone();
+    let grant_store: Arc<dyn halo_runtime_ports::PermissionGrantStorePort> = store;
     let manager = Arc::new(
         PermissionRequestManager::new(audit_store, reply_store, Arc::new(SystemProductClock))
             .with_grant_store(grant_store),
@@ -200,16 +200,16 @@ pub struct CoreSessionMaintenancePermit {
     _permit: SessionMaintenancePermit,
 }
 
-fn validate_persisted_session_id(session_id: &str) -> BitFunResult<()> {
-    bitfun_core_types::validate_session_id(session_id).map_err(BitFunError::Validation)
+fn validate_persisted_session_id(session_id: &str) -> HaloResult<()> {
+    halo_core_types::validate_session_id(session_id).map_err(HaloError::Validation)
 }
 
-fn latest_persisted_turn_id(turns: &[DialogTurnData]) -> BitFunResult<String> {
+fn latest_persisted_turn_id(turns: &[DialogTurnData]) -> HaloResult<String> {
     turns
         .last()
         .map(|turn| turn.turn_id.clone())
         .ok_or_else(|| {
-            BitFunError::Validation("Session has no persisted turns to fork".to_string())
+            HaloError::Validation("Session has no persisted turns to fork".to_string())
         })
 }
 
@@ -217,7 +217,7 @@ async fn generate_core_session_usage_report(
     persistence: &PersistenceManager,
     token_usage_service: &TokenUsageService,
     request: AgentSessionUsageRequest,
-) -> BitFunResult<SessionUsageReport> {
+) -> HaloResult<SessionUsageReport> {
     validate_persisted_session_id(&request.session_id)?;
     generate_session_usage_report(persistence, Some(token_usage_service), request).await
 }
@@ -517,7 +517,7 @@ impl CoreAgentRuntimeCompatibility {
     pub fn ensure_workspace_runtime_ownership(
         &self,
         request: &SessionStoragePathRequest,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.coordinator.ensure_workspace_runtime_ownership(
             &request.workspace_path,
             request.remote_connection_id.as_deref(),
@@ -530,7 +530,7 @@ impl CoreAgentRuntimeCompatibility {
         storage_path: &Path,
         session_id: &str,
         include_internal: bool,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         validate_persisted_session_id(session_id)?;
         if include_internal {
             self.coordinator
@@ -549,7 +549,7 @@ impl CoreAgentRuntimeCompatibility {
         session_id: &str,
         include_internal: bool,
         tail_turn_count: Option<usize>,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<DialogTurnData>,
         usize,
@@ -594,7 +594,7 @@ impl CoreAgentRuntimeCompatibility {
         storage_path: &Path,
         session_id: &str,
         include_internal: bool,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>)> {
         validate_persisted_session_id(session_id)?;
         if include_internal {
             self.coordinator
@@ -613,7 +613,7 @@ impl CoreAgentRuntimeCompatibility {
         session_id: &str,
         include_internal: bool,
         tail_turn_count: Option<usize>,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<DialogTurnData>,
         usize,
@@ -659,7 +659,7 @@ impl CoreAgentRuntimeCompatibility {
         request: SessionStoragePathRequest,
         session_id: &str,
         include_internal: bool,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>)> {
         validate_persisted_session_id(session_id)?;
         if include_internal {
             self.coordinator
@@ -675,7 +675,7 @@ impl CoreAgentRuntimeCompatibility {
     pub async fn list_persisted_sessions(
         &self,
         workspace_path: &Path,
-    ) -> BitFunResult<Vec<SessionMetadata>> {
+    ) -> HaloResult<Vec<SessionMetadata>> {
         self.persistence.list_session_metadata(workspace_path).await
     }
 
@@ -684,7 +684,7 @@ impl CoreAgentRuntimeCompatibility {
         workspace_path: &Path,
         cursor: Option<&str>,
         limit: usize,
-    ) -> BitFunResult<SessionMetadataPage> {
+    ) -> HaloResult<SessionMetadataPage> {
         self.persistence
             .list_session_metadata_page(workspace_path, cursor, limit)
             .await
@@ -694,7 +694,7 @@ impl CoreAgentRuntimeCompatibility {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<Option<SessionMetadata>> {
+    ) -> HaloResult<Option<SessionMetadata>> {
         validate_persisted_session_id(session_id)?;
         self.persistence
             .load_session_metadata(workspace_path, session_id)
@@ -706,14 +706,14 @@ impl CoreAgentRuntimeCompatibility {
         workspace_path: &Path,
         session_id: &str,
         update: impl FnOnce(&mut SessionMetadata),
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         validate_persisted_session_id(session_id)?;
         self.persistence
             .update_session_metadata(workspace_path, session_id, update)
             .await
     }
 
-    pub fn is_session_loaded_in_memory(&self, session_id: &str) -> BitFunResult<bool> {
+    pub fn is_session_loaded_in_memory(&self, session_id: &str) -> HaloResult<bool> {
         validate_persisted_session_id(session_id)?;
         Ok(self
             .coordinator
@@ -729,7 +729,7 @@ impl CoreAgentRuntimeCompatibility {
     /// so a later process restart cannot resurrect work. Live read-only views
     /// (for example Peer Device controllers) still need the current process
     /// state to distinguish an executing session from interrupted history.
-    pub fn loaded_session_snapshot(&self, session_id: &str) -> BitFunResult<Option<Session>> {
+    pub fn loaded_session_snapshot(&self, session_id: &str) -> HaloResult<Option<Session>> {
         validate_persisted_session_id(session_id)?;
         Ok(self
             .coordinator
@@ -741,7 +741,7 @@ impl CoreAgentRuntimeCompatibility {
         &self,
         session_id: &str,
         title: &str,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         validate_persisted_session_id(session_id)?;
         self.coordinator
             .update_session_title(session_id, title)
@@ -751,19 +751,19 @@ impl CoreAgentRuntimeCompatibility {
     pub async fn resolve_persisted_session_storage_path(
         &self,
         request: SessionStoragePathRequest,
-    ) -> BitFunResult<PathBuf> {
+    ) -> HaloResult<PathBuf> {
         CoreSessionStorePort::with_path_manager(self.persistence.path_manager().clone())
             .resolve_session_storage_path(request)
             .await
             .map(|resolution| resolution.effective_storage_path)
-            .map_err(|error| BitFunError::Session(error.to_string()))
+            .map_err(|error| HaloError::Session(error.to_string()))
     }
 
     pub fn is_session_loaded_from_storage_path(
         &self,
         storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<bool> {
+    ) -> HaloResult<bool> {
         validate_persisted_session_id(session_id)?;
         self.coordinator
             .get_session_manager()
@@ -775,7 +775,7 @@ impl CoreAgentRuntimeCompatibility {
         storage_path: &Path,
         session_id: &str,
         include_internal: bool,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if self.is_session_loaded_from_storage_path(storage_path, session_id)? {
             return Ok(());
         }
@@ -795,7 +795,7 @@ impl CoreAgentRuntimeCompatibility {
         &self,
         storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<CoreSessionMutationPermit> {
+    ) -> HaloResult<CoreSessionMutationPermit> {
         validate_persisted_session_id(session_id)?;
         let session_manager = self.coordinator.get_session_manager();
         let guard = session_manager.acquire_session_mutation(session_id).await?;
@@ -812,7 +812,7 @@ impl CoreAgentRuntimeCompatibility {
         storage_path: &Path,
         session_id: &str,
         wait_timeout_ms: u64,
-    ) -> BitFunResult<CoreSessionMaintenancePermit> {
+    ) -> HaloResult<CoreSessionMaintenancePermit> {
         let permit = self
             .scheduler
             .begin_session_maintenance(
@@ -827,7 +827,7 @@ impl CoreAgentRuntimeCompatibility {
     /// Compatibility-only lifecycle operation for ACP setup compensation and
     /// session/close. It releases loaded Core state but preserves persistence
     /// and the storage binding so the same session can be restored later.
-    pub async fn unload_persisted_session(&self, session_id: &str) -> BitFunResult<bool> {
+    pub async fn unload_persisted_session(&self, session_id: &str) -> HaloResult<bool> {
         validate_persisted_session_id(session_id)?;
         self.coordinator
             .get_session_manager()
@@ -839,7 +839,7 @@ impl CoreAgentRuntimeCompatibility {
         &self,
         parent_session_id: &str,
         subagent_session_id: &str,
-    ) -> BitFunResult<usize> {
+    ) -> HaloResult<usize> {
         self.coordinator
             .cancel_background_subagents_for_parent(parent_session_id, subagent_session_id)
             .await
@@ -849,7 +849,7 @@ impl CoreAgentRuntimeCompatibility {
         &self,
         permit: &CoreSessionMutationPermit,
         target_turn: usize,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.coordinator
             .get_session_manager()
             .rollback_context_to_turn_start_locked(
@@ -864,7 +864,7 @@ impl CoreAgentRuntimeCompatibility {
         &self,
         permit: &CoreSessionMutationPermit,
         target_turn: usize,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.coordinator
             .get_session_manager()
             .validate_rollback_context_to_turn_start_locked(
@@ -880,7 +880,7 @@ impl CoreAgentRuntimeCompatibility {
         workspace_path: &Path,
         session_id: &str,
         limit: Option<usize>,
-    ) -> BitFunResult<Vec<DialogTurnData>> {
+    ) -> HaloResult<Vec<DialogTurnData>> {
         validate_persisted_session_id(session_id)?;
         if let Some(limit) = limit {
             self.persistence
@@ -897,7 +897,7 @@ impl CoreAgentRuntimeCompatibility {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         validate_persisted_session_id(session_id)?;
         self.persistence
             .touch_session(workspace_path, session_id)
@@ -908,7 +908,7 @@ impl CoreAgentRuntimeCompatibility {
         &self,
         workspace_path: &Path,
         turn: &DialogTurnData,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         validate_persisted_session_id(&turn.session_id)?;
         self.persistence
             .save_dialog_turn(workspace_path, turn)
@@ -920,7 +920,7 @@ impl CoreAgentRuntimeCompatibility {
         workspace_path: &Path,
         parent_session_id: &str,
         parent_dialog_turn_ids: &std::collections::HashSet<String>,
-    ) -> BitFunResult<Vec<String>> {
+    ) -> HaloResult<Vec<String>> {
         validate_persisted_session_id(parent_session_id)?;
         self.coordinator
             .delete_hidden_subagent_sessions_for_parent_turns(
@@ -1020,14 +1020,14 @@ impl CoreSessionOperationsPort {
     }
 }
 
-fn runtime_port_error(error: BitFunError) -> PortError {
+fn runtime_port_error(error: HaloError) -> PortError {
     let kind = match &error {
-        BitFunError::Validation(_) => PortErrorKind::InvalidRequest,
-        BitFunError::NotFound(_) => PortErrorKind::NotFound,
-        BitFunError::Timeout(_) => PortErrorKind::Timeout,
-        BitFunError::Cancelled(_) => PortErrorKind::Cancelled,
-        BitFunError::SessionInUse { .. } => PortErrorKind::SessionInUse,
-        BitFunError::SessionCreateCleanupRequired { .. } => PortErrorKind::CleanupRequired,
+        HaloError::Validation(_) => PortErrorKind::InvalidRequest,
+        HaloError::NotFound(_) => PortErrorKind::NotFound,
+        HaloError::Timeout(_) => PortErrorKind::Timeout,
+        HaloError::Cancelled(_) => PortErrorKind::Cancelled,
+        HaloError::SessionInUse { .. } => PortErrorKind::SessionInUse,
+        HaloError::SessionCreateCleanupRequired { .. } => PortErrorKind::CleanupRequired,
         _ => PortErrorKind::Backend,
     };
     PortError::new(kind, error.to_string())
@@ -1148,12 +1148,12 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use bitfun_agent_runtime::sdk::{AgentEventSource, AgentRuntime};
-    use bitfun_harness::HarnessRegistry;
-    use bitfun_runtime_ports::{
+    use halo_agent_runtime::sdk::{AgentEventSource, AgentRuntime};
+    use halo_harness::HarnessRegistry;
+    use halo_runtime_ports::{
         LocalWorkspaceSnapshotSessionRequest, LocalWorkspaceSnapshotTurnRequest,
     };
-    use bitfun_runtime_services::RuntimeServices;
+    use halo_runtime_services::RuntimeServices;
     use uuid::Uuid;
 
     #[allow(deprecated)]
@@ -1184,11 +1184,11 @@ mod tests {
     use crate::service::workspace_runtime::{
         set_workspace_runtime_service_for_current_test, WorkspaceRuntimeService,
     };
-    use crate::util::errors::BitFunError;
-    use bitfun_agent_runtime::sdk::{
+    use crate::util::errors::HaloError;
+    use halo_agent_runtime::sdk::{
         AgentSessionForkPort, AgentSessionForkRequest, AgentSessionUsageRequest, PortErrorKind,
     };
-    use bitfun_events::AgenticEvent;
+    use halo_events::AgenticEvent;
     use tokio::sync::RwLock as TokioRwLock;
 
     struct TestWorkspace {
@@ -1198,7 +1198,7 @@ mod tests {
     impl TestWorkspace {
         fn new() -> Self {
             let path = std::env::temp_dir().join(format!(
-                "bitfun-product-runtime-compatibility-test-{}",
+                "halo-product-runtime-compatibility-test-{}",
                 Uuid::new_v4()
             ));
             std::fs::create_dir_all(&path).expect("test workspace should be created");
@@ -1479,7 +1479,7 @@ mod tests {
 
     #[test]
     fn session_create_rollback_residual_remains_typed_across_the_runtime_port() {
-        let error = runtime_port_error(BitFunError::SessionCreateCleanupRequired {
+        let error = runtime_port_error(HaloError::SessionCreateCleanupRequired {
             session_id: "session-1".to_string(),
             error: "metadata write failed".to_string(),
             cleanup_error: "session directory is locked".to_string(),
@@ -1491,7 +1491,7 @@ mod tests {
 
     #[test]
     fn session_writer_conflict_remains_typed_across_the_runtime_port() {
-        let error = runtime_port_error(BitFunError::SessionInUse {
+        let error = runtime_port_error(HaloError::SessionInUse {
             session_id: "session-1".to_string(),
         });
 
@@ -1609,10 +1609,10 @@ mod tests {
             Arc::new(
                 crate::runtime_ownership::CoreRuntimeOwnership::embedded_with_facts(
                     std::env::temp_dir().join(format!(
-                        "bitfun-product-runtime-ownership-test-{}",
+                        "halo-product-runtime-ownership-test-{}",
                         uuid::Uuid::new_v4()
                     )),
-                    "bitfun".to_string(),
+                    "halo".to_string(),
                     "test",
                 ),
             ),

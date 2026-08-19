@@ -213,7 +213,7 @@ mod tests {
     #[tokio::test]
     async fn migrate_entry_moves_password_to_new_connection_id() {
         let dir =
-            std::env::temp_dir().join(format!("bitfun-ssh-vault-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("halo-ssh-vault-test-{}", std::process::id()));
         let _ = tokio::fs::remove_dir_all(&dir).await;
         let vault = SSHPasswordVault::new(dir.clone());
 

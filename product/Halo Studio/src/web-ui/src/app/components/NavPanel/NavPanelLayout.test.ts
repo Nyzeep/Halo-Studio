@@ -19,7 +19,7 @@ function extractBlock(stylesheet: string, selector: string): string {
 describe('NavPanel layout styles', () => {
   it('allows navigation list wrappers to shrink instead of inheriting long item widths', () => {
     const stylesheet = readNavPanelStylesheet();
-    const rootBlock = extractBlock(stylesheet, '.bitfun-nav-panel');
+    const rootBlock = extractBlock(stylesheet, '.halo-nav-panel');
     const contentBlock = extractBlock(stylesheet, '&__content');
     const mainLayerBlock = extractBlock(stylesheet, '&--main');
     const collapsibleBlock = extractBlock(stylesheet, '&__collapsible');

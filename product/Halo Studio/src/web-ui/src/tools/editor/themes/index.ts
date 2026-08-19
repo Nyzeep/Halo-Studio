@@ -4,7 +4,7 @@
 
 import type * as monaco from 'monaco-editor';
 import { monacoApi } from '../services/monacoRuntime';
-import { BitFunDarkTheme, BitFunDarkThemeMetadata } from './bitfun-dark.theme';
+import { HaloDarkTheme, HaloDarkThemeMetadata } from './halo-dark.theme';
 import { createLogger } from '@/shared/utils/logger';
 
 const log = createLogger('ThemeRegistry');
@@ -57,17 +57,17 @@ export function getRegisteredThemes(): string[] {
 }
 
 export function initializeBuiltinThemes(): boolean {
-  return registerTheme(BitFunDarkThemeMetadata.id, BitFunDarkTheme);
+  return registerTheme(HaloDarkThemeMetadata.id, HaloDarkTheme);
 }
 
 export function ensureDefaultTheme(): void {
-  if (!registeredThemes.has(BitFunDarkThemeMetadata.id)) {
-    registerTheme(BitFunDarkThemeMetadata.id, BitFunDarkTheme);
+  if (!registeredThemes.has(HaloDarkThemeMetadata.id)) {
+    registerTheme(HaloDarkThemeMetadata.id, HaloDarkTheme);
   }
 }
 
 export function isThemesInitialized(): boolean {
-  return registeredThemes.has(BitFunDarkThemeMetadata.id);
+  return registeredThemes.has(HaloDarkThemeMetadata.id);
 }
 
 export function applyTheme(themeId: string): void {
@@ -79,7 +79,7 @@ export function applyTheme(themeId: string): void {
 }
 
 export function getDefaultThemeId(): string {
-  return BitFunDarkThemeMetadata.id;
+  return HaloDarkThemeMetadata.id;
 }
 
-export { BitFunDarkTheme, BitFunDarkThemeMetadata };
+export { HaloDarkTheme, HaloDarkThemeMetadata };

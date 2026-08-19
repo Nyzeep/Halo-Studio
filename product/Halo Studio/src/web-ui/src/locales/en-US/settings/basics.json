@@ -16,35 +16,35 @@
     "systemTheme": "Match system",
     "systemThemeDescription": "Use light or dark theme based on your OS appearance. Updates when the system switches.",
     "presets": {
-      "bitfun-dark": {
+      "halo-dark": {
         "name": "Dark",
         "description": "Default dark theme"
       },
-      "bitfun-light": {
+      "halo-light": {
         "name": "Light",
         "description": "Light theme - Elegant and refined, soft blue-gray tones"
       },
-      "bitfun-midnight": {
+      "halo-midnight": {
         "name": "Midnight",
         "description": "Midnight gray dark theme - Professional and elegant, inspired by JetBrains IDE"
       },
-      "bitfun-china-style": {
+      "halo-china-style": {
         "name": "Ink Charm",
         "description": "Chinese style theme - Rice paper and ink, blue and vermilion, warm and elegant"
       },
-      "bitfun-china-night": {
+      "halo-china-night": {
         "name": "Ink Night",
         "description": "Chinese dark theme - Starlit ink night, moonlight like water, serene and elegant"
       },
-      "bitfun-cyber": {
+      "halo-cyber": {
         "name": "Cyber",
         "description": "Tech-style theme - Deep black hole, neon future, ultimate tech aesthetics"
       },
-      "bitfun-slate": {
+      "halo-slate": {
         "name": "Slate",
         "description": "Slate gray geometric theme - Deep immersion, high contrast grayscale aesthetics"
       },
-      "bitfun-tokyo-night": {
+      "halo-tokyo-night": {
         "name": "Tokyo Night",
         "description": "Popular Tokyo Night palette - Indigo night, blue and violet highlights"
       }

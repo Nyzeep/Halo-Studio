@@ -1,5 +1,5 @@
 //! Compatibility re-export for MCP server registry.
 //!
-//! The reusable registry owner lives in `bitfun-services-integrations`.
+//! The reusable registry owner lives in `halo-services-integrations`.
 
-pub use bitfun_services_integrations::mcp::server::MCPServerRegistry;
+pub use halo_services_integrations::mcp::server::MCPServerRegistry;

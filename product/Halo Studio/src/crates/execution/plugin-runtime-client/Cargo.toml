@@ -1,17 +1,17 @@
 [package]
-name = "bitfun-plugin-runtime-client"
+name = "halo-plugin-runtime-client"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Default PluginRuntimeClient implementation for BitFun extension execution"
+description = "Default PluginRuntimeClient implementation for Halo extension execution"
 
 [lib]
-name = "bitfun_plugin_runtime_client"
+name = "halo_plugin_runtime_client"
 crate-type = ["rlib"]
 
 [dependencies]
 async-trait = { workspace = true }
-bitfun-runtime-ports = { path = "../../contracts/runtime-ports" }
+halo-runtime-ports = { path = "../../contracts/runtime-ports" }
 tokio = { workspace = true }
 
 [lints]

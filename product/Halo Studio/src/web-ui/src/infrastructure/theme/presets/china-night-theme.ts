@@ -30,13 +30,13 @@ const CHINA_NIGHT_ERROR = '#e85555';
 const chinaNightText = (alpha: number | string) => rgbaFromHex(CHINA_NIGHT_TEXT_PRIMARY, alpha);
 const chinaNightAccent = (alpha: number | string) => rgbaFromHex(CHINA_NIGHT_ACCENT, alpha);
 
-export const bitfunChinaNightTheme: ThemeConfig = {
+export const haloChinaNightTheme: ThemeConfig = {
 
-  id: 'bitfun-china-night',
+  id: 'halo-china-night',
   name: 'Ink Night',
   type: 'dark',
   description: 'Chinese dark theme - Starlit ink night, moonlight like water, serene and elegant',
-  author: 'BitFun Team',
+  author: 'Halo Studio Team',
   version: '1.0.0',
 
 

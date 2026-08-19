@@ -33,8 +33,8 @@ vi.mock('@/infrastructure/contexts/WorkspaceContext', () => ({
     hasWorkspace: true,
     currentWorkspace: {
       id: 'workspace-1',
-      name: 'BitFun',
-      rootPath: 'D:/workspace/BitFun',
+      name: 'Halo',
+      rootPath: 'D:/workspace/Halo',
     },
     openedWorkspacesList: [],
     openWorkspace: vi.fn(),
@@ -95,7 +95,7 @@ describe('WelcomePanel Git summary loading', () => {
       root.render(<WelcomePanel sessionMode="agentic" />);
     });
 
-    expect(gitApiMock.isGitRepository).toHaveBeenCalledWith('D:/workspace/BitFun');
+    expect(gitApiMock.isGitRepository).toHaveBeenCalledWith('D:/workspace/Halo');
 
     act(() => {
       root.unmount();
@@ -116,6 +116,6 @@ describe('WelcomePanel Git summary loading', () => {
       root.render(<WelcomePanel sessionMode="agentic" />);
     });
 
-    expect(gitApiMock.getStatus).toHaveBeenCalledWith('D:/workspace/BitFun', 'welcome_panel');
+    expect(gitApiMock.getStatus).toHaveBeenCalledWith('D:/workspace/Halo', 'welcome_panel');
   });
 });

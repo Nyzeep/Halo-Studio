@@ -3,19 +3,19 @@
 //! Concrete ecosystem providers are selected only in this assembly module. The
 //! catalog and product surfaces remain provider- and ecosystem-neutral.
 
-pub use bitfun_product_domains::external_integration_policy::{
+pub use halo_product_domains::external_integration_policy::{
     EffectiveExternalIntegrationPolicy, ExternalIntegrationAccess, ExternalIntegrationMode,
     ExternalIntegrationPolicyMutation, ExternalIntegrationPolicyOperation,
     ExternalIntegrationPolicyScope, ExternalIntegrationPolicySnapshot,
     ExternalIntegrationPolicyStatus,
 };
-pub use bitfun_product_domains::external_source_control::{
+pub use halo_product_domains::external_source_control::{
     ExternalCapabilityKindV1, ExternalSourceControlActionV1, ExternalSourceControlRequestV1,
     ExternalSourceControlSnapshotV1, ExternalSourceRuntimeState, ExternalSourceSurfaceSnapshotV1,
     EXTERNAL_SOURCE_CONTROL_SCHEMA_V1,
 };
-use bitfun_product_domains::external_sources::native_prompt_command_group_fingerprint;
-pub use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_sources::native_prompt_command_group_fingerprint;
+pub use halo_product_domains::external_sources::{
     native_prompt_command_conflict_key, prompt_command_conflict_key, EcosystemId,
     ExpandedPromptCommand, ExternalIntegrationCapabilityId, ExternalMcpActivationState,
     ExternalMcpApprovalRequest, ExternalMcpCatalogEntry, ExternalMcpConflict,
@@ -30,13 +30,13 @@ pub use bitfun_product_domains::external_sources::{
     NativePromptCommandReconfirmationProjection, PromptCommandAvailability,
     PromptCommandCatalogEntry, PromptCommandDefinition, SourceKey,
 };
-pub use bitfun_product_domains::external_subagents::{
+pub use halo_product_domains::external_subagents::{
     ExternalSubagentActivationState, ExternalSubagentCompatibilityState, ExternalSubagentConflict,
     ExternalSubagentConflictCandidate, ExternalSubagentSummary,
 };
 
 use crate::external_mcp::{
-    reconcile_external_mcp_catalog, BitFunExternalMcpRuntime, ExternalMcpDecision,
+    reconcile_external_mcp_catalog, HaloExternalMcpRuntime, ExternalMcpDecision,
     ExternalMcpDecisions, ExternalMcpProductState, ExternalMcpRuntimePort,
     ExternalMcpRuntimeStatus, NativeMcpCandidate,
 };
@@ -52,32 +52,32 @@ use crate::external_tools::{
     ExternalToolProductState, TOOL_CONFLICT_RESELECTION_REQUIRED, UNRESOLVED_TOOL_CONFLICT_CHOICE,
 };
 use crate::service::config::{subscribe_config_updates, ConfigUpdateEvent};
-use bitfun_claude_code_adapter::{
+use halo_claude_code_adapter::{
     ClaudeCodeCommandProvider, ClaudeCodeMcpProvider, ClaudeCodeSubagentProvider,
 };
-use bitfun_codex_adapter::{CodexMcpProvider, CodexSubagentProvider};
-use bitfun_external_sources::{
+use halo_codex_adapter::{CodexMcpProvider, CodexSubagentProvider};
+use halo_external_sources::{
     DeferredDiscovery, ExternalMcpDiscoveryResult, ExternalSourceControlPlane,
     ExternalSourceCoordinator, ExternalSourceDiscoveryResult, ExternalSubagentDiscoveryResult,
     ExternalToolDiscoveryResult,
 };
-use bitfun_opencode_adapter::{
+use halo_opencode_adapter::{
     OpenCodeCommandProvider, OpenCodeMcpProvider, OpenCodeSubagentProvider, OpenCodeToolProvider,
 };
-use bitfun_product_domains::external_integration_policy::{
+use halo_product_domains::external_integration_policy::{
     external_integration_policy_snapshot, incompatible_external_integration_policy_snapshot,
     ExternalIntegrationCapabilityDescriptor, ExternalIntegrationEcosystemDescriptor,
     ExternalIntegrationPolicyDocument, ExternalIntegrationPolicySettings,
     EXTERNAL_INTEGRATION_POLICY_SCHEMA_MAJOR,
 };
-use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_sources::{
     ExecutionDomainId, ExternalMcpRevisionKey, ExternalMcpSourceProvider, ExternalMcpStaticStatus,
     ExternalSourceContext, ExternalSourceScope, ExternalToolSourceProvider,
     PromptCommandSourceProvider,
 };
-use bitfun_product_domains::external_subagents::ExternalSubagentSourceProvider;
-use bitfun_services_core::json_store::JsonFileStore;
-use bitfun_services_integrations::file_watch::{FileWatchService, FileWatcherConfig};
+use halo_product_domains::external_subagents::ExternalSubagentSourceProvider;
+use halo_services_core::json_store::JsonFileStore;
+use halo_services_integrations::file_watch::{FileWatchService, FileWatcherConfig};
 use dashmap::{mapref::entry::Entry, DashMap};
 use futures::future::join_all;
 use serde::{Deserialize, Serialize};
@@ -91,7 +91,7 @@ use tokio::sync::broadcast;
 
 const PROVIDER_DISCOVERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 const EXTERNAL_SOURCE_PREFERENCES_FILE: &str = "external-sources.json";
-const SUBAGENT_CONFLICT_RESELECTION_REQUIRED: &str = "__bitfun_reselection_required__";
+const SUBAGENT_CONFLICT_RESELECTION_REQUIRED: &str = "__halo_reselection_required__";
 const OPENCODE_ECOSYSTEM_ID: &str = "opencode";
 const CLAUDE_CODE_ECOSYSTEM_ID: &str = "claude-code";
 const CODEX_ECOSYSTEM_ID: &str = "codex";
@@ -115,7 +115,7 @@ fn external_capability_descriptor(
 }
 
 /// Internal SDK-ready registration seam. Adapters only contribute discovery
-/// providers and metadata; execution remains owned by BitFun policy/runtime.
+/// providers and metadata; execution remains owned by Halo policy/runtime.
 #[derive(Clone)]
 struct ExternalEcosystemRegistration {
     descriptor: ExternalIntegrationEcosystemDescriptor,
@@ -903,7 +903,7 @@ impl WorkspaceExternalSourceService {
             watch_states: tokio::sync::Mutex::new(BTreeMap::new()),
             refresh_gate: tokio::sync::Mutex::new(()),
             product_rebuild_gate: tokio::sync::Mutex::new(()),
-            mcp_runtime: Arc::new(BitFunExternalMcpRuntime),
+            mcp_runtime: Arc::new(HaloExternalMcpRuntime),
             active_mcp_runtime_ids: tokio::sync::Mutex::new(BTreeSet::new()),
             initial_refresh_completed: AtomicBool::new(false),
             background_refresh_scheduled: AtomicBool::new(false),
@@ -957,7 +957,7 @@ impl WorkspaceExternalSourceService {
         recovery_policy: WorkerRecoveryPolicy,
     ) -> Result<ExternalSourceCatalogSnapshot, String> {
         // Preferences are global to the local execution domain and may be
-        // changed by another BitFun process. Synchronize before every refresh
+        // changed by another Halo process. Synchronize before every refresh
         // so a cached CLI/Desktop service cannot keep an externally disabled
         // source active.
         sync_service_preferences(self).await?;
@@ -1170,8 +1170,8 @@ impl WorkspaceExternalSourceService {
         .await;
         if let Err(error) = persist_observed_tool_conflicts(&state.conflicts).await {
             state.diagnostics.push(ExternalSourceDiagnostic {
-                severity: bitfun_product_domains::external_sources::ExternalSourceDiagnosticSeverity::Warning,
-                asset_kind: bitfun_product_domains::external_sources::ExternalSourceAssetKind::Tool,
+                severity: halo_product_domains::external_sources::ExternalSourceDiagnosticSeverity::Warning,
+                asset_kind: halo_product_domains::external_sources::ExternalSourceAssetKind::Tool,
                 code: "external_tool.conflict_history_write_failed".to_string(),
                 message: format!(
                     "Could not persist external tool conflict history; the current catalog remains fail-closed: {error}"
@@ -1883,7 +1883,7 @@ impl WorkspaceExternalSourceService {
 
     fn schedule_subagent_last_valid_expiry(
         self: &Arc<Self>,
-        snapshot: &bitfun_external_sources::ExternalSubagentCoordinatorSnapshot,
+        snapshot: &halo_external_sources::ExternalSubagentCoordinatorSnapshot,
     ) {
         let schedule = self
             .subagent_expiry_schedule
@@ -2135,7 +2135,7 @@ impl WorkspaceExternalSourceService {
         self: &Arc<Self>,
         request: ExternalSourceControlRequestV1,
     ) -> ExternalSourceOperationResult<ExternalSourceSurfaceSnapshotV1> {
-        use bitfun_product_domains::external_source_control::ExternalSourceOperationStage;
+        use halo_product_domains::external_source_control::ExternalSourceOperationStage;
 
         if let Err(detail) = request.validate() {
             return Err(ExternalSourceOperationError::invalid_request(detail)
@@ -2931,7 +2931,7 @@ impl WorkspaceExternalSourceService {
     fn watch_roots(
         &self,
         policy: &ExternalIntegrationPolicySnapshot,
-    ) -> Vec<bitfun_product_domains::external_sources::ExternalWatchRoot> {
+    ) -> Vec<halo_product_domains::external_sources::ExternalWatchRoot> {
         let mut roots = BTreeMap::new();
         let mut provider_roots = Vec::new();
         let command_ecosystems =
@@ -2969,7 +2969,7 @@ impl WorkspaceExternalSourceService {
         roots
             .into_iter()
             .map(
-                |(path, recursive)| bitfun_product_domains::external_sources::ExternalWatchRoot {
+                |(path, recursive)| halo_product_domains::external_sources::ExternalWatchRoot {
                     path,
                     recursive,
                 },
@@ -2980,25 +2980,25 @@ impl WorkspaceExternalSourceService {
 
 fn lock_coordinator(
     control_plane: &ExternalSourceControlPlane,
-) -> MutexGuard<'_, bitfun_external_sources::ExternalSourceCoordinator> {
+) -> MutexGuard<'_, halo_external_sources::ExternalSourceCoordinator> {
     control_plane.lock_commands()
 }
 
 fn lock_tool_coordinator(
     control_plane: &ExternalSourceControlPlane,
-) -> MutexGuard<'_, bitfun_external_sources::ExternalToolCoordinator> {
+) -> MutexGuard<'_, halo_external_sources::ExternalToolCoordinator> {
     control_plane.lock_tools()
 }
 
 fn lock_subagent_coordinator(
     control_plane: &ExternalSourceControlPlane,
-) -> MutexGuard<'_, bitfun_external_sources::ExternalSubagentCoordinator> {
+) -> MutexGuard<'_, halo_external_sources::ExternalSubagentCoordinator> {
     control_plane.lock_subagents()
 }
 
 fn lock_mcp_coordinator(
     control_plane: &ExternalSourceControlPlane,
-) -> MutexGuard<'_, bitfun_external_sources::ExternalMcpCoordinator> {
+) -> MutexGuard<'_, halo_external_sources::ExternalMcpCoordinator> {
     control_plane.lock_mcp()
 }
 
@@ -3370,11 +3370,11 @@ fn native_mcp_behavior_version(
     config: &crate::service::mcp::MCPServerConfig,
 ) -> Result<String, String> {
     let value = serde_json::to_value(config)
-        .map_err(|error| format!("Could not fingerprint BitFun MCP configuration: {error}"))?;
+        .map_err(|error| format!("Could not fingerprint Halo MCP configuration: {error}"))?;
     let mut encoded = Vec::new();
     write_canonical_json(&value, &mut encoded)
-        .map_err(|error| format!("Could not fingerprint BitFun MCP configuration: {error}"))?;
-    Ok(revision_key.opaque_revision("bitfun.mcp.behavior.v1", [encoded.as_slice()]))
+        .map_err(|error| format!("Could not fingerprint Halo MCP configuration: {error}"))?;
+    Ok(revision_key.opaque_revision("halo.mcp.behavior.v1", [encoded.as_slice()]))
 }
 
 fn write_canonical_json(value: &serde_json::Value, output: &mut Vec<u8>) -> serde_json::Result<()> {
@@ -3417,7 +3417,7 @@ async fn load_native_mcp_candidates(
         .config_service()
         .load_all_configs()
         .await
-        .map_err(|error| format!("Could not read BitFun MCP configuration: {error}"))?;
+        .map_err(|error| format!("Could not read Halo MCP configuration: {error}"))?;
     let mut candidates = Vec::with_capacity(configs.len());
     for config in configs {
         let behavior_version = native_mcp_behavior_version(revision_key, &config)?;
@@ -3425,7 +3425,7 @@ async fn load_native_mcp_candidates(
         candidates.push(NativeMcpCandidate {
             candidate_id,
             server_id: config.id,
-            display_name: format!("BitFun: {}", config.name),
+            display_name: format!("Halo: {}", config.name),
             name: config.name,
             behavior_version,
             enabled: config.enabled,
@@ -3439,7 +3439,7 @@ async fn load_native_mcp_candidates(
     Ok(candidates)
 }
 
-/// Stable product identifier for a BitFun-owned MCP configuration. Surfaces
+/// Stable product identifier for a Halo-owned MCP configuration. Surfaces
 /// use this only to correlate native list rows with conflict candidates; the
 /// underlying configuration id remains private to the MCP owner.
 pub fn native_mcp_candidate_id(server_id: &str) -> String {
@@ -3496,7 +3496,7 @@ fn mark_external_mcp_runtime_unavailable(
 
 fn merge_mcp_state(
     snapshot: &mut ExternalSourceCatalogSnapshot,
-    coordinator_snapshot: &bitfun_external_sources::ExternalMcpCoordinatorSnapshot,
+    coordinator_snapshot: &halo_external_sources::ExternalMcpCoordinatorSnapshot,
     state: ExternalMcpProductState,
 ) {
     let known_sources = snapshot
@@ -3771,7 +3771,7 @@ async fn persist_observed_subagent_conflicts_with_store(
 
 fn merge_subagent_state(
     snapshot: &mut ExternalSourceCatalogSnapshot,
-    coordinator_snapshot: &bitfun_external_sources::ExternalSubagentCoordinatorSnapshot,
+    coordinator_snapshot: &halo_external_sources::ExternalSubagentCoordinatorSnapshot,
     state: &ExternalSubagentProductState,
     preference_revision: u64,
 ) {
@@ -4154,7 +4154,7 @@ fn validate_integration_policy_operation(
 ) -> Result<(), String> {
     let descriptors = default_external_integration_ecosystems();
     let validate_ecosystem =
-        |ecosystem_id: &bitfun_product_domains::external_sources::EcosystemId| {
+        |ecosystem_id: &halo_product_domains::external_sources::EcosystemId| {
             descriptors
                 .iter()
                 .find(|descriptor| descriptor.ecosystem_id == *ecosystem_id)
@@ -5007,7 +5007,7 @@ async fn remember_native_prompt_command_conflict_choice(
             .any(|candidate| validate_conflict_preference(conflict_key, candidate).is_err())
         || native_candidate_ids.iter().any(|candidate| {
             !participants.contains(candidate)
-                || !candidate.starts_with("bitfun.")
+                || !candidate.starts_with("halo.")
                 || validate_conflict_preference(conflict_key, candidate).is_err()
         })
     {
@@ -5363,7 +5363,7 @@ pub async fn get_external_source_control_snapshot(
     force_refresh: bool,
     host_capabilities: ExternalSourceHostCapabilities,
 ) -> ExternalSourceOperationResult<ExternalSourceSurfaceSnapshotV1> {
-    use bitfun_product_domains::external_source_control::ExternalSourceOperationStage;
+    use halo_product_domains::external_source_control::ExternalSourceOperationStage;
 
     let service = if host_capabilities.can_execute_external_assets {
         service_for(workspace_root).await
@@ -5392,7 +5392,7 @@ pub async fn apply_external_source_control_action(
     workspace_root: Option<&Path>,
     request: ExternalSourceControlRequestV1,
 ) -> ExternalSourceOperationResult<ExternalSourceSurfaceSnapshotV1> {
-    use bitfun_product_domains::external_source_control::ExternalSourceOperationStage;
+    use halo_product_domains::external_source_control::ExternalSourceOperationStage;
 
     let operation_id = request.operation_id.clone();
     let service = service_for(workspace_root).await.map_err(|error| {
@@ -5554,7 +5554,7 @@ pub fn sanitize_external_source_operation_error(error: String) -> ExternalSource
 fn typed_control_operation_error(
     error: String,
     operation_id: &str,
-    stage: bitfun_product_domains::external_source_control::ExternalSourceOperationStage,
+    stage: halo_product_domains::external_source_control::ExternalSourceOperationStage,
 ) -> ExternalSourceOperationError {
     let mut typed = sanitize_external_source_operation_error(error);
     if typed.correlation_id.is_none() {
@@ -5727,7 +5727,7 @@ impl ExternalSourceSubscription {
 mod tests {
     use super::*;
     use crate::service::mcp::{ConfigLocation, MCPServerConfig, MCPServerType};
-    use bitfun_product_domains::external_sources::{
+    use halo_product_domains::external_sources::{
         EcosystemId, ExternalSourceProviderError, ExternalSourceRecord, ExternalSourceScope,
         PromptCommandAvailability, PromptCommandDefinition, PromptCommandProviderIdentity,
         PromptCommandProviderSnapshot, SourceQualifiedCommandId,
@@ -5854,7 +5854,7 @@ mod tests {
                     location: "/repo/.opencode/commands".to_string(),
                     execution_domain_id: ExecutionDomainId::new("local-user").unwrap(),
                     health:
-                        bitfun_product_domains::external_sources::ExternalSourceHealth::Available,
+                        halo_product_domains::external_sources::ExternalSourceHealth::Available,
                     content_version: "source-v1".to_string(),
                     diagnostics: Vec::new(),
                 },
@@ -5879,7 +5879,7 @@ mod tests {
         };
         let native_v1 = NativePromptCommandDescriptor {
             command_name: "review".to_string(),
-            candidate_id: "bitfun.desktop:action:review".to_string(),
+            candidate_id: "halo.desktop:action:review".to_string(),
             behavior_version: "native-v1".to_string(),
         };
         let first = project_native_prompt_command_conflicts(
@@ -5912,7 +5912,7 @@ mod tests {
 
         let cli_surface = NativePromptCommandDescriptor {
             command_name: "review".to_string(),
-            candidate_id: "bitfun.cli:action:review".to_string(),
+            candidate_id: "halo.cli:action:review".to_string(),
             behavior_version: "native-v1".to_string(),
         };
         let isolated = project_native_prompt_command_conflicts(
@@ -5973,7 +5973,7 @@ mod tests {
     #[test]
     fn native_prompt_command_choice_does_not_mark_external_candidate_as_self_conflicted() {
         let mut config = ExternalSourcesConfig::default();
-        let native = "bitfun.desktop:action:review".to_string();
+        let native = "halo.desktop:action:review".to_string();
         let external = "opencode.commands:project:review";
         let first_key = native_prompt_command_conflict_key(
             "local-user",
@@ -6079,8 +6079,8 @@ mod tests {
     #[test]
     fn native_prompt_command_reconfirmation_clears_the_whole_native_command_group() {
         let mut config = ExternalSourcesConfig::default();
-        let first = "bitfun.desktop:action:review".to_string();
-        let second = "bitfun.desktop:mode:review".to_string();
+        let first = "halo.desktop:action:review".to_string();
+        let second = "halo.desktop:mode:review".to_string();
         let external = "opencode.commands:project:review";
         let desktop_key = native_prompt_command_conflict_key(
             "local-user",
@@ -6091,7 +6091,7 @@ mod tests {
                 (external, "external-v1"),
             ],
         );
-        let cli = "bitfun.cli:action:review".to_string();
+        let cli = "halo.cli:action:review".to_string();
         let cli_key = native_prompt_command_conflict_key(
             "local-user",
             "review",
@@ -6158,7 +6158,7 @@ mod tests {
                     scope: ExternalSourceScope::Project,
                     location: raw_root.to_string(),
                     execution_domain_id: ExecutionDomainId::new("local-user").unwrap(),
-                    health: bitfun_product_domains::external_sources::ExternalSourceHealth::Partial,
+                    health: halo_product_domains::external_sources::ExternalSourceHealth::Partial,
                     content_version: "source-v1".to_string(),
                     diagnostics: vec![ExternalSourceDiagnostic::warning(
                         "future.tool.directory_read_failed",
@@ -6230,7 +6230,7 @@ mod tests {
                     location: location.to_string(),
                     execution_domain_id: ExecutionDomainId::new("peer-a").unwrap(),
                     health:
-                        bitfun_product_domains::external_sources::ExternalSourceHealth::Available,
+                        halo_product_domains::external_sources::ExternalSourceHealth::Available,
                     content_version: "source-v1".to_string(),
                     diagnostics: Vec::new(),
                 },
@@ -6309,7 +6309,7 @@ mod tests {
                 scope: ExternalSourceScope::Project,
                 location: raw_location.to_string_lossy().into_owned(),
                 execution_domain_id: ExecutionDomainId::new("local-user").unwrap(),
-                health: bitfun_product_domains::external_sources::ExternalSourceHealth::Available,
+                health: halo_product_domains::external_sources::ExternalSourceHealth::Available,
                 content_version: "source-v1".to_string(),
                 diagnostics: Vec::new(),
             },
@@ -6354,7 +6354,7 @@ mod tests {
                 scope: ExternalSourceScope::UserGlobal,
                 location: format!("/{}", self.command_name),
                 execution_domain_id: context.execution_domain_id.clone(),
-                health: bitfun_product_domains::external_sources::ExternalSourceHealth::Available,
+                health: halo_product_domains::external_sources::ExternalSourceHealth::Available,
                 content_version: "source-v1".to_string(),
                 diagnostics: Vec::new(),
             };
@@ -6391,7 +6391,7 @@ mod tests {
         fn watch_roots(
             &self,
             _context: &ExternalSourceContext,
-        ) -> Vec<bitfun_product_domains::external_sources::ExternalWatchRoot> {
+        ) -> Vec<halo_product_domains::external_sources::ExternalWatchRoot> {
             Vec::new()
         }
     }
@@ -6448,7 +6448,7 @@ mod tests {
             watch_states: tokio::sync::Mutex::new(BTreeMap::new()),
             refresh_gate: tokio::sync::Mutex::new(()),
             product_rebuild_gate: tokio::sync::Mutex::new(()),
-            mcp_runtime: Arc::new(BitFunExternalMcpRuntime),
+            mcp_runtime: Arc::new(HaloExternalMcpRuntime),
             active_mcp_runtime_ids: tokio::sync::Mutex::new(BTreeSet::new()),
             initial_refresh_completed: AtomicBool::new(false),
             background_refresh_scheduled: AtomicBool::new(false),
@@ -6564,13 +6564,13 @@ mod tests {
         assert_eq!(
             error.recovery_actions,
             vec![
-                bitfun_product_domains::external_source_control::ExternalSourceRecoveryActionV1::Refresh,
+                halo_product_domains::external_source_control::ExternalSourceRecoveryActionV1::Refresh,
             ]
         );
         assert_eq!(
             error.stage,
             Some(
-                bitfun_product_domains::external_source_control::ExternalSourceOperationStage::ApplyPreference
+                halo_product_domains::external_source_control::ExternalSourceOperationStage::ApplyPreference
             )
         );
 
@@ -6602,7 +6602,7 @@ mod tests {
         async fn install(
             &self,
             _candidate: &crate::external_mcp::ActiveExternalMcpCandidate,
-            _prepared: bitfun_product_domains::external_sources::PreparedExternalMcpServer,
+            _prepared: halo_product_domains::external_sources::PreparedExternalMcpServer,
             _workspace_key: &str,
         ) -> Result<(), String> {
             self.calls.fetch_add(1, Ordering::SeqCst);
@@ -6919,7 +6919,7 @@ mod tests {
         assert!(!workspace_key.contains(&temp.path().to_string_lossy().to_string()));
 
         let ecosystem_id =
-            bitfun_product_domains::external_sources::EcosystemId::new(OPENCODE_ECOSYSTEM_ID)
+            halo_product_domains::external_sources::EcosystemId::new(OPENCODE_ECOSYSTEM_ID)
                 .unwrap();
         let mut config = ExternalSourcesConfig::default();
         let user_mutation = ExternalIntegrationPolicyMutation {
@@ -7170,14 +7170,14 @@ mod tests {
     fn invocation_authorization_uses_the_execution_domain_preference_key() {
         let source = ExternalSourceRecord {
             key: SourceKey::new("opencode", "global-tools").unwrap(),
-            ecosystem_id: bitfun_product_domains::external_sources::EcosystemId::new("opencode")
+            ecosystem_id: halo_product_domains::external_sources::EcosystemId::new("opencode")
                 .unwrap(),
             display_name: "OpenCode tools".to_string(),
             source_kind: "standalone_tools".to_string(),
             scope: ExternalSourceScope::UserGlobal,
             location: "/tools".to_string(),
             execution_domain_id: ExecutionDomainId::new("local-user").unwrap(),
-            health: bitfun_product_domains::external_sources::ExternalSourceHealth::Available,
+            health: halo_product_domains::external_sources::ExternalSourceHealth::Available,
             content_version: "v1".to_string(),
             diagnostics: Vec::new(),
         };
@@ -7260,7 +7260,7 @@ mod tests {
             ),
             (
                 "native:prompt_command:local-user:help:old".to_string(),
-                "bitfun.cli:help".to_string(),
+                "halo.cli:help".to_string(),
             ),
         ]);
         let mut lineage_keys = BTreeMap::from([
@@ -7276,7 +7276,7 @@ mod tests {
         let mut conflicted_ids = BTreeSet::from([
             "external-a".to_string(),
             "external-b".to_string(),
-            "bitfun.cli:help".to_string(),
+            "halo.cli:help".to_string(),
         ]);
 
         ExternalSourceCoordinator::reconcile_conflict_preferences(
@@ -7284,8 +7284,8 @@ mod tests {
             &mut lineage_keys,
             &mut conflicted_ids,
             "native:prompt_command:local-user:help:new",
-            "bitfun.cli:help",
-            &["bitfun.cli:help".to_string()],
+            "halo.cli:help",
+            &["halo.cli:help".to_string()],
         );
 
         assert!(choices.contains_key("prompt_command:local-user:review:old"));

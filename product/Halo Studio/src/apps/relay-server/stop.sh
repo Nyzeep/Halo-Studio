@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BitFun Relay Server — stop script.
+# Halo Relay Server — stop script.
 # Run this script on the target server itself after SSH login.
 
 set -euo pipefail
@@ -10,7 +10,7 @@ source "${SCRIPT_DIR}/common.sh"
 
 usage() {
   cat <<'EOF'
-BitFun Relay Server stop script
+Halo Relay Server stop script
 
 Usage:
   bash stop.sh
@@ -34,7 +34,7 @@ for arg in "$@"; do
   esac
 done
 
-echo "=== BitFun Relay Server Stop ==="
+echo "=== Halo Relay Server Stop ==="
 require_docker_daemon
 resolve_compose
 cd "$SCRIPT_DIR"

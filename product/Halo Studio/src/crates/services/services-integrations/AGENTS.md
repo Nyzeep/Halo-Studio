@@ -2,12 +2,12 @@
 
 Scope: this guide applies to `src/crates/services/services-integrations`.
 
-`bitfun-services-integrations` owns reviewed integration contracts and runtime
+`halo-services-integrations` owns reviewed integration contracts and runtime
 slices that are outside pure product logic but still platform-neutral.
 
 ## Guardrails
 
-- Do not depend on `bitfun-core`, app crates, desktop adapters, CLI UI, or web
+- Do not depend on `halo-core`, app crates, desktop adapters, CLI UI, or web
   presentation code.
 - Keep integration families behind explicit features. The default feature set
   should not compile heavy Git, MCP, SSH, network, or file-watch runtimes.
@@ -26,7 +26,7 @@ slices that are outside pure product logic but still platform-neutral.
   provider-private cursor caches, mobile-web relay upload, image-context adapter
   contracts, remote workspace helpers, and command/response assembly.
 - Remote workspace facts, session metadata, file projection DTOs, and
-  workspace/projection host traits belong in `bitfun-runtime-ports`.
+  workspace/projection host traits belong in `halo-runtime-ports`.
 - Workspace-root source selection, persistence/workspace service reads,
   concrete scheduler/session restore, terminal pre-warm adapters, and product
   execution remain core-owned unless a reviewed port/provider moves them with
@@ -36,9 +36,9 @@ slices that are outside pure product logic but still platform-neutral.
   ExecCommand runtime-port adapter, and manager assembly live here behind
   explicit remote SSH features.
 - One-click relay self-deploy (`remote_ssh/relay_deploy.rs`) stages embedded
-  scripts under `~/.bitfun/relay-deploy/` and clones source to
-  `~/.bitfun/relay-src/` (never `$HOME/bitfun`). Embeds
-  `src/apps/relay-server/mirror.sh` and runs `bitfun_mirror_init` before apt /
+  scripts under `~/.halo-studio/relay-deploy/` and clones source to
+  `~/.halo-studio/relay-src/` (never `$HOME/halo`). Embeds
+  `src/apps/relay-server/mirror.sh` and runs `halo_mirror_init` before apt /
   Docker install / GitHub sync so mainland China hosts use configured mirrors.
   Invariants: `src/web-ui/src/features/relay-deploy/README.md`. Desktop Tauri
   wrapper: `src/apps/desktop/src/api/relay_deploy_api.rs`.
@@ -87,17 +87,17 @@ slices that are outside pure product logic but still platform-neutral.
 - Announcement remote fetch/cache lives here; product assembly supplies config
   values such as endpoint, locale, version, platform, and cache path.
 - DeepResearch report IO here may own report/citation sidecar filesystem work;
-  provider-neutral citation numbering stays in `bitfun-agent-runtime`.
+  provider-neutral citation numbering stays in `halo-agent-runtime`.
 
 ## Verification
 
 ```bash
-cargo test -p bitfun-services-integrations
-cargo test -p bitfun-services-integrations --no-default-features --features plugin-source plugin_source --lib
-cargo test -p bitfun-services-integrations --features debug-log --test debug_log_owner_contracts
-cargo test -p bitfun-services-integrations --features remote-ssh --test remote_ssh_disabled_contracts
-cargo test -p bitfun-services-integrations --features remote-ssh,workspace-search --test remote_workspace_search_disabled_contracts
-cargo test -p bitfun-services-integrations --features remote-ssh,remote-ssh-concrete,workspace-search remote_ssh
+cargo test -p halo-services-integrations
+cargo test -p halo-services-integrations --no-default-features --features plugin-source plugin_source --lib
+cargo test -p halo-services-integrations --features debug-log --test debug_log_owner_contracts
+cargo test -p halo-services-integrations --features remote-ssh --test remote_ssh_disabled_contracts
+cargo test -p halo-services-integrations --features remote-ssh,workspace-search --test remote_workspace_search_disabled_contracts
+cargo test -p halo-services-integrations --features remote-ssh,remote-ssh-concrete,workspace-search remote_ssh
 node scripts/check-core-boundaries.mjs
-cargo check -p bitfun-core --features product-full
+cargo check -p halo-core --features product-full
 ```

@@ -10,9 +10,9 @@ fn bounded_mcp_terminal_text(value: &str) -> String {
 }
 
 fn external_mcp_state_label(
-    state: &bitfun_core::external_sources::ExternalMcpActivationState,
+    state: &halo_core::external_sources::ExternalMcpActivationState,
 ) -> &'static str {
-    use bitfun_core::external_sources::ExternalMcpActivationState as State;
+    use halo_core::external_sources::ExternalMcpActivationState as State;
     match state {
         State::ApprovalRequired => "Confirmation required",
         State::Starting => "Starting",
@@ -64,7 +64,7 @@ impl ChatMode {
                 };
 
                 let tool_registry =
-                    bitfun_core::agentic::tools::registry::get_global_tool_registry();
+                    halo_core::agentic::tools::registry::get_global_tool_registry();
                 let registry_lock = tool_registry.read().await;
                 let all_tools = registry_lock.get_all_tools();
 
@@ -96,7 +96,7 @@ impl ChatMode {
                     let server_type = format!("{:?}", config.server_type).to_lowercase();
 
                     let native_candidate_id =
-                        bitfun_core::external_sources::native_mcp_candidate_id(&config.id);
+                        halo_core::external_sources::native_mcp_candidate_id(&config.id);
                     let native_conflict = external_snapshot.as_ref().and_then(|snapshot| {
                         snapshot.mcp_conflicts.iter().find(|conflict| {
                             conflict.candidates.iter().any(|candidate| {
@@ -116,7 +116,7 @@ impl ChatMode {
                                     reason: native_choice
                                         .and_then(|candidate| candidate.unavailable_reason.clone())
                                         .unwrap_or_else(|| {
-                                            "Enable this BitFun server in its MCP configuration, then reopen /mcp"
+                                            "Enable this Halo server in its MCP configuration, then reopen /mcp"
                                                 .to_string()
                                         }),
                                 },
@@ -155,9 +155,9 @@ impl ChatMode {
                         server_type,
                         status,
                         tool_count,
-                        source_label: "BitFun".to_string(),
+                        source_label: "Halo".to_string(),
                         external: false,
-                        detail: "BitFun configuration".to_string(),
+                        detail: "Halo configuration".to_string(),
                         action,
                     });
                 }
@@ -183,9 +183,9 @@ impl ChatMode {
                             })
                         });
                         let action = match &entry.activation_state {
-                            bitfun_core::external_sources::ExternalMcpActivationState::ApprovalRequired
-                            | bitfun_core::external_sources::ExternalMcpActivationState::Declined
-                            | bitfun_core::external_sources::ExternalMcpActivationState::ConfigurationChanged => {
+                            halo_core::external_sources::ExternalMcpActivationState::ApprovalRequired
+                            | halo_core::external_sources::ExternalMcpActivationState::Declined
+                            | halo_core::external_sources::ExternalMcpActivationState::ConfigurationChanged => {
                                 McpItemAction::ExternalDecision {
                                     candidate_id: entry.candidate_id.clone(),
                                     decision_key: entry.decision_key.clone(),
@@ -194,9 +194,9 @@ impl ChatMode {
                                     expected_preference_revision: snapshot.preference_revision,
                                 }
                             }
-                            bitfun_core::external_sources::ExternalMcpActivationState::Starting
-                            | bitfun_core::external_sources::ExternalMcpActivationState::Active
-                            | bitfun_core::external_sources::ExternalMcpActivationState::RuntimeUnavailable { .. } => {
+                            halo_core::external_sources::ExternalMcpActivationState::Starting
+                            | halo_core::external_sources::ExternalMcpActivationState::Active
+                            | halo_core::external_sources::ExternalMcpActivationState::RuntimeUnavailable { .. } => {
                                 McpItemAction::ExternalDecision {
                                     candidate_id: entry.candidate_id.clone(),
                                     decision_key: entry.decision_key.clone(),
@@ -205,8 +205,8 @@ impl ChatMode {
                                     expected_preference_revision: snapshot.preference_revision,
                                 }
                             }
-                            bitfun_core::external_sources::ExternalMcpActivationState::Conflict
-                            | bitfun_core::external_sources::ExternalMcpActivationState::Covered { .. } => {
+                            halo_core::external_sources::ExternalMcpActivationState::Conflict
+                            | halo_core::external_sources::ExternalMcpActivationState::Covered { .. } => {
                                 if let Some(conflict) = conflict {
                                     McpItemAction::ConflictChoice {
                                         conflict_key: conflict.conflict_key.clone(),
@@ -221,7 +221,7 @@ impl ChatMode {
                                     }
                                 }
                             }
-                            bitfun_core::external_sources::ExternalMcpActivationState::Unsupported { reason } => {
+                            halo_core::external_sources::ExternalMcpActivationState::Unsupported { reason } => {
                                 McpItemAction::ReadOnly {
                                     reason: format!(
                                         "Not supported: {}. Change this server in the source application; the list refreshes automatically",
@@ -229,7 +229,7 @@ impl ChatMode {
                                     ),
                                 }
                             }
-                            bitfun_core::external_sources::ExternalMcpActivationState::SourceDisabled => {
+                            halo_core::external_sources::ExternalMcpActivationState::SourceDisabled => {
                                 McpItemAction::ReadOnly {
                                     reason: "Enable this server in the source application; the list refreshes automatically"
                                         .to_string(),
@@ -240,7 +240,7 @@ impl ChatMode {
                             },
                         };
                         let status = match &entry.activation_state {
-                            bitfun_core::external_sources::ExternalMcpActivationState::Active => {
+                            halo_core::external_sources::ExternalMcpActivationState::Active => {
                                 if let Some(runtime_id) = entry.runtime_id.as_deref() {
                                     match tokio::time::timeout(
                                         Duration::from_millis(30),
@@ -256,7 +256,7 @@ impl ChatMode {
                                     "Enabled".to_string()
                                 }
                             }
-                            bitfun_core::external_sources::ExternalMcpActivationState::RuntimeUnavailable { reason } => {
+                            halo_core::external_sources::ExternalMcpActivationState::RuntimeUnavailable { reason } => {
                                 format!(
                                     "Unavailable - {}",
                                     bounded_mcp_terminal_text(reason),
@@ -272,8 +272,8 @@ impl ChatMode {
                                 .count()
                         });
                         let mut detail = match entry.definition.transport {
-                            bitfun_core::external_sources::ExternalMcpTransportKind::LocalStdio => format!(
-                                "source: {}; local command: {}; arguments: {}; starts in: {}; environment variables set: {}; reads from BitFun environment: {}; security: runs with your user permissions without an additional OS sandbox",
+                            halo_core::external_sources::ExternalMcpTransportKind::LocalStdio => format!(
+                                "source: {}; local command: {}; arguments: {}; starts in: {}; environment variables set: {}; reads from Halo environment: {}; security: runs with your user permissions without an additional OS sandbox",
                                 bounded_mcp_terminal_text(source_location),
                                 entry.definition.command_preview.as_deref().unwrap_or("unknown"),
                                 entry.definition.argument_count,
@@ -289,8 +289,8 @@ impl ChatMode {
                                     entry.definition.environment_reference_names.join(", ")
                                 },
                             ),
-                            bitfun_core::external_sources::ExternalMcpTransportKind::StreamableHttp => format!(
-                                "source: {}; remote origin: {}; HTTP headers: {}; reads from BitFun environment: {}; security: connects to the shown service with your user permissions",
+                            halo_core::external_sources::ExternalMcpTransportKind::StreamableHttp => format!(
+                                "source: {}; remote origin: {}; HTTP headers: {}; reads from Halo environment: {}; security: connects to the shown service with your user permissions",
                                 bounded_mcp_terminal_text(source_location),
                                 entry.definition.remote_url_preview.as_deref().unwrap_or("unknown"),
                                 if entry.definition.header_names.is_empty() {
@@ -306,7 +306,7 @@ impl ChatMode {
                             ),
                             _ => "unsupported external MCP transport".to_string(),
                         };
-                        if let bitfun_core::external_sources::ExternalMcpActivationState::RuntimeUnavailable { reason } = &entry.activation_state {
+                        if let halo_core::external_sources::ExternalMcpActivationState::RuntimeUnavailable { reason } = &entry.activation_state {
                             detail.push_str(&format!(
                                 "; unavailable reason: {}; next step: disable this server, fix its source configuration or authentication, then enable it",
                                 bounded_mcp_terminal_text(reason),
@@ -319,8 +319,8 @@ impl ChatMode {
                                 .unwrap_or_else(|| entry.candidate_id.clone()),
                             name: bounded_mcp_terminal_text(&entry.definition.name),
                             server_type: match entry.definition.transport {
-                                bitfun_core::external_sources::ExternalMcpTransportKind::LocalStdio => "local".to_string(),
-                                bitfun_core::external_sources::ExternalMcpTransportKind::StreamableHttp => "remote".to_string(),
+                                halo_core::external_sources::ExternalMcpTransportKind::LocalStdio => "local".to_string(),
+                                halo_core::external_sources::ExternalMcpTransportKind::StreamableHttp => "remote".to_string(),
                                 _ => "unsupported".to_string(),
                             },
                             status,
@@ -345,7 +345,7 @@ impl ChatMode {
                         tool_count: 0,
                         source_label: "External AI applications".to_string(),
                         external: true,
-                        detail: "BitFun is still checking compatible MCP settings".to_string(),
+                        detail: "Halo is still checking compatible MCP settings".to_string(),
                         action: McpItemAction::ReadOnly {
                             reason: "Still checking; this list updates automatically".to_string(),
                         },
@@ -412,8 +412,8 @@ impl ChatMode {
         let handle = rt_handle.spawn(async move {
             let status = server_manager.get_server_status(&task_server_id).await;
             match status {
-                Ok(bitfun_core::service::mcp::MCPServerStatus::Connected)
-                | Ok(bitfun_core::service::mcp::MCPServerStatus::Healthy) => {
+                Ok(halo_core::service::mcp::MCPServerStatus::Connected)
+                | Ok(halo_core::service::mcp::MCPServerStatus::Healthy) => {
                     server_manager.stop_server(&task_server_id).await
                 }
                 _ => server_manager.start_server(&task_server_id).await,
@@ -446,7 +446,7 @@ impl ChatMode {
                     expected_mcp_generation,
                     expected_preference_revision,
                 } => {
-                    bitfun_core::external_sources::set_external_mcp_server_decision(
+                    halo_core::external_sources::set_external_mcp_server_decision(
                         Some(workspace.as_path()),
                         &candidate_id,
                         &decision_key,
@@ -463,7 +463,7 @@ impl ChatMode {
                     expected_mcp_generation,
                     expected_preference_revision,
                 } => {
-                    bitfun_core::external_sources::choose_external_mcp_conflict(
+                    halo_core::external_sources::choose_external_mcp_conflict(
                         Some(workspace.as_path()),
                         &conflict_key,
                         &candidate_id,
@@ -679,25 +679,25 @@ impl ChatMode {
         let task_name = name_owned.clone();
         let handle = rt_handle.spawn(async move {
             let config_obj = config_value.as_object().ok_or_else(|| {
-                bitfun_core::util::errors::BitFunError::Validation(
+                halo_core::util::errors::HaloError::Validation(
                     "MCP server config must be a JSON object".to_string(),
                 )
             })?;
 
             let server_type = match config_obj.get("type").and_then(|v| v.as_str()) {
-                Some("sse") => bitfun_core::service::mcp::MCPServerType::Remote,
+                Some("sse") => halo_core::service::mcp::MCPServerType::Remote,
                 Some("streamable-http") | Some("streamable_http") | Some("http") => {
-                    bitfun_core::service::mcp::MCPServerType::Remote
+                    halo_core::service::mcp::MCPServerType::Remote
                 }
-                _ => bitfun_core::service::mcp::MCPServerType::Local,
+                _ => halo_core::service::mcp::MCPServerType::Local,
             };
 
             let transport = match config_obj.get("type").and_then(|v| v.as_str()) {
-                Some("sse") => bitfun_core::service::mcp::MCPServerTransport::Sse,
+                Some("sse") => halo_core::service::mcp::MCPServerTransport::Sse,
                 Some("streamable-http") | Some("streamable_http") | Some("http") => {
-                    bitfun_core::service::mcp::MCPServerTransport::StreamableHttp
+                    halo_core::service::mcp::MCPServerTransport::StreamableHttp
                 }
-                _ => bitfun_core::service::mcp::MCPServerTransport::Stdio,
+                _ => halo_core::service::mcp::MCPServerTransport::Stdio,
             };
 
             let command = config_obj
@@ -746,7 +746,7 @@ impl ChatMode {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
 
-            let config = bitfun_core::service::mcp::MCPServerConfig {
+            let config = halo_core::service::mcp::MCPServerConfig {
                 id: name_owned.clone(),
                 name: name_owned.clone(),
                 server_type,
@@ -760,7 +760,7 @@ impl ChatMode {
                 url,
                 auto_start,
                 enabled,
-                location: bitfun_core::service::mcp::ConfigLocation::User,
+                location: halo_core::service::mcp::ConfigLocation::User,
                 capabilities: Vec::new(),
                 settings: Default::default(),
                 oauth: config_obj
@@ -776,7 +776,7 @@ impl ChatMode {
 
             mcp_service.server_manager().add_server(config).await?;
 
-            Ok::<(), bitfun_core::util::errors::BitFunError>(())
+            Ok::<(), halo_core::util::errors::HaloError>(())
         });
         self.pending_mcp_tasks.push(PendingMcpTask::Add {
             name: task_name,
@@ -837,7 +837,7 @@ impl ChatMode {
 
                     match stop_result {
                         Ok(Ok(())) => return,
-                        Ok(Err(bitfun_core::util::errors::BitFunError::NotFound(_))) => return,
+                        Ok(Err(halo_core::util::errors::HaloError::NotFound(_))) => return,
                         Ok(Err(e)) => {
                             tracing::debug!(
                                 "Best-effort MCP stop failed: id={} attempt={} error={}",
@@ -864,7 +864,7 @@ impl ChatMode {
                 );
             });
 
-            Ok::<(), bitfun_core::util::errors::BitFunError>(())
+            Ok::<(), halo_core::util::errors::HaloError>(())
         });
 
         self.pending_mcp_tasks.push(PendingMcpTask::Delete {
@@ -875,7 +875,7 @@ impl ChatMode {
 
     /// Open MCP config file in system editor or show its path
     fn open_mcp_config(&self, chat_state: &mut ChatState) {
-        match bitfun_core::infrastructure::try_get_path_manager_arc() {
+        match halo_core::infrastructure::try_get_path_manager_arc() {
             Ok(path_manager) => {
                 let config_file = path_manager.app_config_file();
                 chat_state.add_system_message(format!(
@@ -890,7 +890,7 @@ impl ChatMode {
             }
             Err(_) => {
                 chat_state.add_system_message(
-                    "Could not determine config file path. Check ~/.config/bitfun/config/app.json"
+                    "Could not determine config file path. Check ~/.config/Halo Studio/config/app.json"
                         .to_string(),
                 );
             }

@@ -53,7 +53,7 @@ const emptyDraft: MarketSubmissionDraftRequest = {
   icon: 'box',
   category: 'other',
   tags: [],
-  minBitfunVersion: '0.1.0',
+  minHaloVersion: '0.1.0',
   changelog: '',
   license: { spdxExpression: 'MIT' },
 };
@@ -385,10 +385,10 @@ const MiniAppSubmissionsView: React.FC = () => {
             </label>
             <Input
               label={t('market.submissions.minVersion')}
-              value={draft.minBitfunVersion}
+              value={draft.minHaloVersion}
               required
               disabled={busy}
-              onChange={(event) => setDraft({ ...draft, minBitfunVersion: event.target.value })}
+              onChange={(event) => setDraft({ ...draft, minHaloVersion: event.target.value })}
             />
           </div>
 

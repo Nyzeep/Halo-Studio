@@ -6,7 +6,7 @@
 
 use crate::agentic::deep_review::tool_measurement;
 use crate::agentic::tools::tool_context_runtime::ToolUseContext;
-use bitfun_agent_runtime::post_call_hooks::{
+use halo_agent_runtime::post_call_hooks::{
     run_successful_tool_post_call_hooks, SuccessfulToolPostCallHookExecutor,
 };
 use serde_json::Value;

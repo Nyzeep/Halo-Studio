@@ -1,9 +1,9 @@
-use bitfun_product_domains::external_sources::{
+use halo_product_domains::external_sources::{
     EcosystemId, ExternalSourceAssetKind, ExternalSourceContext, ExternalSourceDiagnostic,
     ExternalSourceHealth, ExternalSourceProviderError, ExternalSourceRecord, ExternalSourceScope,
     ExternalWatchRoot, SourceKey,
 };
-use bitfun_product_domains::external_subagents::{
+use halo_product_domains::external_subagents::{
     external_subagent_candidate_id, ExternalSubagentBehaviorVersion,
     ExternalSubagentCompatibilityState, ExternalSubagentContributionId,
     ExternalSubagentContributionRole, ExternalSubagentDefinition, ExternalSubagentDiscoveryInput,
@@ -12,7 +12,7 @@ use bitfun_product_domains::external_subagents::{
     ExternalSubagentProviderSnapshot, ExternalSubagentSourceProvider, ExternalSubagentToolRequest,
     ExternalSubagentToolSelector, SecretText,
 };
-use bitfun_services_core::markdown::FrontMatterMarkdown;
+use halo_services_core::markdown::FrontMatterMarkdown;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};

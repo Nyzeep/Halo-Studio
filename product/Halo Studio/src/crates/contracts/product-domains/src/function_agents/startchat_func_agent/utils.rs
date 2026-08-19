@@ -322,7 +322,7 @@ mod tests {
             &Language::English,
         );
 
-        assert!(prompt.contains("BitFun AI assistant"));
+        assert!(prompt.contains("Halo AI assistant"));
         assert!(prompt.contains("Current branch: feature/runtime"));
         assert!(prompt.contains("diff --git a/src/lib.rs b/src/lib.rs"));
     }

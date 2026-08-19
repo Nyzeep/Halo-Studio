@@ -217,13 +217,13 @@ impl MCPConfigService {
             let import_metadata = servers
                 .get(&config.id)
                 .and_then(Value::as_object)
-                .and_then(|server| server.get("_bitfunImport"))
+                .and_then(|server| server.get("_haloImport"))
                 .cloned();
             let mut replacement = config_to_cursor_format(config);
             if let (Some(metadata), Some(replacement)) =
                 (import_metadata, replacement.as_object_mut())
             {
-                replacement.insert("_bitfunImport".to_string(), metadata);
+                replacement.insert("_haloImport".to_string(), metadata);
             }
             servers.insert(config.id.clone(), replacement);
             Ok(())

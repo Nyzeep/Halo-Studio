@@ -6,7 +6,7 @@ use super::types::{
 };
 use crate::infrastructure::storage::{PersistenceService, StorageOptions};
 use crate::infrastructure::PathManager;
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use log::{info, warn};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -19,7 +19,7 @@ pub(super) struct CronJobStore {
 }
 
 impl CronJobStore {
-    pub(super) async fn new(path_manager: Arc<PathManager>) -> BitFunResult<Self> {
+    pub(super) async fn new(path_manager: Arc<PathManager>) -> HaloResult<Self> {
         let cron_dir = path_manager.user_cron_dir();
         path_manager.ensure_dir(&cron_dir).await?;
 
@@ -35,7 +35,7 @@ impl CronJobStore {
         self.path_manager.cron_jobs_file()
     }
 
-    pub(super) async fn load(&self) -> BitFunResult<CronJobsFile> {
+    pub(super) async fn load(&self) -> HaloResult<CronJobsFile> {
         let jobs_file_path = self.jobs_file_path();
         if !jobs_file_path.exists() {
             return Ok(CronJobsFile::default());
@@ -43,7 +43,7 @@ impl CronJobStore {
 
         let content = fs::read_to_string(&jobs_file_path)
             .await
-            .map_err(|error| BitFunError::service(format!("Failed to read file: {}", error)))?;
+            .map_err(|error| HaloError::service(format!("Failed to read file: {}", error)))?;
 
         match parse_jobs_file_content(&content, &jobs_file_path) {
             Ok(LoadJobsOutcome::Current(file)) => Ok(file),
@@ -69,7 +69,7 @@ impl CronJobStore {
         }
     }
 
-    pub(super) async fn save_jobs(&self, jobs: Vec<CronJob>) -> BitFunResult<()> {
+    pub(super) async fn save_jobs(&self, jobs: Vec<CronJob>) -> HaloResult<()> {
         let mut jobs = jobs;
         jobs.sort_by(|left, right| {
             left.created_at_ms
@@ -87,12 +87,12 @@ impl CronJobStore {
             .await
     }
 
-    async fn backup_incompatible_jobs_file(&self, jobs_file_path: &Path) -> BitFunResult<()> {
+    async fn backup_incompatible_jobs_file(&self, jobs_file_path: &Path) -> HaloResult<()> {
         let backup_path = incompatible_backup_path(jobs_file_path);
         fs::rename(jobs_file_path, &backup_path)
             .await
             .map_err(|error| {
-                BitFunError::service(format!(
+                HaloError::service(format!(
                     "Failed to back up incompatible cron jobs file {} to {}: {}",
                     jobs_file_path.display(),
                     backup_path.display(),
@@ -114,9 +114,9 @@ enum LoadJobsOutcome {
     Migrated(CronJobsFile),
 }
 
-fn parse_jobs_file_content(content: &str, jobs_file_path: &Path) -> BitFunResult<LoadJobsOutcome> {
+fn parse_jobs_file_content(content: &str, jobs_file_path: &Path) -> HaloResult<LoadJobsOutcome> {
     let value: serde_json::Value = serde_json::from_str(content).map_err(|error| {
-        BitFunError::service(format!(
+        HaloError::service(format!(
             "Failed to parse cron jobs file {}: {}",
             jobs_file_path.display(),
             error
@@ -127,7 +127,7 @@ fn parse_jobs_file_content(content: &str, jobs_file_path: &Path) -> BitFunResult
         .get("version")
         .and_then(|value| value.as_u64())
         .ok_or_else(|| {
-            BitFunError::service(format!(
+            HaloError::service(format!(
                 "Cron jobs file {} is missing a numeric version field",
                 jobs_file_path.display()
             ))
@@ -135,7 +135,7 @@ fn parse_jobs_file_content(content: &str, jobs_file_path: &Path) -> BitFunResult
 
     if version == u64::from(CRON_JOBS_VERSION) {
         let file: CronJobsFile = serde_json::from_value(value).map_err(|error| {
-            BitFunError::service(format!(
+            HaloError::service(format!(
                 "Failed to deserialize cron jobs file {} as version {}: {}",
                 jobs_file_path.display(),
                 CRON_JOBS_VERSION,
@@ -147,7 +147,7 @@ fn parse_jobs_file_content(content: &str, jobs_file_path: &Path) -> BitFunResult
 
     if version == 1 {
         let legacy: LegacyCronJobsFileV1 = serde_json::from_value(value).map_err(|error| {
-            BitFunError::service(format!(
+            HaloError::service(format!(
                 "Failed to deserialize legacy cron jobs file {}: {}",
                 jobs_file_path.display(),
                 error
@@ -156,7 +156,7 @@ fn parse_jobs_file_content(content: &str, jobs_file_path: &Path) -> BitFunResult
         return Ok(LoadJobsOutcome::Migrated(migrate_legacy_jobs_file(legacy)));
     }
 
-    Err(BitFunError::service(format!(
+    Err(HaloError::service(format!(
         "Unsupported cron jobs file version {} in {}",
         version,
         jobs_file_path.display()

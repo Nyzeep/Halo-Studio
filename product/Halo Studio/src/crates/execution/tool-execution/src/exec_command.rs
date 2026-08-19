@@ -14,8 +14,8 @@ const REMOTE_EXEC_ENV_SNAPSHOT_MAX_OUTPUT_CHARS: usize = 128 * 1024;
 const REMOTE_EXEC_ENV_SNAPSHOT_CONTROL_YIELD_TIME_MS: u64 = 500;
 const REMOTE_EXEC_ENV_SNAPSHOT_CONTROL_MAX_OUTPUT_CHARS: usize = 2_000;
 const REMOTE_EXEC_ENV_SNAPSHOT_TTL: Duration = Duration::from_secs(10 * 60);
-const REMOTE_ENV_SNAPSHOT_BEGIN: &str = "__BITFUN_REMOTE_ENV_SNAPSHOT_BEGIN__";
-const REMOTE_ENV_SNAPSHOT_END: &str = "__BITFUN_REMOTE_ENV_SNAPSHOT_END__";
+const REMOTE_ENV_SNAPSHOT_BEGIN: &str = "__HALO_REMOTE_ENV_SNAPSHOT_BEGIN__";
+const REMOTE_ENV_SNAPSHOT_END: &str = "__HALO_REMOTE_ENV_SNAPSHOT_END__";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecCommandControlAction {
@@ -287,7 +287,7 @@ pub fn exec_command_noninteractive_env() -> HashMap<String, String> {
         ("GH_PAGER".to_string(), "cat".to_string()),
         ("GIT_TERMINAL_PROMPT".to_string(), "0".to_string()),
         ("GIT_EDITOR".to_string(), "true".to_string()),
-        ("BITFUN_NONINTERACTIVE".to_string(), "1".to_string()),
+        ("HALO_NONINTERACTIVE".to_string(), "1".to_string()),
     ])
 }
 
@@ -377,34 +377,34 @@ pub fn remote_exec_non_tty_control_wrapper(
     let escaped_cmd = exec_command_shell_escape(cmd);
     let shell_args = remote_exec_shell_login_args(&shell_kind).join(" ");
     format!(
-        r#"__bitfun_shell={escaped_shell}
-__bitfun_cmd={escaped_cmd}
+        r#"__halo_shell={escaped_shell}
+__halo_cmd={escaped_cmd}
 if command -v setsid >/dev/null 2>&1; then
-  setsid "$__bitfun_shell" {shell_args} "$__bitfun_cmd" &
+  setsid "$__halo_shell" {shell_args} "$__halo_cmd" &
 else
-  "$__bitfun_shell" {shell_args} "$__bitfun_cmd" &
+  "$__halo_shell" {shell_args} "$__halo_cmd" &
 fi
-__bitfun_child=$!
-__bitfun_pgid=$__bitfun_child
-__bitfun_stop() {{
-  __bitfun_signal=${{1:-INT}}
-  __bitfun_exit=${{2:-130}}
-  __bitfun_grace=${{3:-{REMOTE_NON_TTY_INTERRUPT_GRACE_SECONDS}}}
+__halo_child=$!
+__halo_pgid=$__halo_child
+__halo_stop() {{
+  __halo_signal=${{1:-INT}}
+  __halo_exit=${{2:-130}}
+  __halo_grace=${{3:-{REMOTE_NON_TTY_INTERRUPT_GRACE_SECONDS}}}
   trap - INT TERM
-  kill -"$__bitfun_signal" "-$__bitfun_pgid" 2>/dev/null || kill -"$__bitfun_signal" "$__bitfun_child" 2>/dev/null || true
-  if [ "$__bitfun_grace" -gt 0 ]; then
-    sleep "$__bitfun_grace"
+  kill -"$__halo_signal" "-$__halo_pgid" 2>/dev/null || kill -"$__halo_signal" "$__halo_child" 2>/dev/null || true
+  if [ "$__halo_grace" -gt 0 ]; then
+    sleep "$__halo_grace"
   fi
-  kill -KILL "-$__bitfun_pgid" 2>/dev/null || kill -KILL "$__bitfun_child" 2>/dev/null || true
-  wait "$__bitfun_child" 2>/dev/null || true
-  exit "$__bitfun_exit"
+  kill -KILL "-$__halo_pgid" 2>/dev/null || kill -KILL "$__halo_child" 2>/dev/null || true
+  wait "$__halo_child" 2>/dev/null || true
+  exit "$__halo_exit"
 }}
-trap '__bitfun_stop INT 130 {REMOTE_NON_TTY_INTERRUPT_GRACE_SECONDS}' INT
-trap '__bitfun_stop KILL 137 0' TERM
-wait "$__bitfun_child"
-__bitfun_status=$?
+trap '__halo_stop INT 130 {REMOTE_NON_TTY_INTERRUPT_GRACE_SECONDS}' INT
+trap '__halo_stop KILL 137 0' TERM
+wait "$__halo_child"
+__halo_status=$?
 trap - INT TERM
-exit "$__bitfun_status""#
+exit "$__halo_status""#
     )
 }
 
@@ -1208,12 +1208,12 @@ mod tests {
             ExecCommandShellKind::Bash,
         );
 
-        assert!(wrapper.contains("setsid \"$__bitfun_shell\" -o pipefail -lc \"$__bitfun_cmd\" &"));
-        assert!(wrapper.contains("trap '__bitfun_stop INT 130 2' INT"));
-        assert!(wrapper.contains("trap '__bitfun_stop KILL 137 0' TERM"));
-        assert!(wrapper.contains("__bitfun_grace=${3:-2}"));
-        assert!(wrapper.contains("kill -KILL \"-$__bitfun_pgid\""));
-        assert!(wrapper.contains("__bitfun_cmd='python3 -c '\\''print(1)'\\'''"));
+        assert!(wrapper.contains("setsid \"$__halo_shell\" -o pipefail -lc \"$__halo_cmd\" &"));
+        assert!(wrapper.contains("trap '__halo_stop INT 130 2' INT"));
+        assert!(wrapper.contains("trap '__halo_stop KILL 137 0' TERM"));
+        assert!(wrapper.contains("__halo_grace=${3:-2}"));
+        assert!(wrapper.contains("kill -KILL \"-$__halo_pgid\""));
+        assert!(wrapper.contains("__halo_cmd='python3 -c '\\''print(1)'\\'''"));
     }
 
     #[test]
@@ -1241,7 +1241,7 @@ mod tests {
         );
 
         let snapshot = parse_remote_exec_env_snapshot_output(
-            "noise\r\n__BITFUN_REMOTE_ENV_SNAPSHOT_BEGIN__\r\nPATH=/home/me/.nvm/bin:/usr/bin\r\nNVM_DIR=/home/me/.nvm\r\nPWD=/tmp\r\nBAD-NAME=value\r\n__BITFUN_REMOTE_ENV_SNAPSHOT_END__\r\nmore noise",
+            "noise\r\n__HALO_REMOTE_ENV_SNAPSHOT_BEGIN__\r\nPATH=/home/me/.nvm/bin:/usr/bin\r\nNVM_DIR=/home/me/.nvm\r\nPWD=/tmp\r\nBAD-NAME=value\r\n__HALO_REMOTE_ENV_SNAPSHOT_END__\r\nmore noise",
         )
         .expect("snapshot should parse");
 

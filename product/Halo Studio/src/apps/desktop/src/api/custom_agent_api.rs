@@ -1,5 +1,5 @@
 use crate::api::app_state::AppState;
-use bitfun_core::agentic::agents::{
+use halo_core::agentic::agents::{
     custom_agent_model_or_default, custom_agent_review_writable_tools, default_custom_agent_tools,
     default_custom_agent_user_context_policy, CustomAgentDetail, CustomAgentKind, CustomAgentLevel,
     CustomMode, CustomSubagent, UserContextPolicy, UserContextSection,
@@ -426,7 +426,7 @@ pub async fn delete_custom_agent(
         }
     }
 
-    if let Err(error) = bitfun_core::service::config::reload_global_config().await {
+    if let Err(error) = halo_core::service::config::reload_global_config().await {
         warn!(
             "Failed to reload global config after custom agent deletion: agent_id={}, error={}",
             agent_id, error

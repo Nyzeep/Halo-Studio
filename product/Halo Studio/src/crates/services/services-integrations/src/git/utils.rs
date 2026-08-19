@@ -5,7 +5,7 @@ pub use super::{
  * Git utility functions
  */
 use super::{GitCommandOutput, GitError, GitFileStatus};
-use bitfun_services_core::process_manager;
+use halo_services_core::process_manager;
 use git2::{Repository, Status, StatusOptions};
 use std::path::Path;
 use std::process::Stdio;

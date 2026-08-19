@@ -1,4 +1,4 @@
-# BitFun MiniApp Market Server
+# Halo Studio MiniApp Market Server
 
 这里是 MiniApp 市场 HTTP 服务的 Axum 入口。生产服务同时提供
 `/miniapp/api/v1` API 和已经构建好的 MiniApp 市场网页。
@@ -47,7 +47,7 @@
 
 ```bash
 pnpm run build:miniapp-market
-cargo run -p bitfun-miniapp-market-server
+cargo run -p halo-miniapp-market-server
 ```
 
 默认监听 `127.0.0.1:9710`，默认开发数据位于
@@ -61,10 +61,10 @@ curl -fsS http://127.0.0.1:9710/miniapp/api/v1/config
 需要隔离测试数据时，使用专用临时目录；不要复用生产路径：
 
 ```bash
-MARKET_DATABASE_PATH=/tmp/bitfun-market-dev/market.sqlite \
-MARKET_ARTIFACT_DIR=/tmp/bitfun-market-dev/artifacts \
+MARKET_DATABASE_PATH=/tmp/halo-market-dev/market.sqlite \
+MARKET_ARTIFACT_DIR=/tmp/halo-market-dev/artifacts \
 MARKET_SESSION_SECRET=development-only-change-me \
-cargo run -p bitfun-miniapp-market-server
+cargo run -p halo-miniapp-market-server
 ```
 
 开发默认 secret 不能用于 release 或生产。GitHub OAuth 未配置时，健康响应中的
@@ -73,7 +73,7 @@ cargo run -p bitfun-miniapp-market-server
 ## 环境变量
 
 生产示例见 `../../../deploy/miniapp-market/market.env.example`。实际生产值只
-存在服务器的 `/etc/bitfun-miniapp-market/market.env`。
+存在服务器的 `/etc/halo-miniapp-market/market.env`。
 
 | 变量 | 作用 |
 | --- | --- |
@@ -99,15 +99,15 @@ Rust 后端改动在仓库根目录运行：
 
 ```bash
 pnpm run fmt:rs
-cargo test -p bitfun-miniapp-market-service
-cargo check -p bitfun-miniapp-market-server
+cargo test -p halo-miniapp-market-service
+cargo check -p halo-miniapp-market-server
 cargo check --workspace
 ```
 
 领域状态机或 DTO 改动再运行：
 
 ```bash
-cargo test -p bitfun-product-domains --features miniapp
+cargo test -p halo-product-domains --features miniapp
 pnpm run type-check:miniapp-market
 pnpm run test:miniapp-market
 ```
@@ -125,8 +125,8 @@ MARKET_GIT_COMMIT=local-verification \
 
 ## 数据库和文件规则
 
-- SQLite 生产文件：`/srv/bitfun-miniapp-market/data/market.sqlite`
-- artifacts：`/srv/bitfun-miniapp-market/artifacts`
+- SQLite 生产文件：`/srv/halo-miniapp-market/data/market.sqlite`
+- artifacts：`/srv/halo-miniapp-market/artifacts`
 - 两者都是持久数据，不包含在 Docker 镜像中。
 - migration 在服务启动时执行，因此涉及 schema 的发布必须先完成一致性备份。
 - 不要在服务运行时复制 SQLite 主文件当作备份；使用部署目录提供的 SQLite

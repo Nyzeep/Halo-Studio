@@ -64,7 +64,7 @@ const SceneTab: React.FC<SceneTabProps> = ({
     if (e.button !== 1) return;
     if (pinned) return;
     const target = e.target as HTMLElement;
-    if (target.closest('.bitfun-scene-tab__action')) return;
+    if (target.closest('.halo-scene-tab__action')) return;
     e.preventDefault();
   }, [pinned]);
 
@@ -72,7 +72,7 @@ const SceneTab: React.FC<SceneTabProps> = ({
     if (e.button !== 1) return;
     if (pinned) return;
     const target = e.target as HTMLElement;
-    if (target.closest('.bitfun-scene-tab__action')) return;
+    if (target.closest('.halo-scene-tab__action')) return;
     e.preventDefault();
     e.stopPropagation();
     onClose(tab.id);
@@ -84,9 +84,9 @@ const SceneTab: React.FC<SceneTabProps> = ({
       aria-selected={isActive}
       tabIndex={isActive ? 0 : -1}
       className={[
-        'bitfun-scene-tab',
-        isActive && 'bitfun-scene-tab--active',
-        pinned && 'bitfun-scene-tab--pinned',
+        'halo-scene-tab',
+        isActive && 'halo-scene-tab--active',
+        pinned && 'halo-scene-tab--pinned',
       ].filter(Boolean).join(' ')}
       onClick={handleClick}
       onMouseDown={handleMouseDown}
@@ -94,19 +94,19 @@ const SceneTab: React.FC<SceneTabProps> = ({
       onKeyDown={handleKeyDown}
     >
       {/* Centered content group */}
-      <div className="bitfun-scene-tab__content">
-        {Icon && <Icon size={13} className="bitfun-scene-tab__icon" aria-hidden="true" />}
-        <span className="bitfun-scene-tab__label">{label}</span>
+      <div className="halo-scene-tab__content">
+        {Icon && <Icon size={13} className="halo-scene-tab__icon" aria-hidden="true" />}
+        <span className="halo-scene-tab__label">{label}</span>
         {subtitle && (
           <>
-            <span className="bitfun-scene-tab__sep" aria-hidden="true">/</span>
-            <span className="bitfun-scene-tab__subtitle">{subtitle}</span>
+            <span className="halo-scene-tab__sep" aria-hidden="true">/</span>
+            <span className="halo-scene-tab__subtitle">{subtitle}</span>
           </>
         )}
         {onActionClick && (
           <Tooltip content={actionTitle} placement="bottom" followCursor>
             <span
-              className="bitfun-scene-tab__action"
+              className="halo-scene-tab__action"
               onClick={handleActionClick}
               onMouseDown={e => e.stopPropagation()}
               role="button"
@@ -122,7 +122,7 @@ const SceneTab: React.FC<SceneTabProps> = ({
       {!pinned && (
         <button
           type="button"
-          className="bitfun-scene-tab__close"
+          className="halo-scene-tab__close"
           aria-label={`Close ${label}`}
           onClick={handleClose}
           tabIndex={-1}

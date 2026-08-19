@@ -1,6 +1,6 @@
 use crate::infrastructure::get_path_manager_arc;
 use crate::service::config::types::{AgentSubagentOverrideState, ParentSubagentOverrideConfig};
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -106,7 +106,7 @@ pub fn normalize_project_agent_profiles_document(
 
 pub fn deserialize_project_agent_profiles_document(
     content: &str,
-) -> BitFunResult<ProjectAgentProfilesDocument> {
+) -> HaloResult<ProjectAgentProfilesDocument> {
     Ok(normalize_project_agent_profiles_document(
         serde_json::from_str(content)?,
     ))
@@ -114,7 +114,7 @@ pub fn deserialize_project_agent_profiles_document(
 
 pub fn serialize_project_agent_profiles_document(
     document: &ProjectAgentProfilesDocument,
-) -> BitFunResult<Vec<u8>> {
+) -> HaloResult<Vec<u8>> {
     Ok(serde_json::to_vec_pretty(
         &normalize_project_agent_profiles_document(document.clone()),
     )?)
@@ -122,7 +122,7 @@ pub fn serialize_project_agent_profiles_document(
 
 pub fn project_agent_profiles_path_for_remote(remote_root: &str) -> String {
     format!(
-        "{}/.bitfun/config/{}",
+        "{}/.halo-studio/config/{}",
         remote_root.trim_end_matches('/'),
         PROJECT_AGENT_PROFILES_FILE_NAME
     )
@@ -130,14 +130,14 @@ pub fn project_agent_profiles_path_for_remote(remote_root: &str) -> String {
 
 pub async fn load_project_agent_profiles_document_local(
     workspace_root: &Path,
-) -> BitFunResult<ProjectAgentProfilesDocument> {
+) -> HaloResult<ProjectAgentProfilesDocument> {
     let path = get_path_manager_arc().project_agent_profiles_file(workspace_root);
     match tokio::fs::read_to_string(&path).await {
         Ok(content) => deserialize_project_agent_profiles_document(&content),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             Ok(ProjectAgentProfilesDocument::new())
         }
-        Err(error) => Err(BitFunError::config(format!(
+        Err(error) => Err(HaloError::config(format!(
             "Failed to read project agent profiles file '{}': {}",
             path.display(),
             error
@@ -148,7 +148,7 @@ pub async fn load_project_agent_profiles_document_local(
 pub async fn save_project_agent_profiles_document_local(
     workspace_root: &Path,
     document: &ProjectAgentProfilesDocument,
-) -> BitFunResult<()> {
+) -> HaloResult<()> {
     let path = get_path_manager_arc().project_agent_profiles_file(workspace_root);
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent).await?;

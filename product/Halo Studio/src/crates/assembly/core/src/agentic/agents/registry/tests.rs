@@ -12,11 +12,11 @@ use crate::agentic::agents::registry::visibility::{
 use crate::agentic::agents::{resolve_mode_config_profile_id, Agent, UserContextPolicy};
 use crate::service::config::types::AgentSubagentOverrideState;
 use async_trait::async_trait;
-use bitfun_agent_runtime::custom_agent::{
+use halo_agent_runtime::custom_agent::{
     custom_agent_save_markdown_file, CustomAgentDefinition, CustomAgentDiscoveryRoots,
     CustomAgentKind, CustomAgentLevel,
 };
-use bitfun_agent_runtime::sdk::{RuntimeAgentRegistry, RuntimeAgentRegistryQuery};
+use halo_agent_runtime::sdk::{RuntimeAgentRegistry, RuntimeAgentRegistryQuery};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -150,12 +150,12 @@ fn source_qualified_key_resolves_the_matching_custom_subagent() {
 
     let project = registry
         .get_custom_agent_detail_by_key_inner(
-            "project::bitfun::SameNamedReviewer",
+            "project::halo::SameNamedReviewer",
             Some(&workspace),
         )
         .expect("project key should select the project definition");
     let user = registry
-        .get_custom_agent_detail_by_key_inner("user::bitfun::SameNamedReviewer", Some(&workspace))
+        .get_custom_agent_detail_by_key_inner("user::halo::SameNamedReviewer", Some(&workspace))
         .expect("user key should select the user definition");
 
     assert_eq!(project.prompt, "project review guidance");
@@ -207,7 +207,7 @@ async fn review_lookup_is_scoped_to_the_requested_workspace() {
 
 #[tokio::test]
 async fn review_lookup_cold_loads_the_requested_project_registry() {
-    let env = CustomAgentTestEnv::new("bitfun-project-review-lookup");
+    let env = CustomAgentTestEnv::new("halo-project-review-lookup");
     let registry = AgentRegistry::new();
     let agent_id = "ProjectReviewer";
     write_project_custom_review_subagent(
@@ -685,8 +685,8 @@ async fn parent_subagent_overrides_follow_source_scopes() {
         external_sources_supported: false,
     };
 
-    let project_override_key = "project::bitfun::ProjectScout".to_string();
-    let user_override_key = "user::bitfun::UserScout".to_string();
+    let project_override_key = "project::halo::ProjectScout".to_string();
+    let user_override_key = "user::halo::UserScout".to_string();
     let builtin_override_key = "builtin::builtin::Explore".to_string();
 
     let mut project_parent_map = HashMap::new();
@@ -772,7 +772,7 @@ async fn parent_subagent_overrides_follow_source_scopes() {
 
 #[tokio::test]
 async fn explicit_custom_mode_load_exposes_user_mode_metadata_in_modes_info() {
-    let env = CustomAgentTestEnv::new("bitfun-custom-mode-registry-load");
+    let env = CustomAgentTestEnv::new("halo-custom-mode-registry-load");
     let registry = AgentRegistry::new();
     let mode_path = env.user_agents_dir.join("planner-plus.md");
     write_user_custom_mode(
@@ -808,7 +808,7 @@ async fn explicit_custom_mode_load_exposes_user_mode_metadata_in_modes_info() {
 
 #[tokio::test]
 async fn custom_mode_does_not_appear_in_subagent_list() {
-    let env = CustomAgentTestEnv::new("bitfun-custom-mode-registry-separation");
+    let env = CustomAgentTestEnv::new("halo-custom-mode-registry-separation");
     let registry = AgentRegistry::new();
     write_user_custom_mode(
         &env.user_agents_dir.join("planner-plus.md"),
@@ -832,7 +832,7 @@ async fn custom_mode_does_not_appear_in_subagent_list() {
 
 #[tokio::test]
 async fn project_scoped_custom_mode_is_skipped_while_project_subagent_loads() {
-    let env = CustomAgentTestEnv::new("bitfun-custom-mode-registry-project");
+    let env = CustomAgentTestEnv::new("halo-custom-mode-registry-project");
     let registry = AgentRegistry::new();
     let workspace_root = env.workspace_root.clone();
 
@@ -861,7 +861,7 @@ async fn project_scoped_custom_mode_is_skipped_while_project_subagent_loads() {
 
 #[tokio::test]
 async fn custom_mode_detail_reports_kind_level_model_path_and_policy() {
-    let env = CustomAgentTestEnv::new("bitfun-custom-mode-registry-detail");
+    let env = CustomAgentTestEnv::new("halo-custom-mode-registry-detail");
     let registry = AgentRegistry::new();
     let mode_path = env.user_agents_dir.join("planner-plus.md");
     write_user_custom_mode(
@@ -898,7 +898,7 @@ async fn custom_mode_detail_reports_kind_level_model_path_and_policy() {
 
 #[tokio::test]
 async fn updating_custom_mode_model_persists_and_keeps_mode_category() {
-    let env = CustomAgentTestEnv::new("bitfun-custom-mode-registry-update-model");
+    let env = CustomAgentTestEnv::new("halo-custom-mode-registry-update-model");
     let registry = AgentRegistry::new();
     let mode_path = env.user_agents_dir.join("planner-plus.md");
     write_user_custom_mode(
@@ -945,7 +945,7 @@ async fn updating_custom_mode_model_persists_and_keeps_mode_category() {
 
 #[tokio::test]
 async fn updating_custom_mode_definition_rewrites_file_and_preserves_mode_kind() {
-    let env = CustomAgentTestEnv::new("bitfun-custom-mode-registry-update-definition");
+    let env = CustomAgentTestEnv::new("halo-custom-mode-registry-update-definition");
     let registry = AgentRegistry::new();
     let mode_path = env.user_agents_dir.join("planner-plus.md");
     write_user_custom_mode(
@@ -1010,7 +1010,7 @@ impl CustomAgentTestEnv {
     fn new(prefix: &str) -> Self {
         let root = std::env::temp_dir().join(format!("{prefix}-{}", unique_suffix()));
         let workspace_root = root.join("workspace");
-        let workspace_agents_dir = workspace_root.join(".bitfun").join("agents");
+        let workspace_agents_dir = workspace_root.join(".halo-studio").join("agents");
         let user_agents_dir = root.join("user-root").join("agents");
         std::fs::create_dir_all(&workspace_agents_dir)
             .expect("workspace agents dir should be created");
@@ -1027,7 +1027,7 @@ impl CustomAgentTestEnv {
     fn discovery_roots(&self, workspace_root: Option<PathBuf>) -> CustomAgentDiscoveryRoots {
         CustomAgentDiscoveryRoots {
             workspace_root,
-            bitfun_user_agents_dir: Some(self.user_agents_dir.clone()),
+            halo_user_agents_dir: Some(self.user_agents_dir.clone()),
             home_dir: None,
         }
     }

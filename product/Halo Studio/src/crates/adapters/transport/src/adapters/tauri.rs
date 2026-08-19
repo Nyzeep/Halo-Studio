@@ -1,12 +1,12 @@
 //! Tauri transport adapter.
 //!
 //! This adapter owns only Tauri delivery. Agentic event names and payload
-//! shapes are projected by `bitfun-events`.
+//! shapes are projected by `halo-events`.
 
 #[cfg(feature = "tauri-adapter")]
 use crate::traits::TransportAdapter;
 use async_trait::async_trait;
-use bitfun_events::{project_agentic_frontend_event, AgenticEvent};
+use halo_events::{project_agentic_frontend_event, AgenticEvent};
 use log::warn;
 use std::fmt;
 

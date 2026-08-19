@@ -1,10 +1,10 @@
 [中文](README.zh-CN.md) | **English**
 
-# BitFun Component Library
+# Halo Studio Component Library
 
 ## Overview
 
-This is the BitFun component preview system for quickly viewing and testing UI components.
+This is the Halo Studio component preview system for quickly viewing and testing UI components.
 
 ## Quick Start
 

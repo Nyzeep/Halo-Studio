@@ -3,8 +3,8 @@
 use std::sync::{OnceLock, RwLock};
 use std::time::Instant;
 
-use bitfun_core::infrastructure::try_get_path_manager_arc;
-use bitfun_core::service::config::types::GlobalConfig;
+use halo_core::infrastructure::try_get_path_manager_arc;
+use halo_core::service::config::types::GlobalConfig;
 use dark_light::Mode;
 use log::{debug, error, warn};
 use tauri::webview::PageLoadEvent;
@@ -29,7 +29,7 @@ fn desktop_product_name() -> &'static str {
     if cfg!(feature = "halo-local-coding") {
         "Halo Studio"
     } else {
-        "BitFun"
+        "Halo"
     }
 }
 
@@ -263,11 +263,11 @@ impl ThemeConfig {
             .themes
             .as_ref()
             .map(|t| t.current.as_str())
-            .unwrap_or("bitfun-light");
+            .unwrap_or("halo-light");
 
         let resolved_id = Self::resolve_builtin_theme_id(theme_id);
 
-        let theme = match Self::get_builtin_theme(resolved_id) {
+        let theme = match Self::get_builtin_theme(&resolved_id) {
             Some(mut config) => {
                 config.selection_id = Some(theme_id.to_string());
                 config
@@ -287,15 +287,19 @@ impl ThemeConfig {
 
     /// Maps config `themes.current` to a built-in id for splash / window chrome.
     /// `system` follows OS light/dark (aligned with web-ui `getSystemPreferredDefaultThemeId`).
-    fn resolve_builtin_theme_id(theme_id: &str) -> &str {
+    fn resolve_builtin_theme_id(theme_id: &str) -> String {
+        // 历史配置兼容（上游对照）：更名前的 bitfun-* 主题 id 映射到 halo-*。
+        if let Some(legacy) = theme_id.strip_prefix("bitfun-") {
+            return format!("halo-{legacy}");
+        }
         if theme_id == "system" {
             let manifest = Self::startup_theme_bootstrap_manifest();
             return match dark_light::detect() {
-                Mode::Dark => manifest.default_dark_theme_id.as_str(),
-                Mode::Light | Mode::Default => manifest.default_light_theme_id.as_str(),
+                Mode::Dark => manifest.default_dark_theme_id.clone(),
+                Mode::Light | Mode::Default => manifest.default_light_theme_id.clone(),
             };
         }
-        theme_id
+        theme_id.to_string()
     }
 
     fn startup_messages_json(locale: &str) -> String {
@@ -345,10 +349,10 @@ impl ThemeConfig {
         ))
         .unwrap_or_else(|_| "\"warn\"".to_string());
         let perf_trace_enabled = cfg!(debug_assertions)
-            || ((cfg!(feature = "devtools") || std::env::var_os("BITFUN_PERF_TRACE").is_some())
-                && std::env::var_os("BITFUN_WEBDRIVER_PORT").is_some());
+            || ((cfg!(feature = "devtools") || std::env::var_os("HALO_PERF_TRACE").is_some())
+                && std::env::var_os("HALO_WEBDRIVER_PORT").is_some());
         let bootstrap_theme_id_json =
-            serde_json::to_string(&self.id).unwrap_or_else(|_| "\"bitfun-light\"".to_string());
+            serde_json::to_string(&self.id).unwrap_or_else(|_| "\"halo-light\"".to_string());
         let bootstrap_theme_selection_json = self
             .selection_id
             .as_ref()
@@ -357,25 +361,25 @@ impl ThemeConfig {
         let bootstrap_keybindings_assignment = serde_json::to_string(&bootstrap_config.keybindings)
             .ok()
             .filter(|json| json.len() <= MAX_BOOTSTRAP_KEYBINDINGS_JSON_BYTES)
-            .map(|json| format!("window.__BITFUN_BOOTSTRAP_KEYBINDINGS__ = {json};"))
+            .map(|json| format!("window.__HALO_BOOTSTRAP_KEYBINDINGS__ = {json};"))
             .unwrap_or_default();
         let bootstrap_workspace_startup_state_assignment = workspace_startup_state
             .and_then(|state| serde_json::to_string(state).ok())
             .filter(|json| json.len() <= MAX_BOOTSTRAP_WORKSPACE_STATE_JSON_BYTES)
-            .map(|json| format!("window.__BITFUN_BOOTSTRAP_WORKSPACE_STARTUP_STATE__ = {json};"))
+            .map(|json| format!("window.__HALO_BOOTSTRAP_WORKSPACE_STARTUP_STATE__ = {json};"))
             .unwrap_or_default();
 
         format!(
             r#"
             (function() {{
-                window.__BITFUN_STARTUP_TRACE_ID__ = {startup_trace_id_json};
-                window.__BITFUN_PERF_TRACE_ENABLED__ = {perf_trace_enabled};
-                window.__BITFUN_BOOTSTRAP_LOG_LEVEL__ = {bootstrap_log_level_json};
-                window.__BITFUN_BOOTSTRAP_LOCALE__ = {startup_locale_json};
-                window.__BITFUN_BOOTSTRAP_MESSAGES__ = {startup_messages_json};
-                window.__BITFUN_SHOW_STARTUP_WINDOW_CONTROLS__ = {show_startup_window_controls};
-                window.__BITFUN_BOOTSTRAP_THEME_ID__ = {bootstrap_theme_id_json};
-                window.__BITFUN_BOOTSTRAP_THEME_SELECTION__ = {bootstrap_theme_selection_json};
+                window.__HALO_STARTUP_TRACE_ID__ = {startup_trace_id_json};
+                window.__HALO_PERF_TRACE_ENABLED__ = {perf_trace_enabled};
+                window.__HALO_BOOTSTRAP_LOG_LEVEL__ = {bootstrap_log_level_json};
+                window.__HALO_BOOTSTRAP_LOCALE__ = {startup_locale_json};
+                window.__HALO_BOOTSTRAP_MESSAGES__ = {startup_messages_json};
+                window.__HALO_SHOW_STARTUP_WINDOW_CONTROLS__ = {show_startup_window_controls};
+                window.__HALO_BOOTSTRAP_THEME_ID__ = {bootstrap_theme_id_json};
+                window.__HALO_BOOTSTRAP_THEME_SELECTION__ = {bootstrap_theme_selection_json};
                 {bootstrap_keybindings_assignment}
                 {bootstrap_workspace_startup_state_assignment}
                 function applyTheme() {{
@@ -487,7 +491,7 @@ pub fn create_main_window(
         .title(if cfg!(feature = "halo-local-coding") {
             "Halo Studio - 本地编码工作台"
         } else {
-            "BitFun"
+            "Halo"
         })
         .inner_size(
             crate::MAIN_WINDOW_DEFAULT_WIDTH,
@@ -547,7 +551,7 @@ pub fn create_main_window(
             );
             #[cfg(any(debug_assertions, feature = "devtools"))]
             {
-                if std::env::var("BITFUN_OPEN_DEVTOOLS")
+                if std::env::var("HALO_OPEN_DEVTOOLS")
                     .map(|v| v == "1")
                     .unwrap_or(false)
                 {
@@ -789,12 +793,12 @@ pub async fn show_agent_companion_desktop_pet(app: tauri::AppHandle) -> Result<(
         return Ok(());
     }
 
-    let url = app_url("?bitfunWindow=agent-companion");
+    let url = app_url("?haloWindow=agent-companion");
     let mut builder = tauri::WebviewWindowBuilder::new(&app, AGENT_COMPANION_WINDOW_LABEL, url)
         .title(if cfg!(feature = "halo-local-coding") {
             "Halo Studio Agent Companion"
         } else {
-            "BitFun Agent Companion"
+            "Halo Agent Companion"
         })
         .inner_size(
             AGENT_COMPANION_WINDOW_MIN_SIZE,

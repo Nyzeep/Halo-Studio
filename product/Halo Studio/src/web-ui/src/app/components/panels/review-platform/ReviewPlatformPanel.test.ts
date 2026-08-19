@@ -44,7 +44,7 @@ describe('pull request Review linking', () => {
     }, {
       platform: 'github',
       host: 'github.com',
-      projectPath: 'gcwing/bitfun',
+      projectPath: 'gcwing/halo',
       pullRequestId: '1502',
     })).toBe(true);
   });
@@ -82,7 +82,7 @@ describe('pull request Review linking', () => {
     const second = pullRequestReviewLaunchKey({
       platform: 'github',
       host: 'github.com',
-      projectPath: 'gcwing/bitfun',
+      projectPath: 'gcwing/halo',
       pullRequestId: '1503',
       baseRevision: baseRevision.toUpperCase(),
       headRevision: headRevision.toUpperCase(),

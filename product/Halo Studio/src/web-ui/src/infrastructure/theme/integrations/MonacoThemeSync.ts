@@ -2,13 +2,13 @@
 
 import type * as Monaco from 'monaco-editor';
 import { ThemeConfig } from '../types';
-import { BitFunDarkTheme } from '@/tools/editor/themes/bitfun-dark.theme';
+import { HaloDarkTheme } from '@/tools/editor/themes/halo-dark.theme';
 import { createLogger } from '@/shared/utils/logger';
 
 const log = createLogger('MonacoThemeSync');
 
 
-const SEMANTIC_HIGHLIGHTING_RULES = BitFunDarkTheme.rules;
+const SEMANTIC_HIGHLIGHTING_RULES = HaloDarkTheme.rules;
 const TRANSPARENT_MONACO_BORDER = '#00000000';
 const LIGHT_MONACO_PASSIVE_SELECTION = 'rgba(15, 23, 42, 0.1)';
 const TRANSPARENT_MONACO_BORDER_COLORS = {
@@ -18,7 +18,7 @@ const TRANSPARENT_MONACO_BORDER_COLORS = {
   'diffEditor.removedTextBorder': TRANSPARENT_MONACO_BORDER,
 } as const;
 
-function getBitfunLightMonacoTheme(): Monaco.editor.IStandaloneThemeData {
+function getHaloLightMonacoTheme(): Monaco.editor.IStandaloneThemeData {
   return {
     base: 'vs',
     inherit: true,
@@ -114,7 +114,7 @@ export class MonacoThemeSync {
 
     const activeTheme = theme ?? this.pendingTheme;
     if (!activeTheme) {
-      return this.currentThemeId ?? 'bitfun-dark';
+      return this.currentThemeId ?? 'halo-dark';
     }
 
     const targetThemeId = this.getTargetMonacoThemeId(activeTheme);
@@ -124,11 +124,11 @@ export class MonacoThemeSync {
 
   private ensureBuiltinThemes(monacoInstance: typeof Monaco): void {
     try {
-      monacoInstance.editor.defineTheme('bitfun-dark', BitFunDarkTheme);
-      monacoInstance.editor.defineTheme('bitfun-light', getBitfunLightMonacoTheme());
-      log.debug('BitFun Monaco themes registered');
+      monacoInstance.editor.defineTheme('halo-dark', HaloDarkTheme);
+      monacoInstance.editor.defineTheme('halo-light', getHaloLightMonacoTheme());
+      log.debug('Halo Monaco themes registered');
     } catch (error) {
-      log.warn('Failed to register BitFun Monaco themes', error);
+      log.warn('Failed to register Halo Monaco themes', error);
     }
   }
 
@@ -201,11 +201,11 @@ export class MonacoThemeSync {
     if (theme.monaco) {
       return theme.id;
     }
-    return theme.type === 'dark' ? 'bitfun-dark' : 'bitfun-light';
+    return theme.type === 'dark' ? 'halo-dark' : 'halo-light';
   }
 
   /**
-   * Registers BitFun built-in and optional custom Monaco themes on the given Monaco instance.
+   * Registers Halo built-in and optional custom Monaco themes on the given Monaco instance.
    * Use from the Monaco React wrapper `beforeMount` hook so themes exist on the loader's Monaco
    * before the editor is created (avoids falling back to the default light theme).
    */
@@ -214,7 +214,7 @@ export class MonacoThemeSync {
       return this.attachMonaco(monacoInstance, theme);
     } catch (error) {
       log.error('registerThemesForEditorInstance failed', error);
-      return 'bitfun-dark';
+      return 'halo-dark';
     }
   }
   

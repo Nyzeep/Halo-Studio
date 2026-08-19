@@ -1,6 +1,6 @@
 use super::flashgrep::SearchResults;
 use super::types::ContentSearchOutputMode;
-use bitfun_services_core::filesystem::{FileSearchResult, SearchMatchType};
+use halo_services_core::filesystem::{FileSearchResult, SearchMatchType};
 use std::path::Path;
 
 pub(crate) fn convert_search_results(

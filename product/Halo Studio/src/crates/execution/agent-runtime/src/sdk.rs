@@ -51,13 +51,13 @@ pub use crate::runtime::{
     RuntimeError, RuntimeToolRegistry, SessionSelector,
 };
 pub use crate::session_state::{session_state_label_for_state, ProcessingPhase, SessionState};
-pub use bitfun_agent_tools::{ToolRegistry, ToolRegistryItem};
-pub use bitfun_core_types::SessionUsageReport;
-pub use bitfun_harness::{
+pub use halo_agent_tools::{ToolRegistry, ToolRegistryItem};
+pub use halo_core_types::SessionUsageReport;
+pub use halo_harness::{
     build_descriptor_harness_registry, HarnessCapability, HarnessProviderDescriptor,
     HarnessRegistry, HarnessWorkflow,
 };
-pub use bitfun_runtime_ports::{
+pub use halo_runtime_ports::{
     AgentBackgroundResultRequest, AgentDialogTurnPort, AgentDialogTurnRequest,
     AgentInputAttachment, AgentLifecycleDeliveryPort, AgentLocalCommandTurnPort,
     AgentLocalCommandTurnRecordRequest, AgentSessionArchiveRequest,
@@ -86,7 +86,7 @@ pub use bitfun_runtime_ports::{
     SessionTranscriptReader, SessionTranscriptRequest, TerminalPort, ThreadGoal, ThreadGoalStatus,
     TranscriptContent, TranscriptMessage, TranscriptToolCall, WorkspacePort,
 };
-pub use bitfun_runtime_services::{
+pub use halo_runtime_services::{
     CapabilityAvailability, RuntimeServices, RuntimeServicesBuilder, RuntimeServicesError,
     RuntimeServicesProvider, RuntimeServicesRegistry,
 };

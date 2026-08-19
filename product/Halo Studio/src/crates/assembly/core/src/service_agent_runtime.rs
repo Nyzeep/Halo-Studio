@@ -5,13 +5,13 @@
 //! session restore, terminal pre-warm, remote image conversion, and runtime-port
 //! implementations until a reviewed port/provider migration proves equivalence.
 
-use bitfun_agent_runtime::sdk::{
+use halo_agent_runtime::sdk::{
     AgentEventSource, AgentInteractionResponsePort, AgentRuntime, AgentRuntimeBuilder,
     AgentSessionForkPort, AgentSessionModePort, AgentSessionModelPort,
     AgentSessionModelUpdateRequest, AgentSessionRestorePort, AgentSessionUsagePort,
     AgentTurnSettlementPort, RuntimeError,
 };
-use bitfun_runtime_ports::{
+use halo_runtime_ports::{
     AgentDialogTurnPort, AgentDialogTurnRequest, AgentInputAttachment, AgentLifecycleDeliveryPort,
     AgentLocalCommandTurnPort, AgentSessionClosePort, AgentSessionCreateRequest,
     AgentSessionManagementPort, AgentSubmissionPort, AgentSubmissionSource,
@@ -20,7 +20,7 @@ use bitfun_runtime_ports::{
     RemoteSessionWorkspaceIdentity, RuntimeServiceCapability, RuntimeServicePort,
     SessionStoragePathRequest, SessionStorePort,
 };
-use bitfun_services_integrations::remote_connect::{
+use halo_services_integrations::remote_connect::{
     agent_input_attachment_from_remote_image_context, build_remote_chat_messages,
     build_remote_model_catalog,
     normalize_remote_model_selection as normalize_remote_model_selection_contract,
@@ -88,7 +88,7 @@ fn remote_workspace_kind(
 
 fn git_branch_for_workspace_path(path: &std::path::Path) -> Option<String> {
     let path_str = path.to_string_lossy();
-    bitfun_services_integrations::git::execute_git_command_sync(
+    halo_services_integrations::git::execute_git_command_sync(
         &path_str,
         &["rev-parse", "--abbrev-ref", "HEAD"],
     )
@@ -413,12 +413,12 @@ fn core_agent_runtime_builder(
     session_model: Arc<dyn AgentSessionModelPort>,
     session_restore: Arc<dyn AgentSessionRestorePort>,
     local_command_turn: Arc<dyn AgentLocalCommandTurnPort>,
-    transcript_reader: Arc<dyn bitfun_runtime_ports::SessionTranscriptReader>,
+    transcript_reader: Arc<dyn halo_runtime_ports::SessionTranscriptReader>,
     thread_goal_management: Arc<dyn AgentThreadGoalManagementPort>,
     cancellation: Arc<dyn AgentTurnCancellationPort>,
     interaction_response: Arc<dyn AgentInteractionResponsePort>,
 ) -> Result<AgentRuntimeBuilder, String> {
-    let agent_registry: Arc<dyn bitfun_agent_runtime::sdk::RuntimeAgentRegistry> =
+    let agent_registry: Arc<dyn halo_agent_runtime::sdk::RuntimeAgentRegistry> =
         crate::agentic::agents::get_agent_registry();
     Ok(AgentRuntimeBuilder::new()
         .with_submission_port(submission)
@@ -460,7 +460,7 @@ impl AgentDialogTurnPort for RejectBusyAgentDialogTurnPort {
     async fn submit_dialog_turn(
         &self,
         request: AgentDialogTurnRequest,
-    ) -> bitfun_runtime_ports::PortResult<DialogSubmitOutcome> {
+    ) -> halo_runtime_ports::PortResult<DialogSubmitOutcome> {
         self.0
             .submit_agent_dialog_turn_reject_if_busy(request)
             .await
@@ -471,18 +471,18 @@ impl AgentDialogTurnPort for RejectBusyAgentDialogTurnPort {
 impl AgentSessionManagementPort for ScheduledSessionManagementPort {
     async fn list_sessions(
         &self,
-        request: bitfun_runtime_ports::AgentSessionListRequest,
-    ) -> bitfun_runtime_ports::PortResult<Vec<bitfun_runtime_ports::AgentSessionSummary>> {
+        request: halo_runtime_ports::AgentSessionListRequest,
+    ) -> halo_runtime_ports::PortResult<Vec<halo_runtime_ports::AgentSessionSummary>> {
         AgentSessionManagementPort::list_sessions(self.coordinator.as_ref(), request).await
     }
 
     async fn delete_session(
         &self,
-        request: bitfun_runtime_ports::AgentSessionDeleteRequest,
-    ) -> bitfun_runtime_ports::PortResult<()> {
-        bitfun_core_types::validate_session_id(&request.session_id).map_err(|message| {
-            bitfun_runtime_ports::PortError::new(
-                bitfun_runtime_ports::PortErrorKind::InvalidRequest,
+        request: halo_runtime_ports::AgentSessionDeleteRequest,
+    ) -> halo_runtime_ports::PortResult<()> {
+        halo_core_types::validate_session_id(&request.session_id).map_err(|message| {
+            halo_runtime_ports::PortError::new(
+                halo_runtime_ports::PortErrorKind::InvalidRequest,
                 message,
             )
         })?;
@@ -495,8 +495,8 @@ impl AgentSessionManagementPort for ScheduledSessionManagementPort {
             .await
             .map(|resolution| resolution.effective_storage_path)
             .map_err(|error| {
-                bitfun_runtime_ports::PortError::new(
-                    bitfun_runtime_ports::PortErrorKind::InvalidRequest,
+                halo_runtime_ports::PortError::new(
+                    halo_runtime_ports::PortErrorKind::InvalidRequest,
                     error.to_string(),
                 )
             })?;
@@ -504,8 +504,8 @@ impl AgentSessionManagementPort for ScheduledSessionManagementPort {
             .get_session_manager()
             .validate_session_storage_path_binding(&request.session_id, &storage_path)
             .map_err(|error| {
-                bitfun_runtime_ports::PortError::new(
-                    bitfun_runtime_ports::PortErrorKind::InvalidRequest,
+                halo_runtime_ports::PortError::new(
+                    halo_runtime_ports::PortErrorKind::InvalidRequest,
                     error.to_string(),
                 )
             })?;
@@ -519,53 +519,53 @@ impl AgentSessionManagementPort for ScheduledSessionManagementPort {
             .await
             .map_err(|error| {
                 let kind = match error {
-                    crate::util::errors::BitFunError::Validation(_) => {
-                        bitfun_runtime_ports::PortErrorKind::InvalidRequest
+                    crate::util::errors::HaloError::Validation(_) => {
+                        halo_runtime_ports::PortErrorKind::InvalidRequest
                     }
-                    crate::util::errors::BitFunError::NotFound(_) => {
-                        bitfun_runtime_ports::PortErrorKind::NotFound
+                    crate::util::errors::HaloError::NotFound(_) => {
+                        halo_runtime_ports::PortErrorKind::NotFound
                     }
-                    crate::util::errors::BitFunError::Timeout(_) => {
-                        bitfun_runtime_ports::PortErrorKind::Timeout
+                    crate::util::errors::HaloError::Timeout(_) => {
+                        halo_runtime_ports::PortErrorKind::Timeout
                     }
-                    crate::util::errors::BitFunError::Cancelled(_) => {
-                        bitfun_runtime_ports::PortErrorKind::Cancelled
+                    crate::util::errors::HaloError::Cancelled(_) => {
+                        halo_runtime_ports::PortErrorKind::Cancelled
                     }
-                    crate::util::errors::BitFunError::SessionInUse { .. } => {
-                        bitfun_runtime_ports::PortErrorKind::SessionInUse
+                    crate::util::errors::HaloError::SessionInUse { .. } => {
+                        halo_runtime_ports::PortErrorKind::SessionInUse
                     }
-                    _ => bitfun_runtime_ports::PortErrorKind::Backend,
+                    _ => halo_runtime_ports::PortErrorKind::Backend,
                 };
-                bitfun_runtime_ports::PortError::new(kind, error.to_string())
+                halo_runtime_ports::PortError::new(kind, error.to_string())
             })?;
         AgentSessionManagementPort::delete_session(self.coordinator.as_ref(), request).await
     }
 
     async fn rename_session(
         &self,
-        request: bitfun_runtime_ports::AgentSessionRenameRequest,
-    ) -> bitfun_runtime_ports::PortResult<()> {
+        request: halo_runtime_ports::AgentSessionRenameRequest,
+    ) -> halo_runtime_ports::PortResult<()> {
         AgentSessionManagementPort::rename_session(self.coordinator.as_ref(), request).await
     }
 
     async fn archive_session(
         &self,
-        request: bitfun_runtime_ports::AgentSessionArchiveRequest,
-    ) -> bitfun_runtime_ports::PortResult<()> {
+        request: halo_runtime_ports::AgentSessionArchiveRequest,
+    ) -> halo_runtime_ports::PortResult<()> {
         AgentSessionManagementPort::archive_session(self.coordinator.as_ref(), request).await
     }
 
     async fn set_session_archived(
         &self,
-        request: bitfun_runtime_ports::AgentSessionArchiveStateRequest,
-    ) -> bitfun_runtime_ports::PortResult<()> {
+        request: halo_runtime_ports::AgentSessionArchiveStateRequest,
+    ) -> halo_runtime_ports::PortResult<()> {
         AgentSessionManagementPort::set_session_archived(self.coordinator.as_ref(), request).await
     }
 
     async fn resolve_session_workspace_binding(
         &self,
-        request: bitfun_runtime_ports::AgentSessionWorkspaceRequest,
-    ) -> bitfun_runtime_ports::PortResult<Option<bitfun_runtime_ports::AgentSessionWorkspaceBinding>>
+        request: halo_runtime_ports::AgentSessionWorkspaceRequest,
+    ) -> halo_runtime_ports::PortResult<Option<halo_runtime_ports::AgentSessionWorkspaceBinding>>
     {
         AgentSessionManagementPort::resolve_session_workspace_binding(
             self.coordinator.as_ref(),
@@ -579,11 +579,11 @@ impl AgentSessionManagementPort for ScheduledSessionManagementPort {
 impl AgentSessionClosePort for ScheduledSessionManagementPort {
     async fn discard_transient_session(
         &self,
-        request: bitfun_runtime_ports::AgentTransientSessionDiscardRequest,
-    ) -> bitfun_runtime_ports::PortResult<bool> {
-        bitfun_core_types::validate_session_id(&request.session_id).map_err(|message| {
-            bitfun_runtime_ports::PortError::new(
-                bitfun_runtime_ports::PortErrorKind::InvalidRequest,
+        request: halo_runtime_ports::AgentTransientSessionDiscardRequest,
+    ) -> halo_runtime_ports::PortResult<bool> {
+        halo_core_types::validate_session_id(&request.session_id).map_err(|message| {
+            halo_runtime_ports::PortError::new(
+                halo_runtime_ports::PortErrorKind::InvalidRequest,
                 message,
             )
         })?;
@@ -612,8 +612,8 @@ impl AgentSessionClosePort for ScheduledSessionManagementPort {
             .map_err(map_session_close_error)?;
         let cleanup_budget = close_deadline.saturating_duration_since(tokio::time::Instant::now());
         if cleanup_budget.is_zero() {
-            return Err(bitfun_runtime_ports::PortError::new(
-                bitfun_runtime_ports::PortErrorKind::Timeout,
+            return Err(halo_runtime_ports::PortError::new(
+                halo_runtime_ports::PortErrorKind::Timeout,
                 "Session close deadline was exhausted before transient resource cleanup",
             ));
         }
@@ -628,8 +628,8 @@ impl AgentSessionClosePort for ScheduledSessionManagementPort {
         )
         .await
         .map_err(|_| {
-            bitfun_runtime_ports::PortError::new(
-                bitfun_runtime_ports::PortErrorKind::Timeout,
+            halo_runtime_ports::PortError::new(
+                halo_runtime_ports::PortErrorKind::Timeout,
                 "Transient Session resource cleanup exceeded the Session close deadline",
             )
         })?
@@ -638,27 +638,27 @@ impl AgentSessionClosePort for ScheduledSessionManagementPort {
 }
 
 fn map_session_close_error(
-    error: crate::util::errors::BitFunError,
-) -> bitfun_runtime_ports::PortError {
+    error: crate::util::errors::HaloError,
+) -> halo_runtime_ports::PortError {
     let kind = match &error {
-        crate::util::errors::BitFunError::Validation(_) => {
-            bitfun_runtime_ports::PortErrorKind::InvalidRequest
+        crate::util::errors::HaloError::Validation(_) => {
+            halo_runtime_ports::PortErrorKind::InvalidRequest
         }
-        crate::util::errors::BitFunError::NotFound(_) => {
-            bitfun_runtime_ports::PortErrorKind::NotFound
+        crate::util::errors::HaloError::NotFound(_) => {
+            halo_runtime_ports::PortErrorKind::NotFound
         }
-        crate::util::errors::BitFunError::Timeout(_) => {
-            bitfun_runtime_ports::PortErrorKind::Timeout
+        crate::util::errors::HaloError::Timeout(_) => {
+            halo_runtime_ports::PortErrorKind::Timeout
         }
-        crate::util::errors::BitFunError::Cancelled(_) => {
-            bitfun_runtime_ports::PortErrorKind::Cancelled
+        crate::util::errors::HaloError::Cancelled(_) => {
+            halo_runtime_ports::PortErrorKind::Cancelled
         }
-        crate::util::errors::BitFunError::SessionInUse { .. } => {
-            bitfun_runtime_ports::PortErrorKind::SessionInUse
+        crate::util::errors::HaloError::SessionInUse { .. } => {
+            halo_runtime_ports::PortErrorKind::SessionInUse
         }
-        _ => bitfun_runtime_ports::PortErrorKind::Backend,
+        _ => halo_runtime_ports::PortErrorKind::Backend,
     };
-    bitfun_runtime_ports::PortError::new(kind, error.to_string())
+    halo_runtime_ports::PortError::new(kind, error.to_string())
 }
 
 fn scheduled_session_management_port(
@@ -934,7 +934,7 @@ impl CoreServiceAgentRuntime {
         let session_model: Arc<dyn AgentSessionModelPort> = coordinator.clone();
         let session_restore: Arc<dyn AgentSessionRestorePort> = coordinator.clone();
         let local_command_turn: Arc<dyn AgentLocalCommandTurnPort> = coordinator.clone();
-        let transcript_reader: Arc<dyn bitfun_runtime_ports::SessionTranscriptReader> =
+        let transcript_reader: Arc<dyn halo_runtime_ports::SessionTranscriptReader> =
             coordinator.clone();
         let thread_goal_management: Arc<dyn AgentThreadGoalManagementPort> = coordinator.clone();
         let cancellation: Arc<dyn AgentTurnCancellationPort> = coordinator.clone();
@@ -967,7 +967,7 @@ impl CoreServiceAgentRuntime {
         let session_model: Arc<dyn AgentSessionModelPort> = coordinator.clone();
         let session_restore: Arc<dyn AgentSessionRestorePort> = coordinator.clone();
         let local_command_turn: Arc<dyn AgentLocalCommandTurnPort> = coordinator.clone();
-        let transcript_reader: Arc<dyn bitfun_runtime_ports::SessionTranscriptReader> =
+        let transcript_reader: Arc<dyn halo_runtime_ports::SessionTranscriptReader> =
             coordinator.clone();
         let thread_goal_management: Arc<dyn AgentThreadGoalManagementPort> = coordinator.clone();
         let cancellation: Arc<dyn AgentTurnCancellationPort> = coordinator.clone();
@@ -1004,7 +1004,7 @@ impl CoreServiceAgentRuntime {
         let session_model: Arc<dyn AgentSessionModelPort> = coordinator.clone();
         let session_restore: Arc<dyn AgentSessionRestorePort> = coordinator.clone();
         let local_command_turn: Arc<dyn AgentLocalCommandTurnPort> = coordinator.clone();
-        let transcript_reader: Arc<dyn bitfun_runtime_ports::SessionTranscriptReader> =
+        let transcript_reader: Arc<dyn halo_runtime_ports::SessionTranscriptReader> =
             coordinator.clone();
         let thread_goal_management: Arc<dyn AgentThreadGoalManagementPort> = coordinator.clone();
         let cancellation: Arc<dyn AgentTurnCancellationPort> = coordinator.clone();
@@ -1070,7 +1070,7 @@ impl CoreServiceAgentRuntime {
         let session_model: Arc<dyn AgentSessionModelPort> = coordinator.clone();
         let session_restore: Arc<dyn AgentSessionRestorePort> = coordinator.clone();
         let local_command_turn: Arc<dyn AgentLocalCommandTurnPort> = coordinator.clone();
-        let transcript_reader: Arc<dyn bitfun_runtime_ports::SessionTranscriptReader> =
+        let transcript_reader: Arc<dyn halo_runtime_ports::SessionTranscriptReader> =
             coordinator.clone();
         let thread_goal_management: Arc<dyn AgentThreadGoalManagementPort> = coordinator.clone();
         let interaction_response: Arc<dyn AgentInteractionResponsePort> = coordinator;
@@ -1102,8 +1102,8 @@ impl CoreServiceAgentRuntime {
         session_fork: Arc<dyn AgentSessionForkPort>,
         session_usage: Arc<dyn AgentSessionUsagePort>,
         turn_settlement: Arc<dyn AgentTurnSettlementPort>,
-        services: bitfun_runtime_services::RuntimeServices,
-        harness_registry: bitfun_harness::HarnessRegistry,
+        services: halo_runtime_services::RuntimeServices,
+        harness_registry: halo_harness::HarnessRegistry,
     ) -> Result<AgentRuntime, String> {
         let dialog_turn: Arc<dyn AgentDialogTurnPort> = scheduler.clone();
         Self::product_agent_runtime_with_dialog_turn(
@@ -1123,8 +1123,8 @@ impl CoreServiceAgentRuntime {
         coordinator: Arc<ConversationCoordinator>,
         scheduler: Arc<DialogScheduler>,
         event_source: AgentEventSource,
-        services: bitfun_runtime_services::RuntimeServices,
-        harness_registry: bitfun_harness::HarnessRegistry,
+        services: halo_runtime_services::RuntimeServices,
+        harness_registry: halo_harness::HarnessRegistry,
     ) -> Result<AgentRuntime, String> {
         let dialog_turn: Arc<dyn AgentDialogTurnPort> =
             Arc::new(RejectBusyAgentDialogTurnPort(scheduler.clone()));
@@ -1148,8 +1148,8 @@ impl CoreServiceAgentRuntime {
         session_fork: Arc<dyn AgentSessionForkPort>,
         session_usage: Arc<dyn AgentSessionUsagePort>,
         turn_settlement: Arc<dyn AgentTurnSettlementPort>,
-        services: bitfun_runtime_services::RuntimeServices,
-        harness_registry: bitfun_harness::HarnessRegistry,
+        services: halo_runtime_services::RuntimeServices,
+        harness_registry: halo_harness::HarnessRegistry,
     ) -> Result<AgentRuntime, String> {
         let dialog_turn: Arc<dyn AgentDialogTurnPort> = scheduler.clone();
         Self::product_agent_runtime_with_dialog_turn(
@@ -1173,8 +1173,8 @@ impl CoreServiceAgentRuntime {
         session_fork: Option<Arc<dyn AgentSessionForkPort>>,
         session_usage: Option<Arc<dyn AgentSessionUsagePort>>,
         turn_settlement: Option<Arc<dyn AgentTurnSettlementPort>>,
-        services: bitfun_runtime_services::RuntimeServices,
-        harness_registry: bitfun_harness::HarnessRegistry,
+        services: halo_runtime_services::RuntimeServices,
+        harness_registry: halo_harness::HarnessRegistry,
     ) -> Result<AgentRuntime, String> {
         let submission: Arc<dyn AgentSubmissionPort> = coordinator.clone();
         let session_management =
@@ -1184,7 +1184,7 @@ impl CoreServiceAgentRuntime {
         let session_model: Arc<dyn AgentSessionModelPort> = coordinator.clone();
         let session_restore: Arc<dyn AgentSessionRestorePort> = coordinator.clone();
         let local_command_turn: Arc<dyn AgentLocalCommandTurnPort> = coordinator.clone();
-        let transcript_reader: Arc<dyn bitfun_runtime_ports::SessionTranscriptReader> =
+        let transcript_reader: Arc<dyn halo_runtime_ports::SessionTranscriptReader> =
             coordinator.clone();
         let thread_goal_management: Arc<dyn AgentThreadGoalManagementPort> = coordinator.clone();
         let interaction_response: Arc<dyn AgentInteractionResponsePort> = coordinator;
@@ -1251,7 +1251,7 @@ impl crate::agentic::events::EventSubscriber for CoreRemoteSessionStateTrackerSu
     async fn on_event(
         &self,
         event: &crate::agentic::events::AgenticEvent,
-    ) -> bitfun_agent_runtime::event_bus::EventSubscriberResult {
+    ) -> halo_agent_runtime::event_bus::EventSubscriberResult {
         self.0.handle_agentic_event(event);
         Ok(())
     }
@@ -1887,24 +1887,24 @@ impl RemoteCancelRuntimeHost for CoreRemoteCancelRuntimeHost {
 mod tests {
     use std::collections::HashSet;
 
-    use bitfun_runtime_ports::SessionTranscriptReader;
+    use halo_runtime_ports::SessionTranscriptReader;
 
     use super::*;
     use crate::service::session::{
         DialogTurnData, DialogTurnKind, ModelRoundData, TextItemData, ThinkingItemData,
         ToolCallData, ToolItemData, TurnStatus, UserMessageData,
     };
-    use crate::BitFunError;
+    use crate::HaloError;
 
     #[test]
     fn session_close_preserves_writer_conflicts() {
-        let error = map_session_close_error(BitFunError::SessionInUse {
+        let error = map_session_close_error(HaloError::SessionInUse {
             session_id: "session-1".to_string(),
         });
 
         assert_eq!(
             error.kind,
-            bitfun_runtime_ports::PortErrorKind::SessionInUse
+            halo_runtime_ports::PortErrorKind::SessionInUse
         );
     }
 

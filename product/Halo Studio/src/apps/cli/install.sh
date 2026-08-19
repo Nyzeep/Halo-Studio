@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# BitFun CLI — one-click build + install into PATH.
+# Halo CLI — one-click build + install into PATH.
 #
 # Usage (from anywhere inside the repo, or this directory):
 #   bash src/apps/cli/install.sh
 #   bash install.sh                 # when cwd is src/apps/cli
 #
 # What it does:
-#   1. cargo build -p bitfun-cli --release (native host arch)
-#   2. Install bitfun plus the deprecated bitfun-cli compatibility entrypoint
-#      to ~/.local/bin (override with BITFUN_CLI_BIN_DIR)
+#   1. cargo build -p halo-cli --release (native host arch)
+#   2. Install halo plus the deprecated halo-cli compatibility entrypoint
+#      to ~/.local/bin (override with HALO_CLI_BIN_DIR)
 #   3. Idempotently append a PATH block to ~/.bashrc and ~/.zshrc
 #   4. Print explicit current-shell and new-terminal instructions
 #   5. Restart the account daemon's auto-start service when installed, so
@@ -17,9 +17,9 @@
 # Supported hosts: Linux/macOS on amd64 (x86_64) and arm64 (aarch64).
 #
 # Environment:
-#   BITFUN_CLI_BIN_DIR       Install directory (default: ~/.local/bin)
-#   BITFUN_CLI_SKIP_SHELLRC  Set to 1 to skip bashrc/zshrc edits
-#   CARGO_TARGET_DIR         Optional cargo target dir (e.g. $HOME/bitfun-build/target)
+#   HALO_CLI_BIN_DIR       Install directory (default: ~/.local/bin)
+#   HALO_CLI_SKIP_SHELLRC  Set to 1 to skip bashrc/zshrc edits
+#   CARGO_TARGET_DIR         Optional cargo target dir (e.g. $HOME/halo-build/target)
 #   CARGO_BUILD_JOBS         Optional rustc parallelism limit for small VPS
 
 set -euo pipefail
@@ -45,7 +45,7 @@ resolve_repo_root() {
     echo "$candid"
     return 0
   fi
-  echo "Error: could not locate BitFun repository root from $SCRIPT_DIR" >&2
+  echo "Error: could not locate Halo repository root from $SCRIPT_DIR" >&2
   exit 1
 }
 
@@ -92,14 +92,14 @@ require_cargo() {
 }
 
 # Marker keeps shellrc edits idempotent across re-installs.
-SHELLRC_MARKER_BEGIN="# >>> BitFun CLI PATH (managed by src/apps/cli/install.sh) >>>"
-SHELLRC_MARKER_END="# <<< BitFun CLI PATH (managed by src/apps/cli/install.sh) <<<"
+SHELLRC_MARKER_BEGIN="# >>> Halo CLI PATH (managed by src/apps/cli/install.sh) >>>"
+SHELLRC_MARKER_END="# <<< Halo CLI PATH (managed by src/apps/cli/install.sh) <<<"
 
 ensure_bin_dir_on_path_block() {
   local bin_dir="$1"
   cat <<EOF
 ${SHELLRC_MARKER_BEGIN}
-# Added so \`bitfun\` is available in new shells after install.sh.
+# Added so \`halo\` is available in new shells after install.sh.
 case ":\$PATH:" in
   *":${bin_dir}:"*) ;;
   *) export PATH="${bin_dir}:\$PATH" ;;
@@ -136,9 +136,9 @@ upsert_shellrc_path() {
 
 print_path_guidance() {
   local bin_dir="$1"
-  echo "Open a new terminal, then run: bitfun"
-  echo "Current shell: export PATH=\"${bin_dir}:\$PATH\" && bitfun"
-  echo "Direct path: ${bin_dir}/bitfun"
+  echo "Open a new terminal, then run: halo"
+  echo "Current shell: export PATH=\"${bin_dir}:\$PATH\" && halo"
+  echo "Direct path: ${bin_dir}/halo"
 }
 
 assert_entrypoint_pair() {
@@ -154,8 +154,8 @@ assert_entrypoint_pair() {
   fi
   warning="$(cat "$stderr_file")"
   rm -f "$stderr_file"
-  if [ "$warning" != 'Warning: `bitfun-cli` is deprecated; use `bitfun` instead.' ]; then
-    echo "Error: deprecated bitfun-cli entrypoint emitted an unexpected warning: $warning" >&2
+  if [ "$warning" != 'Warning: `halo-cli` is deprecated; use `halo` instead.' ]; then
+    echo "Error: deprecated halo-cli entrypoint emitted an unexpected warning: $warning" >&2
     return 1
   fi
 }
@@ -170,13 +170,13 @@ install_entrypoint_pair() {
   local failed=0
 
   mkdir -p "$destination"
-  stage_dir="$(mktemp -d "${destination}/.bitfun-install.XXXXXX")"
-  staged_primary="${stage_dir}/bitfun"
-  staged_legacy="${stage_dir}/bitfun-cli"
-  primary_target="${destination}/bitfun"
-  legacy_target="${destination}/bitfun-cli"
-  primary_backup="${stage_dir}/previous-bitfun"
-  legacy_backup="${stage_dir}/previous-bitfun-cli"
+  stage_dir="$(mktemp -d "${destination}/.halo-install.XXXXXX")"
+  staged_primary="${stage_dir}/halo"
+  staged_legacy="${stage_dir}/halo-cli"
+  primary_target="${destination}/halo"
+  legacy_target="${destination}/halo-cli"
+  primary_backup="${stage_dir}/previous-halo"
+  legacy_backup="${stage_dir}/previous-halo-cli"
 
   install -m 755 "$primary_source" "$staged_primary" || failed=1
   if [ "$failed" -eq 0 ]; then
@@ -221,8 +221,8 @@ install_entrypoint_pair() {
 restart_daemon_for_upgrade() {
   local os unit_name agent_label config_home plist uid
   os="$(uname -s)"
-  unit_name="bitfun-cli-daemon.service"
-  agent_label="com.bitfun.cli.daemon"
+  unit_name="halo-cli-daemon.service"
+  agent_label="com.halostudio.cli.daemon"
 
   case "$os" in
     Linux)
@@ -254,7 +254,7 @@ restart_daemon_for_upgrade() {
 
   # No auto-start service installed — warn only when a manually supervised
   # daemon is still running the old binary.
-  if "${BIN_DIR}/bitfun" daemon status 2>/dev/null | grep -q "daemon process: running"; then
+  if "${BIN_DIR}/halo" daemon status 2>/dev/null | grep -q "daemon process: running"; then
     echo "Note: a running daemon was detected (not service-managed); restart it"
     echo "so it picks up the new binary."
   fi
@@ -262,20 +262,20 @@ restart_daemon_for_upgrade() {
 
 usage() {
   cat <<'EOF'
-BitFun CLI install script
+Halo CLI install script
 
 Usage:
   bash install.sh [--help]
 
-Builds the release CLI and installs the primary bitfun command plus the
-deprecated bitfun-cli compatibility entrypoint.
+Builds the release CLI and installs the primary halo command plus the
+deprecated halo-cli compatibility entrypoint.
 
 Options:
   -h, --help    Show this help
 
 Environment:
-  BITFUN_CLI_BIN_DIR       Install directory (default: ~/.local/bin)
-  BITFUN_CLI_SKIP_SHELLRC  Set to 1 to skip ~/.bashrc and ~/.zshrc edits
+  HALO_CLI_BIN_DIR       Install directory (default: ~/.local/bin)
+  HALO_CLI_SKIP_SHELLRC  Set to 1 to skip ~/.bashrc and ~/.zshrc edits
   CARGO_TARGET_DIR         Cargo target directory override
   CARGO_BUILD_JOBS         Limit rustc parallelism (useful on small VPS)
 EOF
@@ -296,11 +296,11 @@ for arg in "$@"; do
 done
 
 REPO_ROOT="$(resolve_repo_root)"
-BIN_DIR="${BITFUN_CLI_BIN_DIR:-${HOME}/.local/bin}"
+BIN_DIR="${HALO_CLI_BIN_DIR:-${HOME}/.local/bin}"
 HOST_ARCH="$(host_arch_label)"
 HOST_OS="$(uname -s)"
 
-echo "=== BitFun CLI Install ==="
+echo "=== Halo CLI Install ==="
 echo "Repo:   $REPO_ROOT"
 echo "Host:   ${HOST_OS} / ${HOST_ARCH} ($(uname -m))"
 echo "Install dir: $BIN_DIR"
@@ -311,10 +311,10 @@ require_cargo
 mkdir -p "$BIN_DIR"
 
 echo ""
-echo "[1/4] Building bitfun and the deprecated bitfun-cli entrypoint (release)..."
+echo "[1/4] Building halo and the deprecated halo-cli entrypoint (release)..."
 cd "$REPO_ROOT"
 # Build from workspace root so path deps resolve.
-cargo build -p bitfun-cli --release
+cargo build -p halo-cli --release
 
 TARGET_DIR="${CARGO_TARGET_DIR:-${REPO_ROOT}/target}"
 if [ -n "${CARGO_BUILD_TARGET:-}" ]; then
@@ -322,8 +322,8 @@ if [ -n "${CARGO_BUILD_TARGET:-}" ]; then
 else
   RELEASE_DIR="${TARGET_DIR}/release"
 fi
-BUILT_BIN="${RELEASE_DIR}/bitfun"
-BUILT_LEGACY_BIN="${RELEASE_DIR}/bitfun-cli"
+BUILT_BIN="${RELEASE_DIR}/halo"
+BUILT_LEGACY_BIN="${RELEASE_DIR}/halo-cli"
 for binary in "$BUILT_BIN" "$BUILT_LEGACY_BIN"; do
   if [ ! -x "$binary" ]; then
     echo "Error: built binary not found at $binary"
@@ -334,14 +334,14 @@ done
 echo ""
 echo "[2/4] Installing binaries..."
 install_entrypoint_pair "$BUILT_BIN" "$BUILT_LEGACY_BIN" "$BIN_DIR"
-echo "Installed: ${BIN_DIR}/bitfun"
-echo "Installed deprecated compatibility entrypoint: ${BIN_DIR}/bitfun-cli"
-assert_entrypoint_pair "${BIN_DIR}/bitfun" "${BIN_DIR}/bitfun-cli"
+echo "Installed: ${BIN_DIR}/halo"
+echo "Installed deprecated compatibility entrypoint: ${BIN_DIR}/halo-cli"
+assert_entrypoint_pair "${BIN_DIR}/halo" "${BIN_DIR}/halo-cli"
 
 echo ""
 echo "[3/4] Configuring shell PATH..."
-if [ "${BITFUN_CLI_SKIP_SHELLRC:-0}" = "1" ]; then
-  echo "Skipped shell rc edits (BITFUN_CLI_SKIP_SHELLRC=1)."
+if [ "${HALO_CLI_SKIP_SHELLRC:-0}" = "1" ]; then
+  echo "Skipped shell rc edits (HALO_CLI_SKIP_SHELLRC=1)."
 else
   upsert_shellrc_path "${HOME}/.bashrc" "$BIN_DIR"
   upsert_shellrc_path "${HOME}/.zshrc" "$BIN_DIR"
@@ -354,7 +354,7 @@ restart_daemon_for_upgrade
 echo ""
 echo "=== Install complete ==="
 print_path_guidance "$BIN_DIR"
-echo "Deprecated compatibility command: bitfun-cli"
+echo "Deprecated compatibility command: halo-cli"
 echo "Login (Peer Host): open /login inside the TUI after start."
-echo "Server use: after /login, run \`bitfun daemon install\` to keep this"
+echo "Server use: after /login, run \`halo daemon install\` to keep this"
 echo "device reachable by your account even after exit or reboot."

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Mobile web is the browser-based remote control client for BitFun desktop sessions.
+Mobile web is the browser-based remote control client for Halo Studio desktop sessions.
 
 ## Boundaries
 

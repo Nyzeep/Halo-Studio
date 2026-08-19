@@ -10,7 +10,7 @@ use tauri::{Emitter, State};
 use crate::api::app_state::SSHServiceError;
 use crate::startup_trace::DesktopStartupTrace;
 use crate::AppState;
-use bitfun_core::service::remote_ssh::{
+use halo_core::service::remote_ssh::{
     ConnectionTestReport, DockerContainerInfo, RemoteTreeNode, SSHAuthMethod, SSHConfigEntry,
     SSHConfigLookupResult, SSHConnectionConfig, SSHConnectionManager, SSHConnectionResult,
     SavedConnection, ServerInfo,
@@ -290,7 +290,7 @@ pub async fn remote_read_dir(
     state: State<'_, AppState>,
     connection_id: String,
     path: String,
-) -> Result<Vec<bitfun_core::service::remote_ssh::RemoteDirEntry>, String> {
+) -> Result<Vec<halo_core::service::remote_ssh::RemoteDirEntry>, String> {
     let remote_fs = state.get_remote_file_service_async().await?;
     remote_fs
         .read_dir(&connection_id, &path)
@@ -1036,7 +1036,7 @@ pub async fn remote_open_workspace(
     remote_path: String,
 ) -> Result<(), String> {
     let remote_path =
-        bitfun_core::service::remote_ssh::normalize_remote_workspace_path(&remote_path);
+        halo_core::service::remote_ssh::normalize_remote_workspace_path(&remote_path);
     let manager = state.get_ssh_manager_async().await?;
 
     // Verify connection exists
@@ -1137,7 +1137,7 @@ mod tests {
 
     #[tokio::test]
     async fn local_docker_profiles_do_not_require_a_legacy_password_vault_entry() {
-        use bitfun_core::service::remote_ssh::{
+        use halo_core::service::remote_ssh::{
             ContainerAccess, ContainerWorkspaceConfig, SSHAuthMethod, SSHConnectionConfig,
             SSHConnectionManager,
         };

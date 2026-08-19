@@ -487,8 +487,8 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
         void loadMetadataPage(SESSIONS_LEVEL_0, undefined, 'sessions_nav_post_archive');
       }
     };
-    window.addEventListener('bitfun:session-archived', handler);
-    return () => window.removeEventListener('bitfun:session-archived', handler);
+    window.addEventListener('halo:session-archived', handler);
+    return () => window.removeEventListener('halo:session-archived', handler);
   }, [isVisible, workspacePath, loadMetadataPage]);
 
   const closeSessionMenu = useCallback(() => {
@@ -557,8 +557,8 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
       });
     };
 
-    window.addEventListener('bitfun:session-switched', handleSessionSwitched);
-    return () => window.removeEventListener('bitfun:session-switched', handleSessionSwitched);
+    window.addEventListener('halo:session-switched', handleSessionSwitched);
+    return () => window.removeEventListener('halo:session-switched', handleSessionSwitched);
   }, []);
 
   const sessions = useMemo(
@@ -776,7 +776,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
       }
 
       const target = event.target as HTMLElement | null;
-      if (target?.closest('.bitfun-nav-panel__inline-item-actions, .bitfun-nav-panel__inline-item-edit')) {
+      if (target?.closest('.halo-nav-panel__inline-item-actions, .halo-nav-panel__inline-item-edit')) {
         return;
       }
 
@@ -893,7 +893,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
       if (!confirmed) return;
       try {
         await flowChatManager.archiveChatSession(sessionId);
-        window.dispatchEvent(new CustomEvent('bitfun:session-archived'));
+        window.dispatchEvent(new CustomEvent('halo:session-archived'));
       } catch (err) {
         log.error('Failed to archive session', err);
       }
@@ -1010,8 +1010,8 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
   if (topLevelSessions.length === 0) {
     if (metadataPageState.isLoading) {
       return (
-        <div className="bitfun-nav-panel__inline-list">
-          <div className="bitfun-nav-panel__inline-loading">
+        <div className="halo-nav-panel__inline-list">
+          <div className="halo-nav-panel__inline-loading">
             <Loader2 size={12} />
             <span>{t('nav.sessions.loading')}</span>
           </div>
@@ -1020,10 +1020,10 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
     }
     if (metadataPageState.loadError) {
       return (
-        <div className="bitfun-nav-panel__inline-list">
+        <div className="halo-nav-panel__inline-list">
           <button
             type="button"
-            className="bitfun-nav-panel__inline-action"
+            className="halo-nav-panel__inline-action"
             onClick={() => {
               void loadInitialMetadataPage('sessions_nav_manual_retry');
             }}
@@ -1037,7 +1037,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
   }
 
   return (
-    <div className="bitfun-nav-panel__inline-list">
+    <div className="halo-nav-panel__inline-list">
       {visibleItems.map(({ session, level }) => {
           const isEditing = editingSessionId === session.sessionId;
           const relationship = resolveSessionRelationship(session);
@@ -1119,15 +1119,15 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
             showBackgroundSubagentActivity ||
             isDispatched;
           const tooltipContent = showRichTooltip ? (
-            <div className="bitfun-nav-panel__inline-item-tooltip">
-              <div className="bitfun-nav-panel__inline-item-tooltip-title">{sessionTitle}</div>
+            <div className="halo-nav-panel__inline-item-tooltip">
+              <div className="halo-nav-panel__inline-item-tooltip-title">{sessionTitle}</div>
               {showAssistantInTooltip ? (
-                <div className="bitfun-nav-panel__inline-item-tooltip-meta">
+                <div className="halo-nav-panel__inline-item-tooltip-meta">
                   {t('nav.sessions.assistantOwner', { name: trimmedAssistant })}
                 </div>
               ) : null}
               {isChildSession ? (
-                <div className="bitfun-nav-panel__inline-item-tooltip-meta">
+                <div className="halo-nav-panel__inline-item-tooltip-meta">
                   {parentTurnIndex
                     ? t('nav.sessions.childSourceWithTurn', {
                         parentTitle: parentTitle || t('nav.sessions.parentSession'),
@@ -1139,19 +1139,19 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                 </div>
               ) : null}
               {isDispatched ? (
-                <div className="bitfun-nav-panel__inline-item-tooltip-meta">
+                <div className="halo-nav-panel__inline-item-tooltip-meta">
                   {dispatchPresentation?.summary}
                 </div>
               ) : null}
               {showBackgroundSubagentActivity && backgroundSubagentActivity ? (
                 <>
-                  <div className="bitfun-nav-panel__inline-item-tooltip-meta">
+                  <div className="halo-nav-panel__inline-item-tooltip-meta">
                     {t('nav.sessions.backgroundSubagentsRunning', {
                       count: backgroundSubagentActivityCount,
                     })}
                   </div>
                   {backgroundSubagentActivity.items.length > 0 ? (
-                    <div className="bitfun-nav-panel__inline-item-tooltip-meta">
+                    <div className="halo-nav-panel__inline-item-tooltip-meta">
                       {backgroundSubagentActivity.items
                         .slice(0, 2)
                         .map(item => item.title)
@@ -1187,7 +1187,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
           const row = (
             <div
               className={[
-                'bitfun-nav-panel__inline-item',
+                'halo-nav-panel__inline-item',
                 level === 1 && 'is-child',
                 isChildSession && 'is-btw-child',
                 isRowActive && 'is-active',
@@ -1205,13 +1205,13 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
               onClick={() => handleSwitch(session.sessionId)}
             >
               {showSessionModeIcon ? (
-                <span className="bitfun-nav-panel__inline-item-icon-slot">
+                <span className="halo-nav-panel__inline-item-icon-slot">
                   {isRunning ? (
                     isWaitingForUserAnswer ? (
                       <CircleHelp
                         size={14}
                         className={[
-                          'bitfun-nav-panel__inline-item-icon',
+                          'halo-nav-panel__inline-item-icon',
                           'is-ask-user',
                         ].join(' ')}
                         aria-hidden="true"
@@ -1220,7 +1220,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                       <Loader2
                         size={14}
                         className={[
-                          'bitfun-nav-panel__inline-item-icon',
+                          'halo-nav-panel__inline-item-icon',
                           'is-running',
                         ].join(' ')}
                       />
@@ -1229,7 +1229,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                     <SessionIcon
                       size={14}
                       className={[
-                        'bitfun-nav-panel__inline-item-icon',
+                        'halo-nav-panel__inline-item-icon',
                         sessionModeKey === 'cowork'
                           ? 'is-cowork'
                           : sessionModeKey === 'claw'
@@ -1241,7 +1241,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                   {attentionKind ? (
                     <span
                       className={[
-                        'bitfun-nav-panel__inline-item-unread-dot',
+                        'halo-nav-panel__inline-item-unread-dot',
                         attentionKind === 'error' && 'is-error',
                         attentionKind === 'interrupted' && 'is-interrupted',
                         attentionKind === 'ask_user' && 'is-ask-user',
@@ -1269,10 +1269,10 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
               ) : null}
 
               {isEditing ? (
-                <div className="bitfun-nav-panel__inline-item-edit" onClick={e => e.stopPropagation()}>
+                <div className="halo-nav-panel__inline-item-edit" onClick={e => e.stopPropagation()}>
                   <Input
                     ref={editInputRef}
-                    className="bitfun-nav-panel__inline-item-edit-field"
+                    className="halo-nav-panel__inline-item-edit-field"
                     variant="default"
                     inputSize="small"
                     value={editingTitle}
@@ -1283,7 +1283,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                   <IconButton
                     variant="success"
                     size="xs"
-                    className="bitfun-nav-panel__inline-item-edit-btn confirm"
+                    className="halo-nav-panel__inline-item-edit-btn confirm"
                     onClick={e => { e.stopPropagation(); handleConfirmEdit(); }}
                     tooltip={t('nav.sessions.confirmEdit')}
                     tooltipPlacement="top"
@@ -1293,7 +1293,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                   <IconButton
                     variant="default"
                     size="xs"
-                    className="bitfun-nav-panel__inline-item-edit-btn cancel"
+                    className="halo-nav-panel__inline-item-edit-btn cancel"
                     onMouseDown={e => { e.preventDefault(); e.stopPropagation(); handleCancelEdit(); }}
                     tooltip={t('nav.sessions.cancelEdit')}
                     tooltipPlacement="top"
@@ -1303,14 +1303,14 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                 </div>
               ) : (
                 <>
-                  <span className="bitfun-nav-panel__inline-item-main">
-                    <span className="bitfun-nav-panel__inline-item-label">{sessionTitle}</span>
+                  <span className="halo-nav-panel__inline-item-main">
+                    <span className="halo-nav-panel__inline-item-label">{sessionTitle}</span>
                     {isChildSession ? (
-                      <span className="bitfun-nav-panel__inline-item-btw-badge">{childSessionBadge}</span>
+                      <span className="halo-nav-panel__inline-item-btw-badge">{childSessionBadge}</span>
                     ) : null}
                     {isDispatched ? (
                       <span
-                        className="bitfun-nav-panel__inline-item-dispatch-badge"
+                        className="halo-nav-panel__inline-item-dispatch-badge"
                         data-state={dispatchPresentation?.visualState}
                         title={dispatchPresentation?.summary}
                       >
@@ -1318,32 +1318,32 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                       </span>
                     ) : null}
                     {attentionKind === 'ask_user' || attentionKind === 'tool_confirm' ? (
-                      <span className="bitfun-nav-panel__inline-item-attention-badge">
+                      <span className="halo-nav-panel__inline-item-attention-badge">
                         {attentionKind === 'ask_user'
                           ? t('nav.sessions.badgeNeedsInput')
                           : t('nav.sessions.badgeNeedsConfirm')}
                       </span>
                     ) : null}
                     {reviewActivityKind ? (
-                      <span className="bitfun-nav-panel__inline-item-review-badge">
+                      <span className="halo-nav-panel__inline-item-review-badge">
                         <Loader2 size={9} aria-hidden />
                         {getReviewActivityBadge(reviewActivityKind)}
                       </span>
                     ) : null}
                     {showBackgroundSubagentActivity ? (
                       <span
-                        className="bitfun-nav-panel__inline-item-background-subagent-badge"
+                        className="halo-nav-panel__inline-item-background-subagent-badge"
                         aria-label={t('nav.sessions.backgroundSubagentsRunning', {
                           count: backgroundSubagentActivityCount,
                         })}
                       >
                         <Bot
-                          className="bitfun-nav-panel__inline-item-background-subagent-icon is-bot"
+                          className="halo-nav-panel__inline-item-background-subagent-icon is-bot"
                           size={10}
                           aria-hidden
                         />
                         <Loader2
-                          className="bitfun-nav-panel__inline-item-background-subagent-icon is-loader"
+                          className="halo-nav-panel__inline-item-background-subagent-icon is-loader"
                           size={10}
                           aria-hidden
                         />
@@ -1351,12 +1351,12 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                     ) : null}
                   </span>
                   <div
-                    className={`bitfun-nav-panel__inline-item-actions${openMenuSessionId === session.sessionId ? ' is-open' : ''}`}
+                    className={`halo-nav-panel__inline-item-actions${openMenuSessionId === session.sessionId ? ' is-open' : ''}`}
                   >
                     <button
                       type="button"
                       ref={openMenuSessionId === session.sessionId ? sessionMenuAnchorRef : undefined}
-                      className={`bitfun-nav-panel__inline-item-action-btn${openMenuSessionId === session.sessionId ? ' is-open' : ''}`}
+                      className={`halo-nav-panel__inline-item-action-btn${openMenuSessionId === session.sessionId ? ' is-open' : ''}`}
                       onClick={e => handleMenuOpen(e, session.sessionId)}
                       data-testid="nav-session-menu-btn"
                       data-session-id={session.sessionId}
@@ -1367,7 +1367,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                   {openMenuSessionId === session.sessionId && sessionMenuPosition && createPortal(
                     <div
                       ref={sessionMenuPopoverRef}
-                      className="bitfun-nav-panel__inline-item-menu-popover"
+                      className="halo-nav-panel__inline-item-menu-popover"
                       role="menu"
                       style={{ top: `${sessionMenuPosition.top}px`, left: `${sessionMenuPosition.left}px` }}
                       data-testid="nav-session-menu"
@@ -1377,7 +1377,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                         <>
                           <button
                             type="button"
-                            className="bitfun-nav-panel__inline-item-menu-item"
+                            className="halo-nav-panel__inline-item-menu-item"
                             onClick={e => {
                               e.stopPropagation();
                               setIsExportScopeMenu(false);
@@ -1390,7 +1390,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                           </button>
                           <button
                             type="button"
-                            className="bitfun-nav-panel__inline-item-menu-item"
+                            className="halo-nav-panel__inline-item-menu-item"
                             onClick={e => { void handleExportMarkdown(e, session, 'full'); }}
                             data-testid="nav-session-menu-export-full"
                             data-session-id={session.sessionId}
@@ -1400,7 +1400,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                           </button>
                           <button
                             type="button"
-                            className="bitfun-nav-panel__inline-item-menu-item"
+                            className="halo-nav-panel__inline-item-menu-item"
                             onClick={e => { void handleExportMarkdown(e, session, 'result'); }}
                             data-testid="nav-session-menu-export-result"
                             data-session-id={session.sessionId}
@@ -1413,7 +1413,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                         <>
                           <button
                             type="button"
-                            className="bitfun-nav-panel__inline-item-menu-item"
+                            className="halo-nav-panel__inline-item-menu-item"
                             onClick={e => { closeSessionMenu(); handleStartEdit(e, session); }}
                             data-testid="nav-session-menu-rename"
                             data-session-id={session.sessionId}
@@ -1423,7 +1423,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                           </button>
                           <button
                             type="button"
-                            className="bitfun-nav-panel__inline-item-menu-item"
+                            className="halo-nav-panel__inline-item-menu-item"
                             onClick={e => { closeSessionMenu(); void handleCopySessionId(e, session.sessionId); }}
                             data-testid="nav-session-menu-copy-id"
                             data-session-id={session.sessionId}
@@ -1433,7 +1433,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                           </button>
                           <button
                             type="button"
-                            className="bitfun-nav-panel__inline-item-menu-item"
+                            className="halo-nav-panel__inline-item-menu-item"
                             onClick={e => {
                               e.stopPropagation();
                               setIsExportScopeMenu(true);
@@ -1443,13 +1443,13 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                             data-session-id={session.sessionId}
                           >
                             {exportingSessionId === session.sessionId
-                              ? <Loader2 size={13} className="bitfun-nav-panel__inline-toggle-spinner" />
+                              ? <Loader2 size={13} className="halo-nav-panel__inline-toggle-spinner" />
                               : <FileDown size={13} />}
                             <span>{t('nav.sessions.exportMarkdown')}</span>
                           </button>
                           <button
                             type="button"
-                            className="bitfun-nav-panel__inline-item-menu-item"
+                            className="halo-nav-panel__inline-item-menu-item"
                             onClick={e => {
                               e.stopPropagation();
                               closeSessionMenu();
@@ -1464,7 +1464,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                           </button>
                           <button
                             type="button"
-                            className="bitfun-nav-panel__inline-item-menu-item"
+                            className="halo-nav-panel__inline-item-menu-item"
                             onClick={e => { closeSessionMenu(); void handleArchive(e, session.sessionId); }}
                             data-testid="nav-session-menu-archive"
                             data-session-id={session.sessionId}
@@ -1474,7 +1474,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                           </button>
                           <button
                             type="button"
-                            className="bitfun-nav-panel__inline-item-menu-item is-danger"
+                            className="halo-nav-panel__inline-item-menu-item is-danger"
                             onClick={e => { closeSessionMenu(); void handleDelete(e, session.sessionId); }}
                             data-testid="nav-session-menu-delete"
                             data-session-id={session.sessionId}
@@ -1501,11 +1501,11 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
       {expandLevel === 2 && topLevelSessions.length > sessionDisplayLimit && (
         <button
           type="button"
-          className="bitfun-nav-panel__inline-toggle"
+          className="halo-nav-panel__inline-toggle"
           data-testid="nav-session-list-load-more"
           onClick={() => setLevel2DisplayCount(prev => prev + SESSIONS_LEVEL_2_PAGE)}
         >
-          <span className="bitfun-nav-panel__inline-toggle-dots">···</span>
+          <span className="halo-nav-panel__inline-toggle-dots">···</span>
           <span>
             {t('nav.sessions.showMore', {
               count: topLevelSessions.length - sessionDisplayLimit,
@@ -1517,7 +1517,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
       {expandToggleState.shouldRender && (
         <button
           type="button"
-          className={`bitfun-nav-panel__inline-toggle${metadataPageState.isLoading ? ' is-loading' : ''}`}
+          className={`halo-nav-panel__inline-toggle${metadataPageState.isLoading ? ' is-loading' : ''}`}
           data-testid="nav-session-list-toggle"
           data-session-nav-toggle-action={expandToggleState.action}
           disabled={metadataPageState.isLoading}
@@ -1526,9 +1526,9 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
           {expandLevel === 0 ? (
             <>
               {metadataPageState.isLoading ? (
-                <Loader2 size={12} className="bitfun-nav-panel__inline-toggle-spinner" />
+                <Loader2 size={12} className="halo-nav-panel__inline-toggle-spinner" />
               ) : (
-                <span className="bitfun-nav-panel__inline-toggle-dots">···</span>
+                <span className="halo-nav-panel__inline-toggle-dots">···</span>
               )}
               <span>
                 {t('nav.sessions.showMore', {
@@ -1539,9 +1539,9 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
           ) : expandLevel === 1 && expandToggleState.expandedRemainingCount > 0 ? (
             <>
               {metadataPageState.isLoading ? (
-                <Loader2 size={12} className="bitfun-nav-panel__inline-toggle-spinner" />
+                <Loader2 size={12} className="halo-nav-panel__inline-toggle-spinner" />
               ) : (
-                <span className="bitfun-nav-panel__inline-toggle-dots">···</span>
+                <span className="halo-nav-panel__inline-toggle-dots">···</span>
               )}
               <span>
                 {t('nav.sessions.showAll', {

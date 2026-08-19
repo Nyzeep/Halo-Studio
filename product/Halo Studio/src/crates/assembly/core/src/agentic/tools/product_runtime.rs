@@ -13,8 +13,8 @@ mod materialization;
 mod snapshot;
 
 use crate::agentic::tools::registry::{ProductToolDecoratorRef, ToolRegistry};
-use bitfun_agent_tools::SnapshotToolDecorator;
-use bitfun_product_capabilities::{
+use halo_agent_tools::SnapshotToolDecorator;
+use halo_product_capabilities::{
     product_assembly_plan_for_profile, DeliveryProfile, ProductAssemblyPlan,
 };
 use materialization::create_product_tool_registry_from_plan;
@@ -89,7 +89,7 @@ impl ProductToolRuntime {
 mod tests {
     use super::ProductToolRuntime;
     use crate::agentic::tools::registry::create_tool_registry;
-    use bitfun_product_capabilities::{product_assembly_plan_for_profile, DeliveryProfile};
+    use halo_product_capabilities::{product_assembly_plan_for_profile, DeliveryProfile};
 
     #[test]
     fn product_tool_runtime_owner_preserves_registry_contract() {

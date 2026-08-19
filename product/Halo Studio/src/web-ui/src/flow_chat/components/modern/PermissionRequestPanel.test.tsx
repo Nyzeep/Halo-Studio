@@ -66,7 +66,7 @@ function request(delegated: boolean): PermissionRequest {
     order: 0,
     sessionId: delegated ? 'child-session' : 'parent-session',
     toolCallId: delegated ? 'child-tool' : 'direct-tool',
-    projectPath: '/workspace/BitFun',
+    projectPath: '/workspace/Halo',
     projectId: 'project-1',
     agentId: delegated ? 'Explore' : 'agentic',
     action: 'edit',
@@ -132,7 +132,7 @@ describe('PermissionRequestPanel', () => {
     expect(container.textContent).not.toContain('subagent');
     const tooltips = [...container.querySelectorAll('[data-tooltip]')]
       .map((node) => node.getAttribute('data-tooltip'));
-    expect(tooltips).toContain('Always allow saves matching access for /workspace/BitFun');
+    expect(tooltips).toContain('Always allow saves matching access for /workspace/Halo');
     expect(tooltips).not.toContain('project-1');
   });
 

@@ -1,4 +1,4 @@
-use bitfun_product_domains::canvas::types::{
+use halo_product_domains::canvas::types::{
     CanvasDiagnostic, CanvasDiagnosticCategory, CanvasDiagnosticSeverity,
 };
 

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use bitfun_events::{
+use halo_events::{
     BackgroundCommandLifecycleInfo, EventEmitter, ToolExecutionProgressInfo, ToolTerminalReadyInfo,
 };
 use log::{error, trace, warn};
@@ -108,7 +108,7 @@ pub async fn emit_global_event(event: BackendEvent) -> Result<()> {
 mod tests {
     use super::{BackendEvent, BackendEventSystem};
     use async_trait::async_trait;
-    use bitfun_events::{
+    use halo_events::{
         BackgroundCommandLifecycleInfo, EventEmitter, ToolExecutionProgressInfo,
         ToolTerminalReadyInfo,
     };

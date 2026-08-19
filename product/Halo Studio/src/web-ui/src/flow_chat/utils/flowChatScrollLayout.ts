@@ -3,7 +3,7 @@
  * Keep footer spacer and overlay controls aligned on the same geometric model.
  */
 
-/** Matches `.bitfun-chat-input-drop-zone { bottom: … }` — viewport inset under workspace strip. */
+/** Matches `.halo-chat-input-drop-zone { bottom: … }` — viewport inset under workspace strip. */
 export const CHAT_INPUT_DROP_ZONE_BOTTOM_PX = 4;
 
 /** Space between the top edge of the input block and the end of scroll content */

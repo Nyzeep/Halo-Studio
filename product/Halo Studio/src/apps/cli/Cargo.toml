@@ -1,32 +1,32 @@
 [package]
-name = "bitfun-cli"
+name = "halo-cli"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "BitFun CLI - Terminal User Interface"
-default-run = "bitfun"
+description = "Halo CLI - Terminal User Interface"
+default-run = "halo"
 autobins = false
 
 [[bin]]
-name = "bitfun"
+name = "halo"
 path = "src/main.rs"
 
 [[bin]]
-name = "bitfun-cli"
-path = "src/bin/bitfun_cli_compat.rs"
+name = "halo-cli"
+path = "src/bin/halo_cli_compat.rs"
 
 [dependencies]
 # Internal crates
-bitfun-core = { path = "../../crates/assembly/core", default-features = false, features = ["product-full"] }
-bitfun-events = { path = "../../crates/contracts/events" }
-bitfun-acp = { path = "../../crates/interfaces/acp" }
-bitfun-agent-runtime = { path = "../../crates/execution/agent-runtime" }
-bitfun-agent-runtime-ipc = { path = "../../crates/adapters/agent-runtime-ipc" }
-bitfun-runtime-ports = { path = "../../crates/contracts/runtime-ports" }
-bitfun-runtime-services = { path = "../../crates/execution/runtime-services" }
-bitfun-services-core = { path = "../../crates/services/services-core", default-features = false, features = ["runtime-ownership"] }
-bitfun-agent-tools = { path = "../../crates/execution/tool-contracts" }
-bitfun-product-domains = { path = "../../crates/contracts/product-domains", default-features = false, features = ["external-sources"] }
+halo-core = { path = "../../crates/assembly/core", default-features = false, features = ["product-full"] }
+halo-events = { path = "../../crates/contracts/events" }
+halo-acp = { path = "../../crates/interfaces/acp" }
+halo-agent-runtime = { path = "../../crates/execution/agent-runtime" }
+halo-agent-runtime-ipc = { path = "../../crates/adapters/agent-runtime-ipc" }
+halo-runtime-ports = { path = "../../crates/contracts/runtime-ports" }
+halo-runtime-services = { path = "../../crates/execution/runtime-services" }
+halo-services-core = { path = "../../crates/services/services-core", default-features = false, features = ["runtime-ownership"] }
+halo-agent-tools = { path = "../../crates/execution/tool-contracts" }
+halo-product-domains = { path = "../../crates/contracts/product-domains", default-features = false, features = ["external-sources"] }
 
 # CLI framework
 clap = { workspace = true }

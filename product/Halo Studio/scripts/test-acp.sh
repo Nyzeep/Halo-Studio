@@ -1,13 +1,13 @@
 #!/bin/bash
-# Test script for BitFun ACP server
+# Test script for Halo ACP server
 # This script demonstrates basic ACP protocol interaction
 
-echo "=== BitFun ACP Server Test ==="
+echo "=== Halo ACP Server Test ==="
 echo ""
 
-BINARY="${BITFUN_CLI:-target/debug/bitfun}"
+BINARY="${HALO_CLI:-target/debug/halo}"
 WORKSPACE="/tmp/test-acp"
-PIPE_DIR="$(mktemp -d /tmp/bitfun-acp-test-sh.XXXXXX)"
+PIPE_DIR="$(mktemp -d /tmp/halo-acp-test-sh.XXXXXX)"
 ACP_IN="$PIPE_DIR/in"
 ACP_OUT="$PIPE_DIR/out"
 mkdir -p "$WORKSPACE"

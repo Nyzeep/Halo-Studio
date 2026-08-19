@@ -2,7 +2,7 @@
 // light/dark flash without requiring an inline script under the mobile CSP.
 let initialTheme = 'dark';
 try {
-  const savedTheme = localStorage.getItem('bitfun-mobile-theme');
+  const savedTheme = localStorage.getItem('halo-mobile-theme');
   if (savedTheme === 'dark' || savedTheme === 'light') {
     initialTheme = savedTheme;
   }

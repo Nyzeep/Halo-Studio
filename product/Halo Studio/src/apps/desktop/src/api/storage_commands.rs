@@ -1,7 +1,7 @@
 //! Storage Management API
 
 use crate::api::AppState;
-use bitfun_core::infrastructure::storage::{CleanupPolicy, CleanupResult, CleanupService};
+use halo_core::infrastructure::storage::{CleanupPolicy, CleanupResult, CleanupService};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::State;

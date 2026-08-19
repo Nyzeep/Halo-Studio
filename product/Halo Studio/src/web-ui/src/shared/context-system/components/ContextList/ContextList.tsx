@@ -46,13 +46,13 @@ export const ContextList: React.FC<ContextListProps> = ({
   
   if (contexts.length === 0) {
     return (
-      <div className={`bitfun-context-list bitfun-context-list--empty ${className}`}>
-        <div className="bitfun-context-list__empty-state">
-          <AlertCircle size={24} className="bitfun-context-list__empty-icon" />
-          <p className="bitfun-context-list__empty-text">
+      <div className={`halo-context-list halo-context-list--empty ${className}`}>
+        <div className="halo-context-list__empty-state">
+          <AlertCircle size={24} className="halo-context-list__empty-icon" />
+          <p className="halo-context-list__empty-text">
             {t('contextSystem.contextList.emptyTitle')}
           </p>
-          <p className="bitfun-context-list__empty-hint">
+          <p className="halo-context-list__empty-hint">
             {t('contextSystem.contextList.emptyHint')}
           </p>
         </div>
@@ -61,18 +61,18 @@ export const ContextList: React.FC<ContextListProps> = ({
   }
   
   return (
-    <div className={`bitfun-context-list ${className}`}>
+    <div className={`halo-context-list ${className}`}>
       
-      <div className="bitfun-context-list__header">
-        <div className="bitfun-context-list__title">
+      <div className="halo-context-list__header">
+        <div className="halo-context-list__title">
           {t('contextSystem.contextList.title')}
-          <span className="bitfun-context-list__count">
+          <span className="halo-context-list__count">
             {contexts.length}
           </span>
         </div>
         
         <button
-          className="bitfun-context-list__clear-btn"
+          className="halo-context-list__clear-btn"
           onClick={handleClearAll}
           title={t('contextSystem.contextList.clearAllTitle')}
         >
@@ -83,13 +83,13 @@ export const ContextList: React.FC<ContextListProps> = ({
       
       
       <div 
-        className="bitfun-context-list__items"
+        className="halo-context-list__items"
         style={{ maxHeight }}
       >
         {contexts.map((context) => (
           <div
             key={context.id}
-            className="bitfun-context-list__item"
+            className="halo-context-list__item"
             onClick={() => handleCardClick(context.id)}
           >
             <ContextCard

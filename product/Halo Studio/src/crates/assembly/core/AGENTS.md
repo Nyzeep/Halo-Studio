@@ -9,7 +9,7 @@ repository-wide rules and the nearest narrower guide when one exists.
 
 ## Role
 
-`bitfun-core` is the shared product runtime facade. It still owns compatibility
+`halo-core` is the shared product runtime facade. It still owns compatibility
 paths and the `product-full` assembly boundary, but new decomposition work should
 prefer the owner crates described in `docs/architecture/product-architecture.md`
 and `docs/architecture/agent-runtime-services-design.md`.
@@ -31,7 +31,7 @@ SessionManager -> Session -> DialogTurn -> ModelRound
 
 - Keep shared core platform-agnostic. Avoid host-specific APIs such as
   `tauri::AppHandle`; use shared abstractions such as
-  `bitfun_events::EventEmitter`.
+  `halo_events::EventEmitter`.
 - Desktop-only host adapters belong in `src/apps/desktop`, then flow through
   typed capability interfaces; use the production transport adapter when event
   delivery is needed.
@@ -44,7 +44,7 @@ SessionManager -> Session -> DialogTurn -> ModelRound
 
 ## Decomposition Rules
 
-- Treat `bitfun-core` as a compatibility facade plus full product assembly point,
+- Treat `halo-core` as a compatibility facade plus full product assembly point,
   not as the preferred home for new stable contracts.
 - Put stable DTOs, facts, ports, and pure decisions in the matching owner crate
   where a clear owner exists. Keep concrete managers, IO, platform adapters, and
@@ -107,7 +107,7 @@ Use the smallest check that matches the touched behavior:
 
 ```bash
 cargo check --workspace
-cargo test -p bitfun-core <test_name> -- --nocapture
+cargo test -p halo-core <test_name> -- --nocapture
 node scripts/check-core-boundaries.mjs
 ```
 

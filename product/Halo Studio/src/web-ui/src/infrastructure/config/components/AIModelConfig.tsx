@@ -71,7 +71,7 @@ interface SubscriptionLogoutRequest {
 }
 
 const SUBSCRIPTION_LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
-const SUBSCRIPTION_MIGRATION_NOTICE_KEY = 'bitfun.subscription-auth.secure-store-notice.v1';
+const SUBSCRIPTION_MIGRATION_NOTICE_KEY = 'halo.subscription-auth.secure-store-notice.v1';
 
 function subscriptionLoginCancelledError(): Error {
   const error = new Error('Login cancelled');
@@ -1853,14 +1853,14 @@ const AIModelConfig: React.FC = () => {
   
   if (creationMode === 'selection') {
     return (
-      <ConfigPageLayout className="bitfun-ai-model-config">
+      <ConfigPageLayout className="halo-ai-model-config">
         <ConfigPageHeader
           title={t('providerSelection.title')}
           subtitle={t('providerSelection.subtitle')}
         />
 
-        <ConfigPageContent className="bitfun-ai-model-config__content bitfun-ai-model-config__content--selection">
-          <div className="bitfun-ai-model-config__provider-selection">
+        <ConfigPageContent className="halo-ai-model-config__content halo-ai-model-config__content--selection">
+          <div className="halo-ai-model-config__provider-selection">
             
             <Card
               data-testid="settings-model-custom-config-btn"
@@ -1868,25 +1868,25 @@ const AIModelConfig: React.FC = () => {
               variant="default"
               padding="medium"
               interactive
-              className="bitfun-ai-model-config__custom-option"
+              className="halo-ai-model-config__custom-option"
               onClick={handleSelectCustom}
             >
-              <div className="bitfun-ai-model-config__custom-option-content">
+              <div className="halo-ai-model-config__custom-option-content">
                 <Settings size={24} />
                 <div>
-                  <div className="bitfun-ai-model-config__custom-option-title">{t('providerSelection.customTitle')}</div>
-                  <div className="bitfun-ai-model-config__custom-option-description">{t('providerSelection.customDescription')}</div>
+                  <div className="halo-ai-model-config__custom-option-title">{t('providerSelection.customTitle')}</div>
+                  <div className="halo-ai-model-config__custom-option-description">{t('providerSelection.customDescription')}</div>
                 </div>
               </div>
             </Card>
 
             
-            <div className="bitfun-ai-model-config__selection-divider">
+            <div className="halo-ai-model-config__selection-divider">
               <span>{t('providerSelection.orSelectProvider')}</span>
             </div>
 
             
-            <div className="bitfun-ai-model-config__provider-grid">
+            <div className="halo-ai-model-config__provider-grid">
               {providers.map(provider => (
                 <Card
                   key={provider.id}
@@ -1895,18 +1895,18 @@ const AIModelConfig: React.FC = () => {
                   variant="default"
                   padding="medium"
                   interactive
-                  className="bitfun-ai-model-config__provider-card"
+                  className="halo-ai-model-config__provider-card"
                   onClick={() => handleSelectProvider(provider.id)}
                 >
-                  <div className="bitfun-ai-model-config__provider-card-content">
-                    <div className="bitfun-ai-model-config__provider-name">{provider.name}</div>
-                    <div className="bitfun-ai-model-config__provider-description">{provider.description}</div>
-                    <div className="bitfun-ai-model-config__provider-models">
+                  <div className="halo-ai-model-config__provider-card-content">
+                    <div className="halo-ai-model-config__provider-name">{provider.name}</div>
+                    <div className="halo-ai-model-config__provider-description">{provider.description}</div>
+                    <div className="halo-ai-model-config__provider-models">
                       {provider.models.slice(0, 3).map(model => (
-                        <span key={model} className="bitfun-ai-model-config__provider-model-tag">{model}</span>
+                        <span key={model} className="halo-ai-model-config__provider-model-tag">{model}</span>
                       ))}
                       {provider.models.length > 3 && (
-                        <span className="bitfun-ai-model-config__provider-model-tag bitfun-ai-model-config__provider-model-tag--more">
+                        <span className="halo-ai-model-config__provider-model-tag halo-ai-model-config__provider-model-tag--more">
                           +{provider.models.length - 3}
                         </span>
                       )}
@@ -1916,7 +1916,7 @@ const AIModelConfig: React.FC = () => {
                         href={provider.helpUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="bitfun-ai-model-config__provider-help-link"
+                        className="halo-ai-model-config__provider-help-link"
                         onClick={async (e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -1937,7 +1937,7 @@ const AIModelConfig: React.FC = () => {
             </div>
 
             
-            <div className="bitfun-ai-model-config__selection-actions">
+            <div className="halo-ai-model-config__selection-actions">
               <Button variant="secondary" onClick={() => setCreationMode(null)}>
                 {t('actions.cancel')}
               </Button>
@@ -2011,8 +2011,8 @@ const AIModelConfig: React.FC = () => {
         .join(', ');
 
       return (
-        <span className="select__value bitfun-ai-model-config__model-picker-value">
-          <span className="select__value-label bitfun-ai-model-config__model-picker-value-text">
+        <span className="select__value halo-ai-model-config__model-picker-value">
+          <span className="select__value-label halo-ai-model-config__model-picker-value-text">
             {summaryText}
           </span>
         </span>
@@ -2022,7 +2022,7 @@ const AIModelConfig: React.FC = () => {
     const apiKeySuffix = (
       <button
         type="button"
-        className="bitfun-ai-model-config__input-visibility-toggle"
+        className="halo-ai-model-config__input-visibility-toggle"
         onClick={() => setShowApiKey(prev => !prev)}
         aria-label={apiKeyVisibilityLabel}
         title={apiKeyVisibilityLabel}
@@ -2078,7 +2078,7 @@ const AIModelConfig: React.FC = () => {
       if (selectedModelDrafts.length === 0) {
         return (
           <div
-            className="bitfun-ai-model-config__selected-models-empty"
+            className="halo-ai-model-config__selected-models-empty"
             data-testid="settings-model-selected-list-empty"
             data-selected-count="0"
           >
@@ -2089,7 +2089,7 @@ const AIModelConfig: React.FC = () => {
 
       return (
         <div
-          className="bitfun-ai-model-config__selected-models-list"
+          className="halo-ai-model-config__selected-models-list"
           data-testid="settings-model-selected-list"
           data-selected-count={selectedModelDrafts.length}
         >
@@ -2123,7 +2123,7 @@ const AIModelConfig: React.FC = () => {
             return (
               <div
                 key={draft.key}
-                className="bitfun-ai-model-config__selected-model-row"
+                className="halo-ai-model-config__selected-model-row"
                 data-testid="settings-model-selected-row"
                 data-model-id={draft.modelName}
                 data-model-name={draft.modelName}
@@ -2132,8 +2132,8 @@ const AIModelConfig: React.FC = () => {
               >
                 <div
                   className={[
-                    'bitfun-ai-model-config__selected-model-head',
-                    canToggleExpand && 'bitfun-ai-model-config__selected-model-head--toggleable',
+                    'halo-ai-model-config__selected-model-head',
+                    canToggleExpand && 'halo-ai-model-config__selected-model-head--toggleable',
                   ].filter(Boolean).join(' ')}
                   onClick={canToggleExpand ? () => toggleSelectedModelCardExpanded(draft.key) : undefined}
                   onKeyDown={canToggleExpand ? (e) => onSelectedModelHeadKeyDown(e, draft.key) : undefined}
@@ -2151,12 +2151,12 @@ const AIModelConfig: React.FC = () => {
                       : undefined
                   }
                 >
-                  <div className="bitfun-ai-model-config__selected-model-head-title">
-                    <div className="bitfun-ai-model-config__selected-model-head-top">
-                      <div className="bitfun-ai-model-config__selected-model-toggle">
+                  <div className="halo-ai-model-config__selected-model-head-title">
+                    <div className="halo-ai-model-config__selected-model-head-top">
+                      <div className="halo-ai-model-config__selected-model-toggle">
                         {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       </div>
-                      <div className="bitfun-ai-model-config__selected-model-name">{modelDisplayName}</div>
+                      <div className="halo-ai-model-config__selected-model-name">{modelDisplayName}</div>
                     </div>
                     {!editingConfig.id && (
                       <IconButton
@@ -2165,7 +2165,7 @@ const AIModelConfig: React.FC = () => {
                         data-model-name={draft.modelName}
                         variant="ghost"
                         size="small"
-                        className="bitfun-ai-model-config__selected-model-remove"
+                        className="halo-ai-model-config__selected-model-remove"
                         onClick={(e) => {
                           e.stopPropagation();
                           removeSelectedModelDraft(draft.modelName);
@@ -2177,8 +2177,8 @@ const AIModelConfig: React.FC = () => {
                     )}
                   </div>
                   {!isExpanded && (
-                    <div className="bitfun-ai-model-config__selected-model-head-bottom">
-                      <span className="bitfun-ai-model-config__selected-model-summary">
+                    <div className="halo-ai-model-config__selected-model-head-bottom">
+                      <span className="halo-ai-model-config__selected-model-summary">
                         {categoryLabel}
                         {' · '}
                         {formatTokenCountShort(draft.contextWindow)} ctx
@@ -2189,15 +2189,15 @@ const AIModelConfig: React.FC = () => {
                   )}
                 </div>
                 {isExpanded && (
-                  <div className="bitfun-ai-model-config__selected-model-grid">
-                    <div className="bitfun-ai-model-config__selected-model-field">
+                  <div className="halo-ai-model-config__selected-model-grid">
+                    <div className="halo-ai-model-config__selected-model-field">
                       <span>{t('category.label')}</span>
                       <Select
                         value={draft.category}
                         onChange={(value) => updateModelDraft(draft.modelName, { category: value as ModelCategory })}
                         options={categoryOptions}
                         size="small"
-                        className="bitfun-ai-model-config__selected-model-category-select"
+                        className="halo-ai-model-config__selected-model-category-select"
                         renderValue={(option) => {
                           if (!option || Array.isArray(option)) {
                             return null;
@@ -2213,7 +2213,7 @@ const AIModelConfig: React.FC = () => {
                         }}
                       />
                     </div>
-                    <div className="bitfun-ai-model-config__selected-model-field">
+                    <div className="halo-ai-model-config__selected-model-field">
                       <span>{t('form.contextWindow')}</span>
                       <NumberInput
                         value={draft.contextWindow}
@@ -2226,7 +2226,7 @@ const AIModelConfig: React.FC = () => {
                       />
                     </div>
                     {showReasoningModeControl && (
-                      <div className="bitfun-ai-model-config__selected-model-field">
+                      <div className="halo-ai-model-config__selected-model-field">
                         <span>{t('thinking.mode')}</span>
                         <Select
                           value={supportsDeepSeekEffort ? getDeepSeekReasoningModeSelectValue(draft) : draft.reasoningMode}
@@ -2242,7 +2242,7 @@ const AIModelConfig: React.FC = () => {
                       </div>
                     )}
                     {showReasoningEffortControl && (
-                      <div className="bitfun-ai-model-config__selected-model-field">
+                      <div className="halo-ai-model-config__selected-model-field">
                         <span>{t('reasoningEffort.label')}</span>
                         <Select
                           value={draft.reasoningEffort || ''}
@@ -2254,7 +2254,7 @@ const AIModelConfig: React.FC = () => {
                       </div>
                     )}
                     {showThinkingBudgetControl && (
-                      <div className="bitfun-ai-model-config__selected-model-field">
+                      <div className="halo-ai-model-config__selected-model-field">
                         <span>{t('thinking.budgetTokens')}</span>
                         <NumberInput
                           value={displayedThinkingBudget}
@@ -2295,7 +2295,7 @@ const AIModelConfig: React.FC = () => {
 
     const renderAuthRow = () => (
       <ConfigPageRow label={t('subscriptionAuth.label')} align={authIsSubscription ? 'start' : 'center'} wide>
-        <div className="bitfun-ai-model-config__control-stack">
+        <div className="halo-ai-model-config__control-stack">
           <Select
             value={authSelectValue}
             onChange={(value) => {
@@ -2315,8 +2315,8 @@ const AIModelConfig: React.FC = () => {
           />
           {authIsSubscription && (
             <small className={matchedSubscription?.connected
-              ? 'resolved-url__hint bitfun-ai-model-config__cli-auth-hint'
-              : 'resolved-url__hint bitfun-ai-model-config__cli-auth-hint bitfun-ai-model-config__json-status--error'}
+              ? 'resolved-url__hint halo-ai-model-config__cli-auth-hint'
+              : 'resolved-url__hint halo-ai-model-config__cli-auth-hint halo-ai-model-config__json-status--error'}
             >
               {matchedSubscription?.connected
                 ? t('subscriptionAuth.detected', {
@@ -2351,11 +2351,11 @@ const AIModelConfig: React.FC = () => {
 
     return (
       <>
-        <div className="bitfun-ai-model-config__form bitfun-ai-model-config__form--modal">
-          <div className="bitfun-ai-model-config__form-scrollable">
+        <div className="halo-ai-model-config__form halo-ai-model-config__form--modal">
+          <div className="halo-ai-model-config__form-scrollable">
             <ConfigPageSection
               title={isProviderScopedEditing ? t('editProviderSubtitle') : t('editSubtitle')}
-              className="bitfun-ai-model-config__edit-section"
+              className="halo-ai-model-config__edit-section"
             >
             {isFromTemplate ? (
               <>
@@ -2365,7 +2365,7 @@ const AIModelConfig: React.FC = () => {
                 {renderAuthRow()}
                 {!authIsSubscription && renderApiKeyRow(`${t('form.apiKey')} *`)}
                 <ConfigPageRow label={t('form.baseUrl')} align="center" wide>
-                  <div className="bitfun-ai-model-config__control-stack">
+                  <div className="halo-ai-model-config__control-stack">
                     {currentTemplate?.baseUrlOptions && currentTemplate.baseUrlOptions.length > 0 && (
                       <Select
                         value={currentTemplate.baseUrlOptions.some(opt => opt.url === editingConfig.base_url) ? editingConfig.base_url : ''}
@@ -2411,13 +2411,13 @@ const AIModelConfig: React.FC = () => {
                       inputSize="small"
                     />
                     {editingConfig.base_url && (
-                      <div className="bitfun-ai-model-config__resolved-url">
+                      <div className="halo-ai-model-config__resolved-url">
                         <Input
                           value={previewRequestUrl(editingConfig.base_url, editingConfig.provider || 'openai')}
                           readOnly
                           onFocus={(e) => e.target.select()}
                           inputSize="small"
-                          className="bitfun-ai-model-config__resolved-url-input"
+                          className="halo-ai-model-config__resolved-url-input"
                         />
                       </div>
                     )}
@@ -2449,8 +2449,8 @@ const AIModelConfig: React.FC = () => {
                   />
                 </ConfigPageRow>
                 <ConfigPageRow label={`${t('form.modelSelection')} *`} wide multiline>
-                  <div className="bitfun-ai-model-config__control-stack">
-                    <div className="bitfun-ai-model-config__model-picker-row">
+                  <div className="halo-ai-model-config__control-stack">
+                    <div className="halo-ai-model-config__model-picker-row">
                       <Select
                         data-testid="settings-model-select"
                         triggerTestId="settings-model-select-btn"
@@ -2472,10 +2472,10 @@ const AIModelConfig: React.FC = () => {
                         size="small"
                         onOpenChange={handleModelSelectionOpenChange}
                         renderValue={renderModelPickerValue}
-                        className={selectedModelValues.length > 0 ? 'bitfun-ai-model-config__model-picker-select bitfun-ai-model-config__model-picker-select--has-value' : 'bitfun-ai-model-config__model-picker-select'}
+                        className={selectedModelValues.length > 0 ? 'halo-ai-model-config__model-picker-select halo-ai-model-config__model-picker-select--has-value' : 'halo-ai-model-config__model-picker-select'}
                       />
                     </div>
-                    <div className="bitfun-ai-model-config__manual-model-entry">
+                    <div className="halo-ai-model-config__manual-model-entry">
                       <Input
                         data-testid="settings-model-manual-name-input"
                         value={manualModelInput}
@@ -2494,7 +2494,7 @@ const AIModelConfig: React.FC = () => {
                       </Button>
                     </div>
                     {modelFetchHint && (
-                      <small className={`resolved-url__hint ${remoteModelsError ? 'bitfun-ai-model-config__json-status--error' : ''}`}>
+                      <small className={`resolved-url__hint ${remoteModelsError ? 'halo-ai-model-config__json-status--error' : ''}`}>
                         {modelFetchHint}
                       </small>
                     )}
@@ -2512,7 +2512,7 @@ const AIModelConfig: React.FC = () => {
                     {renderAuthRow()}
                     {!authIsSubscription && renderApiKeyRow(`${t('form.apiKey')} *`)}
                     <ConfigPageRow label={`${t('form.baseUrl')} *`} align="center" wide>
-                      <div className="bitfun-ai-model-config__control-stack">
+                      <div className="halo-ai-model-config__control-stack">
                         <Input
                           data-testid="settings-model-base-url-input"
                           type="url"
@@ -2530,13 +2530,13 @@ const AIModelConfig: React.FC = () => {
                           inputSize="small"
                         />
                         {editingConfig.base_url && (
-                          <div className="bitfun-ai-model-config__resolved-url">
+                          <div className="halo-ai-model-config__resolved-url">
                             <Input
                               value={previewRequestUrl(editingConfig.base_url, editingConfig.provider || 'openai')}
                               readOnly
                               onFocus={(e) => e.target.select()}
                               inputSize="small"
-                              className="bitfun-ai-model-config__resolved-url-input"
+                              className="halo-ai-model-config__resolved-url-input"
                             />
                           </div>
                         )}
@@ -2568,8 +2568,8 @@ const AIModelConfig: React.FC = () => {
             {!isFromTemplate && (
               <>
                 <ConfigPageRow label={`${t('form.modelSelection')} *`} wide multiline>
-                  <div className="bitfun-ai-model-config__control-stack">
-                    <div className="bitfun-ai-model-config__model-picker-row">
+                  <div className="halo-ai-model-config__control-stack">
+                    <div className="halo-ai-model-config__model-picker-row">
                       <Select
                         data-testid="settings-model-select"
                         triggerTestId="settings-model-select-btn"
@@ -2594,7 +2594,7 @@ const AIModelConfig: React.FC = () => {
                         onOpenChange={handleModelSelectionOpenChange}
                       />
                     </div>
-                    <div className="bitfun-ai-model-config__manual-model-entry">
+                    <div className="halo-ai-model-config__manual-model-entry">
                       <Input
                         data-testid="settings-model-manual-name-input"
                         value={manualModelInput}
@@ -2613,7 +2613,7 @@ const AIModelConfig: React.FC = () => {
                       </Button>
                     </div>
                     {modelFetchHint && (
-                      <small className={`resolved-url__hint ${remoteModelsError ? 'bitfun-ai-model-config__json-status--error' : ''}`}>
+                      <small className={`resolved-url__hint ${remoteModelsError ? 'halo-ai-model-config__json-status--error' : ''}`}>
                         {modelFetchHint}
                       </small>
                     )}
@@ -2626,7 +2626,7 @@ const AIModelConfig: React.FC = () => {
 
           <ConfigPageSection
             title={t('advancedSettings.title')}
-            className="bitfun-ai-model-config__edit-section"
+            className="halo-ai-model-config__edit-section"
           >
             <ConfigPageRow label={t('advancedSettings.title')} align="center">
               <Switch checked={showAdvancedSettings} onChange={(e) => setShowAdvancedSettings(e.target.checked)} size="small" />
@@ -2639,7 +2639,7 @@ const AIModelConfig: React.FC = () => {
                     label={t('advancedSettings.inlineThinkInText.label')}
                     description={t('advancedSettings.inlineThinkInText.hint')}
                     align="center"
-                    className="bitfun-ai-model-config__toggle-row"
+                    className="halo-ai-model-config__toggle-row"
                   >
                     <Switch
                       checked={editingConfig.inline_think_in_text ?? true}
@@ -2651,13 +2651,13 @@ const AIModelConfig: React.FC = () => {
                 <ConfigPageRow
                   label={t('advancedSettings.skipSslVerify.label')}
                   description={editingConfig.skip_ssl_verify ? (
-                    <span className="bitfun-ai-model-config__warning-inline">
+                    <span className="halo-ai-model-config__warning-inline">
                       <AlertTriangle size={14} />
                       <span>{t('advancedSettings.skipSslVerify.warning')}</span>
                     </span>
                   ) : undefined}
                   align="center"
-                  className="bitfun-ai-model-config__toggle-row"
+                  className="halo-ai-model-config__toggle-row"
                 >
                   <Switch
                     checked={editingConfig.skip_ssl_verify || false}
@@ -2667,12 +2667,12 @@ const AIModelConfig: React.FC = () => {
                 </ConfigPageRow>
                 <ConfigPageRow
                   label={(
-                    <span className="bitfun-ai-model-config__inline-header">
-                      <span className="bitfun-ai-model-config__inline-header-main">
+                    <span className="halo-ai-model-config__inline-header">
+                      <span className="halo-ai-model-config__inline-header-main">
                         <span>{t('advancedSettings.customHeaders.label')}</span>
                         <Tooltip
                           content={(
-                            <span className="bitfun-ai-model-config__header-tooltip">
+                            <span className="halo-ai-model-config__header-tooltip">
                               <span>{t('advancedSettings.customHeaders.hint')}</span>
                               <span>
                                 {(editingConfig.custom_headers_mode || 'merge') === 'replace'
@@ -2684,7 +2684,7 @@ const AIModelConfig: React.FC = () => {
                           placement="top"
                         >
                           <span
-                            className="bitfun-ai-model-config__inline-header-info"
+                            className="halo-ai-model-config__inline-header-info"
                             role="button"
                             tabIndex={0}
                             aria-label={t('advancedSettings.customHeaders.hint')}
@@ -2693,13 +2693,13 @@ const AIModelConfig: React.FC = () => {
                           </span>
                         </Tooltip>
                       </span>
-                      <span className="bitfun-ai-model-config__inline-header-actions">
+                      <span className="halo-ai-model-config__inline-header-actions">
                         <Tooltip content={t('advancedSettings.customHeaders.modeMergeHint')} placement="top">
                           <Button
                             type="button"
                             variant={(editingConfig.custom_headers_mode || 'merge') === 'merge' ? 'primary' : 'ghost'}
                             size="small"
-                            className="bitfun-ai-model-config__mode-button"
+                            className="halo-ai-model-config__mode-button"
                             onClick={() => setEditingConfig(prev => ({ ...prev, custom_headers_mode: 'merge' }))}
                           >
                             {t('advancedSettings.customHeaders.modeMerge')}
@@ -2710,7 +2710,7 @@ const AIModelConfig: React.FC = () => {
                             type="button"
                             variant={editingConfig.custom_headers_mode === 'replace' ? 'primary' : 'ghost'}
                             size="small"
-                            className="bitfun-ai-model-config__mode-button"
+                            className="halo-ai-model-config__mode-button"
                             onClick={() => setEditingConfig(prev => ({ ...prev, custom_headers_mode: 'replace' }))}
                           >
                             {t('advancedSettings.customHeaders.modeReplace')}
@@ -2720,29 +2720,29 @@ const AIModelConfig: React.FC = () => {
                     </span>
                   )}
                   multiline
-                  className="bitfun-ai-model-config__custom-headers-row"
+                  className="halo-ai-model-config__custom-headers-row"
                 >
-                  <div className="bitfun-ai-model-config__row-control--stack">
-                    <div className="bitfun-ai-model-config__custom-headers">
+                  <div className="halo-ai-model-config__row-control--stack">
+                    <div className="halo-ai-model-config__custom-headers">
                       {Object.entries(editingConfig.custom_headers || {}).map(([key, value], index) => (
-                        <div key={index} className="bitfun-ai-model-config__header-row">
-                          <Input value={key} onChange={(e) => { const nh = { ...editingConfig.custom_headers }; const ov = nh[key]; delete nh[key]; if (e.target.value) nh[e.target.value] = ov; setEditingConfig(prev => ({ ...prev, custom_headers: nh })); }} placeholder={t('advancedSettings.customHeaders.keyPlaceholder')} inputSize="small" className="bitfun-ai-model-config__header-key" />
-                          <Input value={value} onChange={(e) => { const nh = { ...editingConfig.custom_headers }; nh[key] = e.target.value; setEditingConfig(prev => ({ ...prev, custom_headers: nh })); }} placeholder={t('advancedSettings.customHeaders.valuePlaceholder')} inputSize="small" className="bitfun-ai-model-config__header-value" />
+                        <div key={index} className="halo-ai-model-config__header-row">
+                          <Input value={key} onChange={(e) => { const nh = { ...editingConfig.custom_headers }; const ov = nh[key]; delete nh[key]; if (e.target.value) nh[e.target.value] = ov; setEditingConfig(prev => ({ ...prev, custom_headers: nh })); }} placeholder={t('advancedSettings.customHeaders.keyPlaceholder')} inputSize="small" className="halo-ai-model-config__header-key" />
+                          <Input value={value} onChange={(e) => { const nh = { ...editingConfig.custom_headers }; nh[key] = e.target.value; setEditingConfig(prev => ({ ...prev, custom_headers: nh })); }} placeholder={t('advancedSettings.customHeaders.valuePlaceholder')} inputSize="small" className="halo-ai-model-config__header-value" />
                           <IconButton variant="ghost" size="small" onClick={() => { const nh = { ...editingConfig.custom_headers }; delete nh[key]; setEditingConfig(prev => ({ ...prev, custom_headers: Object.keys(nh).length > 0 ? nh : undefined })); }} tooltip={t('actions.delete')}><X size={14} /></IconButton>
                         </div>
                       ))}
-                      <Button type="button" variant="secondary" size="small" onClick={() => setEditingConfig(prev => ({ ...prev, custom_headers: { ...prev?.custom_headers, '': '' } }))} className="bitfun-ai-model-config__add-header-btn"><Plus size={14} />{t('advancedSettings.customHeaders.addHeader')}</Button>
+                      <Button type="button" variant="secondary" size="small" onClick={() => setEditingConfig(prev => ({ ...prev, custom_headers: { ...prev?.custom_headers, '': '' } }))} className="halo-ai-model-config__add-header-btn"><Plus size={14} />{t('advancedSettings.customHeaders.addHeader')}</Button>
                     </div>
                   </div>
                 </ConfigPageRow>
                 <ConfigPageRow
                   label={(
-                    <span className="bitfun-ai-model-config__inline-header">
-                      <span className="bitfun-ai-model-config__inline-header-main">
+                    <span className="halo-ai-model-config__inline-header">
+                      <span className="halo-ai-model-config__inline-header-main">
                         <span>{t('advancedSettings.customRequestBody.label')}</span>
                         <Tooltip
                           content={(
-                            <span className="bitfun-ai-model-config__header-tooltip">
+                            <span className="halo-ai-model-config__header-tooltip">
                               <span>{t('advancedSettings.customRequestBody.hint')}</span>
                               <span>{getCustomRequestBodyModeHint(editingConfig.provider, editingConfig.custom_request_body_mode)}</span>
                             </span>
@@ -2750,7 +2750,7 @@ const AIModelConfig: React.FC = () => {
                           placement="top"
                         >
                           <span
-                            className="bitfun-ai-model-config__inline-header-info"
+                            className="halo-ai-model-config__inline-header-info"
                             role="button"
                             tabIndex={0}
                             aria-label={t('advancedSettings.customRequestBody.hint')}
@@ -2759,13 +2759,13 @@ const AIModelConfig: React.FC = () => {
                           </span>
                         </Tooltip>
                       </span>
-                      <span className="bitfun-ai-model-config__inline-header-actions">
+                      <span className="halo-ai-model-config__inline-header-actions">
                         <Tooltip content={t('advancedSettings.customRequestBody.modeMergeHint')} placement="top">
                           <Button
                             type="button"
                             variant={(editingConfig.custom_request_body_mode || 'merge') === 'merge' ? 'primary' : 'ghost'}
                             size="small"
-                            className="bitfun-ai-model-config__mode-button"
+                            className="halo-ai-model-config__mode-button"
                             onClick={() => setEditingConfig(prev => ({ ...prev, custom_request_body_mode: 'merge' }))}
                           >
                             {t('advancedSettings.customRequestBody.modeMerge')}
@@ -2776,7 +2776,7 @@ const AIModelConfig: React.FC = () => {
                             type="button"
                             variant={editingConfig.custom_request_body_mode === 'trim' ? 'primary' : 'ghost'}
                             size="small"
-                            className="bitfun-ai-model-config__mode-button"
+                            className="halo-ai-model-config__mode-button"
                             onClick={() => setEditingConfig(prev => ({ ...prev, custom_request_body_mode: 'trim' }))}
                           >
                             {t('advancedSettings.customRequestBody.modeTrim')}
@@ -2786,13 +2786,13 @@ const AIModelConfig: React.FC = () => {
                     </span>
                   )}
                   multiline
-                  className="bitfun-ai-model-config__custom-request-body-row"
+                  className="halo-ai-model-config__custom-request-body-row"
                 >
-                  <div className="bitfun-ai-model-config__row-control--stack">
+                  <div className="halo-ai-model-config__row-control--stack">
                     <Textarea value={editingConfig.custom_request_body || ''} onChange={(e) => setEditingConfig(prev => ({ ...prev, custom_request_body: e.target.value }))} placeholder={t('advancedSettings.customRequestBody.placeholder')} rows={8} style={{ fontFamily: 'var(--font-family-mono)', fontSize: '13px' }} />
                     {editingConfig.custom_request_body && editingConfig.custom_request_body.trim() !== '' && (() => {
-                      try { JSON.parse(editingConfig.custom_request_body); return <small className="bitfun-ai-model-config__json-status bitfun-ai-model-config__json-status--success">{t('advancedSettings.customRequestBody.validJson')}</small>; }
-                      catch { return <small className="bitfun-ai-model-config__json-status bitfun-ai-model-config__json-status--error">{t('advancedSettings.customRequestBody.invalidJson')}</small>; }
+                      try { JSON.parse(editingConfig.custom_request_body); return <small className="halo-ai-model-config__json-status halo-ai-model-config__json-status--success">{t('advancedSettings.customRequestBody.validJson')}</small>; }
+                      catch { return <small className="halo-ai-model-config__json-status halo-ai-model-config__json-status--error">{t('advancedSettings.customRequestBody.invalidJson')}</small>; }
                     })()}
                   </div>
                 </ConfigPageRow>
@@ -2801,7 +2801,7 @@ const AIModelConfig: React.FC = () => {
           </ConfigPageSection>
           </div>
 
-          <div className="bitfun-ai-model-config__form-actions bitfun-ai-model-config__form-actions--sticky">
+          <div className="halo-ai-model-config__form-actions halo-ai-model-config__form-actions--sticky">
             <Button variant="secondary" onClick={closeEditingModal}>{t('actions.cancel')}</Button>
             <Button data-testid="settings-model-save-btn" variant="primary" onClick={handleSave}>{t('actions.save')}</Button>
           </div>
@@ -2820,7 +2820,7 @@ const AIModelConfig: React.FC = () => {
 
     const badge = (
       <>
-        <span className="bitfun-ai-model-config__meta-tag">
+        <span className="halo-ai-model-config__meta-tag">
           {t(`category.${config.category}`)}
         </span>
         {testResult && (
@@ -2830,7 +2830,7 @@ const AIModelConfig: React.FC = () => {
             data-model-id={config.model_name}
             data-model-name={config.model_name}
             data-status={testResult.success ? 'success' : 'error'}
-            className={`bitfun-ai-model-config__status-dot ${testResult.success ? 'is-success' : 'is-error'}`}
+            className={`halo-ai-model-config__status-dot ${testResult.success ? 'is-success' : 'is-error'}`}
             title={testResult.message}
           />
         )}
@@ -2838,34 +2838,34 @@ const AIModelConfig: React.FC = () => {
     );
 
     const details = (
-      <div className="bitfun-ai-model-config__details">
-        <div className="bitfun-ai-model-config__details-section">
-          <div className="bitfun-ai-model-config__details-section-title">
+      <div className="halo-ai-model-config__details">
+        <div className="halo-ai-model-config__details-section">
+          <div className="halo-ai-model-config__details-section-title">
             {t('details.basicInfo')}
           </div>
-          <div className="bitfun-ai-model-config__details-grid">
-            <div className="bitfun-ai-model-config__details-item">
-              <span className="bitfun-ai-model-config__details-label">{t('form.configName')}</span>
-              <span className="bitfun-ai-model-config__details-value">{providerDisplayName}</span>
+          <div className="halo-ai-model-config__details-grid">
+            <div className="halo-ai-model-config__details-item">
+              <span className="halo-ai-model-config__details-label">{t('form.configName')}</span>
+              <span className="halo-ai-model-config__details-value">{providerDisplayName}</span>
             </div>
-            <div className="bitfun-ai-model-config__details-item">
-              <span className="bitfun-ai-model-config__details-label">{t('details.modelName')}</span>
-              <span className="bitfun-ai-model-config__details-value">{config.model_name}</span>
+            <div className="halo-ai-model-config__details-item">
+              <span className="halo-ai-model-config__details-label">{t('details.modelName')}</span>
+              <span className="halo-ai-model-config__details-value">{config.model_name}</span>
             </div>
-            <div className="bitfun-ai-model-config__details-item">
-              <span className="bitfun-ai-model-config__details-label">{t('details.contextWindow')}</span>
-              <span className="bitfun-ai-model-config__details-value">{config.context_window != null ? i18nService.formatNumber(config.context_window) : '128,000'}</span>
+            <div className="halo-ai-model-config__details-item">
+              <span className="halo-ai-model-config__details-label">{t('details.contextWindow')}</span>
+              <span className="halo-ai-model-config__details-value">{config.context_window != null ? i18nService.formatNumber(config.context_window) : '128,000'}</span>
             </div>
-            <div className="bitfun-ai-model-config__details-item bitfun-ai-model-config__details-item--wide">
-              <span className="bitfun-ai-model-config__details-label">{t('details.apiUrl')}</span>
-              <span className="bitfun-ai-model-config__details-value">{config.base_url}</span>
+            <div className="halo-ai-model-config__details-item halo-ai-model-config__details-item--wide">
+              <span className="halo-ai-model-config__details-label">{t('details.apiUrl')}</span>
+              <span className="halo-ai-model-config__details-value">{config.base_url}</span>
             </div>
             {config.capabilities && config.capabilities.length > 0 && (
-              <div className="bitfun-ai-model-config__details-item bitfun-ai-model-config__details-item--wide">
-                <span className="bitfun-ai-model-config__details-label">{t('details.capabilities')}</span>
-                <div className="bitfun-ai-model-config__details-tags">
+              <div className="halo-ai-model-config__details-item halo-ai-model-config__details-item--wide">
+                <span className="halo-ai-model-config__details-label">{t('details.capabilities')}</span>
+                <div className="halo-ai-model-config__details-tags">
                   {config.capabilities.map(capability => (
-                    <span key={capability} className="bitfun-ai-model-config__details-tag">
+                    <span key={capability} className="halo-ai-model-config__details-tag">
                       {t(`capabilities.${capability}`, { defaultValue: capability })}
                     </span>
                   ))}
@@ -2875,11 +2875,11 @@ const AIModelConfig: React.FC = () => {
           </div>
         </div>
         {testResult && (
-          <div className="bitfun-ai-model-config__details-section">
-            <div className="bitfun-ai-model-config__details-section-title">
+          <div className="halo-ai-model-config__details-section">
+            <div className="halo-ai-model-config__details-section-title">
               {t('actions.test')}
             </div>
-            <div className={`bitfun-ai-model-config__test-result ${testResult.success ? 'success' : 'error'}`}>
+            <div className={`halo-ai-model-config__test-result ${testResult.success ? 'success' : 'error'}`}>
               {testResult.message}
             </div>
           </div>
@@ -2943,11 +2943,11 @@ const AIModelConfig: React.FC = () => {
   };
 
   const streamTtftTimeoutLabel = (
-    <span className="bitfun-ai-model-config__inline-header-main">
+    <span className="halo-ai-model-config__inline-header-main">
       <span>{t('streamTtftTimeout.label')}</span>
       <Tooltip content={t('streamTtftTimeout.hint')} placement="top">
         <span
-          className="bitfun-ai-model-config__inline-header-info"
+          className="halo-ai-model-config__inline-header-info"
           role="button"
           tabIndex={0}
           aria-label={t('streamTtftTimeout.hint')}
@@ -2959,11 +2959,11 @@ const AIModelConfig: React.FC = () => {
   );
 
   const streamIdleTimeoutLabel = (
-    <span className="bitfun-ai-model-config__inline-header-main">
+    <span className="halo-ai-model-config__inline-header-main">
       <span>{t('streamIdleTimeout.label')}</span>
       <Tooltip content={t('streamIdleTimeout.hint')} placement="top">
         <span
-          className="bitfun-ai-model-config__inline-header-info"
+          className="halo-ai-model-config__inline-header-info"
           role="button"
           tabIndex={0}
           aria-label={t('streamIdleTimeout.hint')}
@@ -2976,13 +2976,13 @@ const AIModelConfig: React.FC = () => {
 
   
   return (
-    <ConfigPageLayout className="bitfun-ai-model-config">
+    <ConfigPageLayout className="halo-ai-model-config">
       <ConfigPageHeader
         title={t('title')}
         subtitle={t('subtitle')}
       />
 
-      <ConfigPageContent className="bitfun-ai-model-config__content">
+      <ConfigPageContent className="halo-ai-model-config__content">
         <ConfigPageSection
           title={tDefault('tabs.default')}
           description={tDefault('subtitle')}
@@ -3007,13 +3007,13 @@ const AIModelConfig: React.FC = () => {
               tooltip={t('subscriptionAuth.rescan')}
               disabled={isLoadingSubscriptions}
             >
-              <RefreshCw size={16} className={isLoadingSubscriptions ? 'bitfun-ai-model-config__spin' : ''} />
+              <RefreshCw size={16} className={isLoadingSubscriptions ? 'halo-ai-model-config__spin' : ''} />
             </IconButton>
           )}
         >
-          <div className="bitfun-ai-model-config__cli-discovery">
+          <div className="halo-ai-model-config__cli-discovery">
             {showSubscriptionMigrationNotice && (
-              <div className="bitfun-ai-model-config__subscription-migration-notice" role="status">
+              <div className="halo-ai-model-config__subscription-migration-notice" role="status">
                 <Info size={16} aria-hidden="true" />
                 <span>{t('subscriptionAuth.secureStoreMigrationNotice')}</span>
                 <Button
@@ -3064,15 +3064,15 @@ const AIModelConfig: React.FC = () => {
                     description={descriptionParts.map((part) => (
                       <span
                         key={part}
-                        className="bitfun-ai-model-config__cli-description-line"
+                        className="halo-ai-model-config__cli-description-line"
                       >
                         {part}
                       </span>
                     ))}
-                    className="bitfun-ai-model-config__cli-account"
+                    className="halo-ai-model-config__cli-account"
                     align="center"
                   >
-                    <div className="bitfun-ai-model-config__cli-actions">
+                    <div className="halo-ai-model-config__cli-actions">
                       {account.connected ? (
                         <>
                           <Button
@@ -3135,10 +3135,10 @@ const AIModelConfig: React.FC = () => {
 
                   {loginPanel && (
                     <div
-                      className={`bitfun-ai-model-config__subscription-login-panel bitfun-ai-model-config__subscription-login-panel--${loginPanel.status}`}
+                      className={`halo-ai-model-config__subscription-login-panel halo-ai-model-config__subscription-login-panel--${loginPanel.status}`}
                       role={loginPanel.status === 'failed' ? 'alert' : 'status'}
                     >
-                      <div className="bitfun-ai-model-config__subscription-login-summary">
+                      <div className="halo-ai-model-config__subscription-login-summary">
                         <strong>
                           {loginPanel.status === 'failed'
                             ? t('subscriptionAuth.loginNeedsRetry')
@@ -3155,14 +3155,14 @@ const AIModelConfig: React.FC = () => {
                       </div>
 
                       {loginPanel.status === 'pending' && loginPanel.userCode && (
-                        <div className="bitfun-ai-model-config__subscription-code">
+                        <div className="halo-ai-model-config__subscription-code">
                           <span>{t('subscriptionAuth.verificationCode')}</span>
                           <code>{loginPanel.userCode}</code>
                         </div>
                       )}
 
                       {(loginPanel.status === 'pending' || loginPanel.status === 'failed') && (
-                        <div className="bitfun-ai-model-config__subscription-login-actions">
+                        <div className="halo-ai-model-config__subscription-login-actions">
                           {loginPanel.status === 'pending' && loginPanel.userCode && (
                             <Button
                               size="small"
@@ -3202,7 +3202,7 @@ const AIModelConfig: React.FC = () => {
         </ConfigPageSection>
 
         <ConfigPageSection
-          className="bitfun-ai-model-config__models-section"
+          className="halo-ai-model-config__models-section"
           title={tDefault('tabs.models')}
           description={t('subtitle')}
           extra={(
@@ -3217,7 +3217,7 @@ const AIModelConfig: React.FC = () => {
           )}
         >
           {aiModels.length === 0 ? (
-            <div className="bitfun-ai-model-config__empty">
+            <div className="halo-ai-model-config__empty">
               <Wifi size={36} />
               <p>{t('empty.noModels')}</p>
               <Button data-testid="settings-model-create-first-config-btn" variant="primary" size="small" onClick={handleCreateNew}>
@@ -3226,18 +3226,18 @@ const AIModelConfig: React.FC = () => {
               </Button>
             </div>
           ) : (
-            <div className="bitfun-ai-model-config__collection" data-testid="settings-model-list">
+            <div className="halo-ai-model-config__collection" data-testid="settings-model-list">
               {providerGroups.map(group => (
-                <div key={group.key} className="bitfun-ai-model-config__provider-group">
-                  <div className="bitfun-ai-model-config__provider-group-header">
-                    <div className="bitfun-ai-model-config__provider-group-title">
+                <div key={group.key} className="halo-ai-model-config__provider-group">
+                  <div className="halo-ai-model-config__provider-group-header">
+                    <div className="halo-ai-model-config__provider-group-title">
                       <span>{group.providerName}</span>
-                      <span className="bitfun-ai-model-config__provider-group-count">{group.models.length}</span>
-                      <span className="bitfun-ai-model-config__meta-tag">
+                      <span className="halo-ai-model-config__provider-group-count">{group.models.length}</span>
+                      <span className="halo-ai-model-config__meta-tag">
                         {requestFormatLabelMap[group.models[0]?.provider || 'openai'] || (group.models[0]?.provider || 'openai')}
                       </span>
                     </div>
-                    <div className="bitfun-ai-model-config__provider-group-actions">
+                    <div className="halo-ai-model-config__provider-group-actions">
                       <IconButton
                         variant="ghost"
                         size="small"
@@ -3248,7 +3248,7 @@ const AIModelConfig: React.FC = () => {
                       </IconButton>
                     </div>
                   </div>
-                  <div className="bitfun-ai-model-config__provider-group-list">
+                  <div className="halo-ai-model-config__provider-group-list">
                     {group.models.map(config => renderModelCollectionItem(config))}
                   </div>
                 </div>
@@ -3376,7 +3376,7 @@ const AIModelConfig: React.FC = () => {
         size="small"
         closeOnOverlayClick={false}
       >
-        <div className="bitfun-ai-model-config__subscription-logout-confirm">
+        <div className="halo-ai-model-config__subscription-logout-confirm">
           <p>
             {subscriptionLogoutRequest?.affectedModels.length
               ? t('subscriptionAuth.logoutAffectedModels', {
@@ -3392,7 +3392,7 @@ const AIModelConfig: React.FC = () => {
             </ul>
           )}
           <p>{t('subscriptionAuth.logoutConsequence')}</p>
-          <div className="bitfun-ai-model-config__subscription-logout-actions">
+          <div className="halo-ai-model-config__subscription-logout-actions">
             <Button
               size="small"
               variant="secondary"
@@ -3420,7 +3420,7 @@ const AIModelConfig: React.FC = () => {
             ? t('editProvider')
             : (currentTemplate ? `${t('newProvider')} - ${currentTemplate.name}` : t('newProvider')))}
         size="xlarge"
-        contentClassName="modal__content--fill-flex bitfun-ai-model-config__form--modal"
+        contentClassName="modal__content--fill-flex halo-ai-model-config__form--modal"
       >
         {renderEditingForm()}
       </Modal>

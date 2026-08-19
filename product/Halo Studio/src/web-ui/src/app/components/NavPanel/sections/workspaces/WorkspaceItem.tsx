@@ -202,7 +202,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
 
   return (
     <div
-      className={`bitfun-nav-panel__workspace-item${isActive ? ' is-active' : ''}${isDragging ? ' is-dragging' : ''}`}
+      className={`halo-nav-panel__workspace-item${isActive ? ' is-active' : ''}${isDragging ? ' is-dragging' : ''}`}
       data-testid="nav-workspace-item"
       data-workspace-id={workspace.id}
       draggable={draggable}
@@ -210,7 +210,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
       onDragEnd={onDragEnd}
     >
       <div
-        className="bitfun-nav-panel__workspace-item-card"
+        className="halo-nav-panel__workspace-item-card"
         role="button"
         tabIndex={0}
         onClick={() => { void activateWorkspace(); }}
@@ -221,15 +221,15 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
           }
         }}
       >
-        <div className="bitfun-nav-panel__workspace-item-main">
+        <div className="halo-nav-panel__workspace-item-main">
           <FolderOpen size={15} aria-hidden="true" />
-          <div className="bitfun-nav-panel__workspace-item-name-cluster">
-            <div className="bitfun-nav-panel__workspace-item-name-stack">
-              <div className="bitfun-nav-panel__workspace-item-name-row">
+          <div className="halo-nav-panel__workspace-item-name-cluster">
+            <div className="halo-nav-panel__workspace-item-name-stack">
+              <div className="halo-nav-panel__workspace-item-name-row">
                 <Tooltip content={workspace.rootPath} placement="right" followCursor>
                   <button
                     type="button"
-                    className="bitfun-nav-panel__workspace-item-name-btn"
+                    className="halo-nav-panel__workspace-item-name-btn"
                     onClick={event => {
                       event.stopPropagation();
                       void handleCardNameClick();
@@ -237,8 +237,8 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
                     data-testid="nav-workspace-name-btn"
                     data-workspace-id={workspace.id}
                   >
-                    <span className="bitfun-nav-panel__workspace-item-name-line">
-                      <span className="bitfun-nav-panel__workspace-item-label">{workspace.name}</span>
+                    <span className="halo-nav-panel__workspace-item-name-line">
+                      <span className="halo-nav-panel__workspace-item-label">{workspace.name}</span>
                     </span>
                   </button>
                 </Tooltip>
@@ -247,12 +247,12 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
           </div>
         </div>
 
-        <div className="bitfun-nav-panel__workspace-item-actions" onClick={event => event.stopPropagation()}>
-          <div className="bitfun-nav-panel__workspace-item-menu">
+        <div className="halo-nav-panel__workspace-item-actions" onClick={event => event.stopPropagation()}>
+          <div className="halo-nav-panel__workspace-item-menu">
             <Tooltip content={t('nav.items.project')} placement="right" followCursor>
               <button
                 type="button"
-                className="bitfun-nav-panel__workspace-item-menu-trigger"
+                className="halo-nav-panel__workspace-item-menu-trigger"
                 onClick={() => { void handleOpenFiles(); }}
                 data-testid="nav-workspace-files-btn"
                 data-workspace-id={workspace.id}
@@ -262,7 +262,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
             </Tooltip>
             <button
               type="button"
-              className={`bitfun-nav-panel__workspace-item-menu-trigger${menuOpen ? ' is-open' : ''}`}
+              className={`halo-nav-panel__workspace-item-menu-trigger${menuOpen ? ' is-open' : ''}`}
               onClick={() => setMenuOpen(open => !open)}
               data-testid="nav-workspace-menu-btn"
               data-workspace-id={workspace.id}
@@ -273,24 +273,24 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
 
             {menuOpen && (
               <div
-                className="bitfun-nav-panel__workspace-item-menu-popover"
+                className="halo-nav-panel__workspace-item-menu-popover"
                 role="menu"
                 data-testid="nav-workspace-item-menu"
                 data-workspace-id={workspace.id}
               >
                 <button
                   type="button"
-                  className="bitfun-nav-panel__workspace-item-menu-item"
+                  className="halo-nav-panel__workspace-item-menu-item"
                   onClick={() => { void handleCreateCodeSession(); }}
                   disabled={!legacyNavigationEnabled && !canOpenWorkbenchSession}
                   data-testid="nav-workspace-menu-create-code-session"
                 >
                   <Plus size={13} />
-                  <span className="bitfun-nav-panel__workspace-item-menu-label">{t('shared:agents.code')}</span>
+                  <span className="halo-nav-panel__workspace-item-menu-label">{t('shared:agents.code')}</span>
                 </button>
                 <button
                   type="button"
-                  className="bitfun-nav-panel__workspace-item-menu-item"
+                  className="halo-nav-panel__workspace-item-menu-item"
                   onClick={() => {
                     setMenuOpen(false);
                     setRenameDialogOpen(true);
@@ -298,37 +298,37 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
                   data-testid="nav-workspace-menu-rename"
                 >
                   <Pencil size={13} />
-                  <span className="bitfun-nav-panel__workspace-item-menu-label">
+                  <span className="halo-nav-panel__workspace-item-menu-label">
                     {t('nav.workspaces.actions.rename')}
                   </span>
                 </button>
                 <button
                   type="button"
-                  className="bitfun-nav-panel__workspace-item-menu-item"
+                  className="halo-nav-panel__workspace-item-menu-item"
                   onClick={() => { void handleCopyWorkspacePath(); }}
                   data-testid="nav-workspace-menu-copy-path"
                 >
                   <Copy size={13} />
-                  <span className="bitfun-nav-panel__workspace-item-menu-label">{t('nav.workspaces.actions.copyPath')}</span>
+                  <span className="halo-nav-panel__workspace-item-menu-label">{t('nav.workspaces.actions.copyPath')}</span>
                 </button>
                 <button
                   type="button"
-                  className="bitfun-nav-panel__workspace-item-menu-item"
+                  className="halo-nav-panel__workspace-item-menu-item"
                   onClick={() => { void handleReveal(); }}
                   data-testid="nav-workspace-menu-reveal"
                 >
                   <FolderSearch size={13} />
-                  <span className="bitfun-nav-panel__workspace-item-menu-label">{t('nav.workspaces.actions.reveal')}</span>
+                  <span className="halo-nav-panel__workspace-item-menu-label">{t('nav.workspaces.actions.reveal')}</span>
                 </button>
-                <div className="bitfun-nav-panel__workspace-item-menu-divider" />
+                <div className="halo-nav-panel__workspace-item-menu-divider" />
                 <button
                   type="button"
-                  className="bitfun-nav-panel__workspace-item-menu-item is-danger"
+                  className="halo-nav-panel__workspace-item-menu-item is-danger"
                   onClick={() => { void handleCloseWorkspace(); }}
                   data-testid="nav-workspace-menu-close"
                 >
                   <FolderOpen size={13} />
-                  <span className="bitfun-nav-panel__workspace-item-menu-label">{t('nav.workspaces.actions.close')}</span>
+                  <span className="halo-nav-panel__workspace-item-menu-label">{t('nav.workspaces.actions.close')}</span>
                 </button>
               </div>
             )}
@@ -337,7 +337,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
       </div>
 
       <div
-        className={`bitfun-nav-panel__workspace-item-sessions${sessionsCollapsed ? ' is-collapsed' : ''}`}
+        className={`halo-nav-panel__workspace-item-sessions${sessionsCollapsed ? ' is-collapsed' : ''}`}
         data-testid="nav-workspace-session-region"
         data-workspace-id={workspace.id}
       >

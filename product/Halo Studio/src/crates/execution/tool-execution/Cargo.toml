@@ -8,9 +8,9 @@ default = []
 web-readable = ["dep:htmd", "dep:legible", "dep:readability-js", "dep:regex"]
 
 [dependencies]
-bitfun-agent-tools = { path = "../tool-contracts" }
-bitfun-events = { path = "../../contracts/events" }
-bitfun-runtime-ports = { path = "../../contracts/runtime-ports" }
+halo-agent-tools = { path = "../tool-contracts" }
+halo-events = { path = "../../contracts/events" }
+halo-runtime-ports = { path = "../../contracts/runtime-ports" }
 dashmap = { workspace = true }
 globset = { workspace = true }
 dunce = { workspace = true }

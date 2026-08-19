@@ -20,11 +20,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
 use crate::api::app_state::AppState;
-use bitfun_core::agentic::coordination::{
+use halo_core::agentic::coordination::{
     ConversationCoordinator, DialogScheduler, DialogSubmissionPolicy, DialogTriggerSource,
 };
-use bitfun_core::agentic::core::{MessageContent, MessageRole, Session, SessionConfig};
-use bitfun_core::miniapp::agent_bridge::{
+use halo_core::agentic::core::{MessageContent, MessageRole, Session, SessionConfig};
+use halo_core::miniapp::agent_bridge::{
     agent_run_id_from_request, build_agent_submission_plan, extract_agent_turn_text,
     plan_agent_workspace, require_agent_prompt, require_enabled_agent_permissions,
     validate_reused_session, MiniAppAgentRateLimiter, MiniAppAgentRunRecord,
@@ -32,7 +32,7 @@ use bitfun_core::miniapp::agent_bridge::{
     MiniAppAgentTurnMessageRole, MINIAPP_AGENT_KIND, UNKNOWN_AGENT_RUN_MESSAGE,
     UNKNOWN_AGENT_SESSION_MESSAGE,
 };
-use bitfun_core::BitFunError;
+use halo_core::HaloError;
 
 // ============== Run registry ==============
 
@@ -76,7 +76,7 @@ fn resolve_agent_display_text(display_text: Option<&str>) -> String {
 async fn require_agent_permission(
     state: &AppState,
     app_id: &str,
-) -> Result<bitfun_core::miniapp::AgentPermissions, String> {
+) -> Result<halo_core::miniapp::AgentPermissions, String> {
     let app = state
         .miniapp_manager
         .get(app_id)
@@ -245,7 +245,7 @@ async fn load_and_validate_miniapp_agent_session(
             .await
         {
             Ok(session) => session,
-            Err(BitFunError::NotFound(_)) => return Ok(None),
+            Err(HaloError::NotFound(_)) => return Ok(None),
             Err(error) => {
                 return Err(format!(
                     "Failed to restore MiniApp agent session: {}",
@@ -473,8 +473,8 @@ pub async fn miniapp_agent_run(
         .map_err(|e| format!("Failed to start MiniApp agent turn: {}", e))?;
 
     let status = match outcome {
-        bitfun_core::agentic::coordination::DialogSubmitOutcome::Started { .. } => "started",
-        bitfun_core::agentic::coordination::DialogSubmitOutcome::Queued { .. } => "queued",
+        halo_core::agentic::coordination::DialogSubmitOutcome::Started { .. } => "started",
+        halo_core::agentic::coordination::DialogSubmitOutcome::Queued { .. } => "queued",
     };
 
     agent_run_registry().register(MiniAppAgentRunRecord {
@@ -603,7 +603,7 @@ mod tests {
         resolve_agent_display_text, MiniAppAgentEnsureSessionRequest, MiniAppAgentRunRequest,
         DEFAULT_MINIAPP_AGENT_DISPLAY_TEXT,
     };
-    use bitfun_core::miniapp::agent_bridge::is_clean_relative_subdir;
+    use halo_core::miniapp::agent_bridge::is_clean_relative_subdir;
     use serde_json::json;
 
     #[test]

@@ -34,8 +34,8 @@ describe('startup theme bootstrap manifest', () => {
       expect.arrayContaining([DEFAULT_LIGHT_THEME_ID, DEFAULT_DARK_THEME_ID])
     );
 
-    const light = manifest.themes.find(theme => theme.id === 'bitfun-light');
-    const sourceLight = builtinThemes.find(theme => theme.id === 'bitfun-light');
+    const light = manifest.themes.find(theme => theme.id === 'halo-light');
+    const sourceLight = builtinThemes.find(theme => theme.id === 'halo-light');
 
     expect(light).toEqual({
       id: sourceLight?.id,
@@ -67,8 +67,8 @@ describe('theme prompt snapshot manifest', () => {
     });
     expect(manifest.themes).toHaveLength(builtinThemes.length);
 
-    const dark = manifest.themes.find(theme => theme.id === 'bitfun-dark');
-    const sourceDark = builtinThemes.find(theme => theme.id === 'bitfun-dark');
+    const dark = manifest.themes.find(theme => theme.id === 'halo-dark');
+    const sourceDark = builtinThemes.find(theme => theme.id === 'halo-dark');
 
     expect(dark).toEqual({
       id: sourceDark?.id,

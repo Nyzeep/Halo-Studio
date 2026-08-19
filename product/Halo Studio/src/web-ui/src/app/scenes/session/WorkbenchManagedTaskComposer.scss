@@ -1,4 +1,4 @@
-.bitfun-workbench-managed-task {
+.halo-workbench-managed-task {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -135,9 +135,9 @@
 }
 
 .is-spinning {
-  animation: bitfun-workbench-spin 900ms linear infinite;
+  animation: halo-workbench-spin 900ms linear infinite;
 }
 
-@keyframes bitfun-workbench-spin {
+@keyframes halo-workbench-spin {
   to { transform: rotate(360deg); }
 }

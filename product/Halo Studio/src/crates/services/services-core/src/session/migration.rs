@@ -526,7 +526,7 @@ mod tests {
         write_session_metadata(&source.join("legacy-session"), &legacy_only_metadata);
 
         let mut hidden_metadata = metadata("hidden-session", 250);
-        hidden_metadata.session_kind = bitfun_core_types::SessionKind::Subagent;
+        hidden_metadata.session_kind = halo_core_types::SessionKind::Subagent;
         write_session_metadata(&source.join("hidden-session"), &hidden_metadata);
 
         write_session_index(

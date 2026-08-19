@@ -3,7 +3,7 @@ use super::visibility::SubagentVisibilityPolicy;
 use super::AgentRegistry;
 use crate::agentic::agents::registry::catalog::builtin_agent_specs;
 use crate::agentic::agents::{Agent, AgentCategory, SubAgentSource};
-use bitfun_agent_runtime::agents as runtime_agents;
+use halo_agent_runtime::agents as runtime_agents;
 use log::error;
 use std::collections::HashMap;
 use std::sync::Arc;

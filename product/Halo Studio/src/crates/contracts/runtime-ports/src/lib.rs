@@ -2,7 +2,7 @@
 //! concrete implementations.
 //!
 //! This crate intentionally contains only DTOs and traits. It must not depend
-//! on concrete managers, platform adapters, `bitfun-core`, or app crates.
+//! on concrete managers, platform adapters, `halo-core`, or app crates.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-pub use bitfun_core_types::{
+pub use halo_core_types::{
     SessionExecutionTarget, SessionExecutionTargetKind, SessionExecutionTargetRequest,
     WorktreeError, WorktreeErrorCode, WorktreeLifecycle, WorktreeSettings, WorktreeSummary,
 };
@@ -23,7 +23,7 @@ mod permission;
 mod plugin;
 mod script_tool;
 #[cfg(feature = "permission")]
-pub use bitfun_product_domains::tool_permissions::{
+pub use halo_product_domains::tool_permissions::{
     resolve_child_permission_policy, resolve_permission_policy, wildcard_matches,
     ChildPermissionPolicyLayers, PermissionAuditEvent, PermissionAuditRecord,
     PermissionDelegationContext, PermissionEffect, PermissionEvaluator, PermissionGrant,
@@ -2004,7 +2004,7 @@ pub trait AgentSessionUsagePort: Send + Sync {
     async fn generate_session_usage(
         &self,
         request: AgentSessionUsageRequest,
-    ) -> PortResult<bitfun_core_types::SessionUsageReport>;
+    ) -> PortResult<halo_core_types::SessionUsageReport>;
 }
 
 #[async_trait::async_trait]
@@ -2470,7 +2470,7 @@ mod tests {
                 "rootPath": "/worktrees/session_1",
                 "baseRef": "main",
                 "baseCommit": "0123456789abcdef",
-                "branch": "bitfun/session_1",
+                "branch": "halo/session_1",
                 "lifecycle": "managed"
             }
         }))
@@ -2894,7 +2894,7 @@ mod tests {
         let contract = CompressionContract {
             touched_files: vec!["src/lib.rs".to_string()],
             verification_commands: vec![CompressionContractItem {
-                target: "cargo test -p bitfun-runtime-ports".to_string(),
+                target: "cargo test -p halo-runtime-ports".to_string(),
                 status: "passed".to_string(),
                 summary: "runtime ports contract tests passed".to_string(),
                 error_kind: None,
@@ -2914,7 +2914,7 @@ mod tests {
         assert!(rendered.contains("Touched files:"));
         assert!(rendered.contains("- src/lib.rs"));
         assert!(rendered.contains(
-            "- cargo test -p bitfun-runtime-ports [passed]: runtime ports contract tests passed"
+            "- cargo test -p halo-runtime-ports [passed]: runtime ports contract tests passed"
         ));
         assert!(
             rendered.contains("- cargo check [failed]: compile error before migration (compile)")

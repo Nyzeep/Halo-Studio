@@ -4,12 +4,12 @@ use crate::agentic::coordination::get_global_coordinator;
 use crate::agentic::session::{FileReadState, FileRevision, ReviewReadCoverage};
 use crate::agentic::tools::framework::ToolPathResolution;
 use crate::agentic::tools::tool_context_runtime::ToolUseContext;
-use crate::util::errors::BitFunResult;
-pub use bitfun_agent_runtime::file_read_state::{
+use crate::util::errors::HaloResult;
+pub use halo_agent_runtime::file_read_state::{
     assert_file_not_unexpectedly_modified, content_unchanged_since_full_read,
     FILE_UNEXPECTEDLY_MODIFIED_ERROR,
 };
-use bitfun_agent_runtime::file_read_state::{
+use halo_agent_runtime::file_read_state::{
     validate_edit_content_freshness_against_read_state, validate_prior_read_state,
     validate_write_content_freshness_against_read_state,
     validate_write_mtime_freshness_against_read_state, FileMutationKind,
@@ -267,10 +267,10 @@ pub fn update_file_read_state_after_mutation(
 pub async fn read_current_file_content(
     context: &ToolUseContext,
     resolved: &ToolPathResolution,
-) -> BitFunResult<String> {
+) -> HaloResult<String> {
     if resolved.uses_remote_workspace_backend() {
         let ws_fs = context.ws_fs().ok_or_else(|| {
-            crate::util::errors::BitFunError::tool(
+            crate::util::errors::HaloError::tool(
                 "Remote workspace file system is unavailable".to_string(),
             )
         })?;
@@ -278,11 +278,11 @@ pub async fn read_current_file_content(
             .read_file_text(&resolved.resolved_path)
             .await
             .map_err(|error| {
-                crate::util::errors::BitFunError::tool(format!("Failed to read file: {}", error))
+                crate::util::errors::HaloError::tool(format!("Failed to read file: {}", error))
             })
     } else {
         std::fs::read_to_string(&resolved.resolved_path).map_err(|error| {
-            crate::util::errors::BitFunError::tool(format!(
+            crate::util::errors::HaloError::tool(format!(
                 "Failed to read file {}: {}",
                 resolved.logical_path, error
             ))
@@ -355,7 +355,7 @@ mod tests {
             custom_data: HashMap::new(),
             computer_use_host: None,
             runtime_tool_restrictions: Default::default(),
-            runtime_handles: bitfun_runtime_ports::ToolRuntimeHandles::default(),
+            runtime_handles: halo_runtime_ports::ToolRuntimeHandles::default(),
         }
     }
 

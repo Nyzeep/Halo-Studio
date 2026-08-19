@@ -29,16 +29,16 @@ const FileViewerNav: React.FC = () => {
   }, []);
 
   return (
-    <div className="bitfun-file-viewer-nav">
-      <div className="bitfun-file-viewer-nav__header">
-        <span className="bitfun-file-viewer-nav__icon" aria-hidden="true">
+    <div className="halo-file-viewer-nav">
+      <div className="halo-file-viewer-nav__header">
+        <span className="halo-file-viewer-nav__icon" aria-hidden="true">
           <Folder size={15} />
         </span>
-        <span className="bitfun-file-viewer-nav__label">
+        <span className="halo-file-viewer-nav__label">
           {t('nav.items.project')}
         </span>
         {currentWorkspace?.rootPath && (
-          <span className="bitfun-file-viewer-nav__actions">
+          <span className="halo-file-viewer-nav__actions">
             {viewMode === 'tree' && explorerToolbar && (
               <>
                 <IconButton

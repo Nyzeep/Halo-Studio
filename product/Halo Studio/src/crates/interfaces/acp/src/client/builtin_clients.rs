@@ -14,8 +14,8 @@ pub(crate) struct BuiltinAcpClientPreset {
     pub(crate) command: &'static str,
     pub(crate) args: &'static [&'static str],
     pub(crate) tool_command: &'static str,
-    /// npm package BitFun can install on the user's behalf. `None` means the
-    /// agent is user-managed (BitFun only provides the integration, the user
+    /// npm package Halo can install on the user's behalf. `None` means the
+    /// agent is user-managed (Halo only provides the integration, the user
     /// installs the CLI themselves) — the UI then shows no one-click installer.
     pub(crate) install_package: Option<&'static str>,
     pub(crate) adapter_package: Option<&'static str>,
@@ -35,8 +35,8 @@ const BUILTIN_ACP_CLIENT_PRESETS: &[BuiltinAcpClientPreset] = &[
     // Oh My Pi (omp) — a terminal coding agent that speaks ACP natively via
     // `omp acp` (no adapter needed, like opencode). User-managed: omp targets
     // the bun runtime (installed via `bun install -g @oh-my-pi/pi-coding-agent`
-    // or `curl -fsSL https://omp.sh/install | sh`), which BitFun's npm-based
-    // installer cannot provide — so install_package is None and BitFun only
+    // or `curl -fsSL https://omp.sh/install | sh`), which Halo's npm-based
+    // installer cannot provide — so install_package is None and Halo only
     // detects `omp` on PATH and launches it. https://github.com/can1357/oh-my-pi
     BuiltinAcpClientPreset {
         id: "omp",
@@ -143,7 +143,7 @@ mod tests {
         // Native ACP — no adapter package/bin, like opencode.
         assert!(preset.adapter_package.is_none());
         assert!(preset.adapter_bin.is_none());
-        // User-managed: BitFun provides no installer for omp.
+        // User-managed: Halo provides no installer for omp.
         assert!(preset.install_package.is_none());
 
         let config = default_config_for_builtin_client("omp").expect("omp config");

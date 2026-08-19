@@ -1,18 +1,18 @@
 //! Compatibility facade for browser CDP launch and detection.
 //!
 //! Platform browser detection and launch process handling live in
-//! `bitfun-services-integrations`. Core keeps this module to preserve the
-//! existing product/tool import path and to inject BitFun's managed profile
+//! `halo-services-integrations`. Core keeps this module to preserve the
+//! existing product/tool import path and to inject Halo's managed profile
 //! directory.
 
-use bitfun_services_integrations::browser_control::launcher as provider;
+use halo_services_integrations::browser_control::launcher as provider;
 pub use provider::{
     BrowserInfo, BrowserKind, BrowserLaunchOptions, LaunchResult, DEFAULT_CDP_PORT,
 };
 use std::path::PathBuf;
 
 use crate::infrastructure::app_paths::get_path_manager_arc;
-use crate::util::errors::BitFunResult;
+use crate::util::errors::HaloResult;
 
 pub struct BrowserLauncher;
 
@@ -21,7 +21,7 @@ impl BrowserLauncher {
         provider::BrowserLauncher::is_cdp_available(port).await
     }
 
-    pub fn detect_default_browser() -> BitFunResult<BrowserKind> {
+    pub fn detect_default_browser() -> HaloResult<BrowserKind> {
         Ok(provider::BrowserLauncher::detect_default_browser()?)
     }
 
@@ -42,7 +42,7 @@ impl BrowserLauncher {
         provider::BrowserLauncher::browser_kind_from_config(value)
     }
 
-    pub fn resolve_browser_kind(preferred_browser: Option<&str>) -> BitFunResult<BrowserKind> {
+    pub fn resolve_browser_kind(preferred_browser: Option<&str>) -> HaloResult<BrowserKind> {
         Ok(provider::BrowserLauncher::resolve_browser_kind(
             preferred_browser,
         )?)
@@ -52,7 +52,7 @@ impl BrowserLauncher {
         provider::BrowserLauncher::browser_executable(kind)
     }
 
-    pub async fn launch_with_cdp(kind: &BrowserKind, port: u16) -> BitFunResult<LaunchResult> {
+    pub async fn launch_with_cdp(kind: &BrowserKind, port: u16) -> HaloResult<LaunchResult> {
         Ok(provider::BrowserLauncher::launch_with_cdp_options(
             kind,
             port,
@@ -65,7 +65,7 @@ impl BrowserLauncher {
         kind: &BrowserKind,
         port: u16,
         user_data_dir: Option<&str>,
-    ) -> BitFunResult<LaunchResult> {
+    ) -> HaloResult<LaunchResult> {
         Ok(provider::BrowserLauncher::launch_with_cdp_options(
             kind,
             port,
@@ -74,12 +74,12 @@ impl BrowserLauncher {
         .await?)
     }
 
-    pub async fn restart_with_cdp(kind: &BrowserKind, port: u16) -> BitFunResult<LaunchResult> {
+    pub async fn restart_with_cdp(kind: &BrowserKind, port: u16) -> HaloResult<LaunchResult> {
         Self::launch_with_cdp(kind, port).await
     }
 
     #[cfg(target_os = "macos")]
-    pub fn create_cdp_launcher_app(kind: &BrowserKind, port: u16) -> BitFunResult<String> {
+    pub fn create_cdp_launcher_app(kind: &BrowserKind, port: u16) -> HaloResult<String> {
         Ok(provider::BrowserLauncher::create_cdp_launcher_app(
             kind, port,
         )?)
@@ -100,7 +100,7 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn launch_options_injects_bitfun_managed_profile_root() {
+    fn launch_options_injects_halo_managed_profile_root() {
         let options = BrowserLauncher::launch_options(None);
 
         assert_eq!(options.user_data_dir, None);

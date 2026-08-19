@@ -29,7 +29,7 @@ $panel-height: 680px;
 // trigger (2). The trigger therefore always sits above the collapsed panel
 // that overlaps it, and is removed from hit testing by `visibility` — not by
 // pointer-events alone — once the panel is open.
-.bitfun-fmc {
+.halo-fmc {
   position: fixed;
   bottom: $button-offset;
   right: $button-offset;
@@ -45,7 +45,7 @@ $panel-height: 680px;
 }
 
 // ─── Fullscreen backdrop (catches outside clicks) ──────────
-.bitfun-fmc__backdrop {
+.halo-fmc__backdrop {
   position: fixed;
   inset: 0;
   z-index: 0;
@@ -53,7 +53,7 @@ $panel-height: 680px;
 }
 
 // ─── Circular trigger button ───────────────────────────────
-.bitfun-fmc__button {
+.halo-fmc__button {
   position: relative;
   z-index: 2;
   pointer-events: auto;
@@ -94,7 +94,7 @@ $panel-height: 680px;
   // Hide when the panel is open. `visibility` (delayed until the fade-out
   // finishes) is what actually removes it from hit testing; opacity alone
   // would leave an invisible but clickable trigger under the panel.
-  .bitfun-fmc--open & {
+  .halo-fmc--open & {
     opacity: 0;
     transform: scale(0.5);
     visibility: hidden;
@@ -106,7 +106,7 @@ $panel-height: 680px;
   }
 }
 
-.bitfun-fmc__button--miniapp {
+.halo-fmc__button--miniapp {
   color: var(--color-text-primary);
   background: var(--color-bg-elevated);
   border-color: var(--border-medium);
@@ -118,11 +118,11 @@ $panel-height: 680px;
   }
 }
 
-.bitfun-fmc__button--processing {
+.halo-fmc__button--processing {
   border-color: var(--border-strong);
 }
 
-.bitfun-fmc__miniapp-trigger-icon {
+.halo-fmc__miniapp-trigger-icon {
   position: relative;
   z-index: 1;
   width: 100%;
@@ -134,7 +134,7 @@ $panel-height: 680px;
   color: inherit;
 }
 
-.bitfun-fmc__button-activity {
+.halo-fmc__button-activity {
   position: absolute;
   inset: -5px;
   border-radius: 50%;
@@ -189,7 +189,7 @@ $panel-height: 680px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-fmc__button-activity {
+  .halo-fmc__button-activity {
     &::before,
     &::after {
       animation: none;
@@ -203,7 +203,7 @@ $panel-height: 680px;
 }
 
 // ─── Panel ─────────────────────────────────────────────────
-.bitfun-fmc__panel {
+.halo-fmc__panel {
   position: absolute;
   bottom: 0;
   right: 0;
@@ -279,7 +279,7 @@ $panel-height: 680px;
 }
 
 // ─── Header ────────────────────────────────────────────────
-.bitfun-fmc__header {
+.halo-fmc__header {
   flex: 0 0 auto;
   height: 36px;
   display: flex;
@@ -289,7 +289,7 @@ $panel-height: 680px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.bitfun-fmc__header-btn {
+.halo-fmc__header-btn {
   flex-shrink: 0;
   width: 24px;
   height: 24px;
@@ -318,7 +318,7 @@ $panel-height: 680px;
   }
 }
 
-.bitfun-fmc__miniapp-session-icon {
+.halo-fmc__miniapp-session-icon {
   flex: 0 0 auto;
   width: 24px;
   height: 24px;
@@ -334,12 +334,12 @@ $panel-height: 680px;
 // ─── Title ─────────────────────────────────────────────────
 // Plain display. Session switching lives in the shared SessionMenu ("+"),
 // matching floating window mode.
-.bitfun-fmc__title-wrapper {
+.halo-fmc__title-wrapper {
   flex: 1;
   min-width: 0;
 }
 
-.bitfun-fmc__title-display {
+.halo-fmc__title-display {
   width: 100%;
   min-width: 0;
   display: flex;
@@ -352,7 +352,7 @@ $panel-height: 680px;
   border-radius: var(--size-radius-sm);
 }
 
-.bitfun-fmc__title-text {
+.halo-fmc__title-text {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -365,7 +365,7 @@ $panel-height: 680px;
 // Host for the reused main-window session surface (ChatPane: conversation +
 // ChatInput). Only sizing is adjusted here — the surface keeps the main
 // window's own look and behavior.
-.bitfun-fmc__body {
+.halo-fmc__body {
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -373,7 +373,7 @@ $panel-height: 680px;
   display: flex;
   flex-direction: column;
 
-  .bitfun-chat-pane__content {
+  .halo-chat-pane__content {
     flex: 1;
     min-height: 0;
     background: transparent;
@@ -391,7 +391,7 @@ $panel-height: 680px;
   }
 }
 
-.bitfun-fmc__miniapp-session-pending {
+.halo-fmc__miniapp-session-pending {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -405,7 +405,7 @@ $panel-height: 680px;
   text-align: center;
 }
 
-.bitfun-fmc__miniapp-session-pending-icon {
+.halo-fmc__miniapp-session-pending-icon {
   width: 44px;
   height: 44px;
   display: flex;
@@ -419,7 +419,7 @@ $panel-height: 680px;
 
 // MiniApps describe this empty state as bounded data through
 // app.chat.claimComposer. The host owns the markup, behavior, and theme.
-.bitfun-fmc__miniapp-welcome {
+.halo-fmc__miniapp-welcome {
   width: 100%;
   height: 100%;
   min-height: 360px;
@@ -442,7 +442,7 @@ $panel-height: 680px;
   }
 }
 
-.bitfun-fmc__miniapp-welcome-icon {
+.halo-fmc__miniapp-welcome-icon {
   width: 48px;
   height: 48px;
   display: flex;
@@ -456,7 +456,7 @@ $panel-height: 680px;
     0 10px 28px var(--color-overlay-black-20);
 }
 
-.bitfun-fmc__miniapp-welcome-eyebrow {
+.halo-fmc__miniapp-welcome-eyebrow {
   margin-top: 18px;
   color: var(--color-text-muted);
   font-size: var(--flowchat-font-size-xs);
@@ -464,7 +464,7 @@ $panel-height: 680px;
   letter-spacing: 0.04em;
 }
 
-.bitfun-fmc__miniapp-welcome-description {
+.halo-fmc__miniapp-welcome-description {
   max-width: 420px;
   margin: 12px 0 0;
   color: var(--color-text-secondary);
@@ -472,7 +472,7 @@ $panel-height: 680px;
   line-height: 1.6;
 }
 
-.bitfun-fmc__miniapp-workspace {
+.halo-fmc__miniapp-workspace {
   max-width: 100%;
   display: inline-flex;
   align-items: center;
@@ -494,24 +494,24 @@ $panel-height: 680px;
   }
 }
 
-.bitfun-fmc__miniapp-suggestions {
+.halo-fmc__miniapp-suggestions {
   width: 100%;
   margin-top: 28px;
 }
 
-.bitfun-fmc__miniapp-suggestions-label {
+.halo-fmc__miniapp-suggestions-label {
   margin-bottom: 8px;
   color: var(--color-text-muted);
   font-size: var(--flowchat-font-size-xs);
 }
 
-.bitfun-fmc__miniapp-suggestions-list {
+.halo-fmc__miniapp-suggestions-list {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
-.bitfun-fmc__miniapp-suggestion {
+.halo-fmc__miniapp-suggestion {
   width: 100%;
   min-height: 42px;
   display: flex;
@@ -557,12 +557,12 @@ $panel-height: 680px;
 }
 
 @media (max-width: 900px) {
-  .bitfun-fmc--miniapp-customizing {
+  .halo-fmc--miniapp-customizing {
     right: $button-offset;
     bottom: calc(#{$button-offset} + 64px);
   }
 
-  .bitfun-fmc__miniapp-welcome {
+  .halo-fmc__miniapp-welcome {
     padding: 32px 24px;
   }
 }

@@ -39,13 +39,13 @@ use crate::service::session::{
 };
 use crate::service::snapshot::ensure_snapshot_manager_for_workspace;
 use crate::service::workspace::{get_global_workspace_service, WorkspaceInfo, WorkspaceKind};
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use crate::util::sanitize_plain_model_output;
 use crate::util::timing::elapsed_ms_u64;
-use bitfun_core_types::SessionExecutionTarget;
-pub use bitfun_runtime_ports::SessionViewRestoreTiming;
-use bitfun_runtime_ports::{SessionStoragePathRequest, SessionStorePort};
-use bitfun_services_core::session::{
+use halo_core_types::SessionExecutionTarget;
+pub use halo_runtime_ports::SessionViewRestoreTiming;
+use halo_runtime_ports::{SessionStoragePathRequest, SessionStorePort};
+use halo_services_core::session::{
     apply_session_lineage, collect_hidden_subagent_cascade as collect_hidden_subagent_cascade_ids,
     merge_session_custom_metadata as merge_session_custom_metadata_value,
     set_deep_review_run_manifest, set_review_target_evidence, set_session_relationship,
@@ -171,7 +171,7 @@ pub struct SessionExecutionBindingUpdate {
 /// Stable failure categories for atomically moving a session execution root.
 ///
 /// Worktree lifecycle maps these categories to its public structured error
-/// contract without having to inspect human-readable `BitFunError` messages.
+/// contract without having to inspect human-readable `HaloError` messages.
 #[derive(Debug, thiserror::Error)]
 pub enum SessionExecutionBindingError {
     #[error("{0}")]
@@ -179,7 +179,7 @@ pub enum SessionExecutionBindingError {
     #[error("{0}")]
     NotFound(String),
     #[error(transparent)]
-    Internal(#[from] BitFunError),
+    Internal(#[from] HaloError),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -290,17 +290,17 @@ impl SessionManager {
     pub(crate) async fn acquire_session_mutation(
         &self,
         session_id: &str,
-    ) -> BitFunResult<KeyedAsyncLockGuard> {
-        bitfun_core_types::validate_session_id(session_id).map_err(BitFunError::Validation)?;
+    ) -> HaloResult<KeyedAsyncLockGuard> {
+        halo_core_types::validate_session_id(session_id).map_err(HaloError::Validation)?;
         Ok(self.lock_session_mutation(session_id).await)
     }
 
-    fn reserve_active_session(&self) -> BitFunResult<OwnedSemaphorePermit> {
+    fn reserve_active_session(&self) -> HaloResult<OwnedSemaphorePermit> {
         self.active_session_capacity
             .clone()
             .try_acquire_owned()
             .map_err(|_| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Exceeded maximum session limit: {}",
                     self.config.max_active_sessions
                 ))
@@ -322,7 +322,7 @@ impl SessionManager {
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<SessionWriteLock> {
+    ) -> HaloResult<SessionWriteLock> {
         self.persistence_manager
             .lock_session_writes(session_storage_path, session_id)
     }
@@ -366,8 +366,8 @@ impl SessionManager {
         session_id: &str,
         requested_path: &Path,
         allow_existing_same_path: bool,
-    ) -> BitFunResult<bool> {
-        bitfun_core_types::validate_session_id(session_id).map_err(BitFunError::Validation)?;
+    ) -> HaloResult<bool> {
+        halo_core_types::validate_session_id(session_id).map_err(HaloError::Validation)?;
         let requested_path = Self::normalize_session_storage_path(requested_path);
         match self
             .session_storage_path_index
@@ -384,7 +384,7 @@ impl SessionManager {
             Entry::Occupied(mut entry) => {
                 let existing_path = Self::normalize_session_storage_path(&entry.get().path);
                 if existing_path != requested_path {
-                    return Err(BitFunError::Validation(format!(
+                    return Err(HaloError::Validation(format!(
                         "Session ID is already bound to another workspace: session_id={}, existing_storage_path={}, requested_storage_path={}",
                         session_id,
                         existing_path.display(),
@@ -392,7 +392,7 @@ impl SessionManager {
                     )));
                 }
                 if !allow_existing_same_path {
-                    return Err(BitFunError::Validation(format!(
+                    return Err(HaloError::Validation(format!(
                         "Session ID already exists: {session_id}"
                     )));
                 }
@@ -475,7 +475,7 @@ impl SessionManager {
         &self,
         session_id: &str,
         requested_path: &Path,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let claimed = self.claim_session_storage_path(session_id, requested_path, true)?;
         self.commit_session_storage_path_claim(session_id, requested_path, claimed);
         Ok(())
@@ -485,15 +485,15 @@ impl SessionManager {
         &self,
         session_id: &str,
         requested_path: &Path,
-    ) -> BitFunResult<()> {
-        bitfun_core_types::validate_session_id(session_id).map_err(BitFunError::Validation)?;
+    ) -> HaloResult<()> {
+        halo_core_types::validate_session_id(session_id).map_err(HaloError::Validation)?;
         let requested_path = Self::normalize_session_storage_path(requested_path);
         let Some(binding) = self.session_storage_path_index.get(session_id) else {
             return Ok(());
         };
         let existing_path = Self::normalize_session_storage_path(&binding.path);
         if existing_path != requested_path {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Session ID is already bound to another workspace: session_id={}, existing_storage_path={}, requested_storage_path={}",
                 session_id,
                 existing_path.display(),
@@ -507,8 +507,8 @@ impl SessionManager {
         &self,
         storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<bool> {
-        bitfun_core_types::validate_session_id(session_id).map_err(BitFunError::Validation)?;
+    ) -> HaloResult<bool> {
+        halo_core_types::validate_session_id(session_id).map_err(HaloError::Validation)?;
         if !self.sessions.contains_key(session_id) {
             return Ok(false);
         }
@@ -580,10 +580,10 @@ impl SessionManager {
         Some(context_window)
     }
 
-    fn normalize_session_title_input(title: &str) -> BitFunResult<String> {
+    fn normalize_session_title_input(title: &str) -> HaloResult<String> {
         let trimmed = title.trim();
         if trimmed.is_empty() {
-            return Err(BitFunError::validation(
+            return Err(HaloError::validation(
                 "Session title must not be empty".to_string(),
             ));
         }
@@ -827,7 +827,7 @@ impl SessionManager {
                 .context_for_local_workspace(Path::new(project_workspace_path))
                 .sessions_dir
         } else if identity.hostname == "_unresolved" {
-            bitfun_services_integrations::remote_ssh::unresolved_remote_session_storage_dir(
+            halo_services_integrations::remote_ssh::unresolved_remote_session_storage_dir(
                 runtime_service.path_manager().remote_ssh_mirror_root_dir(),
                 identity.remote_connection_id.as_deref().unwrap_or_default(),
                 identity.logical_workspace_path(),
@@ -880,12 +880,12 @@ impl SessionManager {
     async fn resolve_storage_path_for_restore_workspace_path(
         &self,
         workspace_path: &Path,
-    ) -> BitFunResult<PathBuf> {
+    ) -> HaloResult<PathBuf> {
         if self
             .persistence_manager
             .is_resolved_sessions_dir(workspace_path)
         {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Expected a workspace path, received a resolved sessions directory: {}",
                 workspace_path.display()
             )));
@@ -898,7 +898,7 @@ impl SessionManager {
     async fn resolve_storage_path_for_request(
         &self,
         request: SessionStoragePathRequest,
-    ) -> BitFunResult<PathBuf> {
+    ) -> HaloResult<PathBuf> {
         let storage_path_started_at = Instant::now();
         let requested_workspace_path = request.workspace_path.clone();
         let session_storage_path = CoreSessionStorePort::with_path_manager(
@@ -907,7 +907,7 @@ impl SessionManager {
         .resolve_session_storage_path(request)
         .await
         .map(|resolution| resolution.effective_storage_path)
-        .map_err(|error| BitFunError::Session(error.to_string()))?;
+        .map_err(|error| HaloError::Session(error.to_string()))?;
         debug!(
             "Session storage path resolved from workspace request: workspace_path={}, session_storage_path={}, duration_ms={}",
             requested_workspace_path.display(),
@@ -940,7 +940,7 @@ impl SessionManager {
         parent_session_id: &str,
         related_session_id: &str,
         dialog_turn_id: &str,
-    ) -> BitFunResult<Option<DialogTurnData>> {
+    ) -> HaloResult<Option<DialogTurnData>> {
         let storage_path = self
             .effective_session_storage_path(parent_session_id)
             .await
@@ -950,7 +950,7 @@ impl SessionManager {
                     .map(|entry| entry.value().path.clone())
             })
             .ok_or_else(|| {
-                BitFunError::NotFound(format!(
+                HaloError::NotFound(format!(
                     "Session storage path not found: {parent_session_id}"
                 ))
             })?;
@@ -968,7 +968,7 @@ impl SessionManager {
         boundary_turn_index: usize,
         compression_id: &str,
         trigger: &str,
-    ) -> BitFunResult<Option<CompressionTranscriptReference>> {
+    ) -> HaloResult<Option<CompressionTranscriptReference>> {
         if !self.should_persist_session_id(session_id) {
             return Ok(None);
         }
@@ -981,7 +981,7 @@ impl SessionManager {
                     .map(|entry| entry.value().path.clone())
             })
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Session storage path is unavailable: {}",
                     session_id
                 ))
@@ -1039,16 +1039,16 @@ impl SessionManager {
         source_session_id: &str,
         reference: &SessionReferenceLocator,
         reference_artifact_stem: &str,
-    ) -> BitFunResult<MaterializedSessionReference> {
-        bitfun_core_types::validate_session_id(source_session_id)
-            .map_err(BitFunError::Validation)?;
-        bitfun_core_types::validate_session_id(&reference.session_id)
-            .map_err(BitFunError::Validation)?;
-        bitfun_core_types::validate_session_id(reference_artifact_stem)
-            .map_err(BitFunError::Validation)?;
+    ) -> HaloResult<MaterializedSessionReference> {
+        halo_core_types::validate_session_id(source_session_id)
+            .map_err(HaloError::Validation)?;
+        halo_core_types::validate_session_id(&reference.session_id)
+            .map_err(HaloError::Validation)?;
+        halo_core_types::validate_session_id(reference_artifact_stem)
+            .map_err(HaloError::Validation)?;
         let workspace_path = reference.workspace_path.trim();
         if workspace_path.is_empty() {
-            return Err(BitFunError::Validation(
+            return Err(HaloError::Validation(
                 "Referenced session workspace_path is required".to_string(),
             ));
         }
@@ -1062,7 +1062,7 @@ impl SessionManager {
                     .map(|entry| entry.value().path.clone())
             })
             .ok_or_else(|| {
-                BitFunError::NotFound(format!(
+                HaloError::NotFound(format!(
                     "Current session storage path is unavailable: {}",
                     source_session_id
                 ))
@@ -1078,7 +1078,7 @@ impl SessionManager {
         if source_session_id == reference.session_id
             && source_storage_path == reference_storage_path
         {
-            return Err(BitFunError::Validation(
+            return Err(HaloError::Validation(
                 "A session cannot reference itself".to_string(),
             ));
         }
@@ -1088,19 +1088,19 @@ impl SessionManager {
             .load_session_metadata(&reference_storage_path, &reference.session_id)
             .await?
             .ok_or_else(|| {
-                BitFunError::NotFound(format!(
+                HaloError::NotFound(format!(
                     "Referenced session not found: {}",
                     reference.session_id
                 ))
             })?;
         if metadata.status == SessionStatus::Archived {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Referenced session is archived: {}",
                 reference.session_id
             )));
         }
         if !matches!(metadata.session_kind, SessionKind::Standard) {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Referenced session is not a visible top-level session: {}",
                 reference.session_id
             )));
@@ -1109,7 +1109,7 @@ impl SessionManager {
             .get_session(&reference.session_id)
             .is_some_and(|session| matches!(session.state, SessionState::Processing { .. }))
         {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Referenced session is busy: {}",
                 reference.session_id
             )));
@@ -1448,7 +1448,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<Vec<Message>> {
+    ) -> HaloResult<Vec<Message>> {
         let turns = self
             .persistence_manager
             .load_session_turns(workspace_path, session_id)
@@ -1558,7 +1558,7 @@ impl SessionManager {
         workspace_path: &Path,
         session_id: &str,
         turn_index: usize,
-    ) -> BitFunResult<Option<TurnSkillAgentSnapshot>> {
+    ) -> HaloResult<Option<TurnSkillAgentSnapshot>> {
         self.persistence_manager
             .load_turn_skill_agent_snapshot(workspace_path, session_id, turn_index)
             .await
@@ -1568,7 +1568,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<Option<SessionPromptCache>> {
+    ) -> HaloResult<Option<SessionPromptCache>> {
         let cache = match self
             .persistence_manager
             .load_prompt_cache(workspace_path, session_id)
@@ -2073,7 +2073,7 @@ impl SessionManager {
         session_name: String,
         agent_type: String,
         config: SessionConfig,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.create_session_with_id_and_details(
             None,
             session_name,
@@ -2092,7 +2092,7 @@ impl SessionManager {
         session_name: String,
         agent_type: String,
         config: SessionConfig,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.create_session_with_id_and_details(
             session_id,
             session_name,
@@ -2112,7 +2112,7 @@ impl SessionManager {
         agent_type: String,
         config: SessionConfig,
         created_by: Option<String>,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.create_session_with_id_and_details(
             session_id,
             session_name,
@@ -2133,7 +2133,7 @@ impl SessionManager {
         config: SessionConfig,
         created_by: Option<String>,
         kind: SessionKind,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.create_session_with_id_and_details_internal(
             session_id,
             session_name,
@@ -2154,7 +2154,7 @@ impl SessionManager {
         config: SessionConfig,
         created_by: Option<String>,
         kind: SessionKind,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.create_session_with_id_and_details_internal(
             session_id,
             session_name,
@@ -2176,16 +2176,16 @@ impl SessionManager {
         created_by: Option<String>,
         kind: SessionKind,
         transient: bool,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         let _workspace_path = Self::session_workspace_from_config(&config).ok_or_else(|| {
-            BitFunError::Validation("Session workspace_path is required".to_string())
+            HaloError::Validation("Session workspace_path is required".to_string())
         })?;
 
         let session_storage_path = self
             .effective_storage_path_for_config(&config)
             .await
             .ok_or_else(|| {
-                BitFunError::Validation("Session workspace_path is required".to_string())
+                HaloError::Validation("Session workspace_path is required".to_string())
             })?;
 
         let mut session = if let Some(id) = session_id {
@@ -2201,7 +2201,7 @@ impl SessionManager {
         let session_id = session.session_id.clone();
         let _mutation_guard = self.lock_session_mutation(&session_id).await;
         if self.sessions.contains_key(&session_id) {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Session ID already exists: {session_id}"
             )));
         }
@@ -2215,7 +2215,7 @@ impl SessionManager {
         // exposing the session. Persistent sessions must never reuse an on-disk ID:
         // overwriting the header would retain old turns and silently mix histories.
         if self.sessions.contains_key(&session_id) {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Session ID already exists: {session_id}"
             )));
         }
@@ -2224,7 +2224,7 @@ impl SessionManager {
                 .persistence_manager
                 .session_storage_exists(&session_storage_path, &session_id)?
         {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Persisted session ID already exists: {session_id}"
             )));
         }
@@ -2260,7 +2260,7 @@ impl SessionManager {
                     &session_storage_path,
                     storage_claim,
                 );
-                return Err(BitFunError::Validation(format!(
+                return Err(HaloError::Validation(format!(
                     "Session ID already exists: {session_id}"
                 )));
             }
@@ -3044,7 +3044,7 @@ impl SessionManager {
         workspace_path: &Path,
         session_id: &str,
         target_turn: usize,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let metadata = self
             .persistence_manager
             .load_session_metadata(workspace_path, session_id)
@@ -3123,7 +3123,7 @@ impl SessionManager {
         &self,
         session_id: &str,
         new_state: SessionState,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let effective_path = self.effective_session_storage_path(session_id).await;
 
         // IMPORTANT: keep the DashMap guard scope short -- do NOT hold it across .await.
@@ -3135,7 +3135,7 @@ impl SessionManager {
 
             self.config.enable_persistence && self.should_persist_session(&session)
         } else {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "Session not found: {}",
                 session_id
             )));
@@ -3166,7 +3166,7 @@ impl SessionManager {
         session_id: &str,
         expected_turn_id: &str,
         new_state: SessionState,
-    ) -> BitFunResult<bool> {
+    ) -> HaloResult<bool> {
         let effective_path = self.effective_session_storage_path(session_id).await;
 
         let should_persist = if let Some(mut session) = self.sessions.get_mut(session_id) {
@@ -3192,7 +3192,7 @@ impl SessionManager {
 
             self.config.enable_persistence && self.should_persist_session(&session)
         } else {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "Session not found: {}",
                 session_id
             )));
@@ -3215,7 +3215,7 @@ impl SessionManager {
     }
 
     /// Update session title (in-memory + persistence)
-    pub async fn update_session_title(&self, session_id: &str, title: &str) -> BitFunResult<()> {
+    pub async fn update_session_title(&self, session_id: &str, title: &str) -> HaloResult<()> {
         let normalized_title = Self::normalize_session_title_input(title)?;
         let _mutation_guard = self.acquire_session_mutation(session_id).await?;
         self.update_session_title_locked(session_id, normalized_title)
@@ -3226,12 +3226,12 @@ impl SessionManager {
         &self,
         session_id: &str,
         normalized_title: String,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let workspace_path = self.effective_session_storage_path(session_id).await;
 
         {
             let Some(mut session) = self.sessions.get_mut(session_id) else {
-                return Err(BitFunError::NotFound(format!(
+                return Err(HaloError::NotFound(format!(
                     "Session not found: {}",
                     session_id
                 )));
@@ -3243,7 +3243,7 @@ impl SessionManager {
 
         if self.should_persist_session_id(session_id) {
             let Some(workspace_path) = workspace_path.as_ref() else {
-                return Err(BitFunError::Session(format!(
+                return Err(HaloError::Session(format!(
                     "Workspace path is unavailable for session {}",
                     session_id
                 )));
@@ -3251,7 +3251,7 @@ impl SessionManager {
             // Clone the session data out of the DashMap guard before awaiting I/O.
             let session_snapshot = {
                 let Some(session) = self.sessions.get(session_id) else {
-                    return Err(BitFunError::NotFound(format!(
+                    return Err(HaloError::NotFound(format!(
                         "Session not found: {}",
                         session_id
                     )));
@@ -3277,11 +3277,11 @@ impl SessionManager {
         session_id: &str,
         expected_current_title: &str,
         title: &str,
-    ) -> BitFunResult<bool> {
+    ) -> HaloResult<bool> {
         let normalized_title = Self::normalize_session_title_input(title)?;
         let _mutation_guard = self.acquire_session_mutation(session_id).await?;
         let Some(session) = self.sessions.get(session_id) else {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "Session not found: {}",
                 session_id
             )));
@@ -3306,13 +3306,13 @@ impl SessionManager {
         &self,
         session_id: &str,
         agent_type: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let _mutation_guard = self.acquire_session_mutation(session_id).await?;
         let mut session = self
             .sessions
             .get(session_id)
             .map(|session| session.clone())
-            .ok_or_else(|| BitFunError::NotFound(format!("Session not found: {}", session_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Session not found: {}", session_id)))?;
 
         if session.agent_type == agent_type {
             return Ok(());
@@ -3340,7 +3340,7 @@ impl SessionManager {
             active_session.updated_at = now;
             active_session.last_activity_at = now;
         } else {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "Session not found: {}",
                 session_id
             )));
@@ -3363,14 +3363,14 @@ impl SessionManager {
         &self,
         session_id: &str,
         agent_type: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let _mutation_guard = self.acquire_session_mutation(session_id).await?;
         if let Some(mut session) = self.sessions.get_mut(session_id) {
             session.last_submitted_agent_type = Some(agent_type.to_string());
             session.updated_at = SystemTime::now();
             session.last_activity_at = SystemTime::now();
         } else {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "Session not found: {}",
                 session_id
             )));
@@ -3403,14 +3403,14 @@ impl SessionManager {
         session_id: &str,
         last_user_dialog_agent_type: Option<String>,
         last_submitted_agent_type: Option<String>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if let Some(mut session) = self.sessions.get_mut(session_id) {
             session.last_user_dialog_agent_type = last_user_dialog_agent_type;
             session.last_submitted_agent_type = last_submitted_agent_type;
             session.updated_at = SystemTime::now();
             session.last_activity_at = SystemTime::now();
         } else {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "Session not found: {}",
                 session_id
             )));
@@ -3472,7 +3472,7 @@ impl SessionManager {
         &self,
         session_id: &str,
         model_id: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let ai_config = Self::load_ai_config_for_model_resolution().await;
         let mut resolved_context_window = None;
 
@@ -3509,7 +3509,7 @@ impl SessionManager {
             session.updated_at = SystemTime::now();
             session.last_activity_at = SystemTime::now();
         } else {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "Session not found: {}",
                 session_id
             )));
@@ -3562,7 +3562,7 @@ impl SessionManager {
             };
             if let Err(restore_error) = restore_result {
                 return match restore_error {
-                    BitFunError::NotFound(message) => {
+                    HaloError::NotFound(message) => {
                         Err(SessionExecutionBindingError::NotFound(message))
                     }
                     other => Err(SessionExecutionBindingError::Internal(other)),
@@ -3616,7 +3616,7 @@ impl SessionManager {
     /// This method reloads the AI config and updates `max_context_tokens` to the
     /// model's actual configured `context_window`, so subagents with large-context
     /// models are not prematurely capped.
-    pub async fn refresh_session_context_window(&self, session_id: &str) -> BitFunResult<()> {
+    pub async fn refresh_session_context_window(&self, session_id: &str) -> HaloResult<()> {
         if let Some(ai_config) = Self::load_ai_config_for_model_resolution().await {
             if let Some(mut session) = self.sessions.get_mut(session_id) {
                 let previous = session.config.max_context_tokens;
@@ -3674,8 +3674,8 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<()> {
-        bitfun_core_types::validate_session_id(session_id).map_err(BitFunError::Validation)?;
+    ) -> HaloResult<()> {
+        halo_core_types::validate_session_id(session_id).map_err(HaloError::Validation)?;
         let _mutation_guard = self.lock_session_mutation(session_id).await;
         let session_storage_path = self
             .resolve_storage_path_for_workspace_path(workspace_path)
@@ -3696,8 +3696,8 @@ impl SessionManager {
         .await
     }
 
-    pub(crate) async fn delete_session_by_id(&self, session_id: &str) -> BitFunResult<()> {
-        bitfun_core_types::validate_session_id(session_id).map_err(BitFunError::Validation)?;
+    pub(crate) async fn delete_session_by_id(&self, session_id: &str) -> HaloResult<()> {
+        halo_core_types::validate_session_id(session_id).map_err(HaloError::Validation)?;
         let _mutation_guard = self.lock_session_mutation(session_id).await;
         let session = self
             .sessions
@@ -3717,7 +3717,7 @@ impl SessionManager {
                 .map(|entry| entry.value().path.clone())
         };
         let Some(session_storage_path) = session_storage_path else {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "Session storage path not found: {}",
                 session_id
             )));
@@ -3746,8 +3746,8 @@ impl SessionManager {
         remote_connection_id: Option<&str>,
         remote_ssh_host: Option<&str>,
         session_id: &str,
-    ) -> BitFunResult<bool> {
-        bitfun_core_types::validate_session_id(session_id).map_err(BitFunError::Validation)?;
+    ) -> HaloResult<bool> {
+        halo_core_types::validate_session_id(session_id).map_err(HaloError::Validation)?;
         let Some(root) = self.get_session(session_id) else {
             return Ok(false);
         };
@@ -3765,7 +3765,7 @@ impl SessionManager {
                 .as_deref()
                 .map(Path::new)
                 .ok_or_else(|| {
-                    BitFunError::Validation(format!(
+                    HaloError::Validation(format!(
                         "Transient session workspace binding is missing: {}",
                         descendant.session_id
                     ))
@@ -3794,8 +3794,8 @@ impl SessionManager {
         remote_connection_id: Option<&str>,
         remote_ssh_host: Option<&str>,
         session_id: &str,
-    ) -> BitFunResult<Vec<String>> {
-        bitfun_core_types::validate_session_id(session_id).map_err(BitFunError::Validation)?;
+    ) -> HaloResult<Vec<String>> {
+        halo_core_types::validate_session_id(session_id).map_err(HaloError::Validation)?;
         let Some(root) = self.get_session(session_id) else {
             return Ok(Vec::new());
         };
@@ -3864,9 +3864,9 @@ impl SessionManager {
         workspace_path: &Path,
         remote_connection_id: Option<&str>,
         remote_ssh_host: Option<&str>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if !self.is_transient_session(&session.session_id) {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Cannot discard a durable session as transient: {}",
                 session.session_id
             )));
@@ -3879,7 +3879,7 @@ impl SessionManager {
             .map(Path::new)
             .map(Self::normalize_session_storage_path)
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Transient session workspace binding is missing: {}",
                     session.session_id
                 ))
@@ -3888,7 +3888,7 @@ impl SessionManager {
             || session.config.remote_connection_id.as_deref() != remote_connection_id
             || session.config.remote_ssh_host.as_deref() != remote_ssh_host
         {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Transient session ownership binding does not match: {}",
                 session.session_id
             )));
@@ -3902,7 +3902,7 @@ impl SessionManager {
         remote_connection_id: Option<&str>,
         remote_ssh_host: Option<&str>,
         session_id: &str,
-    ) -> BitFunResult<bool> {
+    ) -> HaloResult<bool> {
         let _mutation_guard = self.lock_session_mutation(session_id).await;
         let Some(session) = self.get_session(session_id) else {
             return Ok(false);
@@ -3914,7 +3914,7 @@ impl SessionManager {
             remote_ssh_host,
         )?;
         if matches!(session.state, SessionState::Processing { .. }) {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Cannot discard a processing transient session: {session_id}"
             )));
         }
@@ -3936,19 +3936,19 @@ impl SessionManager {
     ///
     /// Callers must quiesce scheduler execution before unloading. A processing
     /// session is rejected so close/failure compensation cannot detach live work.
-    pub(crate) async fn unload_session_from_memory(&self, session_id: &str) -> BitFunResult<bool> {
-        bitfun_core_types::validate_session_id(session_id).map_err(BitFunError::Validation)?;
+    pub(crate) async fn unload_session_from_memory(&self, session_id: &str) -> HaloResult<bool> {
+        halo_core_types::validate_session_id(session_id).map_err(HaloError::Validation)?;
         let _mutation_guard = self.lock_session_mutation(session_id).await;
         let Some(session) = self.get_session(session_id) else {
             return Ok(false);
         };
         if self.is_transient_session(session_id) {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Cannot unload a transient session; use the owned discard path: {session_id}"
             )));
         }
         if matches!(session.state, SessionState::Processing { .. }) {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Cannot unload a processing session: {session_id}"
             )));
         }
@@ -3958,7 +3958,7 @@ impl SessionManager {
                 .effective_session_storage_path(session_id)
                 .await
                 .ok_or_else(|| {
-                    BitFunError::NotFound(format!(
+                    HaloError::NotFound(format!(
                         "Session storage path is unavailable: {session_id}"
                     ))
                 })?;
@@ -3990,7 +3990,7 @@ impl SessionManager {
         cleanup_workspace_path: &Path,
         session_id: &str,
         policy: SessionResourceCleanupPolicy,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let mut required_error = None;
         let mut record_error = |stage: &'static str, error: String| {
             warn!(
@@ -3998,7 +3998,7 @@ impl SessionManager {
                 session_id, stage, error
             );
             if policy == SessionResourceCleanupPolicy::Required && required_error.is_none() {
-                required_error = Some(BitFunError::Session(format!(
+                required_error = Some(HaloError::Session(format!(
                     "Session resource cleanup is incomplete: session_id={session_id}, stage={stage}, error={error}"
                 )));
             }
@@ -4054,7 +4054,7 @@ impl SessionManager {
         cleanup_workspace_path: &Path,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let delete_started_at = Instant::now();
         let _temporary_write_lock = if self.config.enable_persistence
             && !self.is_transient_session(session_id)
@@ -4135,7 +4135,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         let session_storage_path = self
             .resolve_storage_path_for_restore_workspace_path(workspace_path)
             .await?;
@@ -4147,7 +4147,7 @@ impl SessionManager {
         &self,
         request: SessionStoragePathRequest,
         session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         let session_storage_path = self.resolve_storage_path_for_request(request).await?;
         self.restore_session_from_storage_path(&session_storage_path, session_id)
             .await
@@ -4157,7 +4157,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         let session_storage_path = self
             .resolve_storage_path_for_restore_workspace_path(workspace_path)
             .await?;
@@ -4169,7 +4169,7 @@ impl SessionManager {
         &self,
         request: SessionStoragePathRequest,
         session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         let session_storage_path = self.resolve_storage_path_for_request(request).await?;
         self.restore_internal_session_from_storage_path(&session_storage_path, session_id)
             .await
@@ -4179,7 +4179,7 @@ impl SessionManager {
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.restore_session_from_storage_path_internal(session_storage_path, session_id, false)
             .await
     }
@@ -4188,7 +4188,7 @@ impl SessionManager {
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         self.restore_session_from_storage_path_internal(session_storage_path, session_id, true)
             .await
     }
@@ -4198,7 +4198,7 @@ impl SessionManager {
         session_storage_path: &Path,
         session_id: &str,
         include_internal: bool,
-    ) -> BitFunResult<Session> {
+    ) -> HaloResult<Session> {
         let (session, _) = self
             .restore_session_with_turns_from_storage_path_internal(
                 session_storage_path,
@@ -4220,7 +4220,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>)> {
         self.restore_session_view_timed(workspace_path, session_id)
             .await
             .map(|(session, turns, _)| (session, turns))
@@ -4230,7 +4230,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>, SessionViewRestoreTiming)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>, SessionViewRestoreTiming)> {
         let storage_path_started_at = Instant::now();
         let session_storage_path = self
             .resolve_storage_path_for_restore_workspace_path(workspace_path)
@@ -4247,7 +4247,7 @@ impl SessionManager {
         &self,
         request: SessionStoragePathRequest,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>, SessionViewRestoreTiming)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>, SessionViewRestoreTiming)> {
         let storage_path_started_at = Instant::now();
         let session_storage_path = self.resolve_storage_path_for_request(request).await?;
         let resolve_storage_path_duration_ms = elapsed_ms_u64(storage_path_started_at);
@@ -4262,7 +4262,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>)> {
         self.restore_internal_session_view_timed(workspace_path, session_id)
             .await
             .map(|(session, turns, _)| (session, turns))
@@ -4272,7 +4272,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>, SessionViewRestoreTiming)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>, SessionViewRestoreTiming)> {
         let storage_path_started_at = Instant::now();
         let session_storage_path = self
             .resolve_storage_path_for_restore_workspace_path(workspace_path)
@@ -4292,7 +4292,7 @@ impl SessionManager {
         &self,
         request: SessionStoragePathRequest,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>, SessionViewRestoreTiming)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>, SessionViewRestoreTiming)> {
         let storage_path_started_at = Instant::now();
         let session_storage_path = self.resolve_storage_path_for_request(request).await?;
         let resolve_storage_path_duration_ms = elapsed_ms_u64(storage_path_started_at);
@@ -4311,7 +4311,7 @@ impl SessionManager {
         workspace_path: &Path,
         session_id: &str,
         tail_turn_count: usize,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>, usize)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>, usize)> {
         self.restore_session_view_tail_timed(workspace_path, session_id, tail_turn_count)
             .await
             .map(|(session, turns, total_turn_count, _)| (session, turns, total_turn_count))
@@ -4322,7 +4322,7 @@ impl SessionManager {
         workspace_path: &Path,
         session_id: &str,
         tail_turn_count: usize,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<DialogTurnData>,
         usize,
@@ -4349,7 +4349,7 @@ impl SessionManager {
         workspace_path: &Path,
         session_id: &str,
         tail_turn_count: usize,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>, usize)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>, usize)> {
         self.restore_internal_session_view_tail_timed(workspace_path, session_id, tail_turn_count)
             .await
             .map(|(session, turns, total_turn_count, _)| (session, turns, total_turn_count))
@@ -4360,7 +4360,7 @@ impl SessionManager {
         workspace_path: &Path,
         session_id: &str,
         tail_turn_count: usize,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<DialogTurnData>,
         usize,
@@ -4386,7 +4386,7 @@ impl SessionManager {
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>, SessionViewRestoreTiming)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>, SessionViewRestoreTiming)> {
         self.restore_session_view_from_storage_path_internal(
             session_storage_path,
             session_id,
@@ -4401,7 +4401,7 @@ impl SessionManager {
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>, SessionViewRestoreTiming)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>, SessionViewRestoreTiming)> {
         self.restore_session_view_from_storage_path_internal(
             session_storage_path,
             session_id,
@@ -4417,7 +4417,7 @@ impl SessionManager {
         session_storage_path: &Path,
         session_id: &str,
         tail_turn_count: usize,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<DialogTurnData>,
         usize,
@@ -4437,7 +4437,7 @@ impl SessionManager {
         session_storage_path: &Path,
         session_id: &str,
         tail_turn_count: usize,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<DialogTurnData>,
         usize,
@@ -4458,13 +4458,13 @@ impl SessionManager {
         session_id: &str,
         include_internal: bool,
         tail_turn_count: Option<usize>,
-    ) -> BitFunResult<(
+    ) -> HaloResult<(
         Session,
         Vec<DialogTurnData>,
         usize,
         SessionViewRestoreTiming,
     )> {
-        bitfun_core_types::validate_session_id(session_id).map_err(BitFunError::Validation)?;
+        halo_core_types::validate_session_id(session_id).map_err(HaloError::Validation)?;
         let restore_started_at = Instant::now();
         let resolve_storage_path_duration_ms = 0;
         debug!(
@@ -4479,7 +4479,7 @@ impl SessionManager {
             .await?
             .is_some_and(|metadata| !include_internal && metadata.should_hide_from_user_lists())
         {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "Session not found: {}",
                 session_id
             )));
@@ -4573,7 +4573,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>)> {
         let session_storage_path = self
             .resolve_storage_path_for_restore_workspace_path(workspace_path)
             .await?;
@@ -4585,7 +4585,7 @@ impl SessionManager {
         &self,
         request: SessionStoragePathRequest,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>)> {
         let session_storage_path = self.resolve_storage_path_for_request(request).await?;
         self.restore_session_with_turns_from_storage_path(&session_storage_path, session_id)
             .await
@@ -4595,7 +4595,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>)> {
         let session_storage_path = self
             .resolve_storage_path_for_restore_workspace_path(workspace_path)
             .await?;
@@ -4610,7 +4610,7 @@ impl SessionManager {
         &self,
         request: SessionStoragePathRequest,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>)> {
         let session_storage_path = self.resolve_storage_path_for_request(request).await?;
         self.restore_internal_session_with_turns_from_storage_path(
             &session_storage_path,
@@ -4623,7 +4623,7 @@ impl SessionManager {
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>)> {
         self.restore_session_with_turns_from_storage_path_internal(
             session_storage_path,
             session_id,
@@ -4636,7 +4636,7 @@ impl SessionManager {
         &self,
         session_storage_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>)> {
         self.restore_session_with_turns_from_storage_path_internal(
             session_storage_path,
             session_id,
@@ -4650,12 +4650,12 @@ impl SessionManager {
         session_storage_path: &Path,
         session_id: &str,
         include_internal: bool,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>)> {
         let _mutation_guard = self.lock_session_mutation(session_id).await;
 
         if self.is_session_loaded_from_storage_path(session_storage_path, session_id)? {
             let session = self.get_session(session_id).ok_or_else(|| {
-                BitFunError::NotFound(format!(
+                HaloError::NotFound(format!(
                     "Session not found after identity check: {session_id}"
                 ))
             })?;
@@ -4702,7 +4702,7 @@ impl SessionManager {
         session_storage_path: &Path,
         session_id: &str,
         include_internal: bool,
-    ) -> BitFunResult<(Session, Vec<DialogTurnData>)> {
+    ) -> HaloResult<(Session, Vec<DialogTurnData>)> {
         let restore_started_at = Instant::now();
         // Check if session is already in memory
         let session_already_in_memory = self.sessions.contains_key(session_id);
@@ -4726,7 +4726,7 @@ impl SessionManager {
             .as_ref()
             .is_some_and(|metadata| !include_internal && metadata.should_hide_from_user_lists())
         {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "Session not found: {}",
                 session_id
             )));
@@ -4770,7 +4770,7 @@ impl SessionManager {
                     .or_else(|| available_modes.first())
                     .map(|mode| mode.id.clone())
                     .ok_or_else(|| {
-                        BitFunError::Validation(
+                        HaloError::Validation(
                             "No executable main agent mode is available for session restore"
                                 .to_string(),
                         )
@@ -5035,7 +5035,7 @@ impl SessionManager {
         workspace_path: &Path,
         session_id: &str,
         target_turn: usize,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let session_storage_path = self
             .resolve_storage_path_for_restore_workspace_path(workspace_path)
             .await?;
@@ -5054,7 +5054,7 @@ impl SessionManager {
         session_storage_path: &Path,
         session_id: &str,
         target_turn: usize,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let workspace_path = session_storage_path;
 
         self.validate_rollback_context_to_turn_start_locked(
@@ -5093,7 +5093,7 @@ impl SessionManager {
                 .load_turn_context_snapshot(workspace_path, session_id, target_turn - 1)
                 .await?
                 .ok_or_else(|| {
-                    BitFunError::NotFound(format!(
+                    HaloError::NotFound(format!(
                         "turn context snapshot not found: session_id={} turn={}",
                         session_id,
                         target_turn - 1
@@ -5201,7 +5201,7 @@ impl SessionManager {
         session_storage_path: &Path,
         session_id: &str,
         target_turn: usize,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if !self.config.enable_persistence {
             return Ok(());
         }
@@ -5218,7 +5218,7 @@ impl SessionManager {
                 .await?
                 .is_none()
         {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "turn context snapshot not found: session_id={} turn={}",
                 session_id,
                 target_turn - 1
@@ -5228,7 +5228,7 @@ impl SessionManager {
     }
 
     /// List all sessions
-    pub async fn list_sessions(&self, workspace_path: &Path) -> BitFunResult<Vec<SessionSummary>> {
+    pub async fn list_sessions(&self, workspace_path: &Path) -> HaloResult<Vec<SessionSummary>> {
         if self.config.enable_persistence {
             self.persistence_manager.list_sessions(workspace_path).await
         } else {
@@ -5266,7 +5266,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<Option<SessionMetadata>> {
+    ) -> HaloResult<Option<SessionMetadata>> {
         self.persistence_manager
             .load_session_metadata(workspace_path, session_id)
             .await
@@ -5277,7 +5277,7 @@ impl SessionManager {
         workspace_path: &Path,
         session_id: &str,
         update: impl FnOnce(&mut SessionMetadata),
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.persistence_manager
             .update_session_metadata(workspace_path, session_id, update)
             .await
@@ -5288,7 +5288,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         metadata: &SessionMetadata,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.persistence_manager
             .save_session_metadata(workspace_path, metadata)
             .await
@@ -5299,7 +5299,7 @@ impl SessionManager {
         workspace_path: &Path,
         session_id: &str,
         mode: SessionMemoryMode,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.update_session_metadata_at_workspace(workspace_path, session_id, |metadata| {
             metadata.memory_mode = mode;
         })
@@ -5310,7 +5310,7 @@ impl SessionManager {
         &self,
         session_id: &str,
         mode: SessionMemoryMode,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.update_persisted_session_metadata(session_id, |metadata| {
             metadata.memory_mode = mode;
         })
@@ -5321,7 +5321,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let mut should_enqueue_phase2 = false;
         self.update_session_metadata_at_workspace(workspace_path, session_id, |metadata| {
             should_enqueue_phase2 = matches!(
@@ -5339,7 +5339,7 @@ impl SessionManager {
         Ok(())
     }
 
-    async fn enqueue_phase2_if_session_selected(&self, session_id: &str) -> BitFunResult<()> {
+    async fn enqueue_phase2_if_session_selected(&self, session_id: &str) -> HaloResult<()> {
         if self
             .memory_database
             .phase2_selected_for_session(session_id)
@@ -5352,9 +5352,9 @@ impl SessionManager {
         Ok(())
     }
 
-    async fn metadata_workspace_path_for_update(&self, session_id: &str) -> BitFunResult<PathBuf> {
+    async fn metadata_workspace_path_for_update(&self, session_id: &str) -> HaloResult<PathBuf> {
         if !self.should_persist_session_id(session_id) {
-            return Err(BitFunError::Validation(format!(
+            return Err(HaloError::Validation(format!(
                 "Session persistence is disabled: {}",
                 session_id
             )));
@@ -5363,7 +5363,7 @@ impl SessionManager {
         self.effective_session_storage_path(session_id)
             .await
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Session workspace_path is missing: {}",
                     session_id
                 ))
@@ -5374,7 +5374,7 @@ impl SessionManager {
         &self,
         workspace_path: &Path,
         session_id: &str,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if self
             .persistence_manager
             .load_session_metadata(workspace_path, session_id)
@@ -5388,7 +5388,7 @@ impl SessionManager {
             .sessions
             .get(session_id)
             .map(|value| value.clone())
-            .ok_or_else(|| BitFunError::NotFound(format!("Session not found: {}", session_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Session not found: {}", session_id)))?;
         self.persistence_manager
             .save_session(workspace_path, &session)
             .await
@@ -5399,7 +5399,7 @@ impl SessionManager {
         workspace_path: &Path,
         session_id: &str,
         update: impl FnOnce(&mut SessionMetadata),
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.ensure_session_metadata_persisted(workspace_path, session_id)
             .await?;
         self.persistence_manager
@@ -5411,7 +5411,7 @@ impl SessionManager {
         &self,
         session_id: &str,
         update: impl FnOnce(&mut SessionMetadata),
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if !self.should_persist_session_id(session_id) {
             return Ok(());
         }
@@ -5425,7 +5425,7 @@ impl SessionManager {
         &self,
         session_id: &str,
         patch: serde_json::Value,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.update_persisted_session_metadata(session_id, |metadata| {
             merge_session_custom_metadata_value(metadata, patch)
         })
@@ -5436,7 +5436,7 @@ impl SessionManager {
         &self,
         session_id: &str,
         relationship: SessionRelationship,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.update_persisted_session_metadata(session_id, |metadata| {
             set_session_relationship(metadata, relationship)
         })
@@ -5447,7 +5447,7 @@ impl SessionManager {
         &self,
         session_id: &str,
         relationship: SessionRelationship,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.update_persisted_session_metadata(session_id, |metadata| {
             apply_session_lineage(metadata, relationship)
         })
@@ -5459,7 +5459,7 @@ impl SessionManager {
         workspace_path: &Path,
         parent_session_id: &str,
         parent_dialog_turn_ids: &HashSet<String>,
-    ) -> BitFunResult<Vec<String>> {
+    ) -> HaloResult<Vec<String>> {
         if parent_session_id.trim().is_empty() || parent_dialog_turn_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -5479,7 +5479,7 @@ impl SessionManager {
         &self,
         session_id: &str,
         deep_review_run_manifest: Option<serde_json::Value>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.update_persisted_session_metadata(session_id, |metadata| {
             set_deep_review_run_manifest(metadata, deep_review_run_manifest)
         })
@@ -5490,7 +5490,7 @@ impl SessionManager {
         &self,
         session_id: &str,
         review_target_evidence: Option<serde_json::Value>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.update_persisted_session_metadata(session_id, |metadata| {
             set_review_target_evidence(metadata, review_target_evidence)
         })
@@ -5510,16 +5510,16 @@ impl SessionManager {
         context_messages: Vec<Message>,
         processing_phase: ProcessingPhase,
         user_message_metadata: Option<serde_json::Value>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let _mutation_guard = self.acquire_session_mutation(session_id).await?;
         let session = self
             .get_session(session_id)
-            .ok_or_else(|| BitFunError::NotFound(format!("Session not found: {}", session_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Session not found: {}", session_id)))?;
         let workspace_path = self
             .effective_storage_path_for_config(&session.config)
             .await
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Session workspace_path is missing: {}",
                     session_id
                 ))
@@ -5598,7 +5598,7 @@ impl SessionManager {
         turn_id: Option<String>,
         image_contexts: Option<Vec<ImageContextData>>,
         user_message_metadata: Option<serde_json::Value>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let user_message =
             if let Some(images) = image_contexts.as_ref().filter(|v| !v.is_empty()).cloned() {
                 Message::user_multimodal(user_input.clone(), images)
@@ -5635,7 +5635,7 @@ impl SessionManager {
         image_contexts: Option<Vec<ImageContextData>>,
         prepended_messages: Vec<Message>,
         user_message_metadata: Option<serde_json::Value>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let user_message =
             if let Some(images) = image_contexts.as_ref().filter(|v| !v.is_empty()).cloned() {
                 Message::user_multimodal(user_input.clone(), images)
@@ -5684,7 +5684,7 @@ impl SessionManager {
         user_input: String,
         turn_id: Option<String>,
         user_message_metadata: Option<serde_json::Value>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let turn_id = self
             .start_persisted_turn(
                 session_id,
@@ -5713,7 +5713,7 @@ impl SessionManager {
         display_message: String,
         turn_id: Option<String>,
         user_message_metadata: Option<serde_json::Value>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         let turn_id = self
             .start_persisted_turn(
                 session_id,
@@ -5741,16 +5741,16 @@ impl SessionManager {
         turn_id: Option<String>,
         timestamp_ms: Option<u64>,
         user_message_metadata: Option<serde_json::Value>,
-    ) -> BitFunResult<DialogTurnData> {
+    ) -> HaloResult<DialogTurnData> {
         let _mutation_guard = self.lock_session_mutation(session_id).await;
         let session = self
             .get_session(session_id)
-            .ok_or_else(|| BitFunError::NotFound(format!("Session not found: {}", session_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Session not found: {}", session_id)))?;
         let workspace_path = self
             .effective_storage_path_for_config(&session.config)
             .await
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Session workspace_path is missing: {}",
                     session_id
                 ))
@@ -6044,7 +6044,7 @@ impl SessionManager {
         final_response: String,
         new_messages: &[Message],
         stats: TurnStats,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if !self.should_persist_session_id(session_id) {
             debug!(
                 "Skipping dialog turn persistence for transient session completion: session_id={}, turn_id={}, response_len={}, rounds={}",
@@ -6060,7 +6060,7 @@ impl SessionManager {
             .effective_session_storage_path(session_id)
             .await
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Session workspace_path is missing: {}",
                     session_id
                 ))
@@ -6069,12 +6069,12 @@ impl SessionManager {
             .sessions
             .get(session_id)
             .and_then(|session| session.dialog_turn_ids.iter().position(|id| id == turn_id))
-            .ok_or_else(|| BitFunError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
         let mut turn = self
             .persistence_manager
             .load_dialog_turn(&workspace_path, session_id, turn_index)
             .await?
-            .ok_or_else(|| BitFunError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
 
         // Update state
         let completion_timestamp = SystemTime::now()
@@ -6174,7 +6174,7 @@ impl SessionManager {
         session_id: &str,
         turn_id: &str,
         error: String,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if !self.should_persist_session_id(session_id) {
             debug!(
                 "Skipping dialog turn persistence for transient session failure: session_id={}, turn_id={}, error={}",
@@ -6187,7 +6187,7 @@ impl SessionManager {
             .effective_session_storage_path(session_id)
             .await
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Session workspace_path is missing: {}",
                     session_id
                 ))
@@ -6196,12 +6196,12 @@ impl SessionManager {
             .sessions
             .get(session_id)
             .and_then(|session| session.dialog_turn_ids.iter().position(|id| id == turn_id))
-            .ok_or_else(|| BitFunError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
         let mut turn = self
             .persistence_manager
             .load_dialog_turn(&workspace_path, session_id, turn_index)
             .await?
-            .ok_or_else(|| BitFunError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
 
         turn.status = TurnStatus::Error;
         turn.end_time = Some(
@@ -6236,7 +6236,7 @@ impl SessionManager {
     /// frontend / persistence layer can distinguish a user-cancelled turn
     /// from a fully-completed one. Any partial assistant content that was
     /// already streamed is preserved in `model_rounds`.
-    pub async fn cancel_dialog_turn(&self, session_id: &str, turn_id: &str) -> BitFunResult<()> {
+    pub async fn cancel_dialog_turn(&self, session_id: &str, turn_id: &str) -> HaloResult<()> {
         if !self.should_persist_session_id(session_id) {
             debug!(
                 "Skipping dialog turn persistence for transient session cancellation: session_id={}, turn_id={}",
@@ -6249,7 +6249,7 @@ impl SessionManager {
             .effective_session_storage_path(session_id)
             .await
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Session workspace_path is missing: {}",
                     session_id
                 ))
@@ -6258,12 +6258,12 @@ impl SessionManager {
             .sessions
             .get(session_id)
             .and_then(|session| session.dialog_turn_ids.iter().position(|id| id == turn_id))
-            .ok_or_else(|| BitFunError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
         let mut turn = self
             .persistence_manager
             .load_dialog_turn(&workspace_path, session_id, turn_index)
             .await?
-            .ok_or_else(|| BitFunError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
 
         turn.status = TurnStatus::Cancelled;
         turn.end_time = Some(
@@ -6299,7 +6299,7 @@ impl SessionManager {
         turn_id: &str,
         model_rounds: Vec<ModelRoundData>,
         duration_ms: u64,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if !self.should_persist_session_id(session_id) {
             debug!(
                 "Skipping maintenance turn persistence for transient session completion: session_id={}, turn_id={}, rounds={}, duration_ms={}",
@@ -6315,7 +6315,7 @@ impl SessionManager {
             .effective_session_storage_path(session_id)
             .await
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Session workspace_path is missing: {}",
                     session_id
                 ))
@@ -6324,12 +6324,12 @@ impl SessionManager {
             .sessions
             .get(session_id)
             .and_then(|session| session.dialog_turn_ids.iter().position(|id| id == turn_id))
-            .ok_or_else(|| BitFunError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
         let mut turn = self
             .persistence_manager
             .load_dialog_turn(&workspace_path, session_id, turn_index)
             .await?
-            .ok_or_else(|| BitFunError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
 
         let completion_timestamp = SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -6363,7 +6363,7 @@ impl SessionManager {
         turn_id: &str,
         error: String,
         model_rounds: Vec<ModelRoundData>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         if !self.should_persist_session_id(session_id) {
             debug!(
                 "Skipping maintenance turn persistence for transient session failure: session_id={}, turn_id={}, rounds={}, error={}",
@@ -6379,7 +6379,7 @@ impl SessionManager {
             .effective_session_storage_path(session_id)
             .await
             .ok_or_else(|| {
-                BitFunError::Validation(format!(
+                HaloError::Validation(format!(
                     "Session workspace_path is missing: {}",
                     session_id
                 ))
@@ -6388,12 +6388,12 @@ impl SessionManager {
             .sessions
             .get(session_id)
             .and_then(|session| session.dialog_turn_ids.iter().position(|id| id == turn_id))
-            .ok_or_else(|| BitFunError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
         let mut turn = self
             .persistence_manager
             .load_dialog_turn(&workspace_path, session_id, turn_index)
             .await?
-            .ok_or_else(|| BitFunError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
+            .ok_or_else(|| HaloError::NotFound(format!("Dialog turn not found: {}", turn_id)))?;
 
         let completion_timestamp = SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -6430,7 +6430,7 @@ impl SessionManager {
     /// Get a best-effort message view for the session.
     /// When persistence is enabled, rebuild from persisted turns so callers see the
     /// canonical turn history instead of the runtime context cache.
-    pub async fn get_messages(&self, session_id: &str) -> BitFunResult<Vec<Message>> {
+    pub async fn get_messages(&self, session_id: &str) -> HaloResult<Vec<Message>> {
         if self.config.enable_persistence {
             if let Some(workspace_path) = self.effective_session_storage_path(session_id).await {
                 let messages = self
@@ -6451,13 +6451,13 @@ impl SessionManager {
         session_id: &str,
         limit: usize,
         before_message_id: Option<&str>,
-    ) -> BitFunResult<(Vec<Message>, bool)> {
+    ) -> HaloResult<(Vec<Message>, bool)> {
         let messages = self.get_messages(session_id).await?;
         Ok(Self::paginate_messages(&messages, limit, before_message_id))
     }
 
     /// Get session's runtime context messages (may already include compressed reminders).
-    pub async fn get_context_messages(&self, session_id: &str) -> BitFunResult<Vec<Message>> {
+    pub async fn get_context_messages(&self, session_id: &str) -> HaloResult<Vec<Message>> {
         let context_messages = self.context_store.get_context_messages(session_id);
 
         Ok(context_messages)
@@ -6465,7 +6465,7 @@ impl SessionManager {
 
     /// Add a semantic message to the runtime context cache and immediately refresh the current
     /// turn snapshot so crashes do not lose the latest in-memory context change.
-    pub async fn add_message(&self, session_id: &str, message: Message) -> BitFunResult<()> {
+    pub async fn add_message(&self, session_id: &str, message: Message) -> HaloResult<()> {
         let memory_citation = message.metadata.memory_citation.clone();
         let turn_id = message.metadata.turn_id.clone();
         let round_id = message.metadata.round_id.clone();
@@ -6575,7 +6575,7 @@ impl SessionManager {
         &self,
         session_id: &str,
         compression_state: CompressionState,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let _mutation_guard = self.acquire_session_mutation(session_id).await?;
         let effective_path = self.effective_session_storage_path(session_id).await;
 
@@ -6590,7 +6590,7 @@ impl SessionManager {
                 None
             }
         } else {
-            return Err(BitFunError::NotFound(format!(
+            return Err(HaloError::NotFound(format!(
                 "Session not found: {}",
                 session_id
             )));
@@ -6612,7 +6612,7 @@ impl SessionManager {
         &self,
         user_message: &str,
         max_length: usize,
-    ) -> BitFunResult<Option<String>> {
+    ) -> HaloResult<Option<String>> {
         use crate::util::types::Message;
 
         // Match agent `LANGUAGE_PREFERENCE`: use `app.language`, not I18nService (see `app_language` module).
@@ -6665,18 +6665,18 @@ impl SessionManager {
 
         // Dynamically get Agent client to generate title
         let ai_client_factory = get_global_ai_client_factory().await.map_err(|e| {
-            BitFunError::AIClient(format!("Failed to get AI client factory: {}", e))
+            HaloError::AIClient(format!("Failed to get AI client factory: {}", e))
         })?;
 
         let ai_client = ai_client_factory
             .get_client_by_func_agent("session-title-func-agent")
             .await
-            .map_err(|e| BitFunError::AIClient(format!("Failed to get AI client: {}", e)))?;
+            .map_err(|e| HaloError::AIClient(format!("Failed to get AI client: {}", e)))?;
 
         let response = ai_client
             .send_message(messages, None)
             .await
-            .map_err(|e| BitFunError::ai(format!("AI call failed: {}", e)))?;
+            .map_err(|e| HaloError::ai(format!("AI call failed: {}", e)))?;
 
         let title = sanitize_plain_model_output(&response.text);
         if title.is_empty() {
@@ -6735,7 +6735,7 @@ impl SessionManager {
         &self,
         user_message: &str,
         max_length: Option<usize>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         Ok(self
             .resolve_session_title(user_message, max_length, true)
             .await
@@ -6942,8 +6942,8 @@ mod tests {
         SessionRelationship, SessionRelationshipKind, ToolCallData, ToolItemData, ToolResultData,
         TurnStatus, UserMessageData,
     };
-    use bitfun_core_types::SessionExecutionTarget;
-    use bitfun_runtime_ports::SessionStoragePathRequest;
+    use halo_core_types::SessionExecutionTarget;
+    use halo_runtime_ports::SessionStoragePathRequest;
     use dashmap::{try_result::TryResult, DashMap};
     use serde_json::json;
     use std::collections::HashSet;
@@ -6959,7 +6959,7 @@ mod tests {
     impl TestWorkspace {
         fn new() -> Self {
             let path = std::env::temp_dir()
-                .join(format!("bitfun-session-restore-test-{}", Uuid::new_v4()));
+                .join(format!("halo-session-restore-test-{}", Uuid::new_v4()));
             std::fs::create_dir_all(&path).expect("test workspace should be created");
             Self { path }
         }
@@ -7043,7 +7043,7 @@ mod tests {
             String::new(),
             vec![ToolCall {
                 tool_id: "tool-1".to_string(),
-                tool_name: bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME.to_string(),
+                tool_name: halo_agent_tools::CALL_DEFERRED_TOOL_NAME.to_string(),
                 arguments: json!({
                     "tool_name": "WebFetch",
                     "args": { "url": "https://example.test" }
@@ -7059,7 +7059,7 @@ mod tests {
         .with_round_id("round-1".to_string());
         let result = Message::tool_result(ToolResult {
             tool_id: "tool-1".to_string(),
-            tool_name: bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME.to_string(),
+            tool_name: halo_agent_tools::CALL_DEFERRED_TOOL_NAME.to_string(),
             effective_tool_name: Some("WebFetch".to_string()),
             result: json!({ "content": "external content" }),
             result_for_assistant: Some("external content".to_string()),
@@ -7077,7 +7077,7 @@ mod tests {
         let provider_result: crate::util::types::Message = (&persisted_messages[1]).into();
         assert_eq!(
             provider_result.name.as_deref(),
-            Some(bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME)
+            Some(halo_agent_tools::CALL_DEFERRED_TOOL_NAME)
         );
 
         let rounds =
@@ -7086,7 +7086,7 @@ mod tests {
         assert_eq!(rounds.len(), 1);
         assert_eq!(rounds[0].tool_items.len(), 1);
         let tool = &rounds[0].tool_items[0];
-        assert_eq!(tool.tool_name, bitfun_agent_tools::CALL_DEFERRED_TOOL_NAME);
+        assert_eq!(tool.tool_name, halo_agent_tools::CALL_DEFERRED_TOOL_NAME);
         assert_eq!(
             tool.tool_call.input,
             json!({
@@ -7133,7 +7133,7 @@ mod tests {
 
     fn test_path_manager() -> Arc<PathManager> {
         let root =
-            std::env::temp_dir().join(format!("bitfun-session-manager-test-{}", Uuid::new_v4()));
+            std::env::temp_dir().join(format!("halo-session-manager-test-{}", Uuid::new_v4()));
         Arc::new(PathManager::with_user_root_for_tests(
             root.join("user-root"),
         ))
@@ -7342,7 +7342,7 @@ mod tests {
             .expect_err("the current manager must reject an already-loaded Session ID");
         assert!(matches!(
             duplicate,
-            crate::util::errors::BitFunError::Validation(ref message)
+            crate::util::errors::HaloError::Validation(ref message)
                 if message.contains("already exists")
         ));
 
@@ -7352,7 +7352,7 @@ mod tests {
             .expect_err("second writer must fail immediately");
         assert!(matches!(
             error,
-            crate::util::errors::BitFunError::SessionInUse { ref session_id }
+            crate::util::errors::HaloError::SessionInUse { ref session_id }
                 if session_id == &session.session_id
         ));
 
@@ -7448,7 +7448,7 @@ mod tests {
             .expect_err("workspace alias must identify the same Session");
         assert!(matches!(
             error,
-            crate::util::errors::BitFunError::SessionInUse { .. }
+            crate::util::errors::HaloError::SessionInUse { .. }
         ));
     }
 
@@ -7564,7 +7564,7 @@ mod tests {
             .expect_err("failed unload save must retain writer ownership");
         assert!(matches!(
             error,
-            crate::util::errors::BitFunError::SessionInUse { .. }
+            crate::util::errors::HaloError::SessionInUse { .. }
         ));
     }
 
@@ -7608,7 +7608,7 @@ mod tests {
             .expect_err("failed unload must retain writer ownership");
         assert!(matches!(
             error,
-            crate::util::errors::BitFunError::SessionInUse { .. }
+            crate::util::errors::HaloError::SessionInUse { .. }
         ));
     }
 
@@ -9256,7 +9256,7 @@ mod tests {
 
     #[tokio::test]
     async fn core_session_store_port_resolves_local_storage_to_sessions_dir() {
-        use bitfun_runtime_ports::{
+        use halo_runtime_ports::{
             SessionStorageKind, SessionStoragePathRequest, SessionStorePort,
         };
 
@@ -9295,7 +9295,7 @@ mod tests {
 
     #[tokio::test]
     async fn core_session_store_port_resolves_unresolved_remote_storage_path() {
-        use bitfun_runtime_ports::{
+        use halo_runtime_ports::{
             SessionStorageKind, SessionStoragePathRequest, SessionStorePort,
         };
 
@@ -9325,7 +9325,7 @@ mod tests {
     #[tokio::test]
     async fn core_session_store_port_resolved_remote_sessions_dir_passes_through_only_sessions_root(
     ) {
-        use bitfun_runtime_ports::{
+        use halo_runtime_ports::{
             SessionStorageKind, SessionStoragePathRequest, SessionStorePort,
         };
 
@@ -9333,7 +9333,7 @@ mod tests {
         let path_manager = workspace.path_manager();
         let port = CoreSessionStorePort::with_path_manager_for_tests(path_manager.clone());
         let sessions_dir =
-            bitfun_services_integrations::remote_ssh::remote_workspace_session_mirror_dir(
+            halo_services_integrations::remote_ssh::remote_workspace_session_mirror_dir(
                 path_manager.remote_ssh_mirror_root_dir(),
                 "example-host",
                 "/root/repo",
@@ -9350,7 +9350,7 @@ mod tests {
         assert_eq!(resolved.storage_kind, SessionStorageKind::Remote);
         assert_eq!(resolved.effective_storage_path, sessions_dir);
 
-        let runtime_root = bitfun_services_integrations::remote_ssh::remote_workspace_runtime_root(
+        let runtime_root = halo_services_integrations::remote_ssh::remote_workspace_runtime_root(
             path_manager.remote_ssh_mirror_root_dir(),
             "example-host",
             "/root/repo",

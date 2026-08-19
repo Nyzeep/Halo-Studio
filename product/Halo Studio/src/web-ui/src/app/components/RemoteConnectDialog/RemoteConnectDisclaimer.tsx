@@ -18,28 +18,28 @@ export const RemoteConnectDisclaimerContent: React.FC<RemoteConnectDisclaimerCon
   const canAgree = !!onAgree && !agreed;
 
   return (
-    <div className="bitfun-remote-disclaimer">
-      <div className="bitfun-remote-disclaimer__meta">
+    <div className="halo-remote-disclaimer">
+      <div className="halo-remote-disclaimer__meta">
         <Badge variant={agreed ? 'success' : 'warning'}>
           {t(agreed ? 'remoteConnect.disclaimerStatusAgreed' : 'remoteConnect.disclaimerStatusPending')}
         </Badge>
       </div>
 
-      <p className="bitfun-remote-disclaimer__text">{t('remoteConnect.disclaimerIntro')}</p>
+      <p className="halo-remote-disclaimer__text">{t('remoteConnect.disclaimerIntro')}</p>
 
-      <h3 className="bitfun-remote-disclaimer__section-title">
+      <h3 className="halo-remote-disclaimer__section-title">
         {t('remoteConnect.disclaimerKeyRisks')}
       </h3>
-      <ol className="bitfun-remote-disclaimer__list bitfun-remote-disclaimer__list--key">
+      <ol className="halo-remote-disclaimer__list halo-remote-disclaimer__list--key">
         <li>{t('remoteConnect.disclaimerItemGeneralRisk')}</li>
         <li>{t('remoteConnect.disclaimerItemSecurity')}</li>
         <li>{t('remoteConnect.disclaimerItemEncryption')}</li>
         <li>{t('remoteConnect.disclaimerItemPrivacy')}</li>
       </ol>
 
-      <details className="bitfun-remote-disclaimer__details">
+      <details className="halo-remote-disclaimer__details">
         <summary>{t('remoteConnect.disclaimerFullDetails')}</summary>
-        <ol className="bitfun-remote-disclaimer__list" start={5}>
+        <ol className="halo-remote-disclaimer__list" start={5}>
           <li>{t('remoteConnect.disclaimerItemOpenSource')}</li>
           <li>{t('remoteConnect.disclaimerItemDataUsage')}</li>
           <li>{t('remoteConnect.disclaimerItemCredentials')}</li>
@@ -55,10 +55,10 @@ export const RemoteConnectDisclaimerContent: React.FC<RemoteConnectDisclaimerCon
         </ol>
       </details>
 
-      <div className="bitfun-remote-disclaimer__actions">
+      <div className="halo-remote-disclaimer__actions">
         <button
           type="button"
-          className="bitfun-remote-disclaimer__btn bitfun-remote-disclaimer__btn--secondary"
+          className="halo-remote-disclaimer__btn halo-remote-disclaimer__btn--secondary"
           onClick={onClose}
         >
           {canAgree ? t('remoteConnect.disclaimerDecline') : t('actions.close')}
@@ -66,7 +66,7 @@ export const RemoteConnectDisclaimerContent: React.FC<RemoteConnectDisclaimerCon
         {canAgree && (
           <button
             type="button"
-            className="bitfun-remote-disclaimer__btn bitfun-remote-disclaimer__btn--primary"
+            className="halo-remote-disclaimer__btn halo-remote-disclaimer__btn--primary"
             onClick={onAgree}
           >
             {t('remoteConnect.disclaimerAgree')}

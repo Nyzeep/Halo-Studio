@@ -1,5 +1,5 @@
-use bitfun_codex_adapter::{CodexMcpProvider, CodexMcpProviderOptions};
-use bitfun_product_domains::external_sources::{
+use halo_codex_adapter::{CodexMcpProvider, CodexMcpProviderOptions};
+use halo_product_domains::external_sources::{
     ExecutionDomainId, ExternalMcpDiscoveryInput, ExternalMcpRevisionKey,
     ExternalMcpSourceProvider, ExternalMcpStaticStatus, ExternalMcpTransportKind,
     ExternalSourceContext, ExternalSourceScope,

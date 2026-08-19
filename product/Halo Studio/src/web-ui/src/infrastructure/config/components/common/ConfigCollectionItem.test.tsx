@@ -31,8 +31,8 @@ describe('ConfigCollectionItem', () => {
       );
     });
 
-    const row = container.querySelector<HTMLElement>('.bitfun-collection-item__row');
-    const toggle = container.querySelector<HTMLButtonElement>('.bitfun-collection-item__details-toggle');
+    const row = container.querySelector<HTMLElement>('.halo-collection-item__row');
+    const toggle = container.querySelector<HTMLButtonElement>('.halo-collection-item__details-toggle');
     const control = Array.from(container.querySelectorAll('button'))
       .find((button) => button.textContent === 'Active');
     expect(row?.getAttribute('role')).toBeNull();
@@ -65,7 +65,7 @@ describe('ConfigCollectionItem', () => {
       );
     });
 
-    const toggle = container.querySelector<HTMLButtonElement>('.bitfun-collection-item__details-toggle');
+    const toggle = container.querySelector<HTMLButtonElement>('.halo-collection-item__details-toggle');
     expect(toggle?.disabled).toBe(true);
     expect(toggle?.getAttribute('aria-expanded')).toBe('false');
 

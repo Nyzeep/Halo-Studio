@@ -27,8 +27,8 @@ pub use acp_tool_bridge::{
     AcpExternalAgentToolDefinition, AcpExternalAgentToolDefinitionInput, ACP_TOOL_PREFIX,
     ACP_TOOL_SUFFIX,
 };
-pub use bitfun_core_types::ToolImageAttachment;
-pub use bitfun_runtime_ports::{
+pub use halo_core_types::ToolImageAttachment;
+pub use halo_runtime_ports::{
     DynamicToolDescriptor, DynamicToolProvider, PortError, PortErrorKind, PortResult, ToolDecorator,
 };
 pub use deferred_tool::{
@@ -49,7 +49,7 @@ pub use file_read_freshness::{
     FileReadFreshnessFacts,
 };
 pub use framework::{
-    build_bitfun_current_session_uri, build_bitfun_runtime_uri,
+    build_halo_current_session_uri, build_halo_runtime_uri,
     build_get_tool_spec_assistant_detail, build_get_tool_spec_catalog_description,
     build_get_tool_spec_catalog_description_from_provider, build_get_tool_spec_description,
     build_get_tool_spec_detail_result, build_get_tool_spec_duplicate_load_hint,
@@ -58,11 +58,11 @@ pub use framework::{
     build_tool_runtime_artifact_reference, build_tool_session_runtime_artifact_reference,
     collect_loaded_deferred_tool_specs, get_tool_spec_input_schema,
     get_tool_spec_is_concurrency_safe, get_tool_spec_is_readonly, get_tool_spec_short_description,
-    is_bitfun_current_session_uri, is_bitfun_runtime_uri, is_bitfun_tool_uri,
+    is_halo_current_session_uri, is_halo_runtime_uri, is_halo_tool_uri,
     is_miniapp_headless_agent_run, is_remote_posix_path_within_root,
     is_tool_path_allowed_by_resolved_roots, materialize_static_tool_provider_groups,
     miniapp_headless_agent_tool_restrictions, normalize_absolute_posix_path, normalize_host_path,
-    normalize_runtime_relative_path, parse_bitfun_current_session_uri, parse_bitfun_runtime_uri,
+    normalize_runtime_relative_path, parse_halo_current_session_uri, parse_halo_runtime_uri,
     posix_resolve_path_with_workspace, posix_style_path_is_absolute,
     render_get_tool_spec_tool_use_message, resolve_contextual_tool_manifest,
     resolve_contextual_tool_manifest_from_provider, resolve_contextual_visible_tools,
@@ -79,7 +79,7 @@ pub use framework::{
     DeferredToolUsageError, DynamicMcpToolInfo, DynamicToolInfo, GetToolSpecCatalogProvider,
     GetToolSpecDeferredToolSummary, GetToolSpecDetail, GetToolSpecExecutionError,
     GetToolSpecExecutionPlan, GetToolSpecLoadObservation, GetToolSpecRuntime,
-    LoadedDeferredToolSpec, ParsedBitFunCurrentSessionUri, ParsedBitFunRuntimeUri,
+    LoadedDeferredToolSpec, ParsedHaloCurrentSessionUri, ParsedHaloRuntimeUri,
     PortableToolContextProvider, PromptVisibleToolManifestItem, SnapshotToolDecorator,
     SnapshotToolWrapper, SnapshotToolWrapperRef, StaticToolMaterializationError,
     StaticToolProvider, StaticToolProviderFactory, StaticToolProviderGroup, StaticToolProviderPlan,
@@ -88,8 +88,8 @@ pub use framework::{
     ToolManifestPolicyTool, ToolPathBackend, ToolPathContractError, ToolPathOperation,
     ToolPathPolicy, ToolPathResolution, ToolRef, ToolRegistry, ToolRegistryItem, ToolRenderOptions,
     ToolRestrictionError, ToolResult, ToolRuntimeAssembly, ToolRuntimeRestrictions,
-    ToolWorkspaceKind, ValidationResult, BITFUN_CURRENT_SESSION_URI_PREFIX,
-    BITFUN_RUNTIME_URI_PREFIX, GET_TOOL_SPEC_TOOL_NAME,
+    ToolWorkspaceKind, ValidationResult, HALO_CURRENT_SESSION_URI_PREFIX,
+    HALO_RUNTIME_URI_PREFIX, GET_TOOL_SPEC_TOOL_NAME,
 };
 pub use input_validator::InputValidator;
 pub use mcp_tool_bridge::{

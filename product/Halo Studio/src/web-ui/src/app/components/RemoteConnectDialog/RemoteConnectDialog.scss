@@ -1,17 +1,17 @@
 @use '../../../component-library/styles/tokens' as *;
 
-.bitfun-remote-connect {
+.halo-remote-connect {
   display: flex;
   flex-direction: column;
 }
 
-.bitfun-remote-connect__title-extra {
+.halo-remote-connect__title-extra {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
 
-.bitfun-remote-connect__disclaimer-trigger {
+.halo-remote-connect__disclaimer-trigger {
   border: none;
   background: transparent;
   padding: 0;
@@ -34,7 +34,7 @@
 
 // ==================== Group tabs (top level) ====================
 
-.bitfun-remote-connect__groups {
+.halo-remote-connect__groups {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -42,7 +42,7 @@
   gap: 0;
 }
 
-.bitfun-remote-connect__group-btn {
+.halo-remote-connect__group-btn {
   background: none;
   border: none;
   padding: 6px 20px;
@@ -71,14 +71,14 @@
   }
 }
 
-.bitfun-remote-connect__group-divider {
+.halo-remote-connect__group-divider {
   width: 1px;
   height: 16px;
   background: var(--border-subtle);
   flex-shrink: 0;
 }
 
-.bitfun-remote-connect__dot {
+.halo-remote-connect__dot {
   display: inline-block;
   width: 7px;
   height: 7px;
@@ -89,7 +89,7 @@
 
 // ==================== Sub-tabs (second level) ====================
 
-.bitfun-remote-connect__subtabs {
+.halo-remote-connect__subtabs {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -97,7 +97,7 @@
   gap: 0;
 }
 
-.bitfun-remote-connect__subtab {
+.halo-remote-connect__subtab {
   background: none;
   border: none;
   padding: 4px 10px;
@@ -131,14 +131,14 @@
   }
 }
 
-.bitfun-remote-connect__subtab-divider {
+.halo-remote-connect__subtab-divider {
   width: 1px;
   height: 12px;
   background: var(--border-subtle);
   flex-shrink: 0;
 }
 
-.bitfun-remote-connect__dot-sm {
+.halo-remote-connect__dot-sm {
   display: inline-block;
   width: 5px;
   height: 5px;
@@ -149,7 +149,7 @@
 
 // ==================== Body ====================
 
-.bitfun-remote-connect__body {
+.halo-remote-connect__body {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -159,7 +159,7 @@
 
 // ==================== QR box ====================
 
-.bitfun-remote-connect__qr-box {
+.halo-remote-connect__qr-box {
   appearance: none;
   width: 200px;
   height: 200px;
@@ -195,14 +195,14 @@
 
 // ==================== Pairing code (bot) ====================
 
-.bitfun-remote-connect__pairing-code-box {
+.halo-remote-connect__pairing-code-box {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
 }
 
-.bitfun-remote-connect__pairing-code {
+.halo-remote-connect__pairing-code {
   font-size: 36px;
   font-weight: 700;
   letter-spacing: 8px;
@@ -217,20 +217,20 @@
 
 // ==================== Status ====================
 
-.bitfun-remote-connect__status {
+.halo-remote-connect__status {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.bitfun-remote-connect__peer-username {
+.halo-remote-connect__peer-username {
   font-size: 12px;
   color: var(--color-text-secondary);
 }
 
 // ==================== Ngrok usage link ====================
 
-.bitfun-remote-connect__ngrok-usage-link {
+.halo-remote-connect__ngrok-usage-link {
   text-align: center;
   padding: 10px 0 2px;
   margin: 0;
@@ -239,7 +239,7 @@
 
 // ==================== Connected ====================
 
-.bitfun-remote-connect__connected {
+.halo-remote-connect__connected {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -249,8 +249,8 @@
 
 // ==================== Hint text ====================
 
-.bitfun-remote-connect__hint,
-.bitfun-remote-connect__description {
+.halo-remote-connect__hint,
+.halo-remote-connect__description {
   font-size: 12px;
   color: var(--color-text-muted);
   line-height: 1.6;
@@ -259,15 +259,15 @@
   max-width: 420px;
 }
 
-.bitfun-remote-connect__hint {
+.halo-remote-connect__hint {
   text-align: center;
 }
 
-.bitfun-remote-connect__description {
+.halo-remote-connect__description {
   text-align: left;
 }
 
-.bitfun-remote-connect__info-card {
+.halo-remote-connect__info-card {
   width: 100%;
   max-width: 360px;
   margin: 0 auto;
@@ -278,8 +278,8 @@
   box-sizing: border-box;
 }
 
-.bitfun-remote-connect__info-text,
-.bitfun-remote-connect__info-meta {
+.halo-remote-connect__info-text,
+.halo-remote-connect__info-meta {
   font-size: 12px;
   color: var(--color-text-muted);
   line-height: 1.7;
@@ -287,7 +287,7 @@
   text-align: left;
 }
 
-.bitfun-remote-connect__info-meta-group {
+.halo-remote-connect__info-meta-group {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -296,25 +296,25 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.bitfun-remote-connect__lan-ip-select {
+.halo-remote-connect__lan-ip-select {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.bitfun-remote-connect__info-meta-label {
+.halo-remote-connect__info-meta-label {
   font-size: 12px;
   color: var(--color-text-muted);
   white-space: nowrap;
 }
 
-.bitfun-remote-connect__lan-ip-dropdown {
+.halo-remote-connect__lan-ip-dropdown {
   flex: 1;
   min-width: 0;
 }
 
-.bitfun-remote-connect__description-link,
-.bitfun-remote-connect__step-link {
+.halo-remote-connect__description-link,
+.halo-remote-connect__step-link {
   color: var(--color-text-secondary);
   text-decoration: underline;
   cursor: pointer;
@@ -332,21 +332,21 @@
   }
 }
 
-.bitfun-remote-connect__error {
+.halo-remote-connect__error {
   font-size: 12px;
   color: var(--color-error);
   text-align: center;
   margin: 0;
 }
 
-.bitfun-remote-connect__error-group {
+.halo-remote-connect__error-group {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
 }
 
-.bitfun-remote-connect__error-action {
+.halo-remote-connect__error-action {
   background: transparent;
   border: none;
   padding: 0;
@@ -362,30 +362,30 @@
 
 // ==================== Input ====================
 
-.bitfun-remote-connect__field {
+.halo-remote-connect__field {
   width: 100%;
   max-width: 280px;
 
-  .bitfun-input-label {
+  .halo-input-label {
     font-size: 12px;
     color: var(--color-text-muted);
     margin-bottom: 0;
   }
 
-  .bitfun-input-container {
+  .halo-input-container {
     min-height: 32px;
   }
 
   &--inline {
     max-width: 360px;
 
-    .bitfun-input-container {
+    .halo-input-container {
       gap: 12px;
     }
   }
 }
 
-.bitfun-remote-connect__field-prefix {
+.halo-remote-connect__field-prefix {
   min-width: 96px;
   color: var(--color-text-secondary);
   text-align: left;
@@ -394,7 +394,7 @@
 
 // ==================== Buttons ====================
 
-.bitfun-remote-connect__btn {
+.halo-remote-connect__btn {
   padding: 8px 24px;
   font-size: 13px;
   font-weight: 500;
@@ -438,7 +438,7 @@
 
 // ==================== Bot guide ====================
 
-.bitfun-remote-connect__bot-guide {
+.halo-remote-connect__bot-guide {
   width: 100%;
   max-width: 460px;
   display: flex;
@@ -446,23 +446,23 @@
   align-items: center;
   gap: 12px;
 
-  .bitfun-remote-connect__field {
+  .halo-remote-connect__field {
     display: flex;
     flex-direction: column;
     align-items: center;
     margin: 0 auto;
 
-    .bitfun-input-label {
+    .halo-input-label {
       text-align: center;
     }
   }
 
-  .bitfun-remote-connect__field--inline {
+  .halo-remote-connect__field--inline {
     align-items: stretch;
   }
 }
 
-.bitfun-remote-connect__steps {
+.halo-remote-connect__steps {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -470,7 +470,7 @@
   width: 100%;
 }
 
-.bitfun-remote-connect__step {
+.halo-remote-connect__step {
   font-size: 12px;
   color: var(--color-text-muted);
   line-height: 1.6;
@@ -481,7 +481,7 @@
 
 // ==================== Bot mode selector ====================
 
-.bitfun-remote-connect__mode-selector {
+.halo-remote-connect__mode-selector {
   display: inline-flex;
   align-items: center;
   padding: 3px;
@@ -490,7 +490,7 @@
   border-radius: 20px;
 }
 
-.bitfun-remote-connect__mode-btn {
+.halo-remote-connect__mode-btn {
   padding: 5px 14px;
   font-size: var(--font-size-xs);
   font-weight: $font-weight-medium;
@@ -520,12 +520,12 @@
   }
 }
 
-.bitfun-remote-connect__weixin-qr {
+.halo-remote-connect__weixin-qr {
   margin-top: 12px;
   text-align: center;
 }
 
-.bitfun-remote-connect__weixin-qr-img {
+.halo-remote-connect__weixin-qr-img {
   display: block;
   max-width: 220px;
   height: auto;
@@ -533,7 +533,7 @@
   border-radius: 8px;
 }
 
-.bitfun-remote-connect__weixin-qr-svg-wrap {
+.halo-remote-connect__weixin-qr-svg-wrap {
   display: inline-block;
   margin: 0 auto 8px;
   padding: 10px;

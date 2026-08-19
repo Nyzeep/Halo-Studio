@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use serde_json::{json, Value};
 
-use bitfun_core::service::remote_ssh::workspace_state::is_remote_path;
-use bitfun_runtime_ports::{
+use halo_core::service::remote_ssh::workspace_state::is_remote_path;
+use halo_runtime_ports::{
     LocalWorkspaceSnapshotPort, LocalWorkspaceSnapshotSessionRequest, LocalWorkspaceSnapshotStats,
     LocalWorkspaceSnapshotTurnRequest, PortError, PortErrorKind,
 };
@@ -143,7 +143,7 @@ pub(crate) async fn get_session_files(
     let session_id = get_string(request, "sessionId")?;
     let workspace_path = get_string(request, "workspacePath")?;
 
-    bitfun_agent_runtime::session_control::validate_session_id(&session_id)?;
+    halo_agent_runtime::session_control::validate_session_id(&session_id)?;
     require_local_snapshot_workspace(request, &workspace_path).await?;
     let files = local_snapshot_session_files(
         state.local_workspace_snapshot.as_ref(),
@@ -165,7 +165,7 @@ pub(crate) async fn rollback_to_turn(state: &PeerHostState, args: &Value) -> Res
     let turn_index = get_usize(request, "turnIndex")?;
     let delete_turns = optional_bool(request, "deleteTurns").unwrap_or(false);
 
-    bitfun_agent_runtime::session_control::validate_session_id(&session_id)?;
+    halo_agent_runtime::session_control::validate_session_id(&session_id)?;
     require_local_snapshot_workspace(request, &workspace_path).await?;
     let workspace = PathBuf::from(&workspace_path);
     let scope = ensure_session_workspace_runtime_ownership(state, request)?;
@@ -296,7 +296,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
 
-    use bitfun_runtime_ports::{
+    use halo_runtime_ports::{
         LocalWorkspaceSnapshotPort, LocalWorkspaceSnapshotSessionRequest,
         LocalWorkspaceSnapshotStats, LocalWorkspaceSnapshotTurnRequest, PortError, PortErrorKind,
         PortResult,

@@ -25,10 +25,10 @@ use crate::agentic::tools::framework::{
 use crate::agentic::tools::pipeline::SubagentParentInfo;
 use crate::service::config::global::GlobalConfigManager;
 use crate::service::config::types::{AIConfig, GlobalConfig};
-use crate::util::errors::{BitFunError, BitFunResult};
+use crate::util::errors::{HaloError, HaloResult};
 use crate::util::timing::elapsed_ms_u64;
 use async_trait::async_trait;
-use bitfun_runtime_ports::{PermissionRuntimeCeiling, SubagentContextMode};
+use halo_runtime_ports::{PermissionRuntimeCeiling, SubagentContextMode};
 use input::{TaskAction, TaskInvocation};
 use log::{debug, warn};
 use serde_json::{json, Map, Value};
@@ -135,7 +135,7 @@ impl Tool for TaskTool {
         true
     }
 
-    async fn description(&self) -> BitFunResult<String> {
+    async fn description(&self) -> HaloResult<String> {
         Ok(self.render_description())
     }
 
@@ -155,7 +155,7 @@ impl Tool for TaskTool {
     async fn description_with_context(
         &self,
         _context: Option<&ToolUseContext>,
-    ) -> BitFunResult<String> {
+    ) -> HaloResult<String> {
         Ok(self.render_description())
     }
 
@@ -199,7 +199,7 @@ impl Tool for TaskTool {
         &self,
         input: &Value,
         _context: &ToolUseContext,
-    ) -> BitFunResult<Vec<PermissionIntent>> {
+    ) -> HaloResult<Vec<PermissionIntent>> {
         let action = TaskAction::parse(input)?;
         let resource = match action {
             TaskAction::Spawn => input
@@ -215,14 +215,14 @@ impl Tool for TaskTool {
                 .map(str::trim)
                 .filter(|agent_id| !agent_id.is_empty())
                 .map(|agent_id| format!("send_input:{agent_id}"))
-                .ok_or_else(|| BitFunError::validation("agent_id is required".to_string()))?,
+                .ok_or_else(|| HaloError::validation("agent_id is required".to_string()))?,
             TaskAction::Cancel => input
                 .get("agent_id")
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|agent_id| !agent_id.is_empty())
                 .map(|agent_id| format!("cancel:{agent_id}"))
-                .ok_or_else(|| BitFunError::validation("agent_id is required".to_string()))?,
+                .ok_or_else(|| HaloError::validation("agent_id is required".to_string()))?,
         };
         Ok(vec![PermissionIntent::new("task", vec![resource])])
     }
@@ -276,7 +276,7 @@ impl Tool for TaskTool {
         &self,
         input: &Value,
         context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
+    ) -> HaloResult<Vec<ToolResult>> {
         self.call_task_impl(input, context).await
     }
 }

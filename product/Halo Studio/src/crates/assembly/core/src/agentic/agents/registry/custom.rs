@@ -17,8 +17,8 @@ use crate::infrastructure::get_path_manager_arc;
 use crate::service::config::global::GlobalConfigManager;
 use crate::service::config::mode_config_canonicalizer::persist_agent_profile_from_value;
 use crate::service::config::types::AgentSubagentOverrideState;
-use crate::util::errors::{BitFunError, BitFunResult};
-use bitfun_agent_runtime::custom_agent::{
+use crate::util::errors::{HaloError, HaloResult};
+use halo_agent_runtime::custom_agent::{
     custom_agent_review_writable_tools, default_custom_agent_tools, load_custom_agent_definitions,
     validate_custom_agent_definition, CustomAgentDefinition, CustomAgentDiscoveryRoots,
     CustomAgentFrontMatterMetadata, CustomAgentKind, CustomAgentLevel,
@@ -74,7 +74,7 @@ impl AgentRegistry {
                     load_error.error
                 );
             } else {
-                let error = BitFunError::Agent(load_error.error);
+                let error = HaloError::Agent(load_error.error);
                 error!(
                     "Failed to load custom agent from {}: {}",
                     load_error.path.display(),
@@ -249,14 +249,14 @@ impl AgentRegistry {
         agent_id: &str,
         tools: &[String],
         readonly_tools: &[String],
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let writable_tools = custom_agent_review_writable_tools(tools, readonly_tools);
 
         if writable_tools.is_empty() {
             return Ok(());
         }
 
-        Err(BitFunError::agent(format!(
+        Err(HaloError::agent(format!(
             "Review Sub-Agent '{}' can only use read-only tools; remove writable tools: {}",
             agent_id,
             writable_tools.join(", ")
@@ -315,7 +315,7 @@ impl AgentRegistry {
         model: Option<String>,
         clear_model_override: bool,
         workspace_root: Option<&Path>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let mut map = self.write_agents();
         if let Some(entry) = map.get_mut(agent_id) {
             return Self::update_custom_entry_config(agent_id, entry, model, clear_model_override);
@@ -323,21 +323,21 @@ impl AgentRegistry {
         drop(map);
 
         let workspace_root = workspace_root.ok_or_else(|| {
-            BitFunError::agent(format!(
+            HaloError::agent(format!(
                 "workspace_path is required to update project custom agent '{}'",
                 agent_id
             ))
         })?;
         let mut project_maps = self.write_project_subagents();
         let entries = project_maps.get_mut(workspace_root).ok_or_else(|| {
-            BitFunError::agent(format!(
+            HaloError::agent(format!(
                 "Project custom agents are not loaded for workspace: {}",
                 workspace_root.display()
             ))
         })?;
         let entry = entries
             .get_mut(agent_id)
-            .ok_or_else(|| BitFunError::agent(format!("Agent not found: {}", agent_id)))?;
+            .ok_or_else(|| HaloError::agent(format!("Agent not found: {}", agent_id)))?;
 
         Self::update_custom_entry_config(agent_id, entry, model, clear_model_override)
     }
@@ -348,7 +348,7 @@ impl AgentRegistry {
         model: Option<String>,
         clear_model_override: bool,
         workspace_root: Option<&Path>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.update_and_save_custom_agent_config(
             agent_id,
             model,
@@ -362,16 +362,16 @@ impl AgentRegistry {
         entry: &mut AgentEntry,
         model: Option<String>,
         clear_model_override: bool,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let config = entry.custom_config.as_mut().ok_or_else(|| {
-            BitFunError::agent(format!(
+            HaloError::agent(format!(
                 "Agent '{}' is not a custom file-backed agent",
                 agent_id
             ))
         })?;
 
         if model.is_none() && !clear_model_override {
-            return Err(BitFunError::agent(
+            return Err(HaloError::agent(
                 "A model or clear_model_override is required".to_string(),
             ));
         }
@@ -380,7 +380,7 @@ impl AgentRegistry {
 
         if let Some(custom_mode) = entry.agent.as_any().downcast_ref::<CustomMode>() {
             if clear_model_override {
-                return Err(BitFunError::agent(
+                return Err(HaloError::agent(
                     "Clearing the model override is only supported for custom subagents"
                         .to_string(),
                 ));
@@ -396,7 +396,7 @@ impl AgentRegistry {
             .as_any()
             .downcast_ref::<CustomSubagent>()
             .ok_or_else(|| {
-                BitFunError::agent(format!(
+                HaloError::agent(format!(
                     "Failed to downcast agent '{}' to a custom file-backed agent",
                     agent_id
                 ))
@@ -413,7 +413,7 @@ impl AgentRegistry {
         &self,
         agent_id: &str,
         workspace_root: Option<&Path>,
-    ) -> BitFunResult<CustomAgentDetail> {
+    ) -> HaloResult<CustomAgentDetail> {
         self.ensure_user_custom_agents_loaded().await;
         if let Some(root) = workspace_root {
             self.load_custom_agents(Some(root)).await;
@@ -425,12 +425,12 @@ impl AgentRegistry {
         &self,
         agent_id: &str,
         workspace_root: Option<&Path>,
-    ) -> BitFunResult<CustomAgentDetail> {
+    ) -> HaloResult<CustomAgentDetail> {
         let detail = self
             .get_custom_agent_detail(agent_id, workspace_root)
             .await?;
         if detail.kind != "subagent" {
-            return Err(BitFunError::agent(format!(
+            return Err(HaloError::agent(format!(
                 "Agent '{}' is not a subagent",
                 agent_id
             )));
@@ -442,14 +442,14 @@ impl AgentRegistry {
         &self,
         agent_key: &str,
         workspace_root: Option<&Path>,
-    ) -> BitFunResult<CustomAgentDetail> {
+    ) -> HaloResult<CustomAgentDetail> {
         self.ensure_user_custom_agents_loaded().await;
         if let Some(root) = workspace_root {
             self.load_custom_agents(Some(root)).await;
         }
         let detail = self.get_custom_agent_detail_by_key_inner(agent_key, workspace_root)?;
         if detail.kind != "subagent" {
-            return Err(BitFunError::agent(format!(
+            return Err(HaloError::agent(format!(
                 "Agent '{}' is not a subagent",
                 agent_key
             )));
@@ -461,10 +461,10 @@ impl AgentRegistry {
         &self,
         agent_id: &str,
         workspace_root: Option<&Path>,
-    ) -> BitFunResult<CustomAgentDetail> {
+    ) -> HaloResult<CustomAgentDetail> {
         let entry = self
             .find_agent_entry(agent_id, workspace_root)
-            .ok_or_else(|| BitFunError::agent(format!("Agent not found: {}", agent_id)))?;
+            .ok_or_else(|| HaloError::agent(format!("Agent not found: {}", agent_id)))?;
         Self::custom_agent_detail_from_entry(agent_id, entry)
     }
 
@@ -472,7 +472,7 @@ impl AgentRegistry {
         &self,
         agent_key: &str,
         workspace_root: Option<&Path>,
-    ) -> BitFunResult<CustomAgentDetail> {
+    ) -> HaloResult<CustomAgentDetail> {
         let entry = {
             let agents = self.read_agents();
             agents
@@ -495,16 +495,16 @@ impl AgentRegistry {
                 })
                 .cloned()
         })
-        .ok_or_else(|| BitFunError::agent(format!("Agent not found: {}", agent_key)))?;
+        .ok_or_else(|| HaloError::agent(format!("Agent not found: {}", agent_key)))?;
         Self::custom_agent_detail_from_entry(agent_key, entry)
     }
 
     fn custom_agent_detail_from_entry(
         agent_id: &str,
         entry: AgentEntry,
-    ) -> BitFunResult<CustomAgentDetail> {
+    ) -> HaloResult<CustomAgentDetail> {
         if entry.source == AgentSource::Builtin {
-            return Err(BitFunError::agent(
+            return Err(HaloError::agent(
                 "Built-in agents cannot be edited here".to_string(),
             ));
         }
@@ -522,7 +522,7 @@ impl AgentRegistry {
             .as_any()
             .downcast_ref::<CustomSubagent>()
             .ok_or_else(|| {
-                BitFunError::agent(format!("Agent '{}' is not a custom agent file", agent_id))
+                HaloError::agent(format!("Agent '{}' is not a custom agent file", agent_id))
             })?;
 
         Ok(Self::build_custom_agent_detail(
@@ -561,16 +561,16 @@ impl AgentRegistry {
                 .sections
                 .iter()
                 .map(|section| match section {
-                    bitfun_agent_runtime::prompt::UserContextSection::WorkspaceContext => {
+                    halo_agent_runtime::prompt::UserContextSection::WorkspaceContext => {
                         "workspace_context"
                     }
-                    bitfun_agent_runtime::prompt::UserContextSection::WorkspaceInstructions => {
+                    halo_agent_runtime::prompt::UserContextSection::WorkspaceInstructions => {
                         "workspace_instructions"
                     }
-                    bitfun_agent_runtime::prompt::UserContextSection::ProjectLayout => {
+                    halo_agent_runtime::prompt::UserContextSection::ProjectLayout => {
                         "project_layout"
                     }
-                    bitfun_agent_runtime::prompt::UserContextSection::MemorySummary => {
+                    halo_agent_runtime::prompt::UserContextSection::MemorySummary => {
                         "memory_summary"
                     }
                 })
@@ -591,23 +591,23 @@ impl AgentRegistry {
         tools: Option<Vec<String>>,
         readonly: Option<bool>,
         review: Option<bool>,
-        user_context_policy: Option<bitfun_agent_runtime::prompt::UserContextPolicy>,
+        user_context_policy: Option<halo_agent_runtime::prompt::UserContextPolicy>,
         model: Option<String>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         self.ensure_user_custom_agents_loaded().await;
         if let Some(root) = workspace_root {
             self.load_custom_agents(Some(root)).await;
         }
         let entry = self
             .find_agent_entry(agent_id, workspace_root)
-            .ok_or_else(|| BitFunError::agent(format!("Agent not found: {}", agent_id)))?;
+            .ok_or_else(|| HaloError::agent(format!("Agent not found: {}", agent_id)))?;
         if entry.source == AgentSource::Builtin {
-            return Err(BitFunError::agent(
+            return Err(HaloError::agent(
                 "Built-in agents cannot be edited".to_string(),
             ));
         }
         let current_model_config = entry.custom_config.as_ref().ok_or_else(|| {
-            BitFunError::agent(format!(
+            HaloError::agent(format!(
                 "Agent '{}' is not a custom file-backed agent",
                 agent_id
             ))
@@ -653,7 +653,7 @@ impl AgentRegistry {
                 .as_any()
                 .downcast_ref::<CustomSubagent>()
                 .ok_or_else(|| {
-                    BitFunError::agent(format!("Agent '{}' is not a custom agent file", agent_id))
+                    HaloError::agent(format!("Agent '{}' is not a custom agent file", agent_id))
                 })?;
             let review = review.unwrap_or(old.data.review);
             let tools = tools
@@ -703,7 +703,7 @@ impl AgentRegistry {
         tools: Option<Vec<String>>,
         readonly: Option<bool>,
         review: Option<bool>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let detail = self
             .get_custom_subagent_detail(agent_id, workspace_root)
             .await?;
@@ -727,14 +727,14 @@ impl AgentRegistry {
         agent_id: &str,
         workspace_root: Option<&Path>,
         new_agent: Arc<dyn Agent>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let mut map = self.write_agents();
         if map.contains_key(agent_id) {
             let old_entry = map
                 .get(agent_id)
-                .ok_or_else(|| BitFunError::agent(format!("Agent not found: {}", agent_id)))?;
+                .ok_or_else(|| HaloError::agent(format!("Agent not found: {}", agent_id)))?;
             if old_entry.source == AgentSource::Builtin {
-                return Err(BitFunError::agent(
+                return Err(HaloError::agent(
                     "Cannot replace built-in agent".to_string(),
                 ));
             }
@@ -758,17 +758,17 @@ impl AgentRegistry {
         drop(map);
 
         let root = workspace_root.ok_or_else(|| {
-            BitFunError::agent("Workspace path is required to update project subagent".to_string())
+            HaloError::agent("Workspace path is required to update project subagent".to_string())
         })?;
         let mut pm = self.write_project_subagents();
         let entries = pm.get_mut(root).ok_or_else(|| {
-            BitFunError::agent("Project subagent cache not loaded for this workspace".to_string())
+            HaloError::agent("Project subagent cache not loaded for this workspace".to_string())
         })?;
         let old_entry = entries
             .get(agent_id)
-            .ok_or_else(|| BitFunError::agent(format!("Agent not found: {}", agent_id)))?;
+            .ok_or_else(|| HaloError::agent(format!("Agent not found: {}", agent_id)))?;
         if old_entry.source == AgentSource::Builtin {
-            return Err(BitFunError::agent(
+            return Err(HaloError::agent(
                 "Cannot replace built-in agent".to_string(),
             ));
         }
@@ -790,11 +790,11 @@ impl AgentRegistry {
         Ok(())
     }
 
-    pub fn remove_custom_agent(&self, agent_id: &str) -> BitFunResult<Option<String>> {
+    pub fn remove_custom_agent(&self, agent_id: &str) -> HaloResult<Option<String>> {
         let mut map = self.write_agents();
         if let Some(entry) = map.get(agent_id) {
             if entry.source == AgentSource::Builtin {
-                return Err(BitFunError::agent(format!(
+                return Err(HaloError::agent(format!(
                     "Cannot remove built-in agent: {}",
                     agent_id
                 )));
@@ -814,10 +814,10 @@ impl AgentRegistry {
             }
         }
 
-        Err(BitFunError::agent(format!("Agent not found: {}", agent_id)))
+        Err(HaloError::agent(format!("Agent not found: {}", agent_id)))
     }
 
-    pub fn remove_subagent(&self, agent_id: &str) -> BitFunResult<Option<String>> {
+    pub fn remove_subagent(&self, agent_id: &str) -> HaloResult<Option<String>> {
         let entry = self
             .find_agent_entry(agent_id, None)
             .or_else(|| {
@@ -825,9 +825,9 @@ impl AgentRegistry {
                     .values()
                     .find_map(|entries| entries.get(agent_id).cloned())
             })
-            .ok_or_else(|| BitFunError::agent(format!("Subagent not found: {}", agent_id)))?;
+            .ok_or_else(|| HaloError::agent(format!("Subagent not found: {}", agent_id)))?;
         if entry.category != AgentCategory::SubAgent {
-            return Err(BitFunError::agent(format!(
+            return Err(HaloError::agent(format!(
                 "Agent '{}' is not a subagent",
                 agent_id
             )));
@@ -841,19 +841,19 @@ impl AgentRegistry {
         agent_id: &str,
         enabled: bool,
         workspace_root: Option<&Path>,
-    ) -> BitFunResult<()> {
+    ) -> HaloResult<()> {
         let parent_agent_type = parent_agent_type.trim();
         if parent_agent_type.is_empty() {
-            return Err(BitFunError::agent(
+            return Err(HaloError::agent(
                 "parent_agent_type is required to update subagent availability".to_string(),
             ));
         }
 
         let entry = self
             .find_agent_entry(agent_id, workspace_root)
-            .ok_or_else(|| BitFunError::agent(format!("Subagent not found: {}", agent_id)))?;
+            .ok_or_else(|| HaloError::agent(format!("Subagent not found: {}", agent_id)))?;
         if entry.category != AgentCategory::SubAgent {
-            return Err(BitFunError::agent(format!(
+            return Err(HaloError::agent(format!(
                 "Agent '{}' is not a subagent",
                 agent_id
             )));
@@ -861,7 +861,7 @@ impl AgentRegistry {
 
         let subagent_key = subagent_key_for(entry.subagent_source, entry.agent.as_ref())
             .ok_or_else(|| {
-                BitFunError::agent(format!("Failed to resolve subagent key for '{}'", agent_id))
+                HaloError::agent(format!("Failed to resolve subagent key for '{}'", agent_id))
             })?;
         let default_enabled = resolve_default_enabled(&entry, Some(parent_agent_type));
         let state = if enabled {
@@ -873,7 +873,7 @@ impl AgentRegistry {
         match entry.subagent_source {
             Some(SubAgentSource::Project) => {
                 let workspace_root = workspace_root.ok_or_else(|| {
-                    BitFunError::agent(format!(
+                    HaloError::agent(format!(
                         "workspace_path is required to update project subagent availability for '{}'",
                         agent_id
                     ))
@@ -913,11 +913,11 @@ impl AgentRegistry {
                 .await?;
                 Ok(())
             }
-            Some(SubAgentSource::External) => Err(BitFunError::agent(format!(
+            Some(SubAgentSource::External) => Err(HaloError::agent(format!(
                 "External subagent '{}' is read-only; manage it in External AI Apps",
                 agent_id
             ))),
-            None => Err(BitFunError::agent(format!(
+            None => Err(HaloError::agent(format!(
                 "Agent '{}' has no subagent source",
                 agent_id
             ))),
@@ -928,7 +928,7 @@ impl AgentRegistry {
 fn custom_agent_discovery_roots(workspace_root: Option<&Path>) -> CustomAgentDiscoveryRoots {
     CustomAgentDiscoveryRoots {
         workspace_root: workspace_root.map(Path::to_path_buf),
-        bitfun_user_agents_dir: Some(get_path_manager_arc().user_agents_dir()),
+        halo_user_agents_dir: Some(get_path_manager_arc().user_agents_dir()),
         home_dir: dirs::home_dir(),
     }
 }
@@ -940,18 +940,18 @@ fn custom_agent_from_definition(path: String, definition: CustomAgentDefinition)
     }
 }
 
-fn save_runtime_custom_agent(agent: &Arc<dyn Agent>) -> BitFunResult<()> {
+fn save_runtime_custom_agent(agent: &Arc<dyn Agent>) -> HaloResult<()> {
     if let Some(custom_mode) = agent.as_any().downcast_ref::<CustomMode>() {
         return custom_mode.save_to_file(None);
     }
     let custom_subagent = agent
         .as_any()
         .downcast_ref::<CustomSubagent>()
-        .ok_or_else(|| BitFunError::agent("Failed to save custom agent".to_string()))?;
+        .ok_or_else(|| HaloError::agent("Failed to save custom agent".to_string()))?;
     custom_subagent.save_to_file(None)
 }
 
-fn custom_config_from_agent(agent: &dyn Agent) -> BitFunResult<CustomAgentConfig> {
+fn custom_config_from_agent(agent: &dyn Agent) -> HaloResult<CustomAgentConfig> {
     if let Some(custom_mode) = agent.as_any().downcast_ref::<CustomMode>() {
         return Ok(CustomAgentConfig {
             model: custom_mode.data.model.clone(),
@@ -961,7 +961,7 @@ fn custom_config_from_agent(agent: &dyn Agent) -> BitFunResult<CustomAgentConfig
     let custom_subagent = agent
         .as_any()
         .downcast_ref::<CustomSubagent>()
-        .ok_or_else(|| BitFunError::agent("Failed to read custom agent config".to_string()))?;
+        .ok_or_else(|| HaloError::agent("Failed to read custom agent config".to_string()))?;
     Ok(CustomAgentConfig {
         model: custom_subagent.data.model.clone(),
         model_is_explicit: custom_subagent.data.model_is_explicit,

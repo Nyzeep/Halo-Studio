@@ -14,18 +14,18 @@ use uuid::Uuid;
 const DEFAULT_SESSION_ID: &str = "debug-session";
 
 static DEFAULT_LOG_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
-    if let Ok(env_path) = std::env::var("BITFUN_DEBUG_LOG_PATH") {
+    if let Ok(env_path) = std::env::var("HALO_DEBUG_LOG_PATH") {
         return PathBuf::from(env_path);
     }
 
     std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
-        .join(".bitfun")
+        .join(".halo-studio")
         .join("debug.log")
 });
 
 static DEFAULT_INGEST_URL: LazyLock<Option<String>> =
-    LazyLock::new(|| std::env::var("BITFUN_DEBUG_INGEST_URL").ok());
+    LazyLock::new(|| std::env::var("HALO_DEBUG_INGEST_URL").ok());
 
 #[derive(Debug, Clone)]
 pub struct DebugLogConfig {

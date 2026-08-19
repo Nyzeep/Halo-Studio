@@ -39,7 +39,7 @@ const makeSession = (overrides: Partial<Session> = {}): Session => ({
   isHistorical: false,
   todos: [],
   mode: 'agentic',
-  workspacePath: 'D:/workspace/BitFun',
+  workspacePath: 'D:/workspace/Halo',
   isTransient: false,
   maxContextTokens: 4000,
   ...overrides,

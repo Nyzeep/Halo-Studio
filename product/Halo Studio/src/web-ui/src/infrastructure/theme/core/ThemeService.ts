@@ -97,8 +97,8 @@ declare global {
   // Injected by the desktop webview initialization script. These values let the
   // first renderer pass apply the persisted built-in theme without waiting on a
   // Tauri config round trip. They are absent on plain web/F5 fallback paths.
-  var __BITFUN_BOOTSTRAP_THEME_ID__: string | undefined;
-  var __BITFUN_BOOTSTRAP_THEME_SELECTION__: string | undefined;
+  var __HALO_BOOTSTRAP_THEME_ID__: string | undefined;
+  var __HALO_BOOTSTRAP_THEME_SELECTION__: string | undefined;
 }
 
 /** Space-separated R G B channels for accent alpha composition in component styles. */
@@ -290,7 +290,7 @@ export class ThemeService {
 
 
   private getBootstrapThemeSelection(): ThemeSelectionId | null {
-    const selection = globalThis.__BITFUN_BOOTSTRAP_THEME_SELECTION__;
+    const selection = globalThis.__HALO_BOOTSTRAP_THEME_SELECTION__;
     if (selection === SYSTEM_THEME_ID) {
       return SYSTEM_THEME_ID;
     }
@@ -422,7 +422,7 @@ export class ThemeService {
 
     const baseTheme = theme.type === 'light'
       ? builtinThemes.find(item => item.type === 'light') || builtinThemes[0]
-      : builtinThemes.find(item => item.id === 'bitfun-dark') || builtinThemes.find(item => item.type === 'dark') || builtinThemes[0];
+      : builtinThemes.find(item => item.id === 'halo-dark') || builtinThemes.find(item => item.type === 'dark') || builtinThemes[0];
     const normalized = stripNonContractThemeKeys(mergeThemeConfig(baseTheme, theme));
     const validation = this.validateTheme(normalized);
 

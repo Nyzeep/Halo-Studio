@@ -1,6 +1,6 @@
 @use '../../../component-library/styles/tokens' as *;
 
-.bitfun-acp-agents {
+.halo-acp-agents {
   &__toolbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -217,7 +217,7 @@
       color: var(--color-text-secondary);
 
       svg {
-        animation: bitfun-acp-spin 0.9s linear infinite;
+        animation: halo-acp-spin 0.9s linear infinite;
       }
     }
   }
@@ -320,7 +320,7 @@
     gap: $size-gap-2;
     padding: $size-gap-2;
 
-    .bitfun-acp-agents__registry-row--remote {
+    .halo-acp-agents__registry-row--remote {
       padding: $size-gap-2 $size-gap-3;
     }
   }
@@ -348,7 +348,7 @@
   }
 }
 
-@keyframes bitfun-acp-spin {
+@keyframes halo-acp-spin {
   to {
     transform: rotate(360deg);
   }

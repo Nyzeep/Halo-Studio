@@ -14,7 +14,7 @@ Halo release gate），哪些项保持阻断。
 
 ## 决策
 
-1. **上游候选 = rehearsal-only（仅演练）**。BitFun 上游候选（当前记录 `9b05dd0e`，主证据由 GitHub
+1. **上游候选 = rehearsal-only（仅演练）**。上游（原 BitFun）候选（当前记录 `9b05dd0e`，主证据由 GitHub
    REST API 核验：tree `74c1ff43…`、直接父 `59e06a0e…`；base `ca56631e` 是其祖先，compare API
    `behind_by=0`）只作为只读同步演练记录，不自动 merge、不应用、不进入 Halo 产品树。Halo 发行以
    当前固定 base 为准。因此上游候选验证类 finding（candidate release gate、history boundary、

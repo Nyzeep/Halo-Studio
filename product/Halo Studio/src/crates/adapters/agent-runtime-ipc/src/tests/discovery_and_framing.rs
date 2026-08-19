@@ -15,7 +15,7 @@ fn discovery_replacement_never_exposes_partial_json() {
     let workspace = tempdir().expect("workspace");
     let identity = RuntimeInstanceIdentity::for_workspace(
         workspace.path(),
-        "bitfun",
+        "halo",
         "stable",
         "user-a",
         PROTOCOL_VERSION,
@@ -64,7 +64,7 @@ fn sharing_violation_is_never_reported_as_missing_discovery() {
     let workspace = tempdir().expect("workspace");
     let identity = RuntimeInstanceIdentity::for_workspace(
         workspace.path(),
-        "bitfun",
+        "halo",
         "stable",
         "user-a",
         PROTOCOL_VERSION,
@@ -102,7 +102,7 @@ fn instance_identity_is_stable_and_scoped_to_runtime_facts() {
 
     let first = RuntimeInstanceIdentity::for_workspace(
         first_workspace.path(),
-        "bitfun",
+        "halo",
         "stable",
         "user-a",
         PROTOCOL_VERSION,
@@ -110,7 +110,7 @@ fn instance_identity_is_stable_and_scoped_to_runtime_facts() {
     .expect("first identity");
     let same = RuntimeInstanceIdentity::for_workspace(
         &first_workspace.path().join("."),
-        "bitfun",
+        "halo",
         "stable",
         "user-a",
         PROTOCOL_VERSION,
@@ -118,7 +118,7 @@ fn instance_identity_is_stable_and_scoped_to_runtime_facts() {
     .expect("same identity");
     let other_workspace = RuntimeInstanceIdentity::for_workspace(
         second_workspace.path(),
-        "bitfun",
+        "halo",
         "stable",
         "user-a",
         PROTOCOL_VERSION,
@@ -126,7 +126,7 @@ fn instance_identity_is_stable_and_scoped_to_runtime_facts() {
     .expect("other workspace identity");
     let other_user = RuntimeInstanceIdentity::for_workspace(
         first_workspace.path(),
-        "bitfun",
+        "halo",
         "stable",
         "user-b",
         PROTOCOL_VERSION,
@@ -152,7 +152,7 @@ fn instance_identity_preserves_non_utf8_workspace_bytes() {
     std::fs::create_dir(&second_path).expect("second non-UTF-8 workspace");
 
     let identity = |path| {
-        RuntimeInstanceIdentity::for_workspace(path, "bitfun", "stable", "user-a", PROTOCOL_VERSION)
+        RuntimeInstanceIdentity::for_workspace(path, "halo", "stable", "user-a", PROTOCOL_VERSION)
             .expect("workspace identity")
     };
 
@@ -165,7 +165,7 @@ fn discovery_is_owner_checked_and_instance_lock_is_exclusive() {
     let workspace = tempdir().expect("workspace");
     let identity = RuntimeInstanceIdentity::for_workspace(
         workspace.path(),
-        "bitfun",
+        "halo",
         "stable",
         "user-a",
         PROTOCOL_VERSION,

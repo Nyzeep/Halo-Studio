@@ -1,6 +1,6 @@
 #![cfg(feature = "git")]
 
-use bitfun_services_integrations::git::{
+use halo_services_integrations::git::{
     build_git_changed_files_args, build_git_diff_args, parse_branch_line, parse_git_log_line,
     parse_name_status_output, parse_worktree_list, GitAuthor, GitChangedFile, GitChangedFileStatus,
     GitChangedFilesParams, GitCommandOutput, GitCommitParams, GitDiffParams, GitError, GitGraph,
@@ -80,11 +80,11 @@ fn git_command_output_preserves_raw_stream_contract() {
 #[test]
 fn git_text_parsers_preserve_branch_and_log_contracts() {
     assert_eq!(
-        parse_git_log_line("abc123|BitFun|bitfun@example.com|2026-05-12|subject|body"),
+        parse_git_log_line("abc123|Halo|halo@example.com|2026-05-12|subject|body"),
         Some((
             "abc123".to_string(),
-            "BitFun".to_string(),
-            "bitfun@example.com".to_string(),
+            "Halo".to_string(),
+            "halo@example.com".to_string(),
             "2026-05-12".to_string(),
             "subject|body".to_string(),
         ))
@@ -169,10 +169,10 @@ fn git_diff_arg_builders_preserve_existing_command_contract() {
 async fn review_safe_workspace_diff_forces_rename_detection() {
     let repo_dir = TempRepoDir::new("review-workspace-rename");
     run_git(repo_dir.path(), &["init"]);
-    run_git(repo_dir.path(), &["config", "user.name", "BitFun Tests"]);
+    run_git(repo_dir.path(), &["config", "user.name", "Halo Tests"]);
     run_git(
         repo_dir.path(),
-        &["config", "user.email", "tests@bitfun.dev"],
+        &["config", "user.email", "tests@halo.dev"],
     );
     let original = (0..10)
         .map(|index| format!("stable line {index}\n"))
@@ -276,10 +276,10 @@ fn git_status_json_preserves_conflict_contract() {
 async fn review_git_service_reads_exact_renamed_and_deleted_range_without_mutation() {
     let repo_dir = TempRepoDir::new("review-exact-range");
     run_git(repo_dir.path(), &["init"]);
-    run_git(repo_dir.path(), &["config", "user.name", "BitFun Tests"]);
+    run_git(repo_dir.path(), &["config", "user.name", "Halo Tests"]);
     run_git(
         repo_dir.path(),
-        &["config", "user.email", "bitfun-tests@example.com"],
+        &["config", "user.email", "halo-tests@example.com"],
     );
     fs::write(
         repo_dir.path().join(".gitattributes"),
@@ -315,14 +315,14 @@ async fn review_git_service_reads_exact_renamed_and_deleted_range_without_mutati
 
     run_git(
         repo_dir.path(),
-        &["config", "diff.external", "bitfun-review-should-not-run"],
+        &["config", "diff.external", "halo-review-should-not-run"],
     );
     run_git(
         repo_dir.path(),
         &[
             "config",
             "diff.reviewdriver.textconv",
-            "bitfun-review-should-not-run",
+            "halo-review-should-not-run",
         ],
     );
 
@@ -417,7 +417,7 @@ impl TempRepoDir {
             .unwrap()
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "bitfun-services-integrations-{}-{}-{}",
+            "halo-services-integrations-{}-{}-{}",
             name,
             std::process::id(),
             nanos
@@ -455,7 +455,7 @@ fn run_git(repo_dir: &std::path::Path, args: &[&str]) {
 #[test]
 fn git_worktree_info_preserves_camel_case_contract() {
     let worktree = GitWorktreeInfo {
-        path: "D:/workspace/BitFun-worktree".to_string(),
+        path: "D:/workspace/Halo-worktree".to_string(),
         branch: Some("feature/test".to_string()),
         head: "abc123".to_string(),
         is_main: false,
@@ -472,11 +472,11 @@ fn git_worktree_info_preserves_camel_case_contract() {
 #[test]
 fn git_worktree_parser_preserves_porcelain_contract() {
     let worktrees = parse_worktree_list(
-        "worktree D:/workspace/BitFun\nHEAD abc123\nbranch refs/heads/main\n\nworktree D:/workspace/BitFun-feature\nHEAD def456\nbranch refs/heads/feature/test\nlocked\nprunable\n",
+        "worktree D:/workspace/Halo\nHEAD abc123\nbranch refs/heads/main\n\nworktree D:/workspace/Halo-feature\nHEAD def456\nbranch refs/heads/feature/test\nlocked\nprunable\n",
     );
 
     assert_eq!(worktrees.len(), 2);
-    assert_eq!(worktrees[0].path, "D:/workspace/BitFun");
+    assert_eq!(worktrees[0].path, "D:/workspace/Halo");
     assert_eq!(worktrees[0].branch.as_deref(), Some("main"));
     assert_eq!(worktrees[0].head, "abc123");
     assert!(worktrees[0].is_main);
@@ -494,8 +494,8 @@ fn git_commit_params_preserves_no_verify_rename_contract() {
         all: Some(true),
         no_verify: Some(true),
         author: Some(GitAuthor {
-            name: "BitFun".to_string(),
-            email: "bitfun@example.com".to_string(),
+            name: "Halo".to_string(),
+            email: "halo@example.com".to_string(),
         }),
     };
 
@@ -511,8 +511,8 @@ fn git_graph_contract_preserves_camel_case_contract() {
             hash: "abc123".to_string(),
             message: "initial".to_string(),
             full_message: "initial commit".to_string(),
-            author_name: "BitFun".to_string(),
-            author_email: "bitfun@example.com".to_string(),
+            author_name: "Halo".to_string(),
+            author_email: "halo@example.com".to_string(),
             timestamp: 1_700_000_000,
             parents: Vec::new(),
             children: vec!["def456".to_string()],

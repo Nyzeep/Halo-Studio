@@ -80,7 +80,7 @@ const NavBar: React.FC<NavBarProps> = ({
     onMaximize?.();
   }, [onMaximize]);
 
-  const rootClassName = `bitfun-nav-bar${isCollapsed ? ' bitfun-nav-bar--collapsed' : ''}${isMacOS ? ' bitfun-nav-bar--macos' : ''} ${className}`;
+  const rootClassName = `halo-nav-bar${isCollapsed ? ' halo-nav-bar--collapsed' : ''}${isMacOS ? ' halo-nav-bar--macos' : ''} ${className}`;
 
   if (isCollapsed) {
     return (
@@ -88,7 +88,7 @@ const NavBar: React.FC<NavBarProps> = ({
         <Tooltip content={t('header.expandLeftPanel')} placement="bottom" followCursor>
           <button
             type="button"
-            className="bitfun-nav-bar__panel-toggle"
+            className="halo-nav-bar__panel-toggle"
             onClick={onExpandNav}
             aria-label={t('header.expandLeftPanel')}
           >
@@ -104,7 +104,7 @@ const NavBar: React.FC<NavBarProps> = ({
       <Tooltip content={t('header.collapseLeftPanel')} placement="bottom" followCursor>
         <button
           type="button"
-          className="bitfun-nav-bar__panel-toggle"
+          className="halo-nav-bar__panel-toggle"
           onClick={onExpandNav}
           aria-label={t('header.collapseLeftPanel')}
         >
@@ -115,7 +115,7 @@ const NavBar: React.FC<NavBarProps> = ({
       {/* Back / Forward */}
       <Tooltip content={t('nav.backShortcut')} placement="bottom" followCursor disabled={!canGoBack}>
         <button
-          className={`bitfun-nav-bar__btn${!canGoBack ? ' is-inactive' : ''}`}
+          className={`halo-nav-bar__btn${!canGoBack ? ' is-inactive' : ''}`}
           onClick={canGoBack ? goBack : undefined}
           aria-disabled={!canGoBack}
           aria-label={t('nav.back')}
@@ -126,7 +126,7 @@ const NavBar: React.FC<NavBarProps> = ({
 
       <Tooltip content={t('nav.forwardShortcut')} placement="bottom" followCursor disabled={!canGoForward}>
         <button
-          className={`bitfun-nav-bar__btn${!canGoForward ? ' is-inactive' : ''}`}
+          className={`halo-nav-bar__btn${!canGoForward ? ' is-inactive' : ''}`}
           onClick={canGoForward ? goForward : undefined}
           aria-disabled={!canGoForward}
           aria-label={t('nav.forward')}

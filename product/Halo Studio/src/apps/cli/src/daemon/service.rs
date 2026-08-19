@@ -10,10 +10,10 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context, Result};
 
 #[cfg(target_os = "macos")]
-const LAUNCH_AGENT_LABEL: &str = "com.bitfun.cli.daemon";
+const LAUNCH_AGENT_LABEL: &str = "com.halostudio.cli.daemon";
 
 #[cfg(all(unix, not(target_os = "macos")))]
-const SYSTEMD_UNIT_NAME: &str = "bitfun-cli-daemon.service";
+const SYSTEMD_UNIT_NAME: &str = "halo-cli-daemon.service";
 
 fn current_exe_path() -> Result<PathBuf> {
     std::env::current_exe().context("resolve current executable path")
@@ -32,7 +32,7 @@ fn systemd_unit_path() -> Result<PathBuf> {
 fn render_systemd_unit(executable: &Path) -> String {
     format!(
         "[Unit]\n\
-         Description=BitFun CLI account device host\n\
+         Description=Halo CLI account device host\n\
          After=network-online.target\n\
          Wants=network-online.target\n\
          \n\
@@ -128,7 +128,7 @@ fn ensure_systemd_user_available() -> Result<()> {
         _ => Err(anyhow!(
             "systemd user session is not available (no user bus; common in containers, WSL, or SSH sessions without systemd --user).\n\
              Enable a systemd user session for this account, or run the daemon under your own supervisor instead:\n\
-             \x20 bitfun daemon run"
+             \x20 halo daemon run"
         )),
     }
 }
@@ -201,7 +201,7 @@ fn install_platform_service(executable: &Path) -> Result<String> {
 #[cfg(not(unix))]
 fn install_platform_service(_executable: &Path) -> Result<String> {
     Err(anyhow!(
-        "daemon auto-start service is not supported on this platform; run `bitfun daemon run` in a terminal instead"
+        "daemon auto-start service is not supported on this platform; run `halo daemon run` in a terminal instead"
     ))
 }
 
@@ -268,13 +268,13 @@ fn platform_service_active() -> Option<bool> {
 }
 
 /// Install and start the auto-start service. Requires a persisted account
-/// session (the daemon logs in from `~/.bitfun/account_session.enc`).
+/// session (the daemon logs in from `~/.halo-studio/account_session.enc`).
 pub(crate) fn install_service() -> Result<()> {
-    match bitfun_core::service::remote_connect::session_store::load_session() {
+    match halo_core::service::remote_connect::session_store::load_session() {
         Ok(Some(_)) => {}
         Ok(None) => {
             return Err(anyhow!(
-                "not logged in; run `bitfun`, log in with `/login`, then re-run `bitfun daemon install`"
+                "not logged in; run `halo`, log in with `/login`, then re-run `halo daemon install`"
             ));
         }
         Err(error) => return Err(anyhow!("read account session: {error}")),
@@ -318,7 +318,7 @@ pub(crate) fn print_status() -> Result<()> {
         );
     }
     if !installed && !running {
-        println!("hint: `bitfun daemon install` keeps this device reachable after reboot");
+        println!("hint: `halo daemon install` keeps this device reachable after reboot");
     }
     Ok(())
 }
@@ -329,8 +329,8 @@ mod tests {
 
     #[test]
     fn systemd_unit_runs_daemon_run_and_restarts_on_failure() {
-        let unit = render_systemd_unit(Path::new("/home/u/.local/bin/bitfun"));
-        assert!(unit.contains("ExecStart=/home/u/.local/bin/bitfun daemon run"));
+        let unit = render_systemd_unit(Path::new("/home/u/.local/bin/halo"));
+        assert!(unit.contains("ExecStart=/home/u/.local/bin/halo daemon run"));
         assert!(unit.contains("Restart=on-failure"));
         assert!(unit.contains("WantedBy=default.target"));
         assert!(unit.contains("After=network-online.target"));
@@ -339,8 +339,8 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn launch_agent_runs_daemon_run_at_load() {
-        let plist = render_launch_agent(Path::new("/usr/local/bin/bitfun"));
-        assert!(plist.contains("<string>/usr/local/bin/bitfun</string>"));
+        let plist = render_launch_agent(Path::new("/usr/local/bin/halo"));
+        assert!(plist.contains("<string>/usr/local/bin/halo</string>"));
         assert!(plist.contains("<string>run</string>"));
         assert!(plist.contains("<key>RunAtLoad</key>"));
         assert!(plist.contains(LAUNCH_AGENT_LABEL));

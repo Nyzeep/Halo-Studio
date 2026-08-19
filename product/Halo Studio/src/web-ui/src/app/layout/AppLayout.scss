@@ -1,5 +1,5 @@
 /**
- * BitFun main layout styles (SCSS).
+ * Halo main layout styles (SCSS).
  * Token-driven application shell with a consistent dark background.
  * Follows BEM naming and design tokens.
  */
@@ -30,7 +30,7 @@ html, body {
 }
 
 // ==================== Main layout container ====================
-.bitfun-app-layout {
+.halo-app-layout {
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -77,7 +77,7 @@ html, body {
   // ==================== Transitioning ====================
   &--transitioning {
     // Styles during transition
-    .bitfun-app-main-workspace {
+    .halo-app-main-workspace {
       // Content transition handled by child components
     }
   }
@@ -90,7 +90,7 @@ html, body {
 
   // ==================== Modifier - error ====================
   &--error {
-    .bitfun-app-header {
+    .halo-app-header {
       border-bottom-color: var(--color-error);
       background: linear-gradient(135deg, 
         var(--color-error-bg) 0%, 
@@ -102,7 +102,7 @@ html, body {
   &--modal-open {
     overflow: hidden;
 
-    .bitfun-app-main {
+    .halo-app-main {
       filter: blur(2px);
       pointer-events: none;
     }
@@ -111,7 +111,7 @@ html, body {
 }
 
 // ==================== Main content area (full height, no TitleBar) ====================
-.bitfun-app-main-workspace {
+.halo-app-main-workspace {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -122,7 +122,7 @@ html, body {
   background: var(--color-bg-scene);
 }
 
-.bitfun-window-mode-hint {
+.halo-window-mode-hint {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + #{$size-gap-3});
   left: 50%;
@@ -140,7 +140,7 @@ html, body {
   color: var(--color-text-primary);
   pointer-events: none;
   transform: translateX(-50%);
-  animation: bitfun-window-mode-hint-in $motion-base $easing-decelerate both;
+  animation: halo-window-mode-hint-in $motion-base $easing-decelerate both;
   backdrop-filter: blur(12px);
 
   &__title {
@@ -163,7 +163,7 @@ html, body {
   }
 }
 
-@keyframes bitfun-window-mode-hint-in {
+@keyframes halo-window-mode-hint-in {
   from {
     opacity: 0;
     transform: translateX(-50%) translateY(-8px);
@@ -179,7 +179,7 @@ html, body {
 
 // ==================== Responsive ====================
 @media (max-width: 768px) {
-  .bitfun-window-mode-hint {
+  .halo-window-mode-hint {
     align-items: flex-start;
     flex-direction: column;
     gap: 1px;
@@ -195,26 +195,26 @@ html, body {
 
 // ==================== Dark theme tweaks ====================
 @media (prefers-color-scheme: dark) {
-  .bitfun-app-layout {
+  .halo-app-layout {
     background: var(--color-bg-scene);
   }
 }
 
 // ==================== High-contrast mode ====================
 @media (prefers-contrast: high) {
-  .bitfun-app-layout {
+  .halo-app-layout {
     background: var(--color-bg-scene);
   }
 }
 
 // ==================== Reduced motion preference ====================
 @media (prefers-reduced-motion: reduce) {
-  .bitfun-app-layout * {
+  .halo-app-layout * {
     transition: none;
     animation: none;
   }
 
-  .bitfun-window-mode-hint {
+  .halo-window-mode-hint {
     animation: none;
   }
 }

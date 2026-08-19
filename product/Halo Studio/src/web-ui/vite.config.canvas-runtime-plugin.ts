@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { build, type Plugin } from 'vite';
 
-const VIRTUAL_MODULE_ID = 'virtual:bitfun-canvas-runtime-bundle';
+const VIRTUAL_MODULE_ID = 'virtual:halo-canvas-runtime-bundle';
 const RESOLVED_VIRTUAL_MODULE_ID = `\0${VIRTUAL_MODULE_ID}`;
 
 interface RuntimeBundleCache {
@@ -11,10 +11,10 @@ interface RuntimeBundleCache {
   code: string;
 }
 
-export function bitfunCanvasRuntimeBundlePlugin(): Plugin {
+export function haloCanvasRuntimeBundlePlugin(): Plugin {
   let cache: RuntimeBundleCache | null = null;
   const webUiRoot = path.resolve(__dirname);
-  const runtimeRoot = path.resolve(webUiRoot, 'src/tools/bitfun-canvas/runtime');
+  const runtimeRoot = path.resolve(webUiRoot, 'src/tools/halo-canvas/runtime');
   const entry = path.resolve(runtimeRoot, 'entry.tsx');
 
   function collectRuntimeFiles(dir: string): string[] {
@@ -64,7 +64,7 @@ export function bitfunCanvasRuntimeBundlePlugin(): Plugin {
         sourcemap: false,
         lib: {
           entry,
-          name: 'BitfunCanvasRuntimeAdapters',
+          name: 'HaloCanvasRuntimeAdapters',
           formats: ['iife'],
         },
         rollupOptions: {
@@ -87,15 +87,15 @@ export function bitfunCanvasRuntimeBundlePlugin(): Plugin {
       .join('\n');
 
     const code = [
-      `export const bitfunCanvasRuntimeBundle = ${JSON.stringify({ js, css })};`,
-      'export default bitfunCanvasRuntimeBundle;',
+      `export const haloCanvasRuntimeBundle = ${JSON.stringify({ js, css })};`,
+      'export default haloCanvasRuntimeBundle;',
     ].join('\n');
     cache = { key, code };
     return code;
   }
 
   return {
-    name: 'bitfun-canvas-runtime-bundle',
+    name: 'halo-canvas-runtime-bundle',
     enforce: 'pre',
     watchChange(id) {
       if (path.resolve(id).startsWith(runtimeRoot)) {

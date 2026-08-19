@@ -7,11 +7,11 @@ import { browser, expect, $ } from '@wdio/globals';
 import { openWorkspace } from '../helpers/workspace-helper';
 
 const NAV_ENTRY_SELECTORS = [
-  '.bitfun-nav-panel__item',
-  '.bitfun-nav-panel__workspace-item-name-btn',
-  '.bitfun-nav-panel__inline-item',
-  '.bitfun-nav-panel__workspace-create-main',
-  '.bitfun-nav-panel__miniapp-entry',
+  '.halo-nav-panel__item',
+  '.halo-nav-panel__workspace-item-name-btn',
+  '.halo-nav-panel__inline-item',
+  '.halo-nav-panel__workspace-create-main',
+  '.halo-nav-panel__miniapp-entry',
 ];
 
 async function getNavigationEntries() {
@@ -52,7 +52,7 @@ describe('L0 Navigation Panel', () => {
       await browser.pause(1000);
 
       // Use the correct selector from NavPanel.tsx
-      const navPanel = await $('.bitfun-nav-panel');
+      const navPanel = await $('.halo-nav-panel');
       const navExists = await navPanel.isExisting();
 
       console.log('[L0] Navigation panel found:', navExists);
@@ -77,7 +77,7 @@ describe('L0 Navigation Panel', () => {
       expect(hasWorkspace).toBe(true);
 
       // Use correct selector from MainNav.tsx
-      const sections = await $('.bitfun-nav-panel__sections');
+      const sections = await $('.halo-nav-panel__sections');
       const sectionsExist = await sections.isExisting();
 
       console.log('[L0] Navigation sections found:', sectionsExist);

@@ -138,8 +138,8 @@ class PlanBuildStateService {
   }
 
   private setupGlobalListeners(): void {
-    window.addEventListener('bitfun:todowrite-update', this.handleTodoWriteUpdate);
-    window.addEventListener('bitfun:dialog-cancelled', this.handleDialogCancelled);
+    window.addEventListener('halo:todowrite-update', this.handleTodoWriteUpdate);
+    window.addEventListener('halo:dialog-cancelled', this.handleDialogCancelled);
   }
 
   /**

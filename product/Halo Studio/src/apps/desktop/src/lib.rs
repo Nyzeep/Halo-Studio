@@ -1,6 +1,6 @@
 #![recursion_limit = "256"]
 #![allow(non_snake_case)]
-//! BitFun Desktop - Tauri-based desktop application with TransportAdapter architecture
+//! Halo Desktop - Tauri-based desktop application with TransportAdapter architecture
 //!
 //! The reqwest HTTP/2 and MCP transport type graph exceeds rustc's default
 //! trait-evaluation recursion budget when desktop tasks require `Send`.
@@ -32,14 +32,14 @@ pub mod startup_trace;
 pub mod theme;
 pub mod tray;
 
-use bitfun_core::agentic::tools::computer_use_capability::set_computer_use_desktop_available;
-use bitfun_core::agentic::tools::computer_use_host::ComputerUseHostRef;
-use bitfun_core::infrastructure::ai::AIClientFactory;
-use bitfun_core::infrastructure::{get_path_manager_arc, try_get_path_manager_arc};
-use bitfun_core::service::search::get_global_workspace_search_service;
-use bitfun_core::service::workspace::get_global_workspace_service;
-use bitfun_core::util::{elapsed_ms, TimingCollector};
-use bitfun_transport::{TauriTransportAdapter, TransportAdapter};
+use halo_core::agentic::tools::computer_use_capability::set_computer_use_desktop_available;
+use halo_core::agentic::tools::computer_use_host::ComputerUseHostRef;
+use halo_core::infrastructure::ai::AIClientFactory;
+use halo_core::infrastructure::{get_path_manager_arc, try_get_path_manager_arc};
+use halo_core::service::search::get_global_workspace_search_service;
+use halo_core::service::workspace::get_global_workspace_service;
+use halo_core::util::{elapsed_ms, TimingCollector};
+use halo_transport::{TauriTransportAdapter, TransportAdapter};
 use serde::Deserialize;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -92,13 +92,13 @@ use startup_trace::{DesktopStartupTrace, DesktopStartupTraceSnapshot};
 /// Agentic Coordinator state
 #[derive(Clone)]
 pub struct CoordinatorState {
-    pub coordinator: Arc<bitfun_core::agentic::coordination::ConversationCoordinator>,
+    pub coordinator: Arc<halo_core::agentic::coordination::ConversationCoordinator>,
 }
 
 /// Dialog scheduler state (primary entry point for user messages)
 #[derive(Clone)]
 pub struct SchedulerState {
-    pub scheduler: Arc<bitfun_core::agentic::coordination::DialogScheduler>,
+    pub scheduler: Arc<halo_core::agentic::coordination::DialogScheduler>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -113,7 +113,7 @@ static MAIN_WINDOW_HIDDEN_ON_MACOS: AtomicBool = AtomicBool::new(false);
 #[cfg(target_os = "macos")]
 static MAIN_WINDOW_CLOSE_PENDING_ON_MACOS: AtomicBool = AtomicBool::new(false);
 
-const MAIN_WINDOW_CLOSE_REQUESTED_EVENT: &str = "bitfun_main_window_close_requested";
+const MAIN_WINDOW_CLOSE_REQUESTED_EVENT: &str = "halo_main_window_close_requested";
 const BROWSER_WEBVIEW_PAGE_LOAD_EVENT: &str = "browser-webview-page-load";
 const CRON_DESKTOP_START_FALLBACK_DELAY: Duration = Duration::from_secs(120);
 pub(crate) const MAIN_WINDOW_DEFAULT_WIDTH: f64 = 1200.0;
@@ -421,7 +421,7 @@ mod main_window_geometry_tests {
 #[tauri::command]
 async fn webdriver_bridge_result(request: WebdriverBridgeResultRequest) -> Result<(), String> {
     log::debug!("webdriver_bridge_result command invoked");
-    bitfun_webdriver::handle_bridge_result(request.payload)
+    halo_webdriver::handle_bridge_result(request.payload)
 }
 
 #[tauri::command]
@@ -481,12 +481,12 @@ pub async fn run_with_context_and_options(
     // Install the rustls ring CryptoProvider as the process-level default early,
     // so that all subsequent TLS operations (relay_client, reqwest, tokio-tungstenite)
     // reuse the same provider instead of each attempting their own install_default().
-    bitfun_core::service::remote_connect::ensure_rustls_crypto_provider();
+    halo_core::service::remote_connect::ensure_rustls_crypto_provider();
 
-    eprintln!("=== BitFun Desktop Starting ===");
+    eprintln!("=== Halo Desktop Starting ===");
 
     let step_started = Instant::now();
-    if let Err(e) = bitfun_core::service::config::initialize_global_config().await {
+    if let Err(e) = halo_core::service::config::initialize_global_config().await {
         log::error!("Failed to initialize global config service: {}", e);
         return;
     }
@@ -503,8 +503,8 @@ pub async fn run_with_context_and_options(
         (startup_log_level, log_level_duration_ms),
         (ai_factory_result, ai_factory_duration_ms),
     ) = {
-        use bitfun_core::service::config::get_global_config_service;
-        use bitfun_core::service::i18n::initialize_global_i18n_service;
+        use halo_core::service::config::get_global_config_service;
+        use halo_core::service::i18n::initialize_global_i18n_service;
 
         // Initialize global I18nService so bot/remote-connect language is always in sync.
         let i18n_task = async {
@@ -598,7 +598,7 @@ pub async fn run_with_context_and_options(
     #[cfg(feature = "halo-local-coding")]
     let token_usage_service = {
         let path_manager = get_path_manager_arc();
-        match bitfun_core::service::token_usage::TokenUsageService::new(path_manager).await {
+        match halo_core::service::token_usage::TokenUsageService::new(path_manager).await {
             Ok(service) => Arc::new(service),
             Err(error) => {
                 log::error!("Failed to initialize Halo token usage service: {}", error);
@@ -609,7 +609,7 @@ pub async fn run_with_context_and_options(
 
     let step_started = Instant::now();
     let workspace_search_enabled =
-        bitfun_core::service::search::workspace_search_feature_enabled().await;
+        halo_core::service::search::workspace_search_feature_enabled().await;
     startup_trace.record_elapsed_step(
         "native_pre_tauri",
         "workspace_search_feature_enabled",
@@ -636,7 +636,7 @@ pub async fn run_with_context_and_options(
 
     #[cfg(feature = "halo-local-coding")]
     let halo_workbench_components =
-        match bitfun_core::halo_workbench::build_halo_workbench_runtime_components(
+        match halo_core::halo_workbench::build_halo_workbench_runtime_components(
             app_state.workspace_service.clone(),
         ) {
             Ok(components) => components,
@@ -735,7 +735,7 @@ pub async fn run_with_context_and_options(
     let builder = {
         builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             log::info!(
-                "Existing BitFun Desktop instance received launch request: args_count={}, cwd={}",
+                "Existing Halo Desktop instance received launch request: args_count={}, cwd={}",
                 args.len(),
                 cwd
             );
@@ -750,7 +750,7 @@ pub async fn run_with_context_and_options(
         .plugin(tauri_plugin_fs::init())
         .plugin(
             tauri_plugin_autostart::Builder::new()
-                .app_name("BitFun")
+                .app_name("Halo")
                 .build(),
         )
         .plugin(tauri_plugin_notification::init())
@@ -839,7 +839,7 @@ pub async fn run_with_context_and_options(
                             match std::process::Command::new("reg")
                                 .args([
                                     "query",
-                                    r"HKCU\Software\BitFun Team\BitFun",
+                                    r"HKCU\Software\Halo Studio Team\Halo",
                                     "/ve",
                                 ])
                                 .creation_flags(CREATE_NO_WINDOW)
@@ -855,7 +855,7 @@ pub async fn run_with_context_and_options(
                             let _ = std::process::Command::new("reg")
                                 .args([
                                     "add",
-                                    r"HKCU\Software\BitFun Team\BitFun",
+                                    r"HKCU\Software\Halo Studio Team\Halo",
                                     "/ve",
                                     "/d",
                                     &dir_str,
@@ -888,7 +888,7 @@ pub async fn run_with_context_and_options(
                 let step_started = Instant::now();
                 let flashgrep_path = startup_flashgrep_path.clone().or_else(|| {
                     let binary_names =
-                        bitfun_core::service::search::workspace_search_daemon_binary_names();
+                        halo_core::service::search::workspace_search_daemon_binary_names();
                     for binary_name in binary_names {
                         let primary = format!("flashgrep/{}", binary_name);
                         if let Ok(path) = app
@@ -926,7 +926,7 @@ pub async fn run_with_context_and_options(
                 } else {
                     log::warn!(
                         "Workspace search daemon startup check failed: {}",
-                        bitfun_core::service::search::workspace_search_daemon_missing_hint()
+                        halo_core::service::search::workspace_search_daemon_missing_hint()
                     );
                 }
                 startup_trace.record_elapsed_step(
@@ -1049,7 +1049,7 @@ pub async fn run_with_context_and_options(
                 window_duration_ms
             );
             let webdriver_started = Instant::now();
-            bitfun_webdriver::maybe_start(app_handle.clone());
+            halo_webdriver::maybe_start(app_handle.clone());
             startup_trace.record_elapsed_step(
                 "native_setup",
                 "maybe_start_webdriver",
@@ -1189,7 +1189,7 @@ pub async fn run_with_context_and_options(
                 setup_duration_ms,
                 since_process_start_ms
             );
-            log::info!("BitFun Desktop started successfully");
+            log::info!("Halo Desktop started successfully");
             Ok(())
         })
         .on_window_event({
@@ -1927,7 +1927,7 @@ pub async fn run_with_context_and_options(
             api::remote_connect_api::account_delete_device,
             api::remote_connect_api::account_device_rpc,
             api::remote_connect_api::account_delegate_to_paired,
-            // BitFun Page API
+            // Halo Page API
             api::pages_api::page_publish,
             api::pages_api::page_save_version,
             api::pages_api::page_list,
@@ -2144,14 +2144,14 @@ pub async fn run_with_context_and_options(
 }
 
 async fn init_agentic_system() -> anyhow::Result<(
-    Arc<bitfun_core::agentic::coordination::ConversationCoordinator>,
-    Arc<bitfun_core::agentic::coordination::DialogScheduler>,
-    Arc<bitfun_core::agentic::events::EventQueue>,
-    Arc<bitfun_core::agentic::events::EventRouter>,
+    Arc<halo_core::agentic::coordination::ConversationCoordinator>,
+    Arc<halo_core::agentic::coordination::DialogScheduler>,
+    Arc<halo_core::agentic::events::EventQueue>,
+    Arc<halo_core::agentic::events::EventRouter>,
     Arc<AIClientFactory>,
-    Arc<bitfun_core::service::token_usage::TokenUsageService>,
+    Arc<halo_core::service::token_usage::TokenUsageService>,
 )> {
-    use bitfun_core::agentic::*;
+    use halo_core::agentic::*;
 
     let ai_client_factory = AIClientFactory::get_global().await?;
 
@@ -2173,7 +2173,7 @@ async fn init_agentic_system() -> anyhow::Result<(
     let tool_registry = tools::registry::get_global_tool_registry();
     let tool_state_manager = Arc::new(tools::pipeline::ToolStateManager::new(event_queue.clone()));
     let permission_request_manager =
-        bitfun_core::product_runtime::core_permission_request_manager()
+        halo_core::product_runtime::core_permission_request_manager()
             .map_err(anyhow::Error::msg)?;
 
     let computer_use_host: ComputerUseHostRef =
@@ -2197,10 +2197,10 @@ async fn init_agentic_system() -> anyhow::Result<(
     ));
 
     // Get execution config from global settings
-    let exec_config = match bitfun_core::service::config::get_global_config_service().await {
+    let exec_config = match halo_core::service::config::get_global_config_service().await {
         Ok(config_service) => {
             match config_service
-                .get_config::<bitfun_core::service::config::types::GlobalConfig>(None)
+                .get_config::<halo_core::service::config::types::GlobalConfig>(None)
                 .await
             {
                 Ok(global_config) => execution::ExecutionEngineConfig {
@@ -2222,7 +2222,7 @@ async fn init_agentic_system() -> anyhow::Result<(
     ));
 
     let runtime_ownership = Arc::new(
-        bitfun_core::runtime_ownership::CoreRuntimeOwnership::embedded(
+        halo_core::runtime_ownership::CoreRuntimeOwnership::embedded(
             path_manager.as_ref(),
             "desktop",
         ),
@@ -2236,27 +2236,27 @@ async fn init_agentic_system() -> anyhow::Result<(
         runtime_ownership,
     ));
     coordinator.set_terminal_port(
-        bitfun_core::product_runtime::CoreRuntimeServicesProvider::terminal_port(),
+        halo_core::product_runtime::CoreRuntimeServicesProvider::terminal_port(),
     );
     coordinator.set_remote_exec_port(
-        bitfun_core::product_runtime::CoreRuntimeServicesProvider::remote_exec_port(),
+        halo_core::product_runtime::CoreRuntimeServicesProvider::remote_exec_port(),
     );
 
     coordination::ConversationCoordinator::set_global(coordinator.clone());
 
     // Initialize token usage service and register subscriber
     let token_usage_service = Arc::new(
-        bitfun_core::service::token_usage::TokenUsageService::new(path_manager.clone())
+        halo_core::service::token_usage::TokenUsageService::new(path_manager.clone())
             .await
             .map_err(|e| anyhow::anyhow!("Failed to initialize token usage service: {}", e))?,
     );
     let token_usage_subscriber = Arc::new(
-        bitfun_core::service::token_usage::TokenUsageSubscriber::new(token_usage_service.clone()),
+        halo_core::service::token_usage::TokenUsageSubscriber::new(token_usage_service.clone()),
     );
     event_router.subscribe_internal("token_usage".to_string(), token_usage_subscriber);
     event_router.subscribe_internal(
         "thread_goal_tokens".to_string(),
-        Arc::new(bitfun_core::agentic::goal_mode::ThreadGoalTokenSubscriber),
+        Arc::new(halo_core::agentic::goal_mode::ThreadGoalTokenSubscriber),
     );
 
     log::info!("Token usage service initialized and subscriber registered");
@@ -2269,15 +2269,15 @@ async fn init_agentic_system() -> anyhow::Result<(
     coordination::set_global_scheduler(scheduler.clone());
     api::remote_connect_api::set_dialog_scheduler(scheduler.clone());
 
-    let cron_service = bitfun_core::service::cron::CronService::new(
+    let cron_service = halo_core::service::cron::CronService::new(
         path_manager.clone(),
         coordinator.clone(),
         scheduler.clone(),
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to initialize cron service: {}", e))?;
-    bitfun_core::service::cron::set_global_cron_service(cron_service.clone());
-    let cron_subscriber = Arc::new(bitfun_core::service::cron::CronEventSubscriber::new(
+    halo_core::service::cron::set_global_cron_service(cron_service.clone());
+    let cron_subscriber = Arc::new(halo_core::service::cron::CronEventSubscriber::new(
         cron_service.clone(),
     ));
     event_router.subscribe_internal("cron_jobs".to_string(), cron_subscriber);
@@ -2310,11 +2310,11 @@ async fn init_agentic_system() -> anyhow::Result<(
 
 #[cfg(not(feature = "halo-local-coding"))]
 async fn init_function_agents(ai_client_factory: Arc<AIClientFactory>) -> anyhow::Result<()> {
-    let _ = bitfun_core::function_agents::git_func_agent::GitFunctionAgent::new(
+    let _ = halo_core::function_agents::git_func_agent::GitFunctionAgent::new(
         ai_client_factory.clone(),
     );
 
-    let _ = bitfun_core::function_agents::startchat_func_agent::StartchatFunctionAgent::new(
+    let _ = halo_core::function_agents::startchat_func_agent::StartchatFunctionAgent::new(
         ai_client_factory.clone(),
     );
 
@@ -2428,13 +2428,13 @@ pub(crate) fn perform_process_exit_cleanup() -> bool {
     if let Some(search_service) = get_global_workspace_search_service() {
         search_service.shutdown_blocking();
     }
-    bitfun_core::util::process_manager::cleanup_all_processes();
+    halo_core::util::process_manager::cleanup_all_processes();
     api::remote_connect_api::cleanup_on_exit();
     true
 }
 
 fn configure_workspace_search_daemon_env() -> Option<std::path::PathBuf> {
-    let path = bitfun_core::service::search::resolve_workspace_search_daemon_program_path();
+    let path = halo_core::service::search::resolve_workspace_search_daemon_program_path();
     if let Some(path) = path.as_ref() {
         std::env::set_var("FLASHGREP_DAEMON_BIN", path);
     }
@@ -2442,8 +2442,8 @@ fn configure_workspace_search_daemon_env() -> Option<std::path::PathBuf> {
 }
 
 fn start_event_loop_with_transport(
-    event_queue: Arc<bitfun_core::agentic::events::EventQueue>,
-    event_router: Arc<bitfun_core::agentic::events::EventRouter>,
+    event_queue: Arc<halo_core::agentic::events::EventQueue>,
+    event_router: Arc<halo_core::agentic::events::EventRouter>,
     transport: Arc<TauriTransportAdapter>,
 ) {
     tokio::spawn(async move {
@@ -2469,7 +2469,7 @@ fn start_event_loop_with_transport(
 
                     if !api::peer_host_invoke::attached_controllers().is_empty() {
                         if let Some(projected) =
-                            bitfun_events::project_agentic_frontend_event(event_for_fanout)
+                            halo_events::project_agentic_frontend_event(event_for_fanout)
                         {
                             api::remote_connect_api::fanout_peer_device_event(
                                 projected.event_name,
@@ -2484,7 +2484,7 @@ fn start_event_loop_with_transport(
 }
 
 fn init_services(app_handle: tauri::AppHandle, default_log_level: log::LevelFilter) {
-    use bitfun_core::{infrastructure, service};
+    use halo_core::{infrastructure, service};
 
     spawn_ingest_server_with_config_listener();
     spawn_runtime_log_level_listener(default_log_level);
@@ -2500,7 +2500,7 @@ fn init_services(app_handle: tauri::AppHandle, default_log_level: log::LevelFilt
 
         service::snapshot::initialize_snapshot_event_emitter(emitter.clone());
 
-        bitfun_core::service::initialize_file_watch_service(emitter.clone());
+        halo_core::service::initialize_file_watch_service(emitter.clone());
 
         if let Err(e) = workspace_identity_watch_service
             .set_event_emitter(emitter.clone())
@@ -2522,7 +2522,7 @@ fn init_services(app_handle: tauri::AppHandle, default_log_level: log::LevelFilt
 }
 
 async fn resolve_runtime_log_level(default_level: log::LevelFilter) -> log::LevelFilter {
-    use bitfun_core::service::config::get_global_config_service;
+    use halo_core::service::config::get_global_config_service;
 
     if let Ok(config_service) = get_global_config_service().await {
         if let Ok(config_level) = config_service
@@ -2544,7 +2544,7 @@ async fn resolve_runtime_log_level(default_level: log::LevelFilter) -> log::Leve
 }
 
 fn spawn_runtime_log_level_listener(default_level: log::LevelFilter) {
-    use bitfun_core::service::config::{subscribe_config_updates, ConfigUpdateEvent};
+    use halo_core::service::config::{subscribe_config_updates, ConfigUpdateEvent};
 
     tokio::spawn(async move {
         if let Some(mut receiver) = subscribe_config_updates() {
@@ -2582,15 +2582,15 @@ fn spawn_runtime_log_level_listener(default_level: log::LevelFilter) {
 
 fn create_event_emitter(
     transport: Arc<TauriTransportAdapter>,
-) -> Arc<dyn bitfun_core::infrastructure::events::EventEmitter> {
-    use bitfun_core::infrastructure::events::TransportEmitter;
-    let inner: Arc<dyn bitfun_core::infrastructure::events::EventEmitter> =
+) -> Arc<dyn halo_core::infrastructure::events::EventEmitter> {
+    use halo_core::infrastructure::events::TransportEmitter;
+    let inner: Arc<dyn halo_core::infrastructure::events::EventEmitter> =
         Arc::new(TransportEmitter::new(transport));
     api::remote_connect_api::wrap_peer_aware_emitter(inner)
 }
 
 fn spawn_workspace_search_feature_listener(app_handle: tauri::AppHandle) {
-    use bitfun_core::service::config::{subscribe_config_updates, ConfigUpdateEvent};
+    use halo_core::service::config::{subscribe_config_updates, ConfigUpdateEvent};
 
     let app_state: tauri::State<'_, api::AppState> = app_handle.state();
     let workspace_search_service = app_state.workspace_search_service.clone();
@@ -2598,7 +2598,7 @@ fn spawn_workspace_search_feature_listener(app_handle: tauri::AppHandle) {
 
     tokio::spawn(async move {
         let mut feature_enabled =
-            bitfun_core::service::search::workspace_search_feature_enabled().await;
+            halo_core::service::search::workspace_search_feature_enabled().await;
 
         let Some(mut receiver) = subscribe_config_updates() else {
             log::warn!("Config update subscription unavailable for workspace search listener");
@@ -2609,7 +2609,7 @@ fn spawn_workspace_search_feature_listener(app_handle: tauri::AppHandle) {
             match receiver.recv().await {
                 Ok(ConfigUpdateEvent::AppUpdated) | Ok(ConfigUpdateEvent::ConfigReloaded) => {
                     let next_enabled =
-                        bitfun_core::service::search::workspace_search_feature_enabled().await;
+                        halo_core::service::search::workspace_search_feature_enabled().await;
 
                     if next_enabled == feature_enabled {
                         continue;
@@ -2625,11 +2625,11 @@ fn spawn_workspace_search_feature_listener(app_handle: tauri::AppHandle) {
                     }
 
                     let resolved_path = configure_workspace_search_daemon_env();
-                    if !bitfun_core::service::search::workspace_search_daemon_available() {
+                    if !halo_core::service::search::workspace_search_daemon_available() {
                         log::warn!(
                             "Workspace search feature enabled but daemon is unavailable: path={:?}, hint={}",
                             resolved_path.as_ref().map(|path| path.display().to_string()),
-                            bitfun_core::service::search::workspace_search_daemon_missing_hint()
+                            halo_core::service::search::workspace_search_daemon_missing_hint()
                         );
                         feature_enabled = true;
                         continue;
@@ -2638,7 +2638,7 @@ fn spawn_workspace_search_feature_listener(app_handle: tauri::AppHandle) {
                     let current_workspace = workspace_path.read().await.clone();
                     if let Some(current_workspace) = current_workspace {
                         let workspace_str = current_workspace.to_string_lossy().to_string();
-                        if !bitfun_core::service::remote_ssh::workspace_state::is_remote_path(
+                        if !halo_core::service::remote_ssh::workspace_state::is_remote_path(
                             workspace_str.trim(),
                         )
                         .await
@@ -2677,15 +2677,15 @@ fn spawn_workspace_search_feature_listener(app_handle: tauri::AppHandle) {
 }
 
 fn spawn_ingest_server_with_config_listener() {
-    use bitfun_core::infrastructure::debug_log::IngestServerManager;
-    use bitfun_core::service::config::{
+    use halo_core::infrastructure::debug_log::IngestServerManager;
+    use halo_core::service::config::{
         get_global_config_service, subscribe_config_updates, ConfigUpdateEvent,
     };
 
     tokio::spawn(async move {
         let initial_config = if let Ok(config_service) = get_global_config_service().await {
             if let Ok(config) = config_service
-                .get_config::<bitfun_core::service::config::GlobalConfig>(None)
+                .get_config::<halo_core::service::config::GlobalConfig>(None)
                 .await
             {
                 let debug_config = &config.ai.debug_mode_config;
@@ -2693,7 +2693,7 @@ fn spawn_ingest_server_with_config_listener() {
                     .and_then(|service| service.try_get_current_workspace_path())
                     .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
-                Some(bitfun_core::infrastructure::debug_log::IngestServerConfig::from_debug_mode_config(
+                Some(halo_core::infrastructure::debug_log::IngestServerConfig::from_debug_mode_config(
                     debug_config.ingest_port,
                     workspace_path.join(&debug_config.log_path),
                 ))
@@ -2706,7 +2706,7 @@ fn spawn_ingest_server_with_config_listener() {
 
         let configured_port = if let Ok(config_service) = get_global_config_service().await {
             if let Ok(config) = config_service
-                .get_config::<bitfun_core::service::config::GlobalConfig>(None)
+                .get_config::<halo_core::service::config::GlobalConfig>(None)
                 .await
             {
                 Some(config.ai.debug_mode_config.ingest_port)
@@ -2761,7 +2761,7 @@ fn spawn_ingest_server_with_config_listener() {
                     Ok(ConfigUpdateEvent::ConfigReloaded) => {
                         if let Ok(config_service) = get_global_config_service().await {
                             if let Ok(config) = config_service
-                                .get_config::<bitfun_core::service::config::GlobalConfig>(None)
+                                .get_config::<halo_core::service::config::GlobalConfig>(None)
                                 .await
                             {
                                 let debug_config = &config.ai.debug_mode_config;

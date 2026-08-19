@@ -1,6 +1,6 @@
 # Remote SSH and container workspaces
 
-BitFun remote workspaces use one saved target for the file explorer, terminal,
+Halo Studio remote workspaces use one saved target for the file explorer, terminal,
 Agent commands, and workspace tools. The target can be:
 
 - an SSH host;
@@ -22,7 +22,7 @@ paths or commands with Windows semantics.
 `~/.ssh/config`. Each alias may provide its own `HostName`, `Port`, `User`, and
 `IdentityFile`, so hop credentials do not need to match the final target.
 
-BitFun opens each hop in order and carries the next SSH handshake over a
+Halo Studio opens each hop in order and carries the next SSH handshake over a
 `direct-tcpip` channel. Connection errors identify the failed jump number or
 the final target, and distinguish reachability from SSH authentication.
 
@@ -33,7 +33,7 @@ timeouts, whole-chain retries, and challenge-round limits.
 
 ## Docker targets
 
-For **Docker on SSH host**, BitFun first establishes the SSH connection (and
+For **Docker on SSH host**, Halo Studio first establishes the SSH connection (and
 optional jump chain), then wraps workspace operations with:
 
 ```text
@@ -49,7 +49,7 @@ must point directly to the container's sshd endpoint. Optional jump hosts use
 the same SSH path described above.
 
 `Auto` probes the container's published `22/tcp` endpoint and completes an SSH
-handshake. If sshd is unavailable or rejects authentication, BitFun falls back
+handshake. If sshd is unavailable or rejects authentication, Halo Studio falls back
 to `docker exec`. The connection dialog shows the resolved access mode and can
 test jumps, the target, and the container before connecting. It can also list
 containers from local Docker or from the configured SSH Docker host.
@@ -65,7 +65,7 @@ When a Docker target is selected:
 - the workspace path is a path inside the container, not a host path.
 
 A host bind mount is visible only through the path at which it is mounted in
-the container. BitFun does not silently translate host paths to container
+the container. Halo Studio does not silently translate host paths to container
 paths. File transfer uses binary stdin/stdout streams. Uploads write to a
 same-directory temporary file and rename atomically after success; cancellation
 leaves the previous destination intact. Ordinary SSH workspaces continue to use
@@ -87,7 +87,7 @@ temporary directory does not make an existing Docker workspace unusable;
 execution continues with transport-level cancellation as the compatibility
 fallback.
 
-The configured Docker CLI remains the security boundary. BitFun does not expose
+The configured Docker CLI remains the security boundary. Halo Studio does not expose
 the Docker daemon over the network or bypass the current user's Docker
 permissions.
 
@@ -103,7 +103,7 @@ Legacy local-Docker profiles do not need an SSH password-vault entry, even if
 their old serialized auth placeholder is an empty password.
 
 If a saved password is unavailable after an upgrade or local keychain reset,
-BitFun keeps the connection and workspace records and asks for the password on
+Halo Studio keeps the connection and workspace records and asks for the password on
 the next manual reconnect. A startup timeout or temporary network failure marks
 the workspace as unavailable but does not delete its restore metadata.
 

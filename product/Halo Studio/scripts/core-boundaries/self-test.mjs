@@ -34,26 +34,26 @@ export function runManifestParserSelfTest({
   escapeRegex,
 }) {
   const positiveCases = [
-    'bitfun-core = { path = "../core" }',
-    '[dependencies.bitfun-core]',
-    '[dev-dependencies."bitfun-core"]',
-    "[target.'cfg(windows)'.dependencies.bitfun-core]",
-    "[target.'cfg(unix)'.build-dependencies.\"bitfun-core\"]",
+    'halo-core = { path = "../core" }',
+    '[dependencies.halo-core]',
+    '[dev-dependencies."halo-core"]',
+    "[target.'cfg(windows)'.dependencies.halo-core]",
+    "[target.'cfg(unix)'.build-dependencies.\"halo-core\"]",
   ];
   const negativeCases = [
-    '# bitfun-core = { path = "../core" }',
+    '# halo-core = { path = "../core" }',
     '[dependencies]',
-    '[workspace.dependencies.bitfun-core]',
-    '[dependencies.bitfun-core-extra]',
+    '[workspace.dependencies.halo-core]',
+    '[dependencies.halo-core-extra]',
   ];
 
   for (const line of positiveCases) {
-    if (!isManifestDependencyDeclaration(line, 'bitfun-core')) {
+    if (!isManifestDependencyDeclaration(line, 'halo-core')) {
       throw new Error(`manifest parser missed dependency declaration: ${line}`);
     }
   }
   for (const line of negativeCases) {
-    if (isManifestDependencyDeclaration(line, 'bitfun-core')) {
+    if (isManifestDependencyDeclaration(line, 'halo-core')) {
       throw new Error(`manifest parser matched non-dependency declaration: ${line}`);
     }
   }
@@ -65,15 +65,15 @@ export function runManifestParserSelfTest({
     'rmcp = { version = "0.12.0", default-features = false, features = [',
     '    "auth",',
     '], optional = true }',
-    'bitfun-core = { path = "../core", default-features = false, features = ["product-full"] }',
-    'single-quoted-opencode = { package = \'bitfun-opencode-adapter\', path = "../adapters/opencode-adapter" }',
+    'halo-core = { path = "../core", default-features = false, features = ["product-full"] }',
+    'single-quoted-opencode = { package = \'halo-opencode-adapter\', path = "../adapters/opencode-adapter" }',
     '[dependencies.git2]',
     'workspace = true',
     'optional = true',
-    '[target.\'cfg(windows)\'.dependencies."bitfun-cli"]',
+    '[target.\'cfg(windows)\'.dependencies."halo-cli"]',
     'path = "../../apps/cli"',
     '[dependencies.renamed-opencode]',
-    'package = "bitfun-opencode-adapter"',
+    'package = "halo-opencode-adapter"',
     'path = "../adapters/opencode-adapter"',
     '[features]',
     'image = []',
@@ -91,7 +91,7 @@ export function runManifestParserSelfTest({
   if (parsedByName.get('git2')?.optional !== true) {
     throw new Error('dependency profile parser must detect optional dependency tables');
   }
-  if (parsedByName.get('bitfun-cli')?.optional !== false) {
+  if (parsedByName.get('halo-cli')?.optional !== false) {
     throw new Error('dependency profile parser must detect non-optional target dependency tables');
   }
   if (parsedByName.get('renamed-opencode')?.optional !== false) {
@@ -100,12 +100,12 @@ export function runManifestParserSelfTest({
   if (
     !manifestDependencyMatches(
       parsedByName.get('single-quoted-opencode'),
-      'bitfun-opencode-adapter',
+      'halo-opencode-adapter',
     )
   ) {
     throw new Error('dependency profile parser must detect single-quoted package aliases');
   }
-  const parsedCoreDep = parsedByName.get('bitfun-core');
+  const parsedCoreDep = parsedByName.get('halo-core');
   if (!manifestDependencyDisablesDefaultFeatures(parsedCoreDep)) {
     throw new Error('dependency profile parser must detect default-features = false');
   }
@@ -113,7 +113,7 @@ export function runManifestParserSelfTest({
     throw new Error('dependency profile parser must detect inline dependency features');
   }
   const parsedCoreTableDeps = parseManifestDependencies([
-    '[dependencies."bitfun-core"]',
+    '[dependencies."halo-core"]',
     'path = "../core"',
     'default-features = false',
     'features = [',
@@ -121,7 +121,7 @@ export function runManifestParserSelfTest({
     '  "ssh-remote",',
     ']',
   ]);
-  const parsedCoreTableDep = parsedCoreTableDeps.find((dep) => dep.name === 'bitfun-core');
+  const parsedCoreTableDep = parsedCoreTableDeps.find((dep) => dep.name === 'halo-core');
   if (!manifestDependencyDisablesDefaultFeatures(parsedCoreTableDep)) {
     throw new Error('dependency profile parser must detect table default-features = false');
   }
@@ -134,10 +134,10 @@ export function runManifestParserSelfTest({
   const parsedWorkspaceDeps = parseManifestDependencies(
     [
       '[workspace.dependencies]',
-      'opencode-fixture = { path = "src/crates/adapters/opencode-adapter", package = "bitfun-opencode-adapter" }',
-      'opencode-fixture-single = { path = "src/crates/adapters/opencode-adapter", package = \'bitfun-opencode-adapter\' }',
+      'opencode-fixture = { path = "src/crates/adapters/opencode-adapter", package = "halo-opencode-adapter" }',
+      'opencode-fixture-single = { path = "src/crates/adapters/opencode-adapter", package = \'halo-opencode-adapter\' }',
       '[workspace.dependencies.renamed-opencode-workspace]',
-      'package = "bitfun-opencode-adapter"',
+      'package = "halo-opencode-adapter"',
       'path = "src/crates/adapters/opencode-adapter"',
     ],
     { includeWorkspace: true },
@@ -146,26 +146,26 @@ export function runManifestParserSelfTest({
   if (
     !manifestDependencyMatches(
       workspaceDepsByName.get('opencode-fixture'),
-      'bitfun-opencode-adapter',
+      'halo-opencode-adapter',
     ) ||
     !manifestDependencyMatches(
       workspaceDepsByName.get('opencode-fixture-single'),
-      'bitfun-opencode-adapter',
+      'halo-opencode-adapter',
     ) ||
     !manifestDependencyMatches(
       workspaceDepsByName.get('renamed-opencode-workspace'),
-      'bitfun-opencode-adapter',
+      'halo-opencode-adapter',
     )
   ) {
     throw new Error('manifest parser must detect workspace aliases to forbidden packages');
   }
   const aliasedRuntimeDependency = parseManifestDependencies([
     '[dependencies]',
-    'runtime = { package = "bitfun-agent-runtime", path = "../../execution/agent-runtime" }',
+    'runtime = { package = "halo-agent-runtime", path = "../../execution/agent-runtime" }',
   ])[0];
   if (
-    matchingForbiddenDependency(aliasedRuntimeDependency, ['bitfun-agent-runtime']) !==
-    'bitfun-agent-runtime'
+    matchingForbiddenDependency(aliasedRuntimeDependency, ['halo-agent-runtime']) !==
+    'halo-agent-runtime'
   ) {
     throw new Error('forbidden dependency checks must reject Cargo package aliases');
   }
@@ -185,7 +185,7 @@ export function runManifestParserSelfTest({
   }
   for (const rule of productCoreFeatureAssemblyRules) {
     if (!rule.requiredFeatures.includes('product-full')) {
-      throw new Error(`${rule.manifestPath} must require bitfun-core product-full`);
+      throw new Error(`${rule.manifestPath} must require halo-core product-full`);
     }
   }
   for (const featureName of [
@@ -203,16 +203,16 @@ export function runManifestParserSelfTest({
     {
       manifestPath: 'src/apps/desktop/Cargo.toml',
       text:
-        '[dependencies]\nbitfun-core = { path = "../../crates/assembly/core", default-features = false, features = ["product-full"] }',
+        '[dependencies]\nhalo-core = { path = "../../crates/assembly/core", default-features = false, features = ["product-full"] }',
     },
     {
       manifestPath: 'src/apps/server/Cargo.toml',
       text:
-        '[dependencies]\nbitfun-core = { path = "../../crates/assembly/core", default-features = false, features = ["product-full"] }',
+        '[dependencies]\nhalo-core = { path = "../../crates/assembly/core", default-features = false, features = ["product-full"] }',
     },
     {
       manifestPath: 'src/crates/interfaces/acp/Cargo.toml',
-      text: '[dependencies."bitfun-core"]\npath = "../../assembly/core"\ndefault-features = false\nfeatures = ["product-full"]',
+      text: '[dependencies."halo-core"]\npath = "../../assembly/core"\ndefault-features = false\nfeatures = ["product-full"]',
     },
   ]);
   if (
@@ -220,7 +220,7 @@ export function runManifestParserSelfTest({
     'src/apps/desktop/Cargo.toml,src/apps/server/Cargo.toml,src/crates/interfaces/acp/Cargo.toml'
   ) {
     throw new Error(
-      'product core dependency scanner must discover only manifests that depend on bitfun-core',
+      'product core dependency scanner must discover only manifests that depend on halo-core',
     );
   }
   const ownerFeatureRulePaths = new Set(
@@ -256,7 +256,7 @@ export function runManifestParserSelfTest({
     ']',
     'service-integrations = ["dep:git2", "dep:rmcp"]',
     'ssh-remote = [',
-    '    "bitfun-services-integrations/remote-ssh-concrete",',
+    '    "halo-services-integrations/remote-ssh-concrete",',
     '    "russh",',
     ']',
     '[dependencies]',
@@ -275,16 +275,16 @@ export function runManifestParserSelfTest({
     throw new Error('feature parser must detect implicit optional dependency feature references');
   }
 
-  const acceptsGitFacadeLine = createFacadeLineChecker('bitfun_services_integrations::git');
+  const acceptsGitFacadeLine = createFacadeLineChecker('halo_services_integrations::git');
   const facadePositiveCases = [
     '',
     '//! Compatibility facade.',
-    'pub use bitfun_services_integrations::git::GitService;',
-    'pub use bitfun_services_integrations::git::types::*;',
-    'pub use bitfun_services_integrations::git::{',
+    'pub use halo_services_integrations::git::GitService;',
+    'pub use halo_services_integrations::git::types::*;',
+    'pub use halo_services_integrations::git::{',
     '    build_git_graph, build_git_graph_for_branch,',
     '};',
-    'pub use bitfun_services_integrations::git::{build_git_graph, build_git_graph_for_branch};',
+    'pub use halo_services_integrations::git::{build_git_graph, build_git_graph_for_branch};',
   ];
   for (const line of facadePositiveCases) {
     if (!acceptsGitFacadeLine(line)) {
@@ -292,10 +292,10 @@ export function runManifestParserSelfTest({
     }
   }
 
-  const rejectsGitImplementationLine = createFacadeLineChecker('bitfun_services_integrations::git');
+  const rejectsGitImplementationLine = createFacadeLineChecker('halo_services_integrations::git');
   const facadeNegativeCases = [
     'pub mod service;',
-    'use bitfun_services_integrations::git::GitService;',
+    'use halo_services_integrations::git::GitService;',
     'fn parse_git_status() {}',
   ];
   for (const line of facadeNegativeCases) {
@@ -304,7 +304,7 @@ export function runManifestParserSelfTest({
     }
   }
 
-  const cliBoundaryDeps = ['bitfun-cli', 'ratatui', 'crossterm', 'arboard', 'syntect-tui'];
+  const cliBoundaryDeps = ['halo-cli', 'ratatui', 'crossterm', 'arboard', 'syntect-tui'];
   for (const rule of lightweightBoundaryRules) {
     for (const dep of cliBoundaryDeps) {
       if (!rule.forbiddenDeps.includes(dep)) {
@@ -316,8 +316,8 @@ export function runManifestParserSelfTest({
   }
 
   const agentToolsRule = lightweightBoundaryRules.find((rule) => rule.crateName === 'agent-tools');
-  if (!agentToolsRule?.forbiddenDeps.includes('bitfun-ai-adapters')) {
-    throw new Error('agent-tools lightweight boundary must forbid bitfun-ai-adapters');
+  if (!agentToolsRule?.forbiddenDeps.includes('halo-ai-adapters')) {
+    throw new Error('agent-tools lightweight boundary must forbid halo-ai-adapters');
   }
   const coreToolFrameworkRuleText = forbiddenRuleTextForPath(
     'src/crates/assembly/core/src/agentic/tools/framework.rs',
@@ -452,8 +452,8 @@ export function runManifestParserSelfTest({
     throw new Error('missing core workspace path boundary rule');
   }
   const coreWorkspacePathContracts = [
-    'BITFUN_RUNTIME_URI_PREFIX',
-    'ParsedBitFunRuntimeUri',
+    'HALO_RUNTIME_URI_PREFIX',
+    'ParsedHaloRuntimeUri',
     'posix_normalize_components',
     'Component::ParentDir',
   ];
@@ -619,7 +619,7 @@ export function runManifestParserSelfTest({
     'rmcp',
     'image',
     'tool-runtime',
-    'bitfun-relay-service',
+    'halo-relay-service',
     'htmd',
     'legible',
     'readability-js',
@@ -636,7 +636,7 @@ export function runManifestParserSelfTest({
   );
   const coreFullyMigratedDeps = new Set([
     'aes',
-    'bitfun-relay-service',
+    'halo-relay-service',
     'hostname',
     'htmd',
     'legible',
@@ -691,11 +691,11 @@ export function runManifestParserSelfTest({
   }
   for (const dep of [
     'aes',
-    'bitfun-services-core',
-    'bitfun-product-domains',
+    'halo-services-core',
+    'halo-product-domains',
     'dunce',
     'fs2',
-    'bitfun-runtime-ports',
+    'halo-runtime-ports',
     'git2',
     'hex',
     'hostname',
@@ -716,7 +716,7 @@ export function runManifestParserSelfTest({
       throw new Error(`services-integrations optional dependency owner rule must cover ${dep}`);
     }
   }
-  for (const dep of ['bitfun-product-domains', 'dunce', 'fs2', 'hex', 'libc', 'sha2', 'thiserror', 'uuid', 'windows']) {
+  for (const dep of ['halo-product-domains', 'dunce', 'fs2', 'hex', 'libc', 'sha2', 'thiserror', 'uuid', 'windows']) {
     const owner = servicesOptionalOwnerRule?.dependencies.find(
       (dependency) => dependency.depName === dep,
     );
@@ -732,7 +732,7 @@ export function runManifestParserSelfTest({
       throw new Error(`services-integrations review-platform must own optional dependency ${dep}`);
     }
   }
-  for (const dep of ['bitfun-services-core']) {
+  for (const dep of ['halo-services-core']) {
     const owner = servicesOptionalOwnerRule?.dependencies.find(
       (dependency) => dependency.depName === dep,
     );
@@ -832,7 +832,7 @@ export function runManifestParserSelfTest({
     throw new Error('product-domains Command::new exception must stay scoped to MiniApp runtime detection');
   }
   const coreTypesProfile = dependencyProfileRules.find((rule) => rule.crateName === 'core-types');
-  if (!coreTypesProfile?.forbiddenNonOptionalDeps.includes('bitfun-ai-adapters')) {
+  if (!coreTypesProfile?.forbiddenNonOptionalDeps.includes('halo-ai-adapters')) {
     throw new Error('core-types dependency profile must forbid ai-adapter dependencies');
   }
   const coreTypesAiRuleText = forbiddenRuleTextForPath(
@@ -846,7 +846,7 @@ export function runManifestParserSelfTest({
   const runtimePortsProfile = dependencyProfileRules.find(
     (rule) => rule.crateName === 'runtime-ports',
   );
-  if (!runtimePortsProfile?.forbiddenNonOptionalDeps.includes('bitfun-services-core')) {
+  if (!runtimePortsProfile?.forbiddenNonOptionalDeps.includes('halo-services-core')) {
     throw new Error('runtime-ports dependency profile must forbid service implementations');
   }
   const pluginRuntimeContractRule = requiredContentRules.find(
@@ -1233,7 +1233,7 @@ export function runManifestParserSelfTest({
     }
   }
   const opencodeManifestRule = forbiddenManifestDependencyRules.find((rule) =>
-    rule.dependencyNames?.includes('bitfun-opencode-adapter'),
+    rule.dependencyNames?.includes('halo-opencode-adapter'),
   );
   if (!opencodeManifestRule) {
     throw new Error('OpenCode adapter must have a forbidden manifest dependency rule');
@@ -1258,9 +1258,9 @@ export function runManifestParserSelfTest({
     throw new Error('core speech ownership guard must forbid a speech service module');
   }
   for (const dependencyName of [
-    'bitfun-claude-code-adapter',
-    'bitfun-codex-adapter',
-    'bitfun-static-hook-support',
+    'halo-claude-code-adapter',
+    'halo-codex-adapter',
+    'halo-static-hook-support',
   ]) {
     if (!forbiddenManifestDependencyRules.some(
       (rule) => rule.dependencyNames?.includes(dependencyName)
@@ -1269,7 +1269,7 @@ export function runManifestParserSelfTest({
       throw new Error(`${dependencyName} must have a workspace-wide manifest dependency guard`);
     }
   }
-  for (const scanRoot of ['src/apps', 'src/crates', 'BitFun-Installer/src-tauri']) {
+  for (const scanRoot of ['src/apps', 'src/crates', 'Halo-Installer/src-tauri']) {
     if (!opencodeManifestRule.scanRoots?.includes(scanRoot)) {
       throw new Error(`OpenCode adapter manifest guard must scan ${scanRoot}`);
     }
@@ -1294,16 +1294,16 @@ export function runManifestParserSelfTest({
   const opencodeSourceRules = forbiddenContentUnderRules.filter((rule) =>
     rule.reason.includes('OpenCode adapter production imports are limited'),
   );
-  for (const scanRoot of ['src', 'BitFun-Installer/src-tauri']) {
+  for (const scanRoot of ['src', 'Halo-Installer/src-tauri']) {
     if (!opencodeSourceRules.some((rule) => rule.path === scanRoot)) {
       throw new Error(`OpenCode adapter source guard must scan ${scanRoot}`);
     }
   }
   const opencodeSourceRegex = opencodeSourceRules[0]?.patterns?.[0]?.regex;
   if (
-    !opencodeSourceRegex?.test('use bitfun_opencode_adapter as opencode;') ||
-    !opencodeSourceRegex?.test('extern crate bitfun_opencode_adapter;') ||
-    !opencodeSourceRegex?.test('bitfun_opencode_adapter::OpenCodePluginAdapter')
+    !opencodeSourceRegex?.test('use halo_opencode_adapter as opencode;') ||
+    !opencodeSourceRegex?.test('extern crate halo_opencode_adapter;') ||
+    !opencodeSourceRegex?.test('halo_opencode_adapter::OpenCodePluginAdapter')
   ) {
     throw new Error('OpenCode adapter source guard must catch direct, alias, and extern imports');
   }
@@ -1327,12 +1327,12 @@ export function runManifestParserSelfTest({
     throw new Error('Pi RPC adapter must be covered by the no-core dependency guard');
   }
   const piRpcManifestRule = forbiddenManifestDependencyRules.find((rule) =>
-    rule.dependencyNames?.includes('bitfun-pi-rpc-adapter'),
+    rule.dependencyNames?.includes('halo-pi-rpc-adapter'),
   );
   if (!piRpcManifestRule) {
     throw new Error('Pi RPC adapter must have a forbidden manifest dependency rule');
   }
-  for (const scanRoot of ['src/apps', 'src/crates', 'BitFun-Installer/src-tauri']) {
+  for (const scanRoot of ['src/apps', 'src/crates', 'Halo-Installer/src-tauri']) {
     if (!piRpcManifestRule.scanRoots?.includes(scanRoot)) {
       throw new Error(`Pi RPC adapter manifest guard must scan ${scanRoot}`);
     }
@@ -1344,31 +1344,31 @@ export function runManifestParserSelfTest({
     piRpcManifestRule.allowManifestPaths?.join(',')
     !== 'src/crates/assembly/core/Cargo.toml'
   ) {
-    throw new Error('only bitfun-core product assembly may depend on the Pi RPC adapter');
+    throw new Error('only halo-core product assembly may depend on the Pi RPC adapter');
   }
   const piRpcCoreOwner = optionalDependencyFeatureOwnerRules
     .find((rule) => rule.crateName === 'core')
     ?.dependencies.find((dependency) =>
-      dependency.depName === 'bitfun-pi-rpc-adapter',
+      dependency.depName === 'halo-pi-rpc-adapter',
     );
   if (piRpcCoreOwner?.ownerFeatures.join(',') !== 'product-full') {
     throw new Error(
-      'bitfun-core must keep the Pi RPC adapter optional and owned only by product-full',
+      'halo-core must keep the Pi RPC adapter optional and owned only by product-full',
     );
   }
   const piRpcSourceRules = forbiddenContentUnderRules.filter((rule) =>
     rule.reason.includes('Pi RPC Workbench execution adapter imports are limited'),
   );
-  for (const scanRoot of ['src', 'BitFun-Installer/src-tauri']) {
+  for (const scanRoot of ['src', 'Halo-Installer/src-tauri']) {
     if (!piRpcSourceRules.some((rule) => rule.path === scanRoot)) {
       throw new Error(`Pi RPC adapter source guard must scan ${scanRoot}`);
     }
   }
   const piRpcSourceRegex = piRpcSourceRules[0]?.patterns?.[0]?.regex;
   if (
-    !piRpcSourceRegex?.test('use bitfun_pi_rpc_adapter as pi_rpc;')
-    || !piRpcSourceRegex?.test('extern crate bitfun_pi_rpc_adapter;')
-    || !piRpcSourceRegex?.test('bitfun_pi_rpc_adapter::PiRpcAdapter')
+    !piRpcSourceRegex?.test('use halo_pi_rpc_adapter as pi_rpc;')
+    || !piRpcSourceRegex?.test('extern crate halo_pi_rpc_adapter;')
+    || !piRpcSourceRegex?.test('halo_pi_rpc_adapter::PiRpcAdapter')
   ) {
     throw new Error('Pi RPC adapter source guard must catch direct, alias, and extern imports');
   }
@@ -1385,15 +1385,15 @@ export function runManifestParserSelfTest({
     (rule) => rule.crateName === 'pi-rpc-adapter',
   );
   for (const forbiddenDependency of [
-    'bitfun-acp',
-    'bitfun-agent-runtime',
-    'bitfun-agent-runtime-ipc',
-    'bitfun-ai-adapters',
-    'bitfun-claude-code-adapter',
-    'bitfun-codex-adapter',
-    'bitfun-core',
-    'bitfun-opencode-adapter',
-    'bitfun-plugin-runtime-client',
+    'halo-acp',
+    'halo-agent-runtime',
+    'halo-agent-runtime-ipc',
+    'halo-ai-adapters',
+    'halo-claude-code-adapter',
+    'halo-codex-adapter',
+    'halo-core',
+    'halo-opencode-adapter',
+    'halo-plugin-runtime-client',
     'tauri',
   ]) {
     if (!piRpcLightweightRule?.forbiddenDeps.includes(forbiddenDependency)) {
@@ -1431,10 +1431,10 @@ export function runManifestParserSelfTest({
   const runtimeServicesRule = lightweightBoundaryRules.find(
     (rule) => rule.crateName === 'runtime-services',
   );
-  if (!runtimeServicesRule?.forbiddenDeps.includes('bitfun-core')) {
-    throw new Error('runtime-services lightweight boundary must forbid bitfun-core');
+  if (!runtimeServicesRule?.forbiddenDeps.includes('halo-core')) {
+    throw new Error('runtime-services lightweight boundary must forbid halo-core');
   }
-  if (!runtimeServicesRule?.forbiddenDeps.includes('bitfun-services-integrations')) {
+  if (!runtimeServicesRule?.forbiddenDeps.includes('halo-services-integrations')) {
     throw new Error('runtime-services lightweight boundary must forbid concrete service integrations');
   }
   const runtimeServicesProfile = dependencyProfileRules.find(
@@ -1463,13 +1463,13 @@ export function runManifestParserSelfTest({
   const pluginRuntimeClientRule = lightweightBoundaryRules.find(
     (rule) => rule.crateName === 'plugin-runtime-client',
   );
-  if (!pluginRuntimeClientRule?.forbiddenDeps.includes('bitfun-core')) {
-    throw new Error('plugin-runtime-client lightweight boundary must forbid bitfun-core');
+  if (!pluginRuntimeClientRule?.forbiddenDeps.includes('halo-core')) {
+    throw new Error('plugin-runtime-client lightweight boundary must forbid halo-core');
   }
-  if (!pluginRuntimeClientRule?.forbiddenDeps.includes('bitfun-opencode-adapter')) {
+  if (!pluginRuntimeClientRule?.forbiddenDeps.includes('halo-opencode-adapter')) {
     throw new Error('plugin-runtime-client must not depend on the OpenCode fixture adapter');
   }
-  if (!pluginRuntimeClientRule?.forbiddenDeps.includes('bitfun-services-integrations')) {
+  if (!pluginRuntimeClientRule?.forbiddenDeps.includes('halo-services-integrations')) {
     throw new Error('plugin-runtime-client must not depend on concrete service integrations');
   }
   const pluginRuntimeClientProfile = dependencyProfileRules.find(
@@ -1512,13 +1512,13 @@ export function runManifestParserSelfTest({
   const agentRuntimeRule = lightweightBoundaryRules.find(
     (rule) => rule.crateName === 'agent-runtime',
   );
-  if (!agentRuntimeRule?.forbiddenDeps.includes('bitfun-core')) {
-    throw new Error('agent-runtime lightweight boundary must forbid bitfun-core');
+  if (!agentRuntimeRule?.forbiddenDeps.includes('halo-core')) {
+    throw new Error('agent-runtime lightweight boundary must forbid halo-core');
   }
-  if (!agentRuntimeRule?.forbiddenDeps.includes('bitfun-services-integrations')) {
+  if (!agentRuntimeRule?.forbiddenDeps.includes('halo-services-integrations')) {
     throw new Error('agent-runtime lightweight boundary must forbid concrete service integrations');
   }
-  if (!agentRuntimeRule?.forbiddenDeps.includes('bitfun-product-capabilities')) {
+  if (!agentRuntimeRule?.forbiddenDeps.includes('halo-product-capabilities')) {
     throw new Error('agent-runtime lightweight boundary must forbid product assembly facts');
   }
   if (!agentRuntimeRule?.forbiddenDeps.includes('tool-runtime')) {
@@ -1530,7 +1530,7 @@ export function runManifestParserSelfTest({
   if (!agentRuntimeProfile?.forbiddenNonOptionalDeps.includes('tauri')) {
     throw new Error('agent-runtime dependency profile must forbid product surface dependencies');
   }
-  if (!agentRuntimeProfile?.forbiddenNonOptionalDeps.includes('bitfun-product-capabilities')) {
+  if (!agentRuntimeProfile?.forbiddenNonOptionalDeps.includes('halo-product-capabilities')) {
     throw new Error('agent-runtime dependency profile must forbid product assembly facts');
   }
   if (!agentRuntimeProfile?.forbiddenNonOptionalDeps.includes('tool-runtime')) {
@@ -1541,12 +1541,12 @@ export function runManifestParserSelfTest({
   }
   const sdkHostRule = lightweightBoundaryRules.find((rule) => rule.crateName === 'sdk-host');
   for (const dependency of [
-    'bitfun-core',
+    'halo-core',
     'terminal-core',
-    'bitfun-services-core',
-    'bitfun-services-integrations',
+    'halo-services-core',
+    'halo-services-integrations',
     'tool-runtime',
-    'bitfun-cli',
+    'halo-cli',
   ]) {
     if (!sdkHostRule?.forbiddenDeps.includes(dependency)) {
       throw new Error(`SDK Host protocol boundary must forbid concrete dependency: ${dependency}`);
@@ -1555,10 +1555,10 @@ export function runManifestParserSelfTest({
   const productCapabilitiesRule = lightweightBoundaryRules.find(
     (rule) => rule.crateName === 'product-capabilities',
   );
-  if (!productCapabilitiesRule?.forbiddenDeps.includes('bitfun-core')) {
-    throw new Error('product-capabilities lightweight boundary must forbid bitfun-core');
+  if (!productCapabilitiesRule?.forbiddenDeps.includes('halo-core')) {
+    throw new Error('product-capabilities lightweight boundary must forbid halo-core');
   }
-  if (!productCapabilitiesRule?.forbiddenDeps.includes('bitfun-product-domains')) {
+  if (!productCapabilitiesRule?.forbiddenDeps.includes('halo-product-domains')) {
     throw new Error(
       'product-capabilities lightweight boundary must forbid product-domain implementations',
     );
@@ -1569,8 +1569,8 @@ export function runManifestParserSelfTest({
   const productCapabilitiesProfile = dependencyProfileRules.find(
     (rule) => rule.crateName === 'product-capabilities',
   );
-  if (!productCapabilitiesProfile?.forbiddenNonOptionalDeps.includes('bitfun-core')) {
-    throw new Error('product-capabilities dependency profile must forbid bitfun-core');
+  if (!productCapabilitiesProfile?.forbiddenNonOptionalDeps.includes('halo-core')) {
+    throw new Error('product-capabilities dependency profile must forbid halo-core');
   }
   const agentToolsManifestRule = forbiddenContentUnderRules.find(
     (rule) => rule.path === 'src/crates/execution/tool-contracts/src',
@@ -2092,9 +2092,9 @@ export function runManifestParserSelfTest({
         'AgentRuntimeSdkStability',
         'AgentRuntimeSdkCompatibility',
         'impl AgentRuntimeSdkCompatibility',
-        'bitfun_agent_tools',
-        'bitfun_harness',
-        'bitfun_runtime_services',
+        'halo_agent_tools',
+        'halo_harness',
+        'halo_runtime_services',
         'PortResult',
         'RuntimeServicePort',
         'FileSystemPort',
@@ -2161,7 +2161,7 @@ export function runManifestParserSelfTest({
     {
       path: 'src/crates/execution/agent-runtime/examples/sdk_minimal.rs',
       contracts: [
-        'bitfun_agent_runtime::sdk',
+        'halo_agent_runtime::sdk',
         'AgentRuntimeSdkCompatibility::current',
         'impl AgentSubmissionPort for ExampleAgentProvider',
         'AgentRuntimeBuilder::new',
@@ -2234,7 +2234,7 @@ export function runManifestParserSelfTest({
     {
       path: 'src/crates/execution/agent-runtime/tests/custom_subagent_discovery_contracts.rs',
       contracts: [
-        'custom_subagent_discovery_preserves_bitfun_priority_and_ignores_foreign_agent_dirs',
+        'custom_subagent_discovery_preserves_halo_priority_and_ignores_foreign_agent_dirs',
         'custom_subagent_discovery_reports_parse_errors_without_dropping_valid_files',
       ],
     },
@@ -2616,7 +2616,7 @@ export function runManifestParserSelfTest({
     },
     {
       path: 'src/crates/assembly/core/src/agentic/coordination/state_manager.rs',
-      contracts: ['pub use bitfun_agent_runtime::session_state_manager::SessionStateManager'],
+      contracts: ['pub use halo_agent_runtime::session_state_manager::SessionStateManager'],
     },
     {
       path: 'src/crates/execution/agent-runtime/src/event_router.rs',
@@ -2706,22 +2706,22 @@ export function runManifestParserSelfTest({
     },
     {
       path: 'src/crates/assembly/core/src/agentic/execution/types.rs',
-      contracts: ['bitfun_agent_runtime::events::FinishReason'],
+      contracts: ['halo_agent_runtime::events::FinishReason'],
     },
     {
       path: 'src/crates/assembly/core/src/agentic/events/types.rs',
       contracts: [
-        'bitfun_agent_runtime::session_state::session_state_label_for_state',
+        'halo_agent_runtime::session_state::session_state_label_for_state',
       ],
     },
     {
       path: 'src/crates/assembly/core/src/agentic/agents/prompt_builder/user_context.rs',
-      contracts: ['bitfun_agent_runtime::prompt'],
+      contracts: ['halo_agent_runtime::prompt'],
     },
     {
       path: 'src/crates/assembly/core/src/agentic/subagent_runtime/mod.rs',
       contracts: [
-        'bitfun_runtime_ports',
+        'halo_runtime_ports',
         'DelegationPolicy',
         'SubagentContextMode',
       ],
@@ -2869,7 +2869,7 @@ export function runManifestParserSelfTest({
       path: 'src/crates/assembly/product-capabilities/tests/product_sdk_assembly.rs',
       contracts: [
         'product_runtime_parts_can_build_agent_runtime_sdk_without_core',
-        'sdk_delivery_profile_builds_shared_runtime_owner_ceiling_without_bitfun_core',
+        'sdk_delivery_profile_builds_shared_runtime_owner_ceiling_without_halo_core',
         'DeliveryProfile::Cli',
         'DeliveryProfile::Sdk',
       ],
@@ -2893,7 +2893,7 @@ export function runManifestParserSelfTest({
       contracts: [
         'tool_restrictions_for_delegation_policy',
         'miniapp_headless_agent_tool_restrictions',
-        'impl From<ToolRestrictionError> for BitFunError',
+        'impl From<ToolRestrictionError> for HaloError',
         'is_local_path_within_root',
       ],
     },
@@ -3088,8 +3088,8 @@ export function runManifestParserSelfTest({
     {
       path: 'src/crates/assembly/core/src/agentic/round_preempt.rs',
       contracts: [
-        'bitfun_agent_runtime',
-        'bitfun_runtime_ports',
+        'halo_agent_runtime',
+        'halo_runtime_ports',
         'DialogRoundInjectionSource',
         'RoundInjection',
         'RoundInjectionKind',
@@ -3100,7 +3100,7 @@ export function runManifestParserSelfTest({
     {
       path: 'src/crates/assembly/core/src/agentic/goal_mode/mod.rs',
       contracts: [
-        'bitfun_runtime_ports',
+        'halo_runtime_ports',
         'SetThreadGoalResult',
         'ThreadGoal',
         'ThreadGoalContinuationPlan',
@@ -3111,11 +3111,11 @@ export function runManifestParserSelfTest({
     },
     {
       path: 'src/crates/assembly/core/src/agentic/core/message.rs',
-      contracts: ['bitfun_runtime_ports', 'CompressionContract', 'CompressionContractItem'],
+      contracts: ['halo_runtime_ports', 'CompressionContract', 'CompressionContractItem'],
     },
     {
       path: 'src/crates/assembly/core/src/service/workspace/manager.rs',
-      contracts: ['bitfun_runtime_ports', 'RelatedPath'],
+      contracts: ['halo_runtime_ports', 'RelatedPath'],
     },
     {
       path: 'src/crates/assembly/core/src/service_agent_runtime.rs',
@@ -3610,7 +3610,7 @@ export function runManifestParserSelfTest({
         'deferred_tool_names',
         'GetToolSpec',
         'should_post_process_research_report',
-        'bitfun_services_integrations::deep_research::run_for_session_workspace',
+        'halo_services_integrations::deep_research::run_for_session_workspace',
       ],
     },
     {
@@ -3789,7 +3789,7 @@ export function runManifestParserSelfTest({
     },
     {
       path: 'src/crates/assembly/core/src/service/search/service.rs',
-      contracts: ['owner::WorkspaceSearchService::new_with_hooks', 'CoreWorkspaceSearchRuntimeHooks', 'WorkspaceSearchRepoConfig', 'get_global_config_service', 'ensure_workspace_gitignore_ignores_bitfun'],
+      contracts: ['owner::WorkspaceSearchService::new_with_hooks', 'CoreWorkspaceSearchRuntimeHooks', 'WorkspaceSearchRepoConfig', 'get_global_config_service', 'ensure_workspace_gitignore_ignores_halo'],
     },
     {
       path: 'src/crates/assembly/core/src/service/search/remote.rs',
@@ -3815,7 +3815,7 @@ export function runManifestParserSelfTest({
       path: 'src/crates/assembly/core/src/service/search/mod.rs',
       contracts: [
         'feature = "ssh-remote"',
-        'bitfun_services_integrations::remote_ssh::workspace_search::disabled',
+        'halo_services_integrations::remote_ssh::workspace_search::disabled',
       ],
     },
     {
@@ -3825,23 +3825,23 @@ export function runManifestParserSelfTest({
     {
       path: 'src/crates/assembly/core/Cargo.toml',
       contracts: [
-        'bitfun-product-capabilities = \\{ path = "\\.\\.\\/product-capabilities", default-features = false, optional = true \\}',
-        'bitfun-ai-adapters = \\{ path = "\\.\\.\\/\\.\\.\\/adapters\\/ai-adapters", optional = true \\}',
-        'bitfun-tool-packs = \\{ path = "\\.\\.\\/\\.\\.\\/execution\\/tool-provider-groups", default-features = false, optional = true \\}',
-        'bitfun-services-integrations = \\{ path = "\\.\\.\\/\\.\\.\\/services\\/services-integrations", default-features = false, features = \\["remote-ssh"\\] \\}',
-        'bitfun-product-domains = \\{ path = "\\.\\.\\/\\.\\.\\/contracts\\/product-domains", default-features = false, optional = true \\}',
-        'dep:bitfun-ai-adapters',
+        'halo-product-capabilities = \\{ path = "\\.\\.\\/product-capabilities", default-features = false, optional = true \\}',
+        'halo-ai-adapters = \\{ path = "\\.\\.\\/\\.\\.\\/adapters\\/ai-adapters", optional = true \\}',
+        'halo-tool-packs = \\{ path = "\\.\\.\\/\\.\\.\\/execution\\/tool-provider-groups", default-features = false, optional = true \\}',
+        'halo-services-integrations = \\{ path = "\\.\\.\\/\\.\\.\\/services\\/services-integrations", default-features = false, features = \\["remote-ssh"\\] \\}',
+        'halo-product-domains = \\{ path = "\\.\\.\\/\\.\\.\\/contracts\\/product-domains", default-features = false, optional = true \\}',
+        'dep:halo-ai-adapters',
         'ai-adapter-runtime',
         'canvas-runtime',
-        'bitfun-services-integrations\\/canvas-runtime',
-        'bitfun-services-integrations\\/function-agents',
-        'bitfun-services-integrations\\/miniapp-runtime',
-        'dep:bitfun-product-capabilities',
-        'dep:bitfun-tool-packs',
-        'bitfun-tool-packs\\/product-full',
-        'bitfun-services-integrations\\/product-full',
-        'dep:bitfun-product-domains',
-        'bitfun-product-domains\\/product-full',
+        'halo-services-integrations\\/canvas-runtime',
+        'halo-services-integrations\\/function-agents',
+        'halo-services-integrations\\/miniapp-runtime',
+        'dep:halo-product-capabilities',
+        'dep:halo-tool-packs',
+        'halo-tool-packs\\/product-full',
+        'halo-services-integrations\\/product-full',
+        'dep:halo-product-domains',
+        'halo-product-domains\\/product-full',
       ],
     },
     {
@@ -3869,7 +3869,7 @@ export function runManifestParserSelfTest({
     {
       path: 'src/crates/assembly/core/src/util/types/ai.rs',
       contracts: [
-        'bitfun_core_types',
+        'halo_core_types',
         'feature = "ai-adapter-runtime"',
         'GeminiResponse',
         'GeminiUsage',
@@ -4047,7 +4047,7 @@ export function runManifestParserSelfTest({
       path: 'src/crates/assembly/core/src/miniapp/host_dispatch.rs',
       contracts: [
         'dispatch_host',
-        'bitfun_services_integrations::miniapp::host_dispatch::dispatch_host',
+        'halo_services_integrations::miniapp::host_dispatch::dispatch_host',
         'map_host_dispatch_error',
       ],
     },
@@ -4084,7 +4084,7 @@ export function runManifestParserSelfTest({
     {
       path: 'src/crates/assembly/core/src/miniapp/js_worker.rs',
       contracts: [
-        'pub use bitfun_services_integrations::miniapp::worker::{',
+        'pub use halo_services_integrations::miniapp::worker::{',
         'MiniAppWorkerEventSink',
       ],
     },
@@ -4148,7 +4148,7 @@ export function runManifestParserSelfTest({
     },
     {
       path: 'src/crates/assembly/core/src/service/remote_ssh/mod.rs',
-      contracts: ['bitfun_services_integrations::remote_ssh', 'pub mod manager', 'pub mod remote_fs', 'pub mod remote_terminal', 'pub mod workspace_state'],
+      contracts: ['halo_services_integrations::remote_ssh', 'pub mod manager', 'pub mod remote_fs', 'pub mod remote_terminal', 'pub mod workspace_state'],
     },
     {
       path: 'src/crates/services/services-integrations/src/remote_ssh/mod.rs',
@@ -4464,7 +4464,7 @@ export function runManifestParserSelfTest({
     },
     {
       path: 'src/crates/assembly/core/src/miniapp/runtime_detect.rs',
-      contracts: ['pub use bitfun_product_domains::miniapp::runtime::{', 'detect_runtime'],
+      contracts: ['pub use halo_product_domains::miniapp::runtime::{', 'detect_runtime'],
     },
   ];
   for (const { path, contracts } of requiredContentContracts) {
@@ -4494,7 +4494,7 @@ export function runManifestParserSelfTest({
     'src/crates/execution/agent-runtime/tests/sdk_smoke.rs',
   );
   for (const forbiddenSdkSmokeImport of [
-    'bitfun_runtime_services::test_support',
+    'halo_runtime_services::test_support',
     'FakeRuntimeServicesProvider',
   ]) {
     if (!sdkSmokeRuleText.includes(forbiddenSdkSmokeImport)) {
@@ -4925,26 +4925,26 @@ export function runManifestParserSelfTest({
     (rule) => rule.crateName === 'agent-runtime-ipc',
   );
   for (const dependency of [
-    'bitfun-agent-runtime',
-    'bitfun-sdk-host',
-    'bitfun-services-core',
-    'bitfun-services-integrations',
-    'bitfun-transport',
+    'halo-agent-runtime',
+    'halo-sdk-host',
+    'halo-services-core',
+    'halo-services-integrations',
+    'halo-transport',
     'terminal-core',
     'tool-runtime',
     'tauri',
     'reqwest',
     'tokio-tungstenite',
-    'bitfun-cli',
+    'halo-cli',
   ]) {
     if (!runtimeIpcBoundary?.forbiddenDeps.includes(dependency)) {
       throw new Error(`agent-runtime-ipc lightweight boundary must forbid ${dependency}`);
     }
   }
   for (const sharedContract of [
-    'bitfun-events',
-    'bitfun-product-domains',
-    'bitfun-runtime-ports',
+    'halo-events',
+    'halo-product-domains',
+    'halo-runtime-ports',
   ]) {
     if (runtimeIpcBoundary?.forbiddenDeps.includes(sharedContract)) {
       throw new Error(`agent-runtime-ipc must be allowed to reuse ${sharedContract}`);
@@ -4953,7 +4953,7 @@ export function runManifestParserSelfTest({
   const runtimeIpcProfile = dependencyProfileRules.find(
     (rule) => rule.crateName === 'agent-runtime-ipc',
   );
-  for (const dependency of ['bitfun-agent-runtime', 'bitfun-services-core', 'tauri', 'reqwest']) {
+  for (const dependency of ['halo-agent-runtime', 'halo-services-core', 'tauri', 'reqwest']) {
     if (!runtimeIpcProfile?.forbiddenNonOptionalDeps.includes(dependency)) {
       throw new Error(`agent-runtime-ipc dependency profile must forbid ${dependency}`);
     }

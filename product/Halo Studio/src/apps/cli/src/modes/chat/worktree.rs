@@ -1,6 +1,6 @@
-use bitfun_core::service::git::GitService;
-use bitfun_core::service::worktree::{WorktreeService, WorktreeSessionBindingRequest};
-use bitfun_runtime_ports::AgentSessionWorkspaceBinding;
+use halo_core::service::git::GitService;
+use halo_core::service::worktree::{WorktreeService, WorktreeSessionBindingRequest};
+use halo_runtime_ports::AgentSessionWorkspaceBinding;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WorktreeCommand {

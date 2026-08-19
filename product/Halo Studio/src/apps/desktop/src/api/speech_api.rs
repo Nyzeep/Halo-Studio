@@ -1,7 +1,7 @@
 //! Desktop adapter for local speech input.
 
 use crate::api::AppState;
-use bitfun_core_types::speech::{
+use halo_core_types::speech::{
     SpeechAppendAudioChunkRequest, SpeechAppendAudioChunkResponse, SpeechCancelInputSessionRequest,
     SpeechCancelModelDownloadRequest, SpeechDeleteModelRequest, SpeechDownloadModelRequest,
     SpeechFinishInputSessionRequest, SpeechInputSession, SpeechListModelsResponse,
@@ -9,9 +9,9 @@ use bitfun_core_types::speech::{
     SpeechVerifyModelRequest,
 };
 #[cfg(feature = "speech")]
-use bitfun_core_types::speech::SpeechModelProgressEvent;
+use halo_core_types::speech::SpeechModelProgressEvent;
 #[cfg(feature = "speech")]
-use bitfun_events::{SPEECH_MODEL_PROGRESS_EVENT, SPEECH_MODEL_STATUS_CHANGED_EVENT};
+use halo_events::{SPEECH_MODEL_PROGRESS_EVENT, SPEECH_MODEL_STATUS_CHANGED_EVENT};
 #[cfg(feature = "speech")]
 use tauri::Emitter;
 use tauri::{AppHandle, State};

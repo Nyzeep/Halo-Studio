@@ -6,9 +6,9 @@ use crate::agentic::tools::pipeline::SubagentParentInfo;
 use crate::agentic::tools::ToolRuntimeRestrictions;
 use crate::agentic::workspace::WorkspaceServices;
 use crate::agentic::WorkspaceBinding;
-pub use bitfun_agent_runtime::events::FinishReason;
-use bitfun_agent_tools::LoadedDeferredToolSpec;
-use bitfun_runtime_ports::{
+pub use halo_agent_runtime::events::FinishReason;
+use halo_agent_tools::LoadedDeferredToolSpec;
+use halo_runtime_ports::{
     DelegationPolicy, PermissionDelegationContext, PermissionRuntimeCeiling, RemoteExecPort,
     TerminalPort,
 };

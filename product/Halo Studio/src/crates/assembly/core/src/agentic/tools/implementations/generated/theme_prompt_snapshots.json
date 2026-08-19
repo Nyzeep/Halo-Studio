@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "defaultLightThemeId": "bitfun-light",
-  "defaultDarkThemeId": "bitfun-dark",
+  "defaultLightThemeId": "halo-light",
+  "defaultDarkThemeId": "halo-dark",
   "themes": [
     {
-      "id": "bitfun-light",
+      "id": "halo-light",
       "themeType": "light",
       "bgPrimary": "#f3f3f5",
       "bgSecondary": "#ffffff",
@@ -21,7 +21,7 @@
       "styleNotes": "Light theme - Neutral gray surfaces, black primary actions"
     },
     {
-      "id": "bitfun-slate",
+      "id": "halo-slate",
       "themeType": "dark",
       "bgPrimary": "#1c1c1f",
       "bgSecondary": "#262626",
@@ -38,7 +38,7 @@
       "styleNotes": "Slate gray geometric theme - Deep immersion, high contrast grayscale aesthetics"
     },
     {
-      "id": "bitfun-dark",
+      "id": "halo-dark",
       "themeType": "dark",
       "bgPrimary": "#0e0e10",
       "bgSecondary": "#1c1c1f",
@@ -55,7 +55,7 @@
       "styleNotes": "Default dark theme"
     },
     {
-      "id": "bitfun-midnight",
+      "id": "halo-midnight",
       "themeType": "dark",
       "bgPrimary": "#2b2d30",
       "bgSecondary": "#1c1c1f",
@@ -72,7 +72,7 @@
       "styleNotes": "Midnight gray dark theme - Professional and elegant, inspired by JetBrains IDE"
     },
     {
-      "id": "bitfun-china-style",
+      "id": "halo-china-style",
       "themeType": "light",
       "bgPrimary": "#faf8f0",
       "bgSecondary": "#f5f3e8",
@@ -89,7 +89,7 @@
       "styleNotes": "Chinese style theme - Rice paper and ink, blue and vermilion, warm and elegant"
     },
     {
-      "id": "bitfun-china-night",
+      "id": "halo-china-night",
       "themeType": "dark",
       "bgPrimary": "#1c1c1f",
       "bgSecondary": "#212019",
@@ -106,7 +106,7 @@
       "styleNotes": "Chinese dark theme - Starlit ink night, moonlight like water, serene and elegant"
     },
     {
-      "id": "bitfun-cyber",
+      "id": "halo-cyber",
       "themeType": "dark",
       "bgPrimary": "#0e0e10",
       "bgSecondary": "#1c1c1f",
@@ -123,7 +123,7 @@
       "styleNotes": "Tech-style theme - Deep black hole, neon future, ultimate tech aesthetics"
     },
     {
-      "id": "bitfun-tokyo-night",
+      "id": "halo-tokyo-night",
       "themeType": "dark",
       "bgPrimary": "#1a1b26",
       "bgSecondary": "#1e202e",

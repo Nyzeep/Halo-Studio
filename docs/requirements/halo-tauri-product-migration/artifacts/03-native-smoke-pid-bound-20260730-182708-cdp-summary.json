@@ -1,0 +1,20 @@
+{
+  "title": "Halo Studio - 编码工作台",
+  "url": "http://tauri.localhost/",
+  "scope": "local-coding",
+  "product": "halo-studio",
+  "hasShell": true,
+  "hasLeftSidebar": true,
+  "hasMainPanel": true,
+  "hasRightSidebar": true,
+  "navs": [
+    "workspace",
+    "code",
+    "git",
+    "terminal"
+  ],
+  "activeNavAfterInteraction": "terminal",
+  "terminalHasCommand": true,
+  "workspaceOpened": true,
+  "cdpScreenshot": "D:\\Halo Studio\\.worktrees\\issue-03-tauri-workbench\\docs\\requirements\\halo-tauri-product-migration\\artifacts\\03-native-smoke-pid-bound-20260730-182708-cdp-after.png"
+}
