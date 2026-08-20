@@ -1,5 +1,7 @@
 # feat: 全面去 BitFun 化——Halo Studio 独立命名、独立构建验证与中文开发文档
 
+> 状态：已合并（PR #24，2026-08-19，merge commit `fbe1fa3c1`）。本文件作为历史存档保留。
+
 ## 背景
 
 仓库已独立于 BitFun 开发，但代码与文档仍残留大量 bitfun 命名与品牌表述。本次变更把本项目命名空间内的全部文件/目录/标识符改写为 Halo Studio 命名（`halo_studio` / `halo-*` / `@halo-studio/*`），完成独立构建、测试、运行验证，并交付中文开发文档与带技术徽章的 README。

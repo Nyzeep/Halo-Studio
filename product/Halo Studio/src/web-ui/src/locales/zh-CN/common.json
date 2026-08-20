@@ -1126,8 +1126,6 @@
     "yearsAgo": "{{count}} 年前"
   },
   "file": {
-    "file": "文件",
-    "files": "文件",
     "folder": "文件夹",
     "folders": "文件夹",
     "newFile": "新建文件",
@@ -1425,8 +1423,7 @@
     "timeAfternoon": "下午（12-18 点）",
     "timeEvening": "晚上（18-24 点）",
     "timeNight": "凌晨（0-6 点）",
-    "lines": "行",
-    "files": "文件"
+    "lines": "行"
   },
   "ssh": {
     "remote": {

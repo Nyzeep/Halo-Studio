@@ -447,7 +447,7 @@
     "enable": "启用工具"
   },
   "capability": {
-    "file_system": "文件",
+    "file_system": "文件系统",
     "network": "网络",
     "process": "进程",
     "environment": "环境变量"

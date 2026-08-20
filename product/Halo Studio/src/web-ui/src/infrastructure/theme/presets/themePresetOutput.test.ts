@@ -149,42 +149,42 @@ describe('builtin theme preset output', () => {
     }))).toMatchInlineSnapshot(`
       [
         {
-          "hash": "18bde3b1b694643489ccf854d6a4ec2f92b6522925b1afae71c053c84fe018a8",
+          "hash": "a815da061705635412c41255241fd384404301000f8bdae450756d0909735b0b",
           "id": "halo-light",
           "type": "light",
         },
         {
-          "hash": "7def888a159fe62da73f21717777cad2fd13a048853b9264cda683220e899677",
+          "hash": "9ad2b842d90bfcd4abbff1d49437b0d009935874bdbbf3758f42b2b8eedc2ff4",
           "id": "halo-slate",
           "type": "dark",
         },
         {
-          "hash": "c7a28e7fde81910bb796e18afabdb7b2840a5c0ae7a471b583990b43ce804921",
+          "hash": "6f502a2a22b19abb4822cefa9c411f970c3d0a0e7a88f5a91f674a214dc00198",
           "id": "halo-dark",
           "type": "dark",
         },
         {
-          "hash": "b3447ec7218ad3f9bfe9749ca5ed567aee733f8555c86fb9dbca712294484b7c",
+          "hash": "aa72406531e6cdee25285ed2dd3820b76a844324f4e008a146d07273dc8e416d",
           "id": "halo-midnight",
           "type": "dark",
         },
         {
-          "hash": "438f2ae26c4d1ebecbfa98e020d8e7d6559668fbf8e2c56b2dc6aa6bcadc3537",
+          "hash": "4ddf5d891642e65349d012322ec27ea09f180ec736a5a1531d0426afbb0d9e80",
           "id": "halo-china-style",
           "type": "light",
         },
         {
-          "hash": "9caa3cc0deac7cf940ab550c79ea0a5d747f9496095af8ef78e4df1a64abf842",
+          "hash": "f5ca452a876c6818b9dadaa3ff19fe7a850119add359440044fbfff471bec56a",
           "id": "halo-china-night",
           "type": "dark",
         },
         {
-          "hash": "6443493750d1b48805d6392fd17c11347f4f02af88943326522efee29330b417",
+          "hash": "623f846d5b50bfe5d6382d24efb84936dad7a820ba117fc27226e986d24515dd",
           "id": "halo-cyber",
           "type": "dark",
         },
         {
-          "hash": "34e5b2c1ea244d28dffa9be172d3d48e65e82100b39125b21e3760b4316192d3",
+          "hash": "3f5a5aa6113deb4bf434784fa0b9fcf2b09cb8193a2113d581481e0e33c527f4",
           "id": "halo-tokyo-night",
           "type": "dark",
         },

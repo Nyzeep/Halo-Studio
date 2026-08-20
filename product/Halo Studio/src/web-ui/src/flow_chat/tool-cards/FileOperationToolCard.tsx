@@ -326,7 +326,7 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
     && (writeContentCharCount > 0 || status === 'receiving');
 
   const fileName = currentFilePath ?
-    (currentFilePath.split(/[/\\]/).pop() || t('context.file')) :
+    (currentFilePath.split(/[/\\]/).pop() || t('shared:features.files')) :
     (isFailed ? t('toolCards.file.unknownFile') :
       (isWriteStreamingWithoutPath
         ? t('toolCards.file.receivingContent')

@@ -141,7 +141,9 @@ export function getToolCategoryLabel(
   category: SessionUsageReport['tools'][number]['category'] | undefined,
   t: Translator
 ): string {
-  return t(`usage.toolCategories.${category ?? 'other'}`);
+  return category === 'file'
+    ? t('shared:features.files')
+    : t(`usage.toolCategories.${category ?? 'other'}`);
 }
 
 export function getFileScopeLabel(scope: SessionUsageReport['files']['scope'], t: Translator): string {

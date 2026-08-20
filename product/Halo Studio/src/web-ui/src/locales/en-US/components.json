@@ -106,8 +106,7 @@
       "linesDeleted": "lines deleted",
       "filesCount": "{{count}} files",
       "filePath": "File path",
-      "unspecifiedFile": "Unspecified file",
-      "file": "File"
+      "unspecifiedFile": "Unspecified file"
     },
     "taskCard": {
       "title": "Execute Task",
@@ -404,7 +403,6 @@
     },
     "contextTypes": {
       "selection": "Text selection",
-      "file": "File",
       "folder": "Folder",
       "editor": "Editor",
       "flowChat": "FlowChat",
@@ -418,7 +416,6 @@
     },
     "contextRegistry": {
       "file": {
-        "name": "File",
         "description": "File in the file system"
       },
       "directory": {
@@ -540,7 +537,6 @@
   },
   "bottomBar": {
     "sessions": "Workbench",
-    "files": "Files",
     "terminal": "Terminal",
     "git": "Git",
     "capabilities": "Capabilities",

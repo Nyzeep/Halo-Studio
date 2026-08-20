@@ -1080,7 +1080,7 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
                   className={`halo-files-panel__search-mode ${searchMode === 'filenames' ? 'active' : ''}`}
                   onClick={() => setSearchMode('filenames')}
                 >
-                  {t('search.modeFiles')}
+                  {t('shared:features.files')}
                 </button>
               </div>
               <div className="halo-files-panel__search-options">

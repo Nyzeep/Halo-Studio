@@ -9,7 +9,7 @@ export function getContextDescription(context: MenuContext): string {
     case ContextType.SELECTION:
       return i18nService.t('components:contextSystem.contextTypes.selection');
     case ContextType.FILE_NODE:
-      return i18nService.t('components:contextSystem.contextTypes.file');
+      return i18nService.t('shared:features.files');
     case ContextType.FOLDER_NODE:
       return i18nService.t('components:contextSystem.contextTypes.folder');
     case ContextType.EDITOR:

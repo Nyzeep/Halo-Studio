@@ -13,6 +13,7 @@ const manifestPath = join(
 );
 // 历史验证工具：manifest 记录的是去品牌化前导入快照的 blob 摘要；
 // 命名空间迁移后 product/Halo Studio 的内容已按 Halo 命名改写，本脚本仅用于核对未迁移前的历史基线。
+// 状态：已退役。更名完成后本工具按设计无法通过 blob 摘要比对，仅保留作为审计历史，不再作为日常守卫使用。
 const sourceRoot = join(repoRoot, "product", "Halo Studio");
 const expectedUpstream = Object.freeze({
   repository: "https://github.com/GCWing/BitFun.git",

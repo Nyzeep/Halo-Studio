@@ -137,7 +137,6 @@
     "toolCategories": {
       "git": "Git",
       "shell": "Shell",
-      "file": "檔案",
       "other": "其他"
     },
     "fileScopes": {
@@ -190,14 +189,12 @@
       "toolTime": "工具呼叫耗時",
       "tokens": "Tokens",
       "cached": "快取",
-      "files": "檔案",
       "errors": "錯誤",
       "errorRate": "錯誤率"
     },
     "sections": {
       "models": "模型",
       "tools": "工具",
-      "files": "檔案",
       "slowest": "最慢耗時"
     },
     "empty": {
@@ -237,7 +234,6 @@
       "overview": "總覽",
       "models": "模型",
       "tools": "工具",
-      "files": "檔案",
       "errors": "錯誤",
       "slowest": "慢耗時"
     },
@@ -258,7 +254,6 @@
       "toolDuration": "總耗時",
       "toolP95Duration": "P95 總耗時",
       "toolExecutionDuration": "執行耗時",
-      "file": "檔案",
       "operations": "操作",
       "added": "新增",
       "deleted": "刪除",
@@ -576,7 +571,6 @@
     "add": "新增上下文",
     "remove": "移除上下文",
     "clear": "清空上下文",
-    "file": "檔案",
     "folder": "資料夾",
     "selection": "選中內容",
     "codeBlock": "代碼塊",
@@ -890,7 +884,6 @@
     "backToParent": "返回父會話",
     "empty": "請在 /btw 後面寫上問題",
     "nestedDisabled": "側問會話中不能繼續新增側問",
-    "error": "失敗",
     "close": "關閉",
     "noSession": "目前沒有可用於 /btw 的會話"
   },
@@ -1261,7 +1254,6 @@
     "tooltip": "跳轉到目前任務"
   },
   "sessionFilesBadge": {
-    "files": "檔案",
     "filesSummaryCount": "{{count}} 個檔案",
     "expandChangeListCue": "展開列表",
     "expandChangeListAriaCue": "展開查看檔案列表",
@@ -1988,7 +1980,6 @@
       "sortByModifiedTime": "按修改時間（最新在前）"
     },
     "userMessage": {
-      "file": "檔案",
       "dir": "目錄",
       "code": "代碼",
       "img": "圖片",

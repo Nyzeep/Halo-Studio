@@ -799,7 +799,7 @@ const StatsRow: React.FC<{ report: InsightsReport }> = ({ report }) => {
     items.push({
       key: 'files',
       value: formatNumber(stats.total_files_modified),
-      label: t('insights.files'),
+      label: t('shared:features.files'),
     });
   }
   if (stats.median_response_time_secs != null) {

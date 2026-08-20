@@ -4,7 +4,6 @@
     "placeholder": "搜索工作区...",
     "noResults": "未找到匹配的结果",
     "enterKeyword": "输入关键词开始搜索",
-    "modeFiles": "文件",
     "modeContent": "内容",
     "limitReachedFiles": "当前仅显示前 {{count}} 个文件匹配结果，请继续缩小查询范围。",
     "limitReachedContent": "当前仅显示前 {{count}} 个内容匹配结果，请继续缩小查询范围。",
@@ -63,7 +62,6 @@
       },
       "taskState": {
         "queued": "排队中",
-        "running": "执行中",
         "completed": "已完成",
         "failed": "失败",
         "cancelled": "已取消"

@@ -155,7 +155,6 @@
   },
   "workspace": {
     "files": {
-      "title": "Files",
       "exclude": "Exclude Files",
       "watcherExclude": "Exclude from Watcher",
       "associations": "File Associations"

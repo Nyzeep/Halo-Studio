@@ -183,7 +183,7 @@ export class FileExplorerMenuProvider implements IMenuProvider {
           submenu: [
             {
               id: 'file-new-file',
-              label: i18nService.t('common:file.file'),
+              label: i18nService.t('shared:features.files'),
               icon: 'FilePlus',
               command: 'file.new-file',
               onClick: async (ctx) => {

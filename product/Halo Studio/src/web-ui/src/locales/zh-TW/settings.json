@@ -176,7 +176,6 @@
   },
   "workspace": {
     "files": {
-      "title": "檔案",
       "exclude": "排除檔案",
       "watcherExclude": "排除監視",
       "associations": "檔案關聯"

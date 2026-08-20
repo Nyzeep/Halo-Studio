@@ -42,7 +42,7 @@ export function registerDefaultContextTypes(): void {
     
     contextRegistry.register({
       type: 'file',
-      displayName: i18nService.t('components:contextSystem.contextRegistry.file.name'),
+      displayName: i18nService.t('shared:features.files'),
       description: i18nService.t('components:contextSystem.contextRegistry.file.description'),
       icon: React.createElement(FileIcon, { size: 16 }),
       color: 'var(--color-accent-500)',

@@ -106,8 +106,7 @@
       "linesDeleted": "行删除",
       "filesCount": "{{count}} 文件",
       "filePath": "文件路径",
-      "unspecifiedFile": "未指定文件",
-      "file": "文件"
+      "unspecifiedFile": "未指定文件"
     },
     "taskCard": {
       "title": "执行任务",
@@ -404,7 +403,6 @@
     },
     "contextTypes": {
       "selection": "文本选择",
-      "file": "文件",
       "folder": "文件夹",
       "editor": "编辑器",
       "flowChat": "FlowChat",
@@ -418,7 +416,6 @@
     },
     "contextRegistry": {
       "file": {
-        "name": "文件",
         "description": "文件系统中的文件"
       },
       "directory": {
@@ -540,7 +537,6 @@
   },
   "bottomBar": {
     "sessions": "Agent 工作台",
-    "files": "文件树",
     "terminal": "终端",
     "git": "Git",
     "capabilities": "能力配置",

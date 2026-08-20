@@ -1126,8 +1126,6 @@
     "yearsAgo": "{{count}} years ago"
   },
   "file": {
-    "file": "File",
-    "files": "Files",
     "folder": "Folder",
     "folders": "Folders",
     "newFile": "New File",
@@ -1425,8 +1423,7 @@
     "timeAfternoon": "Afternoon (12-18)",
     "timeEvening": "Evening (18-24)",
     "timeNight": "Night (0-6)",
-    "lines": "Lines",
-    "files": "Files"
+    "lines": "Lines"
   },
   "ssh": {
     "remote": {

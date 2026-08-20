@@ -4,7 +4,6 @@
     "placeholder": "Search workspace...",
     "noResults": "No matching results found",
     "enterKeyword": "Enter a keyword to start searching",
-    "modeFiles": "Files",
     "modeContent": "Text",
     "limitReachedFiles": "Showing the first {{count}} file matches. Refine the query to narrow the result set.",
     "limitReachedContent": "Showing the first {{count}} content matches. Refine the query to narrow the result set.",
@@ -63,7 +62,6 @@
       },
       "taskState": {
         "queued": "Queued",
-        "running": "Running",
         "completed": "Completed",
         "failed": "Failed",
         "cancelled": "Cancelled"

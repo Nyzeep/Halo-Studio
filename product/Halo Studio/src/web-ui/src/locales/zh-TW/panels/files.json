@@ -4,7 +4,6 @@
     "placeholder": "搜尋工作區...",
     "noResults": "未找到匹配的結果",
     "enterKeyword": "輸入關鍵詞開始搜尋",
-    "modeFiles": "檔案",
     "modeContent": "內容",
     "limitReachedFiles": "目前僅顯示前 {{count}} 個檔案匹配結果，請繼續縮小查詢範圍。",
     "limitReachedContent": "目前僅顯示前 {{count}} 個內容匹配結果，請繼續縮小查詢範圍。",
@@ -63,7 +62,6 @@
       },
       "taskState": {
         "queued": "排隊中",
-        "running": "執行中",
         "completed": "已完成",
         "failed": "失敗",
         "cancelled": "已取消"

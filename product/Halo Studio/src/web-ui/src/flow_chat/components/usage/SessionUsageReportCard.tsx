@@ -209,7 +209,7 @@ export const SessionUsageReportCard: React.FC<SessionUsageReportCardProps> = ({
     },
     {
       key: 'files',
-      label: t('usage.metrics.files'),
+      label: t('shared:features.files'),
       value: getFileSummaryLabel(report, t),
       icon: FileText,
       help: fileMetricHelp,
@@ -350,11 +350,11 @@ export const SessionUsageReportCard: React.FC<SessionUsageReportCardProps> = ({
           emptyDescription={t('usage.empty.toolsDescription')}
         />
         <UsageMiniList
-          title={t('usage.sections.files')}
+          title={t('shared:features.files')}
           showAll={buildShowAllAction({
             totalCount: report.files.files.length,
             visibleCount: topFiles.length,
-            sectionLabel: t('usage.sections.files'),
+            sectionLabel: t('shared:features.files'),
             t,
             onClick: onOpenDetails ? handleOpenSectionDetails('files') : undefined,
           })}

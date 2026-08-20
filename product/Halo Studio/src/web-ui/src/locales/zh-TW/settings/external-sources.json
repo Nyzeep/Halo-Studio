@@ -447,7 +447,7 @@
     "enable": "啟用工具"
   },
   "capability": {
-    "file_system": "檔案",
+    "file_system": "檔案系統",
     "network": "網路",
     "process": "程序",
     "environment": "環境變數"

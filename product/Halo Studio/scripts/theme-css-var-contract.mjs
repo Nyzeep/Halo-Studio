@@ -244,7 +244,44 @@ export const TOKEN_COMPATIBILITY_ALIAS_FAMILY_CONTRACTS = [
   },
 ];
 
-export const FALLBACK_VAR_CONTRACTS = [];
+export const FALLBACK_VAR_CONTRACTS = [
+  {
+    key: '--color-status-warning',
+    owner: 'src/web-ui/src/app/scenes/session/WorkbenchPermissionDecision.scss',
+    reason: 'Workbench permission decision surface keeps bounded status warning fallbacks before the host theme contract is available.',
+    boundary: 'session permission decision surface fallback',
+  },
+  {
+    key: '--color-status-error',
+    owner: 'src/web-ui/src/app/scenes/session/WorkbenchPermissionDecision.scss',
+    reason: 'Workbench permission decision surface keeps bounded status error fallbacks before the host theme contract is available.',
+    boundary: 'session permission decision surface fallback',
+  },
+  {
+    key: '--color-status-ok',
+    owner: 'src/web-ui/src/app/scenes/session/WorkbenchPermissionDecision.scss',
+    reason: 'Workbench permission decision surface keeps bounded status ok fallbacks before the host theme contract is available.',
+    boundary: 'session permission decision surface fallback',
+  },
+  {
+    key: '--halo-border',
+    owner: 'src/web-ui/src/app/scenes/session/WorkbenchDeliveryReview.scss',
+    reason: 'Workbench delivery review keeps bounded Halo border fallbacks before the host theme contract is available.',
+    boundary: 'session delivery review surface fallback',
+  },
+  {
+    key: '--halo-surface',
+    owner: 'src/web-ui/src/app/scenes/session/WorkbenchDeliveryReview.scss',
+    reason: 'Workbench delivery review keeps bounded Halo surface fallbacks before the host theme contract is available.',
+    boundary: 'session delivery review surface fallback',
+  },
+  {
+    key: '--halo-danger',
+    owner: 'src/web-ui/src/app/scenes/session/WorkbenchDeliveryReview.scss',
+    reason: 'Workbench delivery review keeps bounded Halo danger fallbacks before the host theme contract is available.',
+    boundary: 'session delivery review surface fallback',
+  },
+];
 
 export const SURFACE_TOKEN_RENAME_CONTRACTS = [
   {

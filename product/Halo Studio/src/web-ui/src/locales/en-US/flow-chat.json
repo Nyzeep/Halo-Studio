@@ -137,7 +137,6 @@
     "toolCategories": {
       "git": "Git",
       "shell": "Shell",
-      "file": "File",
       "other": "Other"
     },
     "fileScopes": {
@@ -190,14 +189,12 @@
       "toolTime": "Tool call time",
       "tokens": "Tokens",
       "cached": "Cached",
-      "files": "Files",
       "errors": "Errors",
       "errorRate": "Error rate"
     },
     "sections": {
       "models": "Models",
       "tools": "Tools",
-      "files": "Files",
       "slowest": "Slowest spans"
     },
     "empty": {
@@ -272,7 +269,6 @@
       "overview": "Overview",
       "models": "Models",
       "tools": "Tools",
-      "files": "Files",
       "errors": "Errors",
       "slowest": "Slowest"
     },
@@ -293,7 +289,6 @@
       "toolDuration": "Total time",
       "toolP95Duration": "P95 total",
       "toolExecutionDuration": "Execution time",
-      "file": "File",
       "operations": "Ops",
       "added": "Added",
       "deleted": "Deleted",
@@ -576,7 +571,6 @@
     "add": "Add Context",
     "remove": "Remove Context",
     "clear": "Clear Context",
-    "file": "File",
     "folder": "Folder",
     "selection": "Selection",
     "codeBlock": "Code Block",
@@ -890,7 +884,6 @@
     "backToParent": "Back to parent session",
     "empty": "Please provide a question after /btw",
     "nestedDisabled": "A side question cannot start another side question",
-    "error": "Failed",
     "close": "Close",
     "noSession": "No active session for /btw"
   },
@@ -1261,7 +1254,6 @@
     "tooltip": "Jump to current task"
   },
   "sessionFilesBadge": {
-    "files": "files",
     "filesSummaryCount": "{{count}} files",
     "expandChangeListCue": "Expand list",
     "expandChangeListAriaCue": "Expand to show files",
@@ -1988,7 +1980,6 @@
       "sortByModifiedTime": "By modified time (newest first)"
     },
     "userMessage": {
-      "file": "File",
       "dir": "Directory",
       "code": "Code",
       "img": "Image",

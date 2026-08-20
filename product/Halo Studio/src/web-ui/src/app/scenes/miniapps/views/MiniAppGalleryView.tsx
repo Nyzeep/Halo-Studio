@@ -335,7 +335,7 @@ const MiniAppGalleryView: React.FC = () => {
 
       <div className="gallery-zones">
         <GalleryZone
-          title={t('running')}
+          title={t('shared:statuses.running')}
           tools={runningApps.length > 0 ? <span className="gallery-zone-badge">{runningApps.length}</span> : null}
         >
           {runningApps.length > 0 ? (

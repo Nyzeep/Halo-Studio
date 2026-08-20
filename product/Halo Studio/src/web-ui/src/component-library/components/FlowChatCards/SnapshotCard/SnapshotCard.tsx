@@ -42,7 +42,7 @@ export const SnapshotCard: React.FC<SnapshotCardProps> = ({
 }) => {
   const { t } = useI18n('components');
   const resolvedFilePath = filePath || input?.file_path || input?.target_file || input?.path || t('flowChatCards.snapshotCard.unspecifiedFile');
-  const fileName = resolvedFilePath.split(/[/\\]/).pop() || t('flowChatCards.snapshotCard.file');
+  const fileName = resolvedFilePath.split(/[/\\]/).pop() || t('shared:features.files');
 
   const getOperationInfo = () => {
     const operationMap = {

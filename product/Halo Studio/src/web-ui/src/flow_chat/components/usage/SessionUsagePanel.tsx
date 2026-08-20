@@ -264,7 +264,7 @@ export const SessionUsagePanel: React.FC<SessionUsagePanelProps> = ({
             onClick={() => setActiveTab(tab)}
             onKeyDown={event => handleTabKeyDown(event, tab)}
           >
-            {t(`usage.tabs.${tab}`)}
+            {tab === 'files' ? t('shared:features.files') : t(`usage.tabs.${tab}`)}
           </button>
         ))}
       </nav>
@@ -607,7 +607,7 @@ function UsageOverview({ report }: { report: SessionUsageReport }) {
     {
       key: 'files',
       icon: FileText,
-      label: t('usage.metrics.files'),
+      label: t('shared:features.files'),
       value: getFileSummaryLabel(report, t),
       detail: getFileScopeLabel(report.files.scope, t),
       help: fileScopeHelp,
@@ -960,7 +960,7 @@ function UsageFiles({
         emptyLabel={getFileSummaryLabel(report, t)}
         emptyDescription={fileScopeHelp ?? t('usage.empty.filesDescription')}
         headers={[
-          { id: 'file', label: t('usage.table.file') },
+          { id: 'file', label: t('shared:features.files') },
           { id: 'operations', label: t('usage.table.operations') },
           { id: 'added', label: t('usage.table.added') },
           { id: 'deleted', label: t('usage.table.deleted') },
