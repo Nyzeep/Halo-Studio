@@ -97,3 +97,4 @@ external/
 /.halo-studio/search/flashgrep-index/
 .agents/
 /.flashgrep-index-engine/
+/.scratch/
