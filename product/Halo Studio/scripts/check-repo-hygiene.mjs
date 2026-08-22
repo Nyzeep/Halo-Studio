@@ -18,11 +18,24 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+const GIT_OUTPUT_MAX_BUFFER = 128 * 1024 * 1024;
+
+function gitErrorDetails(error) {
+  return typeof error?.stderr === 'string' && error.stderr.trim().length > 0
+    ? error.stderr.trim()
+    : error instanceof Error
+      ? error.message
+      : String(error);
+}
+
 function runGit(args) {
   try {
-    return execFileSync('git', args, { encoding: 'utf8' }).split(/\r?\n/).filter(Boolean);
-  } catch {
-    return [];
+    return execFileSync('git', args, {
+      encoding: 'utf8',
+      maxBuffer: GIT_OUTPUT_MAX_BUFFER,
+    }).split(/\r?\n/).filter(Boolean);
+  } catch (error) {
+    throw new Error(`git ${args.join(' ')} failed: ${gitErrorDetails(error)}`);
   }
 }
 
@@ -32,30 +45,53 @@ function uniqueFiles(files) {
 
 function hasCommit(ref) {
   try {
-    execFileSync('git', ['rev-parse', '--verify', `${ref}^{commit}`], { stdio: 'ignore' });
+    execFileSync('git', ['rev-parse', '--verify', `${ref}^{commit}`], {
+      encoding: 'utf8',
+      maxBuffer: GIT_OUTPUT_MAX_BUFFER,
+    });
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    const details = gitErrorDetails(error);
+    if (
+      ref === 'HEAD^1'
+      && /(?:unknown revision|needed a single revision|ambiguous argument)/iu.test(details)
+    ) {
+      return false;
+    }
+    throw new Error(`git rev-parse --verify ${ref}^{commit} failed: ${details}`);
   }
 }
 
-const trackedFiles = runGit(['ls-files']);
-const untrackedFiles = runGit(['ls-files', '--others', '--exclude-standard']);
-const repositoryFiles = uniqueFiles([...trackedFiles, ...untrackedFiles]);
-const localChangedFiles = uniqueFiles([
-  ...runGit(['diff', '--name-only', '--diff-filter=ACMRT', 'HEAD']),
-  ...untrackedFiles,
-]);
-const committedChangedFiles = hasCommit('HEAD^1')
-  ? runGit(['diff', '--name-only', '--diff-filter=ACMRT', 'HEAD^1', 'HEAD'])
-  : [];
-const contentScanFiles = uniqueFiles(
-  localChangedFiles.length > 0
-    ? localChangedFiles
-    : committedChangedFiles.length > 0
-      ? committedChangedFiles
-      : trackedFiles,
-);
+function collectRepositoryState() {
+  try {
+    const trackedFiles = runGit(['ls-files']);
+    const untrackedFiles = runGit(['ls-files', '--others', '--exclude-standard']);
+    const repositoryFiles = uniqueFiles([...trackedFiles, ...untrackedFiles]);
+    const localChangedFiles = uniqueFiles([
+      ...runGit(['diff', '--name-only', '--diff-filter=ACMRT', 'HEAD']),
+      ...untrackedFiles,
+    ]);
+    const committedChangedFiles = hasCommit('HEAD^1')
+      ? runGit(['diff', '--name-only', '--diff-filter=ACMRT', 'HEAD^1', 'HEAD'])
+      : [];
+    const contentScanFiles = uniqueFiles(
+      localChangedFiles.length > 0
+        ? localChangedFiles
+        : committedChangedFiles.length > 0
+          ? committedChangedFiles
+          : trackedFiles,
+    );
+
+    return { contentScanFiles, repositoryFiles, trackedFiles };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Repository hygiene check failed: ${message}`);
+    process.exit(1);
+  }
+}
+
+const { contentScanFiles, repositoryFiles, trackedFiles } = collectRepositoryState();
+const trackedFileSet = new Set(trackedFiles.map(normalizePath));
 const contentScanFileSet = new Set(contentScanFiles.map(normalizePath));
 
 const textExtensions = new Set([
@@ -97,6 +133,9 @@ const temporaryPromptNames = new Set([
 ]);
 const sensitiveFilenamePattern =
   /(^|[._-])(id_rsa|id_dsa|id_ecdsa|id_ed25519)([._-]|$)|\.(pem|p12|pfx|mobileprovision)$/i;
+// Cargo vendor test fixtures intentionally include certificate and key material.
+const vendoredFixturePathPattern =
+  /(?:^|\/)vendor\/cargo\/[^/]+\/(?:test|tests|examples|certs)(?:\/|$)/u;
 const windowsLocalPathSegment = String.raw`[A-Za-z]:[\\/](?:Users|Documents and Settings|workspace|workspaces|work|Projects|code|dev|repos?|src|tmp|temp)(?:[\\/][^\s'"\`)<\]]+)*`;
 const localAbsolutePathPattern =
   new RegExp(
@@ -219,7 +258,10 @@ for (const file of repositoryFiles) {
     addViolation(file, null, 'looks like a transient review prompt file.');
   }
 
-  if (sensitiveFilenamePattern.test(basename)) {
+  if (
+    sensitiveFilenamePattern.test(basename)
+    && !(trackedFileSet.has(normalized) && vendoredFixturePathPattern.test(normalized))
+  ) {
     addViolation(file, null, 'looks like a private key, certificate, or provisioning file.');
   }
 
