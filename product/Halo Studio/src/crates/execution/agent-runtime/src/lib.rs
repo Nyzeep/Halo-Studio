@@ -19,6 +19,10 @@ pub mod events;
 pub mod evidence_ledger;
 pub mod file_read_state;
 pub mod halo_workbench;
+// Ticket 04 connects this crate-private seam to HaloWorkbenchRuntime. Until
+// then, the test-only in-memory adapter is its only consumer.
+#[allow(dead_code)]
+pub(crate) mod managed_event_facts;
 pub mod native_hooks;
 pub mod output_surface;
 pub mod permission;
