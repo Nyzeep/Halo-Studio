@@ -14,15 +14,17 @@ use halo_agent_runtime::halo_workbench::{
     HaloWorkbenchSessionSnapshot, HaloWorkbenchWorkspaceInput, HALO_WORKBENCH_SCHEMA_VERSION,
 };
 use halo_runtime_ports::{
-    ClockPort, PiProviderReadiness, PiProviderReadinessPort, PiRpcAvailabilitySummary,
-    PiRpcCancellationMode, PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationKind,
-    PiRpcOperationRiskLevel, PiRpcOperationSummary, PiRpcPort, PiRpcReply, PiRpcVersion,
-    PiRpcVersionEvidenceSource, PortError, PortErrorKind, PortResult, RuntimeServiceCapability,
-    RuntimeServicePort, WorkbenchDeliveryAttribution, WorkbenchDeliveryAttributionKind,
-    WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest,
-    WorkbenchDeliveryFingerprint, WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline,
-    WorkbenchTaskBaselinePort, WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort,
-    WorkbenchWorkspaceFactsRequest, PI_RPC_ADAPTER_IDENTITY,
+    ClockPort, ManagedEventFactAppend, ManagedEventFactKind, ManagedEventFactRecord,
+    ManagedEventFactStorePort, PiProviderReadiness, PiProviderReadinessPort,
+    PiRpcAvailabilitySummary, PiRpcCancellationMode, PiRpcCommand, PiRpcEvent, PiRpcFailureKind,
+    PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcOperationSummary, PiRpcPort, PiRpcReply,
+    PiRpcVersion, PiRpcVersionEvidenceSource, PortError, PortErrorKind, PortResult,
+    RuntimeServiceCapability, RuntimeServicePort, WorkbenchDeliveryAttribution,
+    WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort,
+    WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint,
+    WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
+    WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
+    PI_RPC_ADAPTER_IDENTITY,
 };
 use tokio::sync::{broadcast, Notify, Semaphore};
 
@@ -522,6 +524,53 @@ impl HaloWorkbenchInterruptionHistoryPort for InMemoryInterruptionHistory {
     }
 }
 
+#[derive(Default)]
+struct RecordingManagedFacts {
+    records: Mutex<Vec<ManagedEventFactRecord>>,
+    fail: bool,
+}
+
+impl RecordingManagedFacts {
+    fn failing() -> Self {
+        Self {
+            records: Mutex::new(Vec::new()),
+            fail: true,
+        }
+    }
+
+    fn records(&self) -> Vec<ManagedEventFactRecord> {
+        self.records.lock().expect("facts lock").clone()
+    }
+}
+
+impl ManagedEventFactStorePort for RecordingManagedFacts {
+    fn append(&self, fact: ManagedEventFactAppend) -> PortResult<ManagedEventFactRecord> {
+        if self.fail {
+            return Err(PortError::new(PortErrorKind::Backend, "facts unavailable"));
+        }
+        let mut records = self.records.lock().expect("facts lock");
+        let record = ManagedEventFactRecord {
+            task_id: fact.task_id,
+            fact_id: fact.fact_id,
+            sequence: records.len() as u64 + 1,
+            recorded_at_ms: fact.recorded_at_ms,
+            schema_version: fact.schema_version,
+            kind: fact.kind,
+            redacted_summary: fact.redacted_summary,
+        };
+        records.push(record.clone());
+        Ok(record)
+    }
+
+    fn read_task(&self, task_id: &str) -> PortResult<Vec<ManagedEventFactRecord>> {
+        Ok(self
+            .records()
+            .into_iter()
+            .filter(|fact| fact.task_id == task_id)
+            .collect())
+    }
+}
+
 fn build_runtime(adapter: Arc<DeterministicPiRpc>) -> HaloWorkbenchRuntime {
     build_runtime_with_provider_readiness(adapter, Arc::new(AvailableProviderReadiness))
 }
@@ -750,6 +799,105 @@ async fn wait_for_no_pending_operation(runtime: &HaloWorkbenchRuntime, operation
     })
     .await
     .expect("operation leaves the pending set");
+}
+
+#[tokio::test]
+async fn managed_session_records_a_normalized_fact_before_pi_creation() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let facts = Arc::new(RecordingManagedFacts::default());
+    let runtime = HaloWorkbenchRuntime::new_with_delivery_evidence_and_fact_store(
+        adapter.clone(),
+        Arc::new(TrustedWorkspaceFacts),
+        Arc::new(AvailableProviderReadiness),
+        Arc::new(FixedTaskBaseline),
+        Arc::new(FixedDeliveryEvidence::new("diff", vec![], vec![], vec![])),
+        facts.clone(),
+        Arc::new(FixedClock),
+    );
+    open_ready(&runtime, &adapter, "facts-open", "facts-workspace").await;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "facts-confirm".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "facts-workspace".to_string(),
+                root_path: PathBuf::from("C:/work/facts-workspace"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation accepted");
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "facts-create".to_string(),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "facts-task".to_string(),
+                mode: HaloWorkbenchSessionMode::Managed,
+            },
+        })
+        .await
+        .expect("managed create accepted");
+
+    let records = facts.records();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].task_id, "facts-task");
+    assert_eq!(records[0].kind, ManagedEventFactKind::TaskLifecycle);
+    assert_eq!(adapter.count(CommandKind::CreateSession), 1);
+}
+
+#[tokio::test]
+async fn managed_fact_failure_is_observable_and_prevents_session_and_pi_progress() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = HaloWorkbenchRuntime::new_with_delivery_evidence_and_fact_store(
+        adapter.clone(),
+        Arc::new(TrustedWorkspaceFacts),
+        Arc::new(AvailableProviderReadiness),
+        Arc::new(FixedTaskBaseline),
+        Arc::new(FixedDeliveryEvidence::new("diff", vec![], vec![], vec![])),
+        Arc::new(RecordingManagedFacts::failing()),
+        Arc::new(FixedClock),
+    );
+    open_ready(
+        &runtime,
+        &adapter,
+        "facts-fail-open",
+        "facts-fail-workspace",
+    )
+    .await;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "facts-fail-confirm".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "facts-fail-workspace".to_string(),
+                root_path: PathBuf::from("C:/work/facts-fail-workspace"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation accepted");
+
+    let error = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "facts-fail-create".to_string(),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "facts-fail-task".to_string(),
+                mode: HaloWorkbenchSessionMode::Managed,
+            },
+        })
+        .await
+        .expect_err("facts failure must fail closed");
+
+    assert_eq!(error.code, "managed_event_facts_unavailable");
+    assert_eq!(
+        runtime
+            .snapshot()
+            .error
+            .as_ref()
+            .map(|error| error.code.as_str()),
+        Some("managed_event_facts_unavailable")
+    );
+    assert!(runtime.snapshot().sessions.is_empty());
+    assert_eq!(adapter.count(CommandKind::CreateSession), 0);
 }
 
 #[tokio::test]

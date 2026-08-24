@@ -8,6 +8,8 @@ Halo Studio 是面向本地开发者的原生开发工作台：在受信任 Git 
 - **P0 执行链**：`Halo Workbench Runtime → 受控 Pi 子进程 → pi --mode rpc → stdin/stdout JSONL`。
 - **发布状态**：工单 14/15 的真实 Pi RPC 原生 UI 验收记录为 `not-run`，P0 未放行；完整验收与验证事实以 `docs/verification/` 为准。
 - **上游对照**：上游（原 BitFun）源码与历史证据仅作历史/上游对照，统一标注“历史记录/上游对照（已归档）”；`BitFun-latest/` 为豁免目录，不参与构建。
+- **运行时职责**：Pi 是当前唯一的 P0 生产执行 harness；DeepSeek Harness（DSH）只作为迁移参考，不进入 Halo Studio 的生产执行链。
+- **受管事实**：生产 assembly 已接入独立的 Halo managed-event-facts 持久化端口与 JSON provider；任务恢复、完整生命周期事实覆盖和交付证据投影仍在后续工单中完善，不能视为已完成发布能力。
 
 ## 技术栈
 

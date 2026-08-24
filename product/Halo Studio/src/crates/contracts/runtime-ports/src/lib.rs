@@ -119,6 +119,51 @@ impl std::fmt::Display for PortError {
 
 impl std::error::Error for PortError {}
 
+/// Closed Halo-owned fact kinds persisted by the Workbench Runtime.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedEventFactKind {
+    TaskLifecycle,
+    UserMessageSummary,
+    AgentReplySummary,
+    ToolActivity,
+    AgentOperationRequest,
+    AgentOperationDecision,
+    FileChangeFingerprint,
+    TaskBaselineLinked,
+    DeliveryEvidenceVersion,
+    EvidenceFreshnessChanged,
+}
+
+/// A normalized, bounded fact append request. External executor payloads and
+/// source identities are intentionally absent from this contract.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManagedEventFactAppend {
+    pub task_id: String,
+    pub fact_id: String,
+    pub recorded_at_ms: i64,
+    pub schema_version: u32,
+    pub kind: ManagedEventFactKind,
+    pub redacted_summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManagedEventFactRecord {
+    pub task_id: String,
+    pub fact_id: String,
+    pub sequence: u64,
+    pub recorded_at_ms: i64,
+    pub schema_version: u32,
+    pub kind: ManagedEventFactKind,
+    pub redacted_summary: String,
+}
+
+/// Durable storage seam for the append-only Halo fact history.
+pub trait ManagedEventFactStorePort: Send + Sync {
+    fn append(&self, fact: ManagedEventFactAppend) -> PortResult<ManagedEventFactRecord>;
+    fn read_task(&self, task_id: &str) -> PortResult<Vec<ManagedEventFactRecord>>;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeServiceCapability {

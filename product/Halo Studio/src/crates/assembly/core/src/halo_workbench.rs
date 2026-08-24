@@ -20,8 +20,9 @@ use halo_pi_rpc_adapter::{
     PiRuntimeConfigurationService,
 };
 use halo_runtime_ports::{
-    PiCredentialSecret, PiCredentialStorePort, PiProviderReadiness, PiProviderReadinessPort,
-    PiRpcPort, PiRuntimeConfigurationManagementPort, PortError, PortErrorKind, PortResult,
+    ManagedEventFactAppend, ManagedEventFactRecord, ManagedEventFactStorePort, PiCredentialSecret,
+    PiCredentialStorePort, PiProviderReadiness, PiProviderReadinessPort, PiRpcPort,
+    PiRuntimeConfigurationManagementPort, PortError, PortErrorKind, PortResult,
     WorkbenchDeliveryAttribution, WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence,
     WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint,
     WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
@@ -620,21 +621,20 @@ impl PiCredentialStorePort for PiSystemCredentialStore {
                 "Pi credential provider does not match configuration",
             ));
         }
-        let value =
-            halo_ai_adapters::subscription_auth::store::read_pi_credential(credential_ref)
-                .await
-                .map_err(|_| {
-                    PortError::new(
-                        PortErrorKind::Backend,
-                        "system credential store is unavailable",
-                    )
-                })?
-                .ok_or_else(|| {
-                    PortError::new(
-                        PortErrorKind::NotFound,
-                        "Pi credential reference is missing",
-                    )
-                })?;
+        let value = halo_ai_adapters::subscription_auth::store::read_pi_credential(credential_ref)
+            .await
+            .map_err(|_| {
+                PortError::new(
+                    PortErrorKind::Backend,
+                    "system credential store is unavailable",
+                )
+            })?
+            .ok_or_else(|| {
+                PortError::new(
+                    PortErrorKind::NotFound,
+                    "Pi credential reference is missing",
+                )
+            })?;
         Ok(PiCredentialSecret::new(value))
     }
 
@@ -780,6 +780,108 @@ impl HaloWorkbenchInterruptionHistoryPort for JsonFileHaloWorkbenchInterruptionH
     }
 }
 
+const HALO_WORKBENCH_MANAGED_EVENT_FACTS_SCHEMA_VERSION: u32 = 1;
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct HaloWorkbenchManagedEventFactsFile {
+    schema_version: u32,
+    facts: Vec<ManagedEventFactRecord>,
+}
+
+struct JsonFileHaloWorkbenchManagedEventFacts {
+    path: PathBuf,
+}
+
+impl JsonFileHaloWorkbenchManagedEventFacts {
+    fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    fn load(&self) -> PortResult<Vec<ManagedEventFactRecord>> {
+        let bytes = match fs::read(&self.path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(_) => {
+                return Err(PortError::new(
+                    PortErrorKind::Backend,
+                    "managed facts could not be read",
+                ))
+            }
+        };
+        let file: HaloWorkbenchManagedEventFactsFile =
+            serde_json::from_slice(&bytes).map_err(|_| {
+                PortError::new(PortErrorKind::InvalidRequest, "managed facts are invalid")
+            })?;
+        if file.schema_version != HALO_WORKBENCH_MANAGED_EVENT_FACTS_SCHEMA_VERSION {
+            return Err(PortError::new(
+                PortErrorKind::InvalidRequest,
+                "managed facts schema is unsupported",
+            ));
+        }
+        Ok(file.facts)
+    }
+
+    fn save(&self, facts: Vec<ManagedEventFactRecord>) -> PortResult<()> {
+        let parent = self.path.parent().ok_or_else(|| {
+            PortError::new(PortErrorKind::Backend, "managed facts path has no parent")
+        })?;
+        fs::create_dir_all(parent).map_err(|_| {
+            PortError::new(
+                PortErrorKind::Backend,
+                "managed facts directory could not be prepared",
+            )
+        })?;
+        let bytes = serde_json::to_vec(&HaloWorkbenchManagedEventFactsFile {
+            schema_version: HALO_WORKBENCH_MANAGED_EVENT_FACTS_SCHEMA_VERSION,
+            facts,
+        })
+        .map_err(|_| {
+            PortError::new(PortErrorKind::Backend, "managed facts could not be encoded")
+        })?;
+        fs::write(&self.path, bytes).map_err(|_| {
+            PortError::new(PortErrorKind::Backend, "managed facts could not be written")
+        })
+    }
+}
+
+impl ManagedEventFactStorePort for JsonFileHaloWorkbenchManagedEventFacts {
+    fn append(&self, fact: ManagedEventFactAppend) -> PortResult<ManagedEventFactRecord> {
+        let mut facts = self.load()?;
+        if let Some(existing) = facts
+            .iter()
+            .find(|record| record.task_id == fact.task_id && record.fact_id == fact.fact_id)
+        {
+            return Ok(existing.clone());
+        }
+        let sequence = facts
+            .iter()
+            .filter(|record| record.task_id == fact.task_id)
+            .count() as u64
+            + 1;
+        let record = ManagedEventFactRecord {
+            task_id: fact.task_id,
+            fact_id: fact.fact_id,
+            sequence,
+            recorded_at_ms: fact.recorded_at_ms,
+            schema_version: fact.schema_version,
+            kind: fact.kind,
+            redacted_summary: fact.redacted_summary,
+        };
+        facts.push(record.clone());
+        self.save(facts)?;
+        Ok(record)
+    }
+
+    fn read_task(&self, task_id: &str) -> PortResult<Vec<ManagedEventFactRecord>> {
+        Ok(self
+            .load()?
+            .into_iter()
+            .filter(|record| record.task_id == task_id)
+            .collect())
+    }
+}
+
 #[cfg(not(windows))]
 fn replace_interruption_history_file(temporary: &Path, destination: &Path) -> PortResult<()> {
     fs::rename(temporary, destination).map_err(|_| {
@@ -869,6 +971,14 @@ fn pi_configuration_path() -> Result<std::path::PathBuf, String> {
         .join("pi-runtime-configuration.json"))
 }
 
+fn halo_workbench_managed_event_facts_path() -> Result<PathBuf, String> {
+    let path_manager = crate::infrastructure::try_get_path_manager_arc()
+        .map_err(|error| format!("Workbench managed facts path is unavailable: {error}"))?;
+    Ok(path_manager
+        .user_config_dir()
+        .join("halo-workbench-managed-event-facts.json"))
+}
+
 fn halo_workbench_interruption_history_path() -> Result<PathBuf, String> {
     let path_manager = crate::infrastructure::try_get_path_manager_arc()
         .map_err(|error| format!("Workbench interruption history path is unavailable: {error}"))?;
@@ -894,7 +1004,10 @@ pub fn build_halo_workbench_runtime_components(
     let interruption_history = Arc::new(JsonFileHaloWorkbenchInterruptionHistory::new(
         halo_workbench_interruption_history_path()?,
     ));
-    let runtime = HaloWorkbenchRuntime::try_new_with_delivery_evidence_and_interruption_history(
+    let managed_event_facts = Arc::new(JsonFileHaloWorkbenchManagedEventFacts::new(
+        halo_workbench_managed_event_facts_path()?,
+    ));
+    let runtime = HaloWorkbenchRuntime::try_new_with_delivery_evidence_and_fact_store_and_interruption_history(
         adapter,
         Arc::new(CoreWorkbenchWorkspaceFacts::new(workspace_service)),
         Arc::new(PiRpcConfiguredReadinessGate {
@@ -902,6 +1015,7 @@ pub fn build_halo_workbench_runtime_components(
         }),
         Arc::new(CoreWorkbenchTaskBaseline),
         Arc::new(CoreWorkbenchDeliveryEvidence),
+        managed_event_facts,
         interruption_history,
         Arc::new(SystemProductClock),
     )
@@ -931,6 +1045,7 @@ mod tests {
     use std::process::Command;
     use std::sync::{Arc, Mutex, OnceLock};
 
+    use chrono::Utc;
     use halo_agent_runtime::halo_workbench::{
         HaloWorkbenchActivityKind, HaloWorkbenchActivitySnapshot, HaloWorkbenchActivityStatus,
         HaloWorkbenchInterruptionHistoryPort, HaloWorkbenchMessageRole,
@@ -942,7 +1057,6 @@ mod tests {
         WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint, WorkbenchTaskBaseline,
         WorkbenchTaskBaselinePort, WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFactsRequest,
     };
-    use chrono::Utc;
 
     use super::{
         attribute_changes, project_workspace_facts, CoreWorkbenchTaskBaseline,
@@ -1152,9 +1266,7 @@ mod tests {
             .expect("Pi system credential test lock");
         let root = tempfile::tempdir().expect("test credential root");
         let subscription_metadata = root.path().join("subscription_auth.json");
-        halo_ai_adapters::subscription_auth::set_store_path_for_test(
-            subscription_metadata.clone(),
-        );
+        halo_ai_adapters::subscription_auth::set_store_path_for_test(subscription_metadata.clone());
 
         let store = PiSystemCredentialStore;
         store

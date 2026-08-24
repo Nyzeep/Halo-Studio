@@ -10,13 +10,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
+use crate::managed_event_facts::{
+    normalize_summary, HaloFactId, HaloTaskId, ManagedEventFactInput, ManagedEventFactKind,
+    ManagedEventFacts, ManagedEventFactsPortAdapter,
+};
+
 use halo_runtime_ports::{
-    ClockPort, PiProviderReadinessPort, PiRpcAvailabilitySummary, PiRpcCancellationMode,
-    PiRpcCapability, PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision,
-    PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcPort, PiRpcReply, PiRpcSessionMode,
-    PiRpcVersionEvidenceSource, PiRpcVersionSummary, PiRpcWorkspace, PortErrorKind, PortResult,
-    WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort,
-    WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint,
+    ClockPort, ManagedEventFactStorePort, PiProviderReadinessPort, PiRpcAvailabilitySummary,
+    PiRpcCancellationMode, PiRpcCapability, PiRpcCommand, PiRpcEvent, PiRpcFailureKind,
+    PiRpcOperationDecision, PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcPort, PiRpcReply,
+    PiRpcSessionMode, PiRpcVersionEvidenceSource, PiRpcVersionSummary, PiRpcWorkspace,
+    PortErrorKind, PortResult, WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence,
+    WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint,
     WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
     WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
     WorkbenchWorkspaceTrustRequest, PI_RPC_ADAPTER_IDENTITY,
@@ -521,6 +526,14 @@ impl HaloWorkbenchError {
             "runtime_shutdown",
             "The Workbench Runtime has shut down",
             "restart_application",
+        )
+    }
+
+    fn managed_event_facts_unavailable() -> Self {
+        Self::new(
+            "managed_event_facts_unavailable",
+            "Managed event facts could not be recorded",
+            "retry",
         )
     }
 
@@ -1036,6 +1049,7 @@ struct HaloWorkbenchRuntimeInner {
     interruption_history: Arc<dyn HaloWorkbenchInterruptionHistoryPort>,
     provider_readiness: Arc<dyn PiProviderReadinessPort>,
     clock: Arc<dyn ClockPort>,
+    managed_event_facts: Mutex<Option<Arc<dyn ManagedEventFacts>>>,
     state: Mutex<RuntimeState>,
     interruption_history_state: Mutex<InterruptionHistoryState>,
     requests: tokio::sync::Mutex<RequestLedger>,
@@ -1134,6 +1148,46 @@ impl HaloWorkbenchRuntimeInner {
             return;
         }
         history.mark_persisted(sessions);
+    }
+
+    fn install_managed_event_fact_store(&self, port: Arc<dyn ManagedEventFactStorePort>) {
+        let mut store = self
+            .managed_event_facts
+            .lock()
+            .expect("Halo Workbench managed event facts lock");
+        *store = Some(Arc::new(ManagedEventFactsPortAdapter::new(port)));
+    }
+
+    fn append_managed_task_fact(
+        &self,
+        task_id: &str,
+        kind: ManagedEventFactKind,
+        summary: &str,
+    ) -> Result<(), HaloWorkbenchError> {
+        let store = self
+            .managed_event_facts
+            .lock()
+            .expect("Halo Workbench managed event facts lock")
+            .clone();
+        let Some(store) = store else {
+            return Ok(());
+        };
+        store
+            .append(ManagedEventFactInput {
+                fact_id: HaloFactId::from_runtime(Uuid::new_v4().to_string()),
+                task_id: HaloTaskId::from_runtime(task_id.to_string()),
+                recorded_at_ms: self.clock.now_unix_millis(),
+                schema_version: crate::managed_event_facts::MANAGED_EVENT_FACT_SCHEMA_VERSION,
+                kind,
+                redacted_summary: normalize_summary(summary)
+                    .map_err(|_| HaloWorkbenchError::managed_event_facts_unavailable())?,
+            })
+            .map(|_| ())
+            .map_err(|_| HaloWorkbenchError::managed_event_facts_unavailable())
+    }
+
+    fn expose_error(&self, error: HaloWorkbenchError) {
+        self.state.lock().expect("Halo Workbench state lock").error = Some(error);
     }
 
     fn snapshot(&self) -> HaloWorkbenchSnapshot {
@@ -1957,6 +2011,62 @@ impl HaloWorkbenchRuntime {
         .expect("the empty interruption history port is infallible")
     }
 
+    /// Constructs the runtime with an injected durable managed-facts store.
+    pub fn new_with_delivery_evidence_and_fact_store(
+        adapter: Arc<dyn PiRpcPort>,
+        workspace_facts: Arc<dyn WorkbenchWorkspaceFactsPort>,
+        provider_readiness: Arc<dyn PiProviderReadinessPort>,
+        task_baseline: Arc<dyn WorkbenchTaskBaselinePort>,
+        delivery_evidence: Arc<dyn WorkbenchDeliveryEvidencePort>,
+        fact_store: Arc<dyn ManagedEventFactStorePort>,
+        clock: Arc<dyn ClockPort>,
+    ) -> Self {
+        let runtime = Self::new_with_delivery_evidence(
+            adapter,
+            workspace_facts,
+            provider_readiness,
+            task_baseline,
+            delivery_evidence,
+            clock,
+        );
+        runtime.inner.install_managed_event_fact_store(fact_store);
+        runtime
+    }
+
+    /// Restores the safe Halo snapshot while attaching the durable facts store.
+    /// Facts are read for schema/record validation only; they are never replayed
+    /// into Pi or treated as executable operations during recovery.
+    pub fn try_new_with_delivery_evidence_and_fact_store_and_interruption_history(
+        adapter: Arc<dyn PiRpcPort>,
+        workspace_facts: Arc<dyn WorkbenchWorkspaceFactsPort>,
+        provider_readiness: Arc<dyn PiProviderReadinessPort>,
+        task_baseline: Arc<dyn WorkbenchTaskBaselinePort>,
+        delivery_evidence: Arc<dyn WorkbenchDeliveryEvidencePort>,
+        fact_store: Arc<dyn ManagedEventFactStorePort>,
+        interruption_history: Arc<dyn HaloWorkbenchInterruptionHistoryPort>,
+        clock: Arc<dyn ClockPort>,
+    ) -> Result<Self, HaloWorkbenchError> {
+        let restored_sessions = interruption_history
+            .load_interrupted_sessions()
+            .map_err(|_| HaloWorkbenchError::interruption_history_unavailable())?;
+        for session in &restored_sessions {
+            fact_store
+                .read_task(&session.task_id)
+                .map_err(|_| HaloWorkbenchError::managed_event_facts_unavailable())?;
+        }
+        let runtime = Self::try_new_with_delivery_evidence_and_interruption_history(
+            adapter,
+            workspace_facts,
+            provider_readiness,
+            task_baseline,
+            delivery_evidence,
+            interruption_history,
+            clock,
+        )?;
+        runtime.inner.install_managed_event_fact_store(fact_store);
+        Ok(runtime)
+    }
+
     /// Constructs the runtime with the durable, redacted interruption facts
     /// that are safe to surface after an application restart. This boundary
     /// deliberately excludes native Pi session state and pending operations.
@@ -1983,6 +2093,7 @@ impl HaloWorkbenchRuntime {
                 interruption_history,
                 provider_readiness,
                 clock,
+                managed_event_facts: Mutex::new(None),
                 state: Mutex::new(state),
                 interruption_history_state: Mutex::new(InterruptionHistoryState::new(
                     restored_interruption_history,
@@ -2107,6 +2218,9 @@ impl HaloWorkbenchRuntime {
                     Err(error)
                 }
             };
+            if let Err(error) = &result {
+                runtime.inner.expose_error(error.clone());
+            }
             sender.send_replace(Some(result.clone()));
             let mut ledger = runtime.inner.requests.lock().await;
             ledger.record_complete(request_id, fingerprint, result);
@@ -2759,6 +2873,13 @@ impl HaloWorkbenchRuntime {
         let state_session_id = session_id.clone();
         let state_task_id = task_id.clone();
         let state_workspace_id = workspace_id.clone();
+        if mode == HaloWorkbenchSessionMode::Managed {
+            self.inner.append_managed_task_fact(
+                &task_id,
+                ManagedEventFactKind::TaskLifecycle,
+                "Managed task session is being created",
+            )?;
+        }
         if !self.inner.publish_transition(
             Some(request_id),
             HaloWorkbenchEventKind::SessionStateChanged,
@@ -3005,9 +3126,17 @@ impl HaloWorkbenchRuntime {
         let generation = self.ready_generation()?;
         self.ensure_session_action_allowed(generation, session_id, &intent)?;
         let task_id = self.session_task_id(generation, session_id)?;
+        let facts_managed = self.session_requires_managed_trust(generation, session_id)?;
         let allow_session_removal = matches!(&intent, SessionIntent::End);
         let command = match intent {
             SessionIntent::Prompt(content) => {
+                if facts_managed {
+                    self.inner.append_managed_task_fact(
+                        &task_id,
+                        ManagedEventFactKind::UserMessageSummary,
+                        "Managed user message received",
+                    )?;
+                }
                 self.append_user_message(generation, session_id, &content)?;
                 self.mark_session_running(
                     generation,
@@ -3023,6 +3152,13 @@ impl HaloWorkbenchRuntime {
                 }
             }
             SessionIntent::FollowUp(content) => {
+                if facts_managed {
+                    self.inner.append_managed_task_fact(
+                        &task_id,
+                        ManagedEventFactKind::UserMessageSummary,
+                        "Managed follow-up message received",
+                    )?;
+                }
                 self.append_user_message(generation, session_id, &content)?;
                 self.mark_session_running(
                     generation,

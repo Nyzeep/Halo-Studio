@@ -19,9 +19,8 @@ pub mod events;
 pub mod evidence_ledger;
 pub mod file_read_state;
 pub mod halo_workbench;
-// Ticket 04 connects this crate-private seam to HaloWorkbenchRuntime. Until
-// then, the test-only in-memory adapter is its only consumer.
-#[allow(dead_code)]
+// Managed event facts remain an internal Runtime seam. Stable persistence is
+// injected through halo-runtime-ports; raw fact storage is never a UI surface.
 pub(crate) mod managed_event_facts;
 pub mod native_hooks;
 pub mod output_surface;
