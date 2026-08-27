@@ -30,10 +30,10 @@ function gitErrorDetails(error) {
 
 function runGit(args) {
   try {
-    return execFileSync('git', args, {
+    return execFileSync('git', [...args, '-z'], {
       encoding: 'utf8',
       maxBuffer: GIT_OUTPUT_MAX_BUFFER,
-    }).split(/\r?\n/).filter(Boolean);
+    }).split('\0').filter(Boolean);
   } catch (error) {
     throw new Error(`git ${args.join(' ')} failed: ${gitErrorDetails(error)}`);
   }
