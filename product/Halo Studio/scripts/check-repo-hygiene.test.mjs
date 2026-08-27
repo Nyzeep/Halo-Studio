@@ -54,3 +54,33 @@ test('allows certificate fixture names only inside vendored dependencies', (t) =
   );
   assert.doesNotMatch(result.stderr, /vendor[\\/]cargo[\\/]fixture[\\/]tests[\\/]examples[\\/]id_rsa\.pem/u);
 });
+
+test('scans untracked text files whose Git paths need quoting', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'halo-repo-hygiene-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+
+  writeFileSync(join(directory, 'README.md'), 'fixture\n', 'utf8');
+  for (const args of [
+    ['init', '-q'],
+    ['config', 'core.quotePath', 'true'],
+    ['add', '--', 'README.md'],
+    ['-c', 'user.name=Halo Test', '-c', 'user.email=halo-test@example.invalid', 'commit', '-qm', 'fixture'],
+  ]) {
+    const git = spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+    assert.equal(git.status, 0, 'git ' + args.join(' ') + ' failed:\n' + git.stderr);
+  }
+
+  writeFileSync(
+    join(directory, '受管路径.rs'),
+    "const workspace = 'C:\\Users\\Halo\\project';\n",
+    'utf8',
+  );
+
+  const result = spawnSync(process.execPath, [scriptPath], {
+    cwd: directory,
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 1, 'stdout:\n' + result.stdout + '\nstderr:\n' + result.stderr);
+  assert.match(result.stderr, /受管路径\.rs:1 contains a local absolute path/u);
+});
