@@ -95,6 +95,8 @@ Agent 执行是否经济，需要综合评估端到端 Token 消耗、执行耗�
 - [Rust 工具链](https://rustup.rs/)
 - [Tauri 前置依赖](https://v2.tauri.app/start/prerequisites/)
 
+请在 `product/Halo Studio` 目录中执行以下命令：
+
 ```bash
 pnpm install
 pnpm run desktop:dev

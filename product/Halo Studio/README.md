@@ -95,6 +95,8 @@ Go to [Releases](https://github.com/Nyzeep/Halo-Studio/releases) to download the
 - [Rust toolchain](https://rustup.rs/)
 - [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
+Run the following commands from the `product/Halo Studio` directory:
+
 ```bash
 pnpm install
 pnpm run desktop:dev
