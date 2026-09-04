@@ -12,7 +12,7 @@ them reintroduces the "the chat keeps refreshing itself" report:
 1. **Keep a live action's projection identity stable.** A collapsible tool
    belongs to its trailing `explore-group` from the first active render through
    completion. Do not render it as a standalone `model-round` while active and
-   move it into a group when it settles; that swaps the Virtuoso key, unmounts
+   move it into a group when it settles; that swaps the virtual item key, unmounts
    the card, and looks like a flash. Likewise, never hide the old location with
    `display: none` as a handoff mechanism.
 2. **No mount-triggered animation on anything the list renders.** The list is
@@ -60,7 +60,7 @@ Read this before changing any of the following:
 
 ## Problem
 
-FlowChat uses `react-virtuoso` for virtualization. When the user is already at or near the bottom, collapsing content near the end of the list can shrink total content height.
+FlowChat virtualizes the message list with `FlowChatVirtualScroller` (@tanstack/react-virtual; the engine behind the former react-virtuoso contract). When the user is already at or near the bottom, collapsing content near the end of the list can shrink total content height.
 
 Without compensation, the browser clamps `scrollTop` downward immediately because the previous bottom position no longer exists. That causes the visible header/content above to drop.
 
@@ -99,14 +99,14 @@ temporary tail space, but keeps its own semantics:
 
 The rendered footer height is the sum of all active reservations.
 
-Reservation state is ref-owned first and mirrored into React state. A Virtuoso
+Reservation state is ref-owned first and mirrored into React state. A virtualized
 Footer remount must synchronously read the ref-owned value; otherwise one stale
 React commit can remove exactly the reserved scroll range for a frame.
 
-The Virtuoso Footer does not receive reservation pixels through React context.
+The virtualized Footer does not receive reservation pixels through React context.
 Its stable DOM node is updated imperatively, and its ref callback restores the
 current ref-owned height on mount. This keeps reservation updates from causing
-an additional measurement-sensitive Virtuoso render.
+an additional measurement-sensitive virtualizer render.
 
 Important details:
 
@@ -163,7 +163,7 @@ scroll writers cannot fight the pinned header.
 
 Collapse anchors have an active phase while layout is changing and a retained
 phase after the collapse intent settles. Retained anchors do not expire on a
-wall-clock timer: Virtuoso can publish a delayed size compensation after the
+wall-clock timer: the virtualizer can publish a delayed size compensation after the
 collapse animation and intent have finished. They keep owning virtualizer
 compensation until user navigation, tail/pin ownership transfer, session reset,
 or DOM disconnection. The retained phase stops the continuous animation-frame
@@ -198,7 +198,7 @@ effective content growth first enters a short settlement ledger (currently
 negative height correction cancels matching unsettled growth; a known collapse
 does not. Stable growth then consumes the pin floor in one synchronous Footer
 update. Live pin reconciliation may increase a floor immediately, but cannot
-shrink it while Virtuoso item measurements are still moving. Stream end
+shrink it while virtualizer item measurements are still moving. Stream end
 performs one final atomic collapse-to-pin transfer using the settled required
 range.
 
@@ -323,14 +323,14 @@ Collapses interact with follow mode in three mutually exclusive ways:
    consumable by real streaming growth instead of being removed immediately;
    stream end performs the final exact reconciliation. This keeps the card
    header stable without giving up tail-follow ownership.
-   If React/Virtuoso has already clamped `scrollTop` before a data-driven auto
+   If React/the virtualizer has already clamped `scrollTop` before a data-driven auto
    intent reaches the list's layout handler, the handler extends the collapse
    reservation as needed and restores the last stable follow position before
    paint. Manual collapses and non-follow viewports do not use this fallback.
 2. **Unsignaled shrink while follow + streaming is active:** there is no
    semantic collapse transaction to preserve, so the RAF loop re-pins to the
    new bottom on the next frame.
-   A negative `scrollBy` issued by Virtuoso after a virtualized height
+   A negative `scrollBy` issued by the virtualizer after a virtualized height
    reduction is also suppressed when the previous geometry was already at the
    physical bottom. That compensation would move the viewport away from the
    tail; the next follow frame owns the single tail correction instead.
@@ -410,7 +410,7 @@ If a future collapsible component shows the same "header drops" or "flash on col
   full `FLOWCHAT_COLLAPSE_DURATION_MS` window (see Rule Zero).
 - Feeding `Date.now()` back into `sessionToVirtualItems` /
   `buildModelRoundItemGroups`, or splitting one `ModelRound` into several
-  `model-round` virtual items — both swap stable Virtuoso keys for new ones and
+  `model-round` virtual items — both swap stable virtual item keys for new ones and
   remount visible content.
 - Replacing `applyFooterCompensationNow()` with state-only rendering.
 - Measuring raw `scrollHeight` deltas without subtracting existing compensation.
@@ -423,7 +423,7 @@ If a future collapsible component shows the same "header drops" or "flash on col
   fallback that covers delayed background timers.
 - Reintroducing a persistent scroll-listener lock or allowing multiple competing
   scroll writers. Semantic anchors and the bounded fallback must remain separate.
-- Passing reservation pixels through Virtuoso context or React-owned Footer
+- Passing reservation pixels through virtualizer context or React-owned Footer
   styles. The stable Footer DOM and ref-owned reservation are the hot path.
 - Restoring the blanket follow-mode early return in
   `handleToolCardCollapseIntent` or applying it to an active known intent in
@@ -450,7 +450,7 @@ The diagnostic schema groups events by hypothesis:
 - `A`: user scroll intent, pin release, reservation transfer, and tail handoff
 - `B`: semantic anchor capture, correction, release, or unexpected reacquisition
 - `C`: content measurement, Footer compensation, and physical range changes
-- `D`: Virtuoso scroll compensation and tail-follow ownership
+- `D`: virtualizer scroll compensation and tail-follow ownership
 - `E`: streaming tool-card collapse intent and anchor preservation
 
 Do not add message content, tool arguments, file contents, or other sensitive

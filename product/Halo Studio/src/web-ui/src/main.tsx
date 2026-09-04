@@ -9,6 +9,9 @@ import { PeerHostInvokeBridge } from "./infrastructure/peer-device/PeerHostInvok
 import { PeerDirectoryPickerHost } from "./infrastructure/peer-device/PeerDirectoryPickerHost";
 import { I18nProvider } from "./infrastructure/i18n/providers/I18nProvider";
 import { mouseGlowService } from "./infrastructure/mouse-glow/core/MouseGlowService";
+// Design token layer (M4, ADR-0077) must load before legacy styles so every
+// component style can reference the custom properties it defines.
+import "./tokens/tokens.css";
 import "./app/styles/index.scss";
 
 // Font: Noto Sans SC is loaded via a <link> tag in index.html.

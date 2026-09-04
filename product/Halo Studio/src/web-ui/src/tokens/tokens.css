@@ -1,0 +1,207 @@
+/**
+ * Halo Studio design token layer (M4, ADR-0077; issue #53).
+ *
+ * Pure CSS custom properties with Material Design 3 role naming, following the
+ * DMS design language vocabulary (docs/architecture/dms-design-language-research-20260905.md
+ * section 3) and the strip-workbench prototype token usage.
+ *
+ * Color value provenance — every role value is seeded from existing Halo theme
+ * constants (src/infrastructure/theme/presets/):
+ *   - dark surface/on-surface roles come from haloDarkTheme backgrounds and text
+ *     (#0e0e10, #1c1c1f, #e8e8e8, #b0b0b0, #858585);
+ *   - light surface/on-surface roles come from haloLightTheme backgrounds and
+ *     text (#f3f3f5, #ffffff, #1e293b, #3d4f66, #64748b);
+ *   - --primary is the brand accent seed (ADR-0036/0037/0038): dark uses
+ *     DARK_ACCENT #60a5fa, light uses LIGHT_ACCENT_HOVER #475569 (the light
+ *     theme's action color);
+ *   - --error/--success/--warning map to the presets' semantic colors.
+ *
+ * Theming contract (ADR-0038 continuation):
+ *   - Dark roles are the base defaults on `:root`.
+ *   - With no `data-theme` attribute, `prefers-color-scheme: light` switches to
+ *     the light role set.
+ *   - `:root[data-theme='dark']` / `:root[data-theme='light']` explicitly force
+ *     a role set regardless of the OS setting.
+ *   - `applyTheme()` in ./theme.ts is the imperative entry point (zustand
+ *     friendly); no second theme file exists.
+ *
+ * This directory is the ONLY place where raw color literals are allowed; the
+ * bare-value style check (scripts/check-style-tokens.mjs) enforces that all
+ * other component styles reference these tokens via var(--…).
+ */
+
+:root {
+  /* Typography scale × fontScale (DMS: 12/14/16/20 base). */
+  --font-scale: 1;
+  --font-size-small: calc(12px * var(--font-scale));
+  --font-size-medium: calc(14px * var(--font-scale));
+  --font-size-large: calc(16px * var(--font-scale));
+  --font-size-xlarge: calc(20px * var(--font-scale));
+
+  /* Spacing scale, five steps (prototype --sp-1…--sp-5). */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+
+  /* Shape scale, three steps + full. */
+  --radius-small: 8px;
+  --radius-medium: 12px;
+  --radius-large: 16px;
+  --radius-full: 9999px;
+
+  /* Motion tokens: duration and easing, three steps each (MD3 emphases). */
+  --motion-duration-short: 120ms;
+  --motion-duration-medium: 240ms;
+  --motion-duration-long: 400ms;
+  --motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-easing-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --motion-easing-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+}
+
+/*
+ * Dark role values — base default (no attribute, or any OS setting) and the
+ * explicit dark override. Written once as a shared selector list.
+ */
+:root,
+:root[data-theme='dark'] {
+  /* Surface container ladder, five layers (MD3). */
+  --surface: #0e0e10;
+  --surface-container-lowest: #0a0a0c;
+  --surface-container-low: #141417;
+  --surface-container: #1c1c1f;
+  --surface-container-high: #242428;
+  --surface-container-highest: #2e2e33;
+
+  /* Content roles on surfaces. */
+  --on-surface: #e8e8e8;
+  --on-surface-variant: #b0b0b0;
+  --outline: #858585;
+  --outline-variant: #3a3a40;
+
+  /* Brand accent roles (primary seed: DARK_ACCENT #60a5fa). */
+  --primary: #60a5fa;
+  --on-primary: #082038;
+  --primary-container: #1e3a5f;
+  --on-primary-container: #d6e6ff;
+
+  /* Secondary accent roles (secondary seed: DARK_PURPLE #8b5cf6). */
+  --secondary: #8b5cf6;
+  --on-secondary: #1c1033;
+  --secondary-container: #3b2a58;
+  --on-secondary-container: #e9defc;
+
+  /* Semantic roles. */
+  --error: #ef4444;
+  --on-error: #ffffff;
+  --error-container: #4c1412;
+  --on-error-container: #ffdad6;
+  --success: #34d399;
+  --on-success: #06281a;
+  --success-container: #14532d;
+  --on-success-container: #bbf7d0;
+  --warning: #f59e0b;
+  --on-warning: #2b1902;
+  --warning-container: #4a2c05;
+  --on-warning-container: #fde68a;
+}
+
+/*
+ * Light role values — applied when the OS reports light and no explicit
+ * data-theme decision exists, or when data-theme='light' forces it.
+ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --surface: #ffffff;
+    --surface-container-lowest: #f8f8fa;
+    --surface-container-low: #f3f3f5;
+    --surface-container: #e8e8ea;
+    --surface-container-high: #dddde1;
+    --surface-container-highest: #d2d2d8;
+
+    --on-surface: #1e293b;
+    --on-surface-variant: #3d4f66;
+    --outline: #64748b;
+    --outline-variant: #c4c9d4;
+
+    /* Primary seed: LIGHT_ACCENT_HOVER #475569 (light theme action color). */
+    --primary: #475569;
+    --on-primary: #ffffff;
+    --primary-container: #d8dee9;
+    --on-primary-container: #1e293b;
+
+    --secondary: #655680;
+    --on-secondary: #ffffff;
+    --secondary-container: #e6dff0;
+    --on-secondary-container: #2c2340;
+
+    --error: #c26565;
+    --on-error: #ffffff;
+    --error-container: #f5dfdf;
+    --on-error-container: #4a1414;
+    --success: #5b9a6f;
+    --on-success: #ffffff;
+    --success-container: #dfeee3;
+    --on-success-container: #1d3a26;
+    --warning: #c08c42;
+    --on-warning: #ffffff;
+    --warning-container: #f3e8d4;
+    --on-warning-container: #3f2c0d;
+  }
+}
+
+:root[data-theme='light'] {
+  --surface: #ffffff;
+  --surface-container-lowest: #f8f8fa;
+  --surface-container-low: #f3f3f5;
+  --surface-container: #e8e8ea;
+  --surface-container-high: #dddde1;
+  --surface-container-highest: #d2d2d8;
+
+  --on-surface: #1e293b;
+  --on-surface-variant: #3d4f66;
+  --outline: #64748b;
+  --outline-variant: #c4c9d4;
+
+  --primary: #475569;
+  --on-primary: #ffffff;
+  --primary-container: #d8dee9;
+  --on-primary-container: #1e293b;
+
+  --secondary: #655680;
+  --on-secondary: #ffffff;
+  --secondary-container: #e6dff0;
+  --on-secondary-container: #2c2340;
+
+  --error: #c26565;
+  --on-error: #ffffff;
+  --error-container: #f5dfdf;
+  --on-error-container: #4a1414;
+  --success: #5b9a6f;
+  --on-success: #ffffff;
+  --success-container: #dfeee3;
+  --on-success-container: #1d3a26;
+  --warning: #c08c42;
+  --on-warning: #ffffff;
+  --warning-container: #f3e8d4;
+  --on-warning-container: #3f2c0d;
+}
+
+/*
+ * Reduced motion (ADR-0076 gesture set contract; M4 acceptance #5): when the
+ * user asks the OS to reduce motion, all animations/transitions collapse to
+ * effectively zero duration and smooth scrolling is disabled. Components are
+ * expected to author motion with var(--motion-duration-*) / var(--motion-
+ * easing-*); this rule is the global safety net.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
