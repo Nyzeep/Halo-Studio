@@ -5,13 +5,13 @@ describe('HaloDarkTheme color roles', () => {
   const colors = HaloDarkTheme.colors;
 
   it('keeps editor surface roles output-equivalent', () => {
-    expect(colors['editor.background']).toBe('#121214');
+    expect(colors['editor.background']).toBe('#131314');
     expect(colors['editor.lineHighlightBackground']).toBe('#18181a');
     expect(colors['editor.lineHighlightBorder']).toBe('#202024');
     expect(colors['editorWidget.background']).toBe('#18181a');
     expect(colors['editorHoverWidget.statusBarBackground']).toBe('#202024');
-    expect(colors['diffEditor.unchangedRegionBackground']).toBe('#121214');
-    expect(colors['diffEditor.unchangedCodeBackground']).toBe('#121214');
+    expect(colors['diffEditor.unchangedRegionBackground']).toBe('#131314');
+    expect(colors['diffEditor.unchangedCodeBackground']).toBe('#131314');
   });
 
   it('keeps Halo accent roles output-equivalent', () => {

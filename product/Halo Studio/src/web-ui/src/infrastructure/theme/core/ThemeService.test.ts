@@ -133,15 +133,15 @@ describe('ThemeService runtime theme tokens', () => {
     vi.clearAllMocks();
   });
 
-  it('keeps light theme Flow Chat markdown links browser-blue even with a neutral app accent', async () => {
+  it('keeps light theme Flow Chat markdown links on a dedicated browser-blue tone', async () => {
     const service = new ThemeService();
 
     await service.applyTheme('halo-light');
 
     const rootStyle = document.documentElement.style;
-    expect(rootStyle.getPropertyValue('--color-accent-500')).toBe('#64748b');
-    expect(rootStyle.getPropertyValue('--flowchat-link-color')).toBe('#0969da');
-    expect(rootStyle.getPropertyValue('--flowchat-link-hover-color')).toBe('#0550ae');
+    expect(rootStyle.getPropertyValue('--color-accent-500')).toBe('#1a73e8');
+    expect(rootStyle.getPropertyValue('--flowchat-link-color')).toBe('#0b57d0');
+    expect(rootStyle.getPropertyValue('--flowchat-link-hover-color')).toBe('#0842a0');
   });
 
   it('keeps dark neutral-accent themes on an obvious blue link color', async () => {
@@ -151,8 +151,8 @@ describe('ThemeService runtime theme tokens', () => {
 
     const rootStyle = document.documentElement.style;
     expect(rootStyle.getPropertyValue('--color-accent-500')).toBe('#94a3b8');
-    expect(rootStyle.getPropertyValue('--flowchat-link-color')).toBe('#60a5fa');
-    expect(rootStyle.getPropertyValue('--flowchat-link-hover-color')).toBe('#93c5fd');
+    expect(rootStyle.getPropertyValue('--flowchat-link-color')).toBe('#7cacf8');
+    expect(rootStyle.getPropertyValue('--flowchat-link-hover-color')).toBe('#a8c7fa');
   });
 
   it('uses canonical light overlay stops for scrollbar fallback hover', async () => {

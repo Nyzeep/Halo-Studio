@@ -126,10 +126,11 @@
   }
 
   &__message {
-    padding: 7px 9px;
-    border-radius: 5px;
+    padding: 8px 12px;
+    border-radius: var(--size-radius-base);
     background: var(--color-bg-secondary);
     font-size: var(--font-size-sm);
+    border: 1px solid var(--border-subtle);
 
     p {
       margin: 3px 0 0;
@@ -154,8 +155,15 @@
     display: flex;
     justify-content: space-between;
     gap: 10px;
+    padding: 3px 8px;
+    border-radius: var(--size-radius-sm);
     color: var(--color-text-muted);
     font-size: var(--font-size-xs);
+    transition: background var(--motion-fast) var(--easing-standard);
+
+    &:hover {
+      background: var(--element-bg-subtle);
+    }
 
     span:first-child {
       overflow: hidden;

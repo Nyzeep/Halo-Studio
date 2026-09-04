@@ -29,18 +29,18 @@ $overlay-black-70: rgba(0, 0, 0, 0.7);
 $overlay-black-80: rgba(0, 0, 0, 0.8);
 $overlay-black-90: $overlay-black-80;
 
-$color-blue-500-a08: rgba(96, 165, 250, 0.08);
+$color-blue-500-a08: rgba(168, 199, 250, 0.08);
 $color-blue-500-a06: $color-blue-500-a08;
-$color-blue-500-a15: rgba(96, 165, 250, 0.15);
+$color-blue-500-a15: rgba(168, 199, 250, 0.15);
 $color-blue-500-a12: $color-blue-500-a15;
 $color-blue-500-a18: $color-blue-500-a15;
-$color-blue-600-a08: rgba(59, 130, 246, 0.08);
-$color-blue-600-a15: rgba(59, 130, 246, 0.15);
+$color-blue-600-a08: rgba(124, 172, 248, 0.08);
+$color-blue-600-a15: rgba(124, 172, 248, 0.15);
 $color-blue-600-a12: $color-blue-600-a15;
 $color-blue-600-a18: $color-blue-600-a15;
-$color-blue-600-a30: rgba(59, 130, 246, 0.3);
+$color-blue-600-a30: rgba(124, 172, 248, 0.3);
 $color-blue-600-a25: $color-blue-600-a30;
-$color-blue-600-a40: rgba(59, 130, 246, 0.4);
+$color-blue-600-a40: rgba(124, 172, 248, 0.4);
 
 $color-purple-500-a08: rgba(139, 92, 246, 0.08);
 $color-purple-500-a05: $color-purple-500-a08;
@@ -52,17 +52,17 @@ $color-purple-500-a40: rgba(139, 92, 246, 0.4);
 
 // ==================== Base color system ====================
 
-$color-bg-primary: #0e0e10;
-$color-bg-secondary: #1c1c1f;
+$color-bg-primary: #131314;
+$color-bg-secondary: #1e1f20;
 $color-bg-tertiary: $color-bg-primary;
-$color-bg-elevated: $color-bg-secondary;
+$color-bg-elevated: #26282b;
 $color-bg-workbench: $color-bg-primary;
 $color-bg-scene: $color-bg-secondary;
 
-$color-text-primary: #e8e8e8;
-$color-text-secondary: #b0b0b0;
-$color-text-muted: #858585;
-$color-text-disabled: #555555;
+$color-text-primary: #e3e3e3;
+$color-text-secondary: #c4c7c5;
+$color-text-muted: #9aa0a6;
+$color-text-disabled: #5f6368;
 
 // ==================== Neutral surface system ====================
 $element-bg-subtle: $overlay-white-08;
@@ -75,11 +75,11 @@ $element-bg-strong: $overlay-white-15;
 $color-accent-50: $color-blue-500-a06;
 $color-accent-100: $color-blue-500-a08;
 $color-accent-200: $color-blue-500-a15;
-$color-accent-300: rgba(96, 165, 250, 0.25);
-$color-accent-400: rgba(96, 165, 250, 0.4);
-$color-accent-500: #60a5fa;
-$color-accent-600: #3b82f6;
-$color-accent-700: rgba(59, 130, 246, 0.8);
+$color-accent-300: rgba(168, 199, 250, 0.25);
+$color-accent-400: rgba(168, 199, 250, 0.4);
+$color-accent-500: #a8c7fa;
+$color-accent-600: #7cacf8;
+$color-accent-700: rgba(124, 172, 248, 0.8);
 
 // ==================== Purple system ====================
 $color-purple-100: $color-purple-500-a08;
@@ -127,7 +127,7 @@ $border-prominent: $overlay-white-40;
 $border-accent-soft: $color-blue-600-a30;
 $border-accent-subtle: $color-blue-600-a15;
 $border-accent: $color-blue-600-a40;
-$border-accent-strong: rgba(59, 130, 246, 0.6);
+$border-accent-strong: rgba(124, 172, 248, 0.6);
 
 // ==================== Shadow system ====================
 $shadow-xs: 0 1px 2px $overlay-black-90;
@@ -147,7 +147,7 @@ $glow-shadow-purple:
   0 3px 8px $overlay-black-12;
 
 $glow-shadow-mixed:
-  0 12px 32px rgba(96, 165, 250, 0.2),
+  0 12px 32px rgba(168, 199, 250, 0.2),
   0 6px 16px $color-purple-500-a15,
   0 3px 8px $overlay-black-12;
 
@@ -177,10 +177,10 @@ $glass-red-hover: rgba(239, 68, 68, 0.15);
 // ==================== Sizing system ====================
 
 $size-radius-sm: 6px;
-$size-radius-base: 8px;
-$size-radius-lg: 12px;
-$size-radius-xl: 16px;
-$size-radius-2xl: 20px;
+$size-radius-base: 10px;
+$size-radius-lg: 14px;
+$size-radius-xl: 20px;
+$size-radius-2xl: 24px;
 $size-radius-full: 9999px;
 
 $size-gap-1: 4px;
@@ -367,7 +367,7 @@ $badge-info-text: $color-info;
   --color-accent-300: #{$color-accent-300};
   --color-accent-400: #{$color-accent-400};
   --color-accent-500: #{$color-accent-500};
-  --color-accent-500-rgb: 96 165 250;
+  --color-accent-500-rgb: 168 199 250;
   --color-accent-600: #{$color-accent-600};
   --color-accent-700: #{$color-accent-700};
 
@@ -453,6 +453,9 @@ $badge-info-text: $color-info;
   --size-radius-base: #{$size-radius-base};
   --size-radius-md: var(--size-radius-base);
   --size-radius-lg: #{$size-radius-lg};
+  --size-radius-xl: #{$size-radius-xl};
+  --size-radius-2xl: #{$size-radius-2xl};
+  --size-radius-full: #{$size-radius-full};
 
   --size-gap-1: #{$size-gap-1};
   --size-gap-2: #{$size-gap-2};
@@ -509,7 +512,7 @@ $badge-info-text: $color-info;
   --flowchat-content-inline-pad: 3rem;
   --flowchat-content-inline-pad-mobile: 1.5rem;
   --flowchat-card-gap: 0.42rem;
-  --flowchat-card-radius: 8px;
+  --flowchat-card-radius: 10px;
   --flowchat-card-pad-y: 0.625rem;
   --flowchat-card-pad-x: 0.75rem;
   --flowchat-card-expanded-pad-y: 0.5rem;
@@ -524,8 +527,8 @@ $badge-info-text: $color-info;
   --flowchat-code-line-height: 1.52;
   --flowchat-code-block-pad-y: 0.55rem;
   --flowchat-code-block-pad-x: 0.75rem;
-  --flowchat-link-color: #60a5fa;
-  --flowchat-link-hover-color: #93c5fd;
+  --flowchat-link-color: #7cacf8;
+  --flowchat-link-hover-color: #a8c7fa;
 
   --line-height-tight: #{$line-height-tight};
   --line-height-base: #{$line-height-base};
@@ -538,6 +541,6 @@ $badge-info-text: $color-info;
 :root[data-theme="light"],
 :root[data-theme-type="light"],
 [data-theme-type="light"] {
-  --flowchat-link-color: #0969da;
-  --flowchat-link-hover-color: #0550ae;
+  --flowchat-link-color: #0b57d0;
+  --flowchat-link-hover-color: #0842a0;
 }

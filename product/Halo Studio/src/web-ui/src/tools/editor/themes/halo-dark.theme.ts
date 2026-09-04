@@ -16,10 +16,10 @@ import type { editor } from 'monaco-editor';
 const TRANSPARENT_MONACO_BORDER = '#00000000';
 
 const MONACO_DARK_SURFACE = {
-  background: '#121214',
+  background: '#131314',
   elevated: '#18181a',
   borderSubtle: '#202024',
-  diffDeep: '#121214',
+  diffDeep: '#131314',
 } as const;
 
 const MONACO_EDITOR_TEXT = {

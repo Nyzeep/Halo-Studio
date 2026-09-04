@@ -19,12 +19,15 @@ import {
   STATIC_WHITE,
 } from './shared';
 
-const DARK_BACKGROUND_PRIMARY = '#0e0e10';
-const DARK_BACKGROUND_SECONDARY = '#1c1c1f';
-const DARK_TEXT_PRIMARY = '#e8e8e8';
+// Gemini-style dark neutrals: true dark canvas, layered surfaces.
+const DARK_BACKGROUND_PRIMARY = '#131314';
+const DARK_BACKGROUND_SECONDARY = '#1e1f20';
+const DARK_BACKGROUND_ELEVATED = '#26282b';
+const DARK_TEXT_PRIMARY = '#e3e3e3';
 const DARK_BUTTON_TEXT = '#c8c8c8';
-const DARK_ACCENT = '#60a5fa';
-const DARK_ACCENT_HOVER = '#3b82f6';
+// Google-blue tuned for dark surfaces (Gemini dark accent).
+const DARK_ACCENT = '#a8c7fa';
+const DARK_ACCENT_HOVER = '#7cacf8';
 const DARK_PURPLE = '#8b5cf6';
 const DARK_PURPLE_HOVER = '#7c3aed';
 const DARK_SUCCESS = '#34d399';
@@ -36,9 +39,9 @@ export const haloDarkTheme: ThemeConfig = {
   id: 'halo-dark',
   name: 'Dark',
   type: 'dark',
-  description: 'Default dark theme',
+  description: 'Default dark theme - Gemini-style layered neutrals',
   author: 'Halo Studio Team',
-  version: '2.1.0',
+  version: '2.2.0',
 
 
   colors: {
@@ -46,16 +49,16 @@ export const haloDarkTheme: ThemeConfig = {
       primary: DARK_BACKGROUND_PRIMARY,
       secondary: DARK_BACKGROUND_SECONDARY,
       tertiary: DARK_BACKGROUND_PRIMARY,
-      elevated: DARK_BACKGROUND_SECONDARY,
+      elevated: DARK_BACKGROUND_ELEVATED,
       workbench: DARK_BACKGROUND_PRIMARY,
       scene: DARK_BACKGROUND_SECONDARY,
     },
 
     text: {
       primary: DARK_TEXT_PRIMARY,
-      secondary: '#b0b0b0',
-      muted: '#858585',
-      disabled: '#555555',
+      secondary: '#c4c7c5',
+      muted: '#9aa0a6',
+      disabled: '#5f6368',
     },
 
     accent: createAccentScale({ base: DARK_ACCENT, hover: DARK_ACCENT_HOVER }),
@@ -91,11 +94,11 @@ export const haloDarkTheme: ThemeConfig = {
 
   effects: {
     shadow: {
-      xs: `0 1px 2px ${overlayBlack(0.9)}`,
-      sm: `0 2px 4px ${overlayBlack(0.8)}`,
-      base: `0 4px 8px ${overlayBlack(0.7)}`,
-      lg: `0 8px 16px ${overlayBlack(0.6)}`,
-      xl: `0 12px 24px ${overlayBlack(0.5)}`,
+      xs: `0 1px 2px ${overlayBlack(0.5)}`,
+      sm: `0 2px 6px ${overlayBlack(0.45)}`,
+      base: `0 4px 12px ${overlayBlack(0.45)}`,
+      lg: `0 8px 24px ${overlayBlack(0.5)}`,
+      xl: `0 12px 32px ${overlayBlack(0.55)}`,
     },
 
     blur: {
@@ -146,14 +149,14 @@ export const haloDarkTheme: ThemeConfig = {
           background: overlayWhite(0.24),
           color: STATIC_WHITE,
           border: 'transparent',
-          shadow: 'none',
+          shadow: '0 2px 8px rgba(0, 0, 0, 0.35)',
           transform: 'none',
         },
         active: {
           background: overlayWhite(0.2),
           color: STATIC_WHITE,
           border: 'transparent',
-          shadow: 'none',
+          shadow: '0 1px 4px rgba(0, 0, 0, 0.3)',
           transform: 'none',
         },
       },

@@ -23,12 +23,12 @@ const log = createLogger('ThemeService');
 
 const FLOW_CHAT_LINK_COLORS = {
   dark: {
-    default: '#60a5fa',
-    hover: '#93c5fd',
+    default: '#7cacf8',
+    hover: '#a8c7fa',
   },
   light: {
-    default: '#0969da',
-    hover: '#0550ae',
+    default: '#0b57d0',
+    hover: '#0842a0',
   },
 } as const;
 

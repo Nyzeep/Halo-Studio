@@ -1,12 +1,12 @@
 // Last-resort values for isolated surfaces that can render before root theme
 // variables are available. Keep these values exact and boundary-scoped.
 const BOUNDARY_FALLBACK_COLOR = {
-  textPrimary: '#e8e8e8',
-  textSecondary: '#b0b0b0',
-  textMuted: '#858585',
-  accent500: '#60a5fa',
-  accent600: '#3b82f6',
-  bgSecondary: '#1c1c1f',
+  textPrimary: '#e3e3e3',
+  textSecondary: '#c4c7c5',
+  textMuted: '#9aa0a6',
+  accent500: '#a8c7fa',
+  accent600: '#7cacf8',
+  bgSecondary: '#1e1f20',
   success: '#34d399',
   warning: '#f59e0b',
   error: '#ef4444',
@@ -18,7 +18,7 @@ const BOUNDARY_FALLBACK_COLOR = {
   overlayBlack15: 'rgba(0, 0, 0, 0.15)',
   overlayBlack30: 'rgba(0, 0, 0, 0.3)',
   shadowBase: 'rgba(0, 0, 0, 0.4)',
-  captureBackground: '#121214',
+  captureBackground: '#131314',
 } as const;
 
 export const WIDGET_IFRAME_FALLBACK_COLOR = {

@@ -221,10 +221,10 @@ export function createStandardSpacing(): ThemeConfig['effects']['spacing'] {
 export function createStandardRadius(): RadiusConfig {
   return {
     sm: '6px',
-    base: '8px',
-    lg: '12px',
-    xl: '16px',
-    '2xl': '20px',
+    base: '10px',
+    lg: '14px',
+    xl: '20px',
+    '2xl': '24px',
     full: '9999px',
   };
 }

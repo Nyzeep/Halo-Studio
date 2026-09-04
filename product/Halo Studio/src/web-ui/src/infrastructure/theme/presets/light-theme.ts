@@ -12,15 +12,20 @@ import {
   createStandardTypography,
   rgbFromHex,
   rgbaFromHex,
-  STATIC_BLACK,
   STATIC_WHITE,
 } from './shared';
 
 const LIGHT_INK = '#0f172a';
 const LIGHT_TEXT_PRIMARY = '#1e293b';
 const LIGHT_TEXT_STRONG = '#334155';
-const LIGHT_ACCENT = '#64748b';
-const LIGHT_ACCENT_HOVER = '#475569';
+// Interactive accent: Google-blue used for primary actions, focus rings, and selection.
+const LIGHT_ACCENT = '#1a73e8';
+const LIGHT_ACCENT_HOVER = '#1765cc';
+// Neutral slate keeps borders, muted text, and git chrome free of accent tint.
+const LIGHT_NEUTRAL = '#64748b';
+const LIGHT_NEUTRAL_HOVER = '#475569';
+// Google gray-800 drives the elevation shadows like Google Workspace surfaces.
+const LIGHT_SHADE = '#3c4043';
 const LIGHT_PURPLE = '#7c6b99';
 const LIGHT_PURPLE_HOVER = '#655680';
 const LIGHT_SUCCESS = '#5b9a6f';
@@ -29,16 +34,18 @@ const LIGHT_ERROR = '#c26565';
 
 const lightInk = (alpha: number | string) => rgbaFromHex(LIGHT_INK, alpha);
 const lightAccent = (alpha: number | string) => rgbaFromHex(LIGHT_ACCENT, alpha);
-const lightAccentHover = (alpha: number | string) => rgbaFromHex(LIGHT_ACCENT_HOVER, alpha);
+const lightNeutral = (alpha: number | string) => rgbaFromHex(LIGHT_NEUTRAL, alpha);
+const lightNeutralHover = (alpha: number | string) => rgbaFromHex(LIGHT_NEUTRAL_HOVER, alpha);
+const lightShade = (alpha: number | string) => rgbaFromHex(LIGHT_SHADE, alpha);
 
 export const haloLightTheme: ThemeConfig = {
 
   id: 'halo-light',
   name: 'Light',
   type: 'light',
-  description: 'Light theme - Neutral gray surfaces, black primary actions',
+  description: 'Light theme - Soft neutral surfaces, Google-blue primary actions',
   author: 'Halo Studio Team',
-  version: '2.3.0',
+  version: '2.4.0',
 
   layout: {
     sceneViewportBorder: false,
@@ -47,18 +54,18 @@ export const haloLightTheme: ThemeConfig = {
 
   colors: {
     background: {
-      primary: '#f3f3f5',
+      primary: '#f8f9fa',
       secondary: STATIC_WHITE,
-      tertiary: '#e8e8e8',
+      tertiary: '#f1f3f4',
       elevated: STATIC_WHITE,
-      workbench: '#e8e8e8',
+      workbench: '#f1f3f4',
       scene: STATIC_WHITE,
     },
 
     text: {
       primary: LIGHT_TEXT_PRIMARY,
       secondary: '#3d4f66',
-      muted: LIGHT_ACCENT,
+      muted: LIGHT_NEUTRAL,
       disabled: '#94a3b8',
     },
 
@@ -67,13 +74,6 @@ export const haloLightTheme: ThemeConfig = {
       base: LIGHT_ACCENT,
       hover: LIGHT_ACCENT_HOVER,
       alpha: { 700: 0.88 },
-      stops: {
-        50: lightInk(0.04),
-        100: lightInk(0.07),
-        200: lightInk(0.1),
-        300: lightInk(0.16),
-        400: lightInk(0.26),
-      },
     }),
 
 
@@ -102,11 +102,11 @@ export const haloLightTheme: ThemeConfig = {
 
 
     border: {
-      subtle: lightAccent(0.15),
-      base: lightAccent(0.22),
-      medium: lightAccent(0.32),
-      strong: lightAccent(0.42),
-      prominent: lightAccent(0.52),
+      subtle: lightNeutral(0.15),
+      base: lightNeutral(0.22),
+      medium: lightNeutral(0.32),
+      strong: lightNeutral(0.42),
+      prominent: lightNeutral(0.52),
     },
 
 
@@ -120,8 +120,8 @@ export const haloLightTheme: ThemeConfig = {
 
 
     git: createGitColors({
-      branch: rgbFromHex(LIGHT_ACCENT_HOVER),
-      branchBg: lightAccentHover(0.1),
+      branch: rgbFromHex(LIGHT_NEUTRAL_HOVER),
+      branchBg: lightNeutralHover(0.1),
       changes: rgbFromHex(LIGHT_WARNING),
       added: rgbFromHex(LIGHT_SUCCESS),
       deleted: rgbFromHex(LIGHT_ERROR),
@@ -131,12 +131,12 @@ export const haloLightTheme: ThemeConfig = {
 
   effects: {
     shadow: {
-
-      xs: `0 1px 2px ${lightAccentHover(0.06)}`,
-      sm: `0 2px 4px ${lightAccentHover(0.08)}`,
-      base: `0 4px 8px ${lightAccentHover(0.1)}`,
-      lg: `0 8px 16px ${lightAccentHover(0.12)}`,
-      xl: `0 12px 24px ${lightAccentHover(0.14)}`,
+      // Google Workspace-style two-layer elevation.
+      xs: `0 1px 2px ${lightShade(0.1)}`,
+      sm: `0 1px 3px ${lightShade(0.16)}`,
+      base: `0 1px 3px ${lightShade(0.3)}, 0 4px 8px 3px ${lightShade(0.08)}`,
+      lg: `0 4px 8px 3px ${lightShade(0.12)}, 0 14px 28px ${lightShade(0.24)}`,
+      xl: `0 6px 10px 4px ${lightShade(0.14)}, 0 20px 40px ${lightShade(0.28)}`,
     },
 
 
@@ -179,23 +179,23 @@ export const haloLightTheme: ThemeConfig = {
 
       primary: {
         default: {
-          background: STATIC_BLACK,
+          background: '#0b57d0',
           color: STATIC_WHITE,
           border: 'transparent',
           shadow: 'none',
         },
         hover: {
-          background: '#262626',
+          background: '#0a4cb4',
           color: STATIC_WHITE,
           border: 'transparent',
-          shadow: 'none',
+          shadow: `0 1px 3px ${lightShade(0.3)}, 0 2px 6px 2px ${lightShade(0.12)}`,
           transform: 'none',
         },
         active: {
-          background: '#1c1c1f',
+          background: '#093f99',
           color: STATIC_WHITE,
           border: 'transparent',
-          shadow: 'none',
+          shadow: `0 1px 2px ${lightShade(0.28)}`,
           transform: 'none',
         },
       },
@@ -234,21 +234,21 @@ export const haloLightTheme: ThemeConfig = {
       { token: 'attribute.value', foreground: '5b9a6f' },
     ],
     colors: {
-      background: '#f3f3f5',
+      background: '#f8f9fa',
       foreground: LIGHT_TEXT_PRIMARY,
-      lineHighlight: '#f0f4f8',
-      selection: lightInk(0.14),
+      lineHighlight: '#eef3fc',
+      selection: '#d3e3fd',
       cursor: LIGHT_TEXT_PRIMARY,
 
-      'editor.selectionBackground': lightInk(0.14),
+      'editor.selectionBackground': '#d3e3fd',
       'editor.selectionForeground': LIGHT_TEXT_PRIMARY,
-      'editor.inactiveSelectionBackground': lightInk(0.09),
-      'editor.selectionHighlightBackground': lightInk(0.1),
-      'editor.selectionHighlightBorder': lightInk(0.22),
+      'editor.inactiveSelectionBackground': lightAccent(0.12),
+      'editor.selectionHighlightBackground': lightAccent(0.14),
+      'editor.selectionHighlightBorder': lightAccent(0.32),
       'editorCursor.foreground': LIGHT_TEXT_PRIMARY,
 
-      'editor.wordHighlightBackground': lightInk(0.07),
-      'editor.wordHighlightStrongBackground': lightInk(0.11),
+      'editor.wordHighlightBackground': lightAccent(0.1),
+      'editor.wordHighlightStrongBackground': lightAccent(0.16),
     },
   },
 };
