@@ -13,6 +13,9 @@
  *   mobile-web dist, relay static assets, and lockfiles.
  * - Skip local-path and token checks in recognized test files; also skip local-path checks for
  *   comment-only lines and Rust inline test blocks inside non-test source files.
+ * - Fail when frozen upstream snapshot paths (cargo vendor, halo-scope.json, MiniApp) have any
+ *   uncommitted change; fail when the BitFun-latest reference snapshot becomes tracked. See
+ *   docs/architecture/upstream-freeze-20260905.md for the freeze statement.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -28,12 +31,16 @@ function gitErrorDetails(error) {
       : String(error);
 }
 
-function runGit(args) {
+function runGit(args, options = {}) {
+  const { cwd, nullSeparated = true } = options;
+  const gitArgs = nullSeparated ? [...args, '-z'] : args;
   try {
-    return execFileSync('git', [...args, '-z'], {
+    const output = execFileSync('git', gitArgs, {
       encoding: 'utf8',
       maxBuffer: GIT_OUTPUT_MAX_BUFFER,
-    }).split('\0').filter(Boolean);
+      ...(cwd ? { cwd } : {}),
+    });
+    return (nullSeparated ? output.split('\0') : output.split(/\r?\n/)).filter(Boolean);
   } catch (error) {
     throw new Error(`git ${args.join(' ')} failed: ${gitErrorDetails(error)}`);
   }
@@ -53,7 +60,7 @@ function hasCommit(ref) {
   } catch (error) {
     const details = gitErrorDetails(error);
     if (
-      ref === 'HEAD^1'
+      (ref === 'HEAD' || ref === 'HEAD^1')
       && /(?:unknown revision|needed a single revision|ambiguous argument)/iu.test(details)
     ) {
       return false;
@@ -126,6 +133,15 @@ const ignoredContentPaths = [
 ];
 
 const testFilePattern = /(^|\/)(tests?|__tests__)\/|[._-](test|spec)\.[cm]?[jt]sx?$|_tests?\.rs$|\/tests\.rs$/;
+
+// Paths frozen read-only until the new baseline passes its first real acceptance; see
+// docs/architecture/upstream-freeze-20260905.md. Paths are relative to the repository root.
+const frozenUpstreamPaths = [
+  'product/Halo Studio/MiniApp',
+  'product/Halo Studio/halo-scope.json',
+  'product/Halo Studio/vendor',
+];
+const frozenReferenceSnapshotPath = 'BitFun-latest';
 const temporaryPromptNames = new Set([
   '_codex_review_prompt.txt',
   'codex_review_prompt.txt',
@@ -247,6 +263,54 @@ function getRustInlineTestSkipLines(lines) {
   return skipLines;
 }
 
+function checkFrozenUpstreamPaths() {
+  let repositoryRoot;
+  try {
+    repositoryRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      encoding: 'utf8',
+      maxBuffer: GIT_OUTPUT_MAX_BUFFER,
+    }).trim();
+  } catch (error) {
+    throw new Error(`git rev-parse --show-toplevel failed: ${gitErrorDetails(error)}`);
+  }
+
+  const frozenViolationFiles = [];
+  for (const frozenPath of frozenUpstreamPaths) {
+    // Git treats options after a pathspec as paths, so the diff runs without runGit's
+    // trailing `-z`; line splitting with core.quotePath=false keeps raw UTF-8 paths.
+    const changedFiles = hasCommit('HEAD')
+      ? runGit(
+        ['-c', 'core.quotePath=false', 'diff', '--name-only', 'HEAD', '--', frozenPath],
+        { cwd: repositoryRoot, nullSeparated: false },
+      )
+      : [];
+    const untrackedFiles = runGit(['ls-files', '--others', '--exclude-standard', frozenPath], {
+      cwd: repositoryRoot,
+    });
+    frozenViolationFiles.push(...uniqueFiles([...changedFiles, ...untrackedFiles]));
+  }
+
+  for (const file of uniqueFiles(frozenViolationFiles)) {
+    addViolation(
+      normalizePath(file),
+      null,
+      'belongs to the frozen upstream snapshot, which stays read-only until the new baseline '
+        + 'passes its first real acceptance (docs/architecture/upstream-freeze-20260905.md).',
+    );
+  }
+
+  const trackedReferenceSnapshotFiles = runGit(['ls-files', frozenReferenceSnapshotPath], {
+    cwd: repositoryRoot,
+  });
+  for (const file of uniqueFiles(trackedReferenceSnapshotFiles)) {
+    addViolation(
+      normalizePath(file),
+      null,
+      `belongs to ${frozenReferenceSnapshotPath}, which must stay an untracked reference snapshot.`,
+    );
+  }
+}
+
 for (const file of repositoryFiles) {
   const normalized = normalizePath(file);
   const basename = path.posix.basename(normalized).toLowerCase();
@@ -306,6 +370,8 @@ for (const file of repositoryFiles) {
     tokenPattern.lastIndex = 0;
   }
 }
+
+checkFrozenUpstreamPaths();
 
 if (violations.length > 0) {
   console.error('Repository hygiene check failed:');
