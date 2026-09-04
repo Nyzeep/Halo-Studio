@@ -801,6 +801,70 @@ async fn wait_for_no_pending_operation(runtime: &HaloWorkbenchRuntime, operation
     .expect("operation leaves the pending set");
 }
 
+#[test]
+fn facts_aware_recovery_projects_safe_facts_without_pi_replay() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let facts = Arc::new(RecordingManagedFacts::default());
+    *facts.records.lock().expect("facts lock") = vec![
+        ManagedEventFactRecord {
+            task_id: "task-recovered".to_string(),
+            fact_id: "fact-1".to_string(),
+            sequence: 1,
+            recorded_at_ms: 1_234,
+            schema_version: 1,
+            kind: ManagedEventFactKind::UserMessageSummary,
+            redacted_summary: "safe user summary".to_string(),
+        },
+        ManagedEventFactRecord {
+            task_id: "task-recovered".to_string(),
+            fact_id: "fact-2".to_string(),
+            sequence: 2,
+            recorded_at_ms: 1_235,
+            schema_version: 1,
+            kind: ManagedEventFactKind::ToolActivity,
+            redacted_summary: "safe tool summary".to_string(),
+        },
+    ];
+    let history = Arc::new(InMemoryInterruptionHistory {
+        sessions: Mutex::new(vec![HaloWorkbenchSessionSnapshot {
+            workspace_id: "workspace-recovered".to_string(),
+            task_id: "task-recovered".to_string(),
+            session_id: "session-recovered".to_string(),
+            mode: HaloWorkbenchSessionMode::Managed,
+            phase: HaloWorkbenchSessionPhase::Interrupted,
+            cancellation_mode: None,
+            baseline: None,
+            messages: Vec::new(),
+            activities: Vec::new(),
+            error: None,
+            delivery_review: None,
+        }]),
+        writes: AtomicUsize::new(0),
+    });
+    let runtime = HaloWorkbenchRuntime::try_new_with_delivery_evidence_and_fact_store_and_interruption_history(
+        adapter.clone(),
+        Arc::new(TrustedWorkspaceFacts),
+        Arc::new(AvailableProviderReadiness),
+        Arc::new(FixedTaskBaseline),
+        Arc::new(FixedDeliveryEvidence::new("unused", Vec::new(), Vec::new(), Vec::new())),
+        facts,
+        history,
+        Arc::new(FixedClock),
+    )
+    .expect("facts-aware recovery succeeds");
+    let session = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == "session-recovered")
+        .expect("recovered session is visible");
+    assert_eq!(session.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert_eq!(session.messages[0].role, HaloWorkbenchMessageRole::User);
+    assert_eq!(session.messages[0].content, "safe user summary");
+    assert_eq!(session.activities[0].label, "safe tool summary");
+    assert!(adapter.commands().is_empty(), "recovery must not replay Pi");
+}
+
 #[tokio::test]
 async fn managed_session_records_a_normalized_fact_before_pi_creation() {
     let adapter = Arc::new(DeterministicPiRpc::new());
@@ -839,9 +903,12 @@ async fn managed_session_records_a_normalized_fact_before_pi_creation() {
         .expect("managed create accepted");
 
     let records = facts.records();
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0].task_id, "facts-task");
-    assert_eq!(records[0].kind, ManagedEventFactKind::TaskLifecycle);
+    assert_eq!(records.len(), 2);
+    let lifecycle = records
+        .iter()
+        .find(|record| record.kind == ManagedEventFactKind::TaskLifecycle)
+        .expect("task lifecycle fact is recorded");
+    assert_eq!(lifecycle.task_id, "facts-task");
     assert_eq!(adapter.count(CommandKind::CreateSession), 1);
 }
 

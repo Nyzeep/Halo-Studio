@@ -40,7 +40,7 @@ pub(crate) enum ManagedEventFactKind {
 pub(crate) struct ManagedEventFactSummary(String);
 
 impl ManagedEventFactSummary {
-    fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 
@@ -207,6 +207,7 @@ impl ManagedEventFacts for ManagedEventFactsPortAdapter {
         if record.task_id != input.task_id.0
             || record.fact_id != input.fact_id.0
             || record.schema_version != input.schema_version
+            || record.sequence == 0
             || record.kind != to_port_kind(input.kind)
             || record.redacted_summary != input.redacted_summary.0
         {
@@ -217,12 +218,18 @@ impl ManagedEventFacts for ManagedEventFactsPortAdapter {
 
     fn read_task(&self, task_id: &HaloTaskId) -> ManagedEventFactsResult<Vec<ManagedEventFact>> {
         validate_task_id(&task_id.0)?;
-        self.port
+        let records = self
+            .port
             .read_task(&task_id.0)
-            .map_err(|_| ManagedEventFactsError::Unavailable)?
-            .into_iter()
-            .map(from_port_record)
-            .collect()
+            .map_err(|_| ManagedEventFactsError::Unavailable)?;
+        let mut facts = Vec::with_capacity(records.len());
+        for (index, record) in records.into_iter().enumerate() {
+            if record.task_id != task_id.0 || record.sequence != index as u64 + 1 {
+                return Err(ManagedEventFactsError::InvalidRecordedSequence);
+            }
+            facts.push(from_port_record(record)?);
+        }
+        Ok(facts)
     }
 }
 
@@ -291,9 +298,8 @@ fn from_port_record(record: ManagedEventFactRecord) -> ManagedEventFactsResult<M
     Ok(fact)
 }
 
-#[cfg(test)]
 #[derive(Default)]
-struct InMemoryManagedEventFacts {
+pub(crate) struct InMemoryManagedEventFacts {
     facts_by_task: std::sync::Mutex<std::collections::BTreeMap<HaloTaskId, Vec<ManagedEventFact>>>,
 }
 
@@ -332,7 +338,6 @@ impl InMemoryManagedEventFacts {
     }
 }
 
-#[cfg(test)]
 impl ManagedEventFacts for InMemoryManagedEventFacts {
     fn append(&self, input: ManagedEventFactInput) -> ManagedEventFactsResult<ManagedEventFact> {
         validate_new_fact_input(&input)?;

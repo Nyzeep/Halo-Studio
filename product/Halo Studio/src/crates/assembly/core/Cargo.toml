@@ -101,6 +101,7 @@ halo-services-core = { path = "../../services/services-core", default-features =
     "permission",
     "runtime-ownership",
     "workspace-runtime",
+    "managed-event-facts",
 ] }
 
 # Integration service owner crate

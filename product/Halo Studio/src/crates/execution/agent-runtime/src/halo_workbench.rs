@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use crate::managed_event_facts::{
-    normalize_summary, HaloFactId, HaloTaskId, ManagedEventFactInput, ManagedEventFactKind,
-    ManagedEventFacts, ManagedEventFactsPortAdapter,
+    normalize_summary, HaloFactId, HaloTaskId, InMemoryManagedEventFacts, ManagedEventFact,
+    ManagedEventFactInput, ManagedEventFactKind, ManagedEventFacts, ManagedEventFactsPortAdapter,
 };
 
 use halo_runtime_ports::{
@@ -1006,6 +1006,77 @@ impl RuntimeState {
         }
         Ok(state)
     }
+
+    fn from_fact_history(
+        sessions: Vec<HaloWorkbenchSessionSnapshot>,
+        facts_by_task: BTreeMap<String, Vec<ManagedEventFact>>,
+    ) -> Result<Self, HaloWorkbenchError> {
+        let mut state = Self::default();
+        for session in sessions {
+            let facts = facts_by_task
+                .get(&session.task_id)
+                .ok_or_else(HaloWorkbenchError::managed_event_facts_unavailable)?;
+            let mut session = session;
+            session.phase = HaloWorkbenchSessionPhase::Interrupted;
+            session.messages = facts
+                .iter()
+                .filter_map(|fact| match fact.kind {
+                    ManagedEventFactKind::UserMessageSummary => {
+                        Some(HaloWorkbenchMessageSnapshot {
+                            role: HaloWorkbenchMessageRole::User,
+                            content: fact.redacted_summary.as_str().to_string(),
+                        })
+                    }
+                    ManagedEventFactKind::AgentReplySummary => Some(HaloWorkbenchMessageSnapshot {
+                        role: HaloWorkbenchMessageRole::Assistant,
+                        content: fact.redacted_summary.as_str().to_string(),
+                    }),
+                    _ => None,
+                })
+                .collect();
+            session.activities = facts
+                .iter()
+                .filter_map(|fact| match fact.kind {
+                    ManagedEventFactKind::ToolActivity => {
+                        let summary = fact.redacted_summary.as_str();
+                        let (status, is_error) = if summary.contains("failed") {
+                            (HaloWorkbenchActivityStatus::Failed, true)
+                        } else if summary.contains("started") {
+                            (HaloWorkbenchActivityStatus::Started, false)
+                        } else if summary.contains("updated") {
+                            (HaloWorkbenchActivityStatus::Updated, false)
+                        } else {
+                            (HaloWorkbenchActivityStatus::Completed, false)
+                        };
+                        Some(HaloWorkbenchActivitySnapshot {
+                            activity_id: format!("fact-{}", fact.sequence),
+                            kind: HaloWorkbenchActivityKind::Tool,
+                            label: summary.to_string(),
+                            status,
+                            is_error,
+                        })
+                    }
+                    _ => None,
+                })
+                .collect();
+            if session.workspace_id.is_empty()
+                || session.task_id.is_empty()
+                || session.session_id.is_empty()
+                || session.mode != HaloWorkbenchSessionMode::Managed
+                || session.phase != HaloWorkbenchSessionPhase::Interrupted
+            {
+                return Err(HaloWorkbenchError::interruption_history_unavailable());
+            }
+            if state
+                .sessions
+                .insert(session.session_id.clone(), session)
+                .is_some()
+            {
+                return Err(HaloWorkbenchError::interruption_history_unavailable());
+            }
+        }
+        Ok(state)
+    }
 }
 
 struct InterruptionHistoryState {
@@ -1163,6 +1234,7 @@ impl HaloWorkbenchRuntimeInner {
         task_id: &str,
         kind: ManagedEventFactKind,
         summary: &str,
+        identity: &str,
     ) -> Result<(), HaloWorkbenchError> {
         let store = self
             .managed_event_facts
@@ -1174,7 +1246,15 @@ impl HaloWorkbenchRuntimeInner {
         };
         store
             .append(ManagedEventFactInput {
-                fact_id: HaloFactId::from_runtime(Uuid::new_v4().to_string()),
+                fact_id: HaloFactId::from_runtime({
+                    let mut digest = Sha256::new();
+                    digest.update(task_id.as_bytes());
+                    digest.update([0]);
+                    digest.update(identity.as_bytes());
+                    digest.update([0]);
+                    digest.update(format!("{kind:?}").as_bytes());
+                    format!("halo-fact-{}", hex::encode(digest.finalize()))
+                }),
                 task_id: HaloTaskId::from_runtime(task_id.to_string()),
                 recorded_at_ms: self.clock.now_unix_millis(),
                 schema_version: crate::managed_event_facts::MANAGED_EVENT_FACT_SCHEMA_VERSION,
@@ -1184,6 +1264,35 @@ impl HaloWorkbenchRuntimeInner {
             })
             .map(|_| ())
             .map_err(|_| HaloWorkbenchError::managed_event_facts_unavailable())
+    }
+
+    fn append_managed_session_fact(
+        &self,
+        generation: u64,
+        session_id: &str,
+        kind: ManagedEventFactKind,
+        summary: &str,
+        identity: &str,
+    ) -> bool {
+        let task_id = self
+            .state
+            .lock()
+            .expect("Halo Workbench state lock")
+            .sessions
+            .get(session_id)
+            .filter(|session| session.mode == HaloWorkbenchSessionMode::Managed)
+            .map(|session| session.task_id.clone());
+        let Some(task_id) = task_id else {
+            return true;
+        };
+        match self.append_managed_task_fact(&task_id, kind, summary, identity) {
+            Ok(()) => true,
+            Err(error) => {
+                self.expose_error(error);
+                let _ = generation;
+                false
+            }
+        }
     }
 
     fn expose_error(&self, error: HaloWorkbenchError) {
@@ -1342,6 +1451,15 @@ impl HaloWorkbenchRuntimeInner {
             PiRpcEvent::MessageUpdated {
                 session_id, text, ..
             } => {
+                if !self.append_managed_session_fact(
+                    generation,
+                    &session_id,
+                    ManagedEventFactKind::AgentReplySummary,
+                    "Managed agent reply summary received",
+                    &text,
+                ) {
+                    return;
+                }
                 self.append_assistant_message(generation, &session_id, text);
             }
             PiRpcEvent::ToolExecutionStarted {
@@ -1350,6 +1468,15 @@ impl HaloWorkbenchRuntimeInner {
                 tool_name,
                 ..
             } => {
+                if !self.append_managed_session_fact(
+                    generation,
+                    &session_id,
+                    ManagedEventFactKind::ToolActivity,
+                    "Managed tool activity started",
+                    &format!("{}:started", redacted_tool_call_id),
+                ) {
+                    return;
+                }
                 self.update_tool_activity(
                     generation,
                     &session_id,
@@ -1365,6 +1492,15 @@ impl HaloWorkbenchRuntimeInner {
                 tool_name,
                 ..
             } => {
+                if !self.append_managed_session_fact(
+                    generation,
+                    &session_id,
+                    ManagedEventFactKind::ToolActivity,
+                    "Managed tool activity updated",
+                    &format!("{}:updated", redacted_tool_call_id),
+                ) {
+                    return;
+                }
                 self.update_tool_activity(
                     generation,
                     &session_id,
@@ -1381,6 +1517,15 @@ impl HaloWorkbenchRuntimeInner {
                 is_error,
                 ..
             } => {
+                if !self.append_managed_session_fact(
+                    generation,
+                    &session_id,
+                    ManagedEventFactKind::ToolActivity,
+                    "Managed tool activity ended",
+                    &format!("{}:ended", redacted_tool_call_id),
+                ) {
+                    return;
+                }
                 self.update_tool_activity(
                     generation,
                     &session_id,
@@ -1401,6 +1546,15 @@ impl HaloWorkbenchRuntimeInner {
                 summary,
                 ..
             } => {
+                if !self.append_managed_session_fact(
+                    generation,
+                    &session_id,
+                    ManagedEventFactKind::AgentOperationRequest,
+                    "Managed operation request received",
+                    &operation_id,
+                ) {
+                    return;
+                }
                 let event_session_id = session_id.clone();
                 let event_operation_id = operation_id.clone();
                 self.publish_transition(
@@ -1445,6 +1599,15 @@ impl HaloWorkbenchRuntimeInner {
                 operation_id,
                 ..
             } => {
+                if !self.append_managed_session_fact(
+                    generation,
+                    &session_id,
+                    ManagedEventFactKind::AgentOperationDecision,
+                    "Managed operation decision received",
+                    &operation_id,
+                ) {
+                    return;
+                }
                 let event_session_id = session_id.clone();
                 let event_operation_id = operation_id.clone();
                 self.publish_transition(
@@ -2049,10 +2212,13 @@ impl HaloWorkbenchRuntime {
         let restored_sessions = interruption_history
             .load_interrupted_sessions()
             .map_err(|_| HaloWorkbenchError::interruption_history_unavailable())?;
+        let fact_adapter = ManagedEventFactsPortAdapter::new(fact_store.clone());
+        let mut facts_by_task = BTreeMap::new();
         for session in &restored_sessions {
-            fact_store
-                .read_task(&session.task_id)
+            let facts = fact_adapter
+                .read_task(&HaloTaskId::from_runtime(session.task_id.clone()))
                 .map_err(|_| HaloWorkbenchError::managed_event_facts_unavailable())?;
+            facts_by_task.insert(session.task_id.clone(), facts);
         }
         let runtime = Self::try_new_with_delivery_evidence_and_interruption_history(
             adapter,
@@ -2063,6 +2229,12 @@ impl HaloWorkbenchRuntime {
             interruption_history,
             clock,
         )?;
+        let state = RuntimeState::from_fact_history(restored_sessions, facts_by_task)?;
+        *runtime
+            .inner
+            .state
+            .lock()
+            .expect("Halo Workbench state lock") = state;
         runtime.inner.install_managed_event_fact_store(fact_store);
         Ok(runtime)
     }
@@ -2093,7 +2265,9 @@ impl HaloWorkbenchRuntime {
                 interruption_history,
                 provider_readiness,
                 clock,
-                managed_event_facts: Mutex::new(None),
+                managed_event_facts: Mutex::new(Some(Arc::new(
+                    InMemoryManagedEventFacts::default(),
+                ))),
                 state: Mutex::new(state),
                 interruption_history_state: Mutex::new(InterruptionHistoryState::new(
                     restored_interruption_history,
@@ -2878,6 +3052,7 @@ impl HaloWorkbenchRuntime {
                 &task_id,
                 ManagedEventFactKind::TaskLifecycle,
                 "Managed task session is being created",
+                request_id,
             )?;
         }
         if !self.inner.publish_transition(
@@ -2943,6 +3118,15 @@ impl HaloWorkbenchRuntime {
             };
             if !self.attach_session_baseline(generation, &session_id, baseline) {
                 return Err(HaloWorkbenchError::session_not_found());
+            }
+            if !self.inner.append_managed_session_fact(
+                generation,
+                &session_id,
+                ManagedEventFactKind::TaskBaselineLinked,
+                "Managed task baseline linked",
+                request_id,
+            ) {
+                return Err(HaloWorkbenchError::managed_event_facts_unavailable());
             }
         }
         let result = self
@@ -3135,6 +3319,7 @@ impl HaloWorkbenchRuntime {
                         &task_id,
                         ManagedEventFactKind::UserMessageSummary,
                         "Managed user message received",
+                        request_id,
                     )?;
                 }
                 self.append_user_message(generation, session_id, &content)?;
@@ -3157,6 +3342,7 @@ impl HaloWorkbenchRuntime {
                         &task_id,
                         ManagedEventFactKind::UserMessageSummary,
                         "Managed follow-up message received",
+                        request_id,
                     )?;
                 }
                 self.append_user_message(generation, session_id, &content)?;
