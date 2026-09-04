@@ -258,7 +258,7 @@ function piRpcAdapterEntry(symbol) {
     contractSlice: contractSlices.haloWorkbenchPiRpcExecutionSeam,
     wireImpact: false,
     rationale:
-      'ADR-0072 keeps one Pi RPC production adapter behind PiRpcPort without exposing a generic executor selector or raw Pi protocol',
+      'ADR-0078 keeps two same-tier production adapters behind the audited seam (PiRpcPort / ManagedExecutorPort) without exposing a generic executor selector or raw executor protocol',
     exit:
       'remove only after a reviewed replacement for the accepted Pi RPC production adapter and equivalent Workbench seam tests',
   };
@@ -270,6 +270,20 @@ export const piRpcAdapterPublicApiEntries = [
   piRpcAdapterEntry('HALO_PI_EXTENSION_PERMISSIONS'),
   piRpcAdapterEntry('PiRpcConfig'),
   piRpcAdapterEntry('PiRpcAdapter'),
+  piRpcAdapterEntry('PiRuntimeConfigurationRepository'),
+  piRpcAdapterEntry('PiRuntimeConfigurationService'),
+  piRpcAdapterEntry('PiRuntimeConfigurationView'),
+  piRpcAdapterEntry('JsonFilePiRuntimeConfigurationRepository'),
+  piRpcAdapterEntry('MemoryPiRuntimeConfigurationRepository'),
+  piRpcAdapterEntry('MemoryPiCredentialStore'),
+  piRpcAdapterEntry('StaticPiProviderCapabilities'),
+  piRpcAdapterEntry('validate_runtime_configuration_shape'),
+  piRpcAdapterEntry('pi_rpc_arguments'),
+  piRpcAdapterEntry('pi_models_json_projection'),
+  piRpcAdapterEntry('PiRpcManagedExecutor'),
+  piRpcAdapterEntry('PiEventNormalization'),
+  piRpcAdapterEntry('normalize_pi_rpc_event'),
+  piRpcAdapterEntry('managed_executor_failure_kind'),
 ];
 
 function staticHookAdapterEntry(symbol, owner, consumer) {
