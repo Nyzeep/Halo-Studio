@@ -1,0 +1,695 @@
+<!doctype html>
+<!--
+  ============================================================================
+  niri 条带工作台 · 一次性交互原型
+  ============================================================================
+
+  这是什么
+    一个纯静态单文件（内联 CSS/JS，无构建、无依赖、无网络请求），双击即可运行。
+    把 niri 的条带空间模型（scrollable-tiling）转译进 Halo Studio 工作台：
+    Git 工作区 → 独立条带；受管任务卡 → 固定宽度的列，排在向右无限延伸的条带上。
+
+  回答什么问题（issue #43）
+    「niri 的条带空间模型转译进 Halo 工作台后，手感是否成立？」
+    保真度全在交互模型，不在视觉：视觉仅借用 DMS（DankMaterialShell）的
+    MD3 token 命名做粗调（surface-container-* / on-surface / outline 等，
+    参考 docs/architecture/dms-design-language-research-20260905.md 第 3 节）。
+
+  已实现的交互（对应票面 1-6）
+    1. 横向条带：触摸板双指横滚 = 原生 overflow-x；普通滚轮与 Shift+滚轮
+       均可横移（滚轮优先滚列内会话流，到边后链到条带横移）
+    2. 打开新任务列不挤压既有列：每列固定 380px，新列插入焦点列右侧
+       （niri 语义：新窗口开在焦点窗口右边），既有列位置/宽度零变化
+    3. 左侧工作区轨：Git 工作区 → 独立条带（2 个模拟工作区）；
+       轨道底部恒有「新建」位（niri「永远存在空工作区」的转译）
+    4. Overview：按 o 把全部条带缩远呈现（CSS transform scale），
+       鼠标点击列跳回；总览内方向键 + Enter 也可跳回，Esc 退出
+    5. 列内结构：会话流纵向堆叠（用户/助手消息）+ 工具活动 chips
+       （运行中/完成/失败）+ 底部「交付审查」占位区
+    6. 键盘全覆盖：← → 列间移动焦点、n 新建列、o 总览、Esc 退出、
+       1-9 切换工作区、Enter 总览跳回
+
+  丢弃性声明
+    本文件是一次性原型（throwaway）：不接真实运行时，状态仅在内存，
+    Mock 数据写死，不做持久化、无测试、无错误处理。答案（手感是否成立、
+    交互模型哪些保留/推翻）将折进真实现（前端票 #44/#45），本文件仅作为
+    primary source 留档在 prototype 分支，不应合入产品树，也不作为
+    生产代码的起点。
+
+  指向
+    - 原型票：GitHub issue #43（niri 条带工作台交互原型）
+    - 决策地图：GitHub issue #32（Halo Studio 2.0 重构决策地图）
+    - 研究输入：docs/architecture/niri-interaction-research-20260905.md（转译判断表）
+                docs/architecture/dms-design-language-research-20260905.md（token 词汇）
+
+  运行
+    双击本文件，或任意静态服务（如 python -m http.server）后访问。
+
+  已知取舍
+    - 单一形态，不做变体切换：本票验证的是「唯一的空间模型」的手感，
+      变体切换会破坏空间记忆，故与 UI 原型的多 variant 做法相反。
+    - Overview 缩放用最朴素的 transform scale + 逐条带测宽适配，不追动效。
+    - 无数据持久化；「新建」仅产出占位列，不触发任何真实任务。
+  ============================================================================
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>条带工作台 · 交互原型（#43）</title>
+<style>
+  /* ---- DMS token 层（MD3 色彩角色 + 尺度，深色默认；粗调，不追求还原度） ---- */
+  :root {
+    /* 色彩角色 */
+    --surface: #131316;
+    --surface-container-lowest: #0e0e11;
+    --surface-container-low: #1b1b1f;
+    --surface-container: #201f24;
+    --surface-container-high: #2b2930;
+    --surface-container-highest: #36343b;
+    --on-surface: #e5e1e9;
+    --on-surface-variant: #cac4d0;
+    --outline: #938f99;
+    --outline-variant: #47454f;
+    --primary: #a8c8ff;
+    --on-primary: #00315f;
+    --primary-container: #2a4a7b;
+    --on-primary-container: #d3e3ff;
+    --secondary: #cbc2d8;
+    --secondary-container: #4a4458;
+    --on-secondary-container: #e8def8;
+    --tertiary: #efb8c8;
+    --tertiary-container: #633b48;
+    --on-tertiary-container: #ffd9e2;
+    --error: #ffb4ab;
+    --error-container: #93000a;
+    --on-error-container: #ffdad6;
+    /* 扩展 token（MD3 核心无 success 角色，原型自加，真实现需走 token 层决策） */
+    --success: #81c995;
+    --success-container: #1e3a24;
+    --on-success-container: #a6d9a8;
+    /* 尺度（MD3：字号 4 档 / 间距 5 档 / 圆角 3 档） */
+    --fs-1: 12px; --fs-2: 14px; --fs-3: 16px; --fs-4: 20px;
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px;
+    --radius-s: 8px; --radius-m: 12px; --radius-l: 16px;
+    /* 布局参数 */
+    --col-w: 380px;
+    --rail-w: 224px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--on-surface);
+    font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: var(--fs-2);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  button { font: inherit; color: inherit; }
+
+  /* ---- 顶栏：标题 + 问题 + 状态面（HUD）+ 键位提示 ---- */
+  .topbar { border-bottom: 1px solid var(--outline-variant); background: var(--surface-container-low); }
+  .tb-row1 { display: flex; align-items: baseline; gap: var(--sp-4); padding: var(--sp-2) var(--sp-4) 0; }
+  .tb-title { font-size: var(--fs-3); font-weight: 700; }
+  .tb-tag { font-size: var(--fs-1); color: var(--on-primary-container); background: var(--primary-container); border-radius: 999px; padding: 2px 10px; }
+  .tb-q { font-size: var(--fs-1); color: var(--on-surface-variant); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tb-hud { font-size: var(--fs-1); color: var(--primary); white-space: nowrap; }
+  .tb-row2 { display: flex; align-items: baseline; gap: var(--sp-4); padding: 2px var(--sp-4) var(--sp-2); }
+  .tb-keys { font-size: var(--fs-1); color: var(--on-surface-variant); white-space: nowrap; }
+  .tb-keys b { color: var(--on-surface); font-weight: 600; }
+  .tb-action { font-size: var(--fs-1); color: var(--on-surface-variant); font-style: italic; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+
+  .shell { flex: 1; min-height: 0; display: flex; }
+
+  /* ---- 工作区轨（左侧）：Git 工作区 → 独立条带；底部恒有「新建」位 ---- */
+  .rail {
+    width: var(--rail-w); flex: 0 0 var(--rail-w);
+    background: var(--surface-container-low);
+    border-right: 1px solid var(--outline-variant);
+    padding: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2);
+  }
+  .rail-item {
+    display: flex; flex-direction: column; gap: 2px; text-align: left; cursor: pointer;
+    padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-m);
+    background: transparent; border: 1px solid transparent;
+  }
+  .rail-item:hover { background: var(--surface-container-high); }
+  .rail-item.active { background: var(--surface-container-high); border-color: var(--outline-variant); }
+  .ri-name { font-size: var(--fs-2); font-weight: 600; }
+  .ri-meta { font-size: var(--fs-1); color: var(--on-surface-variant); }
+  .rail-new {
+    margin-top: auto; cursor: pointer; text-align: left;
+    display: flex; flex-direction: column; gap: 2px;
+    padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-m);
+    background: transparent; border: 1px dashed var(--outline); color: var(--on-surface-variant);
+  }
+  .rail-new:hover { color: var(--primary); border-color: var(--primary); }
+  .rail-hint { font-size: var(--fs-1); color: var(--on-surface-variant); opacity: .7; padding: 0 var(--sp-1); }
+
+  /* ---- 条带（stage）：向右无限延伸，横向滚动 ---- */
+  .stage { flex: 1; min-width: 0; position: relative; overflow: hidden; background: var(--surface); }
+  .strip {
+    height: 100%; display: flex; gap: var(--sp-4);
+    padding: var(--sp-5); overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: thin; scrollbar-color: var(--outline-variant) transparent;
+  }
+  .strip::-webkit-scrollbar { height: 8px; }
+  .strip::-webkit-scrollbar-thumb { background: var(--outline-variant); border-radius: 4px; }
+
+  /* 列：固定宽度，永不因新增列而缩放/重排（niri 第一原则） */
+  .col {
+    flex: 0 0 var(--col-w); min-height: 0;
+    display: flex; flex-direction: column;
+    background: var(--surface-container-low);
+    border: 1px solid var(--outline-variant); border-radius: var(--radius-l);
+    overflow: hidden; cursor: default;
+  }
+  .col.focused { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+
+  .col-h { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--outline-variant); }
+  .col-title { flex: 1; min-width: 0; font-size: var(--fs-3); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { font-size: var(--fs-1); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .st-run   { background: var(--primary-container);   color: var(--on-primary-container); }
+  .st-wait  { background: var(--secondary-container); color: var(--on-secondary-container); }
+  .st-rev   { background: var(--tertiary-container);  color: var(--on-tertiary-container); }
+  .st-acc   { background: var(--success-container);   color: var(--on-success-container); }
+
+  /* 会话流：纵向堆叠 */
+  .msgs { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
+  .msg { max-width: 94%; border-radius: var(--radius-m); padding: var(--sp-2) var(--sp-3); font-size: var(--fs-2); line-height: 1.55; }
+  .m-who { display: block; font-size: var(--fs-1); opacity: .72; margin-bottom: 2px; }
+  .msg.user  { align-self: flex-end; background: var(--primary-container); color: var(--on-primary-container); }
+  .msg.agent { align-self: stretch;  background: var(--surface-container-high); color: var(--on-surface); }
+
+  /* 工具活动 chips：运行中 / 完成 / 失败 */
+  .tools {
+    border-top: 1px solid var(--outline-variant); padding: var(--sp-2) var(--sp-4);
+    max-height: 34%; overflow-y: auto;
+    display: flex; flex-wrap: wrap; gap: var(--sp-2); align-content: flex-start;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: var(--fs-1); padding: 3px 10px; border-radius: 999px;
+    background: var(--surface-container-high); color: var(--on-surface-variant);
+    border: 1px solid var(--outline-variant); white-space: nowrap;
+  }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
+  .chip.run .dot { background: var(--primary); animation: pulse 1.2s ease-in-out infinite; }
+  .chip.ok  .dot { background: var(--success); }
+  .chip.fail .dot { background: var(--error); }
+  .chip.fail { color: var(--on-error-container); border-color: var(--error-container); background: var(--error-container); }
+  @keyframes pulse { 50% { opacity: .3; } }
+
+  /* 交付审查占位区（列底） */
+  .review { border-top: 1px solid var(--outline-variant); padding: var(--sp-3) var(--sp-4); }
+  .review-box { border: 1px dashed var(--outline); border-radius: var(--radius-m); padding: var(--sp-2) var(--sp-3); font-size: var(--fs-1); color: var(--on-surface-variant); }
+  .r-title { font-size: var(--fs-2); font-weight: 600; color: var(--on-surface); margin-bottom: 2px; }
+  .review-box.pending  { border-style: solid; border-color: var(--tertiary); }
+  .review-box.waiting  { border-style: solid; border-color: var(--secondary); }
+  .review-box.accepted { border-style: solid; border-color: var(--success); background: var(--success-container); color: var(--on-success-container); }
+  .review-box.accepted .r-title { color: var(--on-success-container); }
+
+  /* 空工作区（niri：永远存在一个空工作区） */
+  .strip.empty { justify-content: center; align-items: center; }
+  .empty-hint {
+    border: 1px dashed var(--outline); border-radius: var(--radius-l);
+    padding: var(--sp-5); color: var(--on-surface-variant); text-align: center;
+    font-size: var(--fs-2); line-height: 1.8;
+  }
+  .empty-hint b { color: var(--primary); }
+
+  /* 条带末尾「新建列」幽灵位 */
+  .strip-new {
+    flex: 0 0 56px; align-self: stretch; cursor: pointer;
+    border: 1px dashed var(--outline); border-radius: var(--radius-l);
+    background: transparent; color: var(--on-surface-variant); font-size: var(--fs-4);
+  }
+  .strip-new:hover { color: var(--primary); border-color: var(--primary); }
+
+  /* ---- Overview：全部条带缩远呈现（CSS transform scale） ---- */
+  .stage.overview { overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-5); padding: var(--sp-5); }
+  .stage.overview .strip { height: 300px; overflow: visible; width: max-content; flex: 0 0 auto; transform-origin: top left; }
+  .ov-row { display: flex; flex-direction: column; gap: var(--sp-2); flex: 0 0 auto; }
+  .ov-label { font-size: var(--fs-2); color: var(--on-surface-variant); }
+  .ov-label b { color: var(--on-surface); }
+  .ov-clip { overflow: hidden; }
+  .col.ov-sel { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="tb-row1">
+    <span class="tb-title">Halo Studio · niri 条带工作台</span>
+    <span class="tb-tag">交互原型 #43</span>
+    <span class="tb-q">回答的问题：条带空间模型转译进 Halo 工作台后，手感是否成立？</span>
+    <span class="tb-hud" id="hud"></span>
+  </div>
+  <div class="tb-row2">
+    <span class="tb-keys"><b>← →</b> 移动焦点 · <b>n</b> 新建列 · <b>o</b> 总览 · <b>Esc</b> 退出 · <b>1-9</b> 工作区 · 触摸板横滚 / 滚轮 / Shift+滚轮 横移</span>
+    <span class="tb-action" id="hud-action"></span>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="rail" id="rail" aria-label="工作区轨"></nav>
+  <main class="stage" id="stage"></main>
+</div>
+
+<script>
+'use strict';
+
+/* ================= 状态（内存态，无持久化；Mock 数据写死） ================= */
+
+let idSeq = 100;
+const uid = () => ++idSeq;
+let taskSeq = 7;
+let wsSeq = 2;
+
+const state = {
+  workspaces: [
+    {
+      name: 'main', branch: 'main', scrollLeft: 0,
+      columns: [
+        {
+          id: uid(), title: '登录态刷新循环修复', status: 'running',
+          msgs: [
+            { who: 'user',  text: '刷新后偶发跳回登录页，先复现再修。' },
+            { who: 'agent', text: '已定位：token 刷新与路由守卫存在竞态，准备改写守卫逻辑。' },
+            { who: 'agent', text: '守卫已改为单飞（single-flight）刷新，正在跑回归。' },
+          ],
+          tools: [
+            { name: 'repo 扫描', state: 'ok' },
+            { name: '编辑 auth/guard.ts', state: 'ok' },
+            { name: 'vitest --watch', state: 'run' },
+          ],
+          review: { state: 'none', note: '尚无交付物' },
+        },
+        {
+          id: uid(), title: 'e2e 测试账号隔离', status: 'waiting',
+          msgs: [
+            { who: 'user',  text: 'e2e 每次都互相污染数据，帮我隔离。' },
+            { who: 'agent', text: '需要一个专用测试租户与凭据，现有账号共享会互相污染。' },
+            { who: 'agent', text: '已给出两种隔离方案（独立租户 / 事务回滚），等你拍板。' },
+          ],
+          tools: [
+            { name: '复现脚本', state: 'ok' },
+            { name: 'e2e:auth', state: 'fail' },
+          ],
+          review: { state: 'waiting', note: '等待开发者：二选一（独立租户 / 事务回滚）' },
+        },
+        {
+          id: uid(), title: '任务列表分页参数', status: 'review',
+          msgs: [
+            { who: 'user',  text: '分页参数语义不统一，page/offset 混用。' },
+            { who: 'agent', text: '统一为 cursor 分页，改动 3 个文件，附带迁移说明。' },
+          ],
+          tools: [
+            { name: 'repo 扫描', state: 'ok' },
+            { name: '编辑 api/pagination.ts', state: 'ok' },
+            { name: '单测', state: 'ok' },
+          ],
+          review: { state: 'pending', note: 'diff 3 文件 · +412 −138，等待审查' },
+        },
+        {
+          id: uid(), title: '依赖季度升级', status: 'accepted',
+          msgs: [
+            { who: 'user',  text: '按季度例行升级依赖。' },
+            { who: 'agent', text: '全部升级完成，回归通过，已合入。' },
+          ],
+          tools: [
+            { name: 'bump deps', state: 'ok' },
+            { name: '回归测试', state: 'ok' },
+          ],
+          review: { state: 'accepted', note: '已接受 · 合入 main（#4821）' },
+        },
+      ],
+    },
+    {
+      name: 'strip-spike', branch: 'Nyzeep/strip-spike', scrollLeft: 0,
+      columns: [
+        {
+          id: uid(), title: '条带工作台技术 spike', status: 'running',
+          msgs: [
+            { who: 'user',  text: '验证 overflow-x 条带在 WebView 里的滚动性能。' },
+            { who: 'agent', text: '7 列 × 每列 50 条消息的合成负载下，滚动帧率稳定。' },
+          ],
+          tools: [
+            { name: '构建合成负载', state: 'ok' },
+            { name: '帧率采样', state: 'run' },
+          ],
+          review: { state: 'none', note: '尚无交付物' },
+        },
+        {
+          id: uid(), title: 'DMS token 层落地', status: 'review',
+          msgs: [
+            { who: 'user',  text: '把 MD3 色彩角色落成 CSS custom properties。' },
+            { who: 'agent', text: 'token 层 + 禁止裸值的 lint 规则草案已就绪。' },
+          ],
+          tools: [
+            { name: 'tokens.css', state: 'ok' },
+            { name: 'stylelint 规则', state: 'ok' },
+          ],
+          review: { state: 'pending', note: 'diff 5 文件 · +230 −40，等待审查' },
+        },
+        {
+          id: uid(), title: '触摸板手势取舍', status: 'waiting',
+          msgs: [
+            { who: 'user',  text: '触摸板横滚要不要接三指轻扫切换工作区？' },
+            { who: 'agent', text: '三方案对比表已生成，涉及与系统手势的冲突面，需要你选。' },
+          ],
+          tools: [
+            { name: '手势方案调研', state: 'ok' },
+          ],
+          review: { state: 'waiting', note: '等待开发者：三选一' },
+        },
+      ],
+    },
+  ],
+  activeWs: 0,
+  focusCol: 0,
+  overview: false,
+  ovSel: 0,          // 总览中键盘选中的列（扁平序号）
+  _flat: [],         // 总览扁平索引 [{wi, ci}]
+  lastAction: '原型已加载 —— 试着按 o 进入总览，按 n 新建一列',
+};
+
+const STATUS = {
+  running:  { label: '运行中',     cls: 'st-run'  },
+  waiting:  { label: '等待开发者', cls: 'st-wait' },
+  review:   { label: '待审查',     cls: 'st-rev'  },
+  accepted: { label: '已接受',     cls: 'st-acc'  },
+};
+const TOOL_STATE = { run: '运行中', ok: '完成', fail: '失败' };
+
+const cur = () => state.workspaces[state.activeWs];
+
+/* ================= 渲染（全量重绘，原型从简） ================= */
+
+const railEl = document.getElementById('rail');
+const stageEl = document.getElementById('stage');
+const hudEl = document.getElementById('hud');
+const hudActionEl = document.getElementById('hud-action');
+
+function colHTML(col, idx, extraCls) {
+  const st = STATUS[col.status];
+  const msgs = col.msgs.map(m =>
+    `<div class="msg ${m.who}"><span class="m-who">${m.who === 'user' ? '开发者' : 'Halo'}</span>${m.text}</div>`
+  ).join('');
+  const chips = col.tools.map(t =>
+    `<span class="chip ${t.state}"><span class="dot"></span>${t.name} · ${TOOL_STATE[t.state]}</span>`
+  ).join('');
+  const rv = col.review;
+  const rvCls = rv.state === 'none' ? '' : ` ${rv.state}`;
+  return `
+  <article class="col${extraCls || ''}" data-idx="${idx}" aria-label="任务列：${col.title}">
+    <div class="col-h">
+      <span class="col-title">${col.title}</span>
+      <span class="badge ${st.cls}">${st.label}</span>
+    </div>
+    <div class="msgs">${msgs}</div>
+    <div class="tools">${chips}</div>
+    <div class="review">
+      <div class="review-box${rvCls}">
+        <div class="r-title">交付审查</div>
+        ${rv.note}
+      </div>
+    </div>
+  </article>`;
+}
+
+function renderRail() {
+  railEl.innerHTML =
+    state.workspaces.map((ws, i) => `
+      <button class="rail-item${i === state.activeWs ? ' active' : ''}" data-ws="${i}" aria-label="切换到工作区 ${ws.name}">
+        <span class="ri-name">${ws.name}</span>
+        <span class="ri-meta">${ws.branch} · ${ws.columns.length} 列</span>
+      </button>`).join('') +
+    `<button class="rail-new" id="rail-new" aria-label="新建工作区">
+       <span class="ri-name">＋ 新建工作区</span>
+       <span class="ri-meta">这里永远存在一个空位</span>
+     </button>
+     <div class="rail-hint">每个工作区 = 一条独立条带，互不溢出（niri：每显示器独立条带）</div>`;
+}
+
+function stripInnerHTML(ws, wi) {
+  if (!ws.columns.length) {
+    return `<div class="empty-hint">空工作区 —— niri 的「永远存在的空工作区」。<br>按 <b>n</b> 新建第一列（${wi === state.activeWs && !state.overview ? '当前可用' : '进入此工作区后可用'}）。</div>`;
+  }
+  const cols = ws.columns.map((c, i) => colHTML(c, i, '')).join('');
+  const ghost = state.overview ? '' :
+    `<button class="strip-new" data-new="1" title="新建任务列（追加到条带末尾）" aria-label="新建任务列">＋</button>`;
+  return cols + ghost;
+}
+
+function renderNormal(opts) {
+  stageEl.className = 'stage';
+  const ws = cur();
+  if (state.focusCol >= ws.columns.length) state.focusCol = Math.max(0, ws.columns.length - 1);
+  stageEl.innerHTML = `<div class="strip${ws.columns.length ? '' : ' empty'}" data-ws="${state.activeWs}">${stripInnerHTML(ws, state.activeWs)}</div>`;
+  const strip = stageEl.querySelector('.strip');
+  strip.scrollLeft = ws.scrollLeft || 0;
+  if (opts.focusScroll && ws.columns.length) {
+    const el = strip.querySelectorAll('.col')[state.focusCol];
+    if (el) el.classList.add('focused');
+    if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  } else if (ws.columns.length) {
+    const el = strip.querySelectorAll('.col')[state.focusCol];
+    if (el) el.classList.add('focused');
+  }
+}
+
+function renderOverview() {
+  stageEl.className = 'stage overview';
+  state._flat = [];
+  state.workspaces.forEach((ws, wi) => ws.columns.forEach((c, ci) => state._flat.push({ wi, ci })));
+  const flatIdx = new Map();
+  state._flat.forEach((f, i) => flatIdx.set(f.wi + ':' + f.ci, i));
+
+  stageEl.innerHTML = state.workspaces.map((ws, wi) => {
+    const cols = ws.columns.map((c, ci) => {
+      const sel = flatIdx.get(wi + ':' + ci) === state.ovSel ? ' ov-sel' : '';
+      return colHTML(c, ci, sel);
+    }).join('');
+    const inner = ws.columns.length ? cols :
+      `<div class="empty-hint">空工作区<br>（永远存在的空位）</div>`;
+    return `
+      <section class="ov-row" data-ws="${wi}">
+        <div class="ov-label"><b>${ws.name}</b> · ${ws.branch} · ${ws.columns.length} 列</div>
+        <div class="ov-clip"><div class="strip" data-ws="${wi}">${inner}</div></div>
+      </section>`;
+  }).join('');
+
+  // 逐条带测宽，scale 适配 stage 宽度（最朴素的 Overview 实现）
+  const avail = stageEl.clientWidth - 48;
+  stageEl.querySelectorAll('.ov-row .strip').forEach(el => {
+    const w = el.scrollWidth || 1;
+    const s = Math.min(0.9, avail / w);
+    el.style.transform = `scale(${s})`;
+    const clip = el.parentElement;
+    clip.style.height = (300 * s) + 'px';
+    clip.style.width = (w * s) + 'px';
+  });
+}
+
+function updateHud() {
+  const ws = cur();
+  if (state.overview) {
+    const sel = state._flat[state.ovSel];
+    const name = sel ? state.workspaces[sel.wi].columns[sel.ci].title : '（无列）';
+    hudEl.textContent = `总览 · ${state.workspaces.length} 个工作区 · 选中：${name}`;
+  } else {
+    const focus = ws.columns[state.focusCol] ? ws.columns[state.focusCol].title : '（空条带）';
+    hudEl.textContent = `工作区 ${ws.name} · 列 ${ws.columns.length ? (state.focusCol + 1) + '/' + ws.columns.length : '0'} · 焦点：${focus}`;
+  }
+  hudActionEl.textContent = state.lastAction;
+}
+
+function render(opts) {
+  opts = opts || {};
+  renderRail();
+  if (state.overview) renderOverview(); else renderNormal(opts);
+  updateHud();
+}
+
+/* ================= 动作 ================= */
+
+function moveFocus(d) {
+  const ws = cur();
+  if (!ws.columns.length) { state.lastAction = '空条带 —— 按 n 新建第一列'; updateHud(); return; }
+  const n = Math.min(Math.max(state.focusCol + d, 0), ws.columns.length - 1);
+  if (n === state.focusCol) {
+    state.lastAction = d < 0 ? '已到最左端' : '已到最右端（条带向右无限延伸，n 可继续追加）';
+    updateHud(); return;
+  }
+  state.focusCol = n;
+  state.lastAction = d < 0 ? '焦点左移' : '焦点右移 —— 条带平移，列不重排';
+  render({ focusScroll: true });
+}
+
+function newColumn(afterFocus) {
+  if (state.overview) { state.lastAction = '先退出总览（Esc）再新建列'; updateHud(); return; }
+  const ws = cur();
+  const col = {
+    id: uid(), title: '新任务 ' + (++taskSeq), status: 'running',
+    msgs: [
+      { who: 'user',  text: '（任务描述占位 —— 原型不接真实运行时）' },
+      { who: 'agent', text: '已开始执行。' },
+    ],
+    tools: [{ name: '启动会话', state: 'run' }],
+    review: { state: 'none', note: '尚无交付物' },
+  };
+  const at = afterFocus ? state.focusCol + 1 : ws.columns.length;
+  ws.columns.splice(at, 0, col);
+  state.focusCol = at;
+  state.lastAction = '新列已追加 —— 既有列的宽度与位置没有任何变化（niri 第一原则）';
+  render({ focusScroll: true });
+}
+
+function switchWs(i) {
+  if (i < 0 || i >= state.workspaces.length) return;
+  state.activeWs = i;
+  state.focusCol = 0;
+  state.lastAction = '切换工作区 —— 每工作区独立条带，互不溢出';
+  if (state.overview) state.overview = false;
+  render({ focusScroll: true });
+}
+
+function newWorkspace() {
+  state.workspaces.push({
+    name: 'ws-' + (++wsSeq), branch: '（新工作区）', scrollLeft: 0, columns: [],
+  });
+  state.activeWs = state.workspaces.length - 1;
+  state.focusCol = 0;
+  state.overview = false;
+  state.lastAction = '新建工作区 —— 轨道底部永远存在「新建」位（niri：永远存在空工作区）';
+  render();
+}
+
+function toggleOverview(force) {
+  state.overview = typeof force === 'boolean' ? force : !state.overview;
+  if (state.overview) {
+    let idx = 0;
+    for (let wi = 0; wi < state.activeWs; wi++) idx += state.workspaces[wi].columns.length;
+    state.ovSel = Math.max(0, idx + Math.min(state.focusCol, cur().columns.length - 1));
+    state.lastAction = 'Overview —— 所有条带缩远呈现；点击列或 Enter 跳回';
+  } else {
+    state.lastAction = '退出 Overview';
+  }
+  render();
+}
+
+function moveOvSel(d) {
+  if (!state._flat.length) return;
+  const n = Math.min(Math.max(state.ovSel + d, 0), state._flat.length - 1);
+  state.ovSel = n;
+  const f = state._flat[n];
+  state.lastAction = `总览选中：${state.workspaces[f.wi].name} · ${state.workspaces[f.wi].columns[f.ci].title}（Enter 跳回）`;
+  renderOverview();
+  updateHud();
+}
+
+function jumpOvSel() {
+  const f = state._flat[state.ovSel];
+  if (!f) return;
+  state.activeWs = f.wi;
+  state.focusCol = f.ci;
+  state.overview = false;
+  state.lastAction = '从 Overview 跳回 —— 位置连续性保持（列没有移动过）';
+  render({ focusScroll: true });
+}
+
+/* ================= 事件 ================= */
+
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key;
+  if (state.overview) {
+    if (k === 'Escape' || k === 'o' || k === 'O') { e.preventDefault(); toggleOverview(false); }
+    else if (k === 'ArrowLeft')  { e.preventDefault(); moveOvSel(-1); }
+    else if (k === 'ArrowRight') { e.preventDefault(); moveOvSel(1); }
+    else if (k === 'Enter')      { e.preventDefault(); jumpOvSel(); }
+    else if (/^[1-9]$/.test(k))  { e.preventDefault(); switchWs(+k - 1); }
+    return;
+  }
+  if (k === 'ArrowLeft')      { e.preventDefault(); moveFocus(-1); }
+  else if (k === 'ArrowRight'){ e.preventDefault(); moveFocus(1); }
+  else if (k === 'n' || k === 'N') { e.preventDefault(); newColumn(true); }
+  else if (k === 'o' || k === 'O') { e.preventDefault(); toggleOverview(true); }
+  else if (/^[1-9]$/.test(k)) { e.preventDefault(); switchWs(+k - 1); }
+});
+
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if (t.closest('#rail-new')) { newWorkspace(); return; }
+  const railItem = t.closest('.rail-item');
+  if (railItem) { switchWs(+railItem.dataset.ws); return; }
+
+  if (state.overview) {
+    const col = t.closest('.col');
+    if (col) {
+      const row = col.closest('.ov-row');
+      if (row) {
+        state.activeWs = +row.dataset.ws;
+        state.focusCol = +col.dataset.idx;
+        state.overview = false;
+        state.lastAction = '从 Overview 跳回 —— 位置连续性保持（列没有移动过）';
+        render({ focusScroll: true });
+      }
+    }
+    return;
+  }
+
+  if (t.closest('[data-new]')) { newColumn(false); return; }
+  const col = t.closest('.col');
+  if (col) {
+    const idx = +col.dataset.idx;
+    state.focusCol = idx;
+    stageEl.querySelectorAll('.col').forEach(el => el.classList.toggle('focused', +el.dataset.idx === idx));
+    updateHud();
+  }
+});
+
+/* 滚轮：条带横移（触摸板横滚走原生 overflow-x；滚轮/Shift+滚轮在此转横） */
+stageEl.addEventListener('wheel', (e) => {
+  if (state.overview) return; // 总览内交给原生滚动
+  const strip = e.target.closest('.strip');
+  if (!strip) return;
+  const mult = e.deltaMode === 1 ? 16 : 1;
+  let dx = e.deltaX * mult, dy = e.deltaY * mult;
+  if (e.shiftKey && Math.abs(dx) < Math.abs(dy)) { dx = dy; dy = 0; } // 规范化 Shift+滚轮
+  if (Math.abs(dy) > Math.abs(dx)) {
+    // 垂直滚轮：先给列内会话流，滚到边再横移条带
+    const scroller = e.target.closest('.msgs, .tools');
+    const canScroll = scroller && (dy > 0
+      ? scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 1
+      : scroller.scrollTop > 1);
+    if (canScroll) return; // 原生纵向滚动
+    e.preventDefault();
+    strip.scrollLeft += dy;
+  } else {
+    e.preventDefault();
+    strip.scrollLeft += dx;
+  }
+}, { passive: false });
+
+/* 记住每条带的横向滚动位置（全量重绘时还原） */
+stageEl.addEventListener('scroll', (e) => {
+  const strip = e.target && e.target.closest ? e.target.closest('.strip') : null;
+  if (strip && !state.overview) {
+    const ws = state.workspaces[+strip.dataset.ws];
+    if (ws) ws.scrollLeft = strip.scrollLeft;
+  }
+}, true);
+
+window.addEventListener('resize', () => { if (state.overview) render(); });
+
+/* ================= 启动 ================= */
+render();
+</script>
+</body>
+</html>
