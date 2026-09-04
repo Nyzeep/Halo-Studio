@@ -106,7 +106,7 @@ DMS MD3 token 架构与主题（ADR-0077；#46/#47）。
 
 1. `tokens/` 目录为纯 CSS custom properties，MD3 角色命名（`--surface-container-*`、`--on-surface`、`--outline`）与三档圆角/五档间距/四档字号 × fontScale 齐备。
 2. 禁裸值 lint 生效：颜色/间距/圆角出现非 token 引用的样式文件导致检查失败（CI 断言）。
-3. sass 依赖移除，组件样式全部为 CSS Modules。
+3. token 层与全部新增/改写组件使用 CSS Modules；存量 .scss 只减不增，sass 依赖在 M6 收尾前移除（M4 时不要求存量全量转换）。
 4. `[data-theme]` 提供 dark/light 两套角色值，默认随 prefers-color-scheme；品牌色作为 `--primary` seed 注入，无第二套主题文件。
 5. prefers-reduced-motion 下全部动效停用（自动化断言 + 真实环境抽查）；动效 token duration/easing 各三档。
 6. `react-virtuoso` 从依赖中移除，长列表虚拟化统一为 `@tanstack/react-virtual`。
