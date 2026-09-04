@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0078
 supersedes: 0071 for P0 execution ownership and transport
 related: 0065 deep Workbench Runtime seam
 ---

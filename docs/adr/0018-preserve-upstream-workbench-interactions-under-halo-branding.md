@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0076
 ---
 
 # 在 Halo 品牌下保留 Halo Studio 工作台交互骨架

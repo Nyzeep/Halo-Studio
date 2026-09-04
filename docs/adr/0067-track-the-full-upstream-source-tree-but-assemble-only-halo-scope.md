@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0079
 ---
 
 # 跟踪完整 Halo Studio 源码树但只装配 Halo 发布范围

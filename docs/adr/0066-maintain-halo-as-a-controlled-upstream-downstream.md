@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0079
 ---
 
 # 将 Halo Studio 维护为受控的 Halo Studio 下游产品
