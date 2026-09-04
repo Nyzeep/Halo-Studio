@@ -149,7 +149,7 @@ describe('builtin theme preset output', () => {
     }))).toMatchInlineSnapshot(`
       [
         {
-          "hash": "a815da061705635412c41255241fd384404301000f8bdae450756d0909735b0b",
+          "hash": "73e0d40b9714e70919357d5e2ce6f702a4bce3edeb04b9c9360b7e5d729a2193",
           "id": "halo-light",
           "type": "light",
         },
@@ -159,12 +159,12 @@ describe('builtin theme preset output', () => {
           "type": "dark",
         },
         {
-          "hash": "6f502a2a22b19abb4822cefa9c411f970c3d0a0e7a88f5a91f674a214dc00198",
+          "hash": "caf9977b1a23ee8d03327303fd0df2ebdcf56b533d99ab9821c425cc865b3120",
           "id": "halo-dark",
           "type": "dark",
         },
         {
-          "hash": "aa72406531e6cdee25285ed2dd3820b76a844324f4e008a146d07273dc8e416d",
+          "hash": "8702d54a1d58f23ea8357c51de891778364d74c460cdecf9b0dcfc23167a903b",
           "id": "halo-midnight",
           "type": "dark",
         },

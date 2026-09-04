@@ -5,13 +5,13 @@
   "themes": [
     {
       "id": "halo-light",
-      "bgPrimary": "#f3f3f5",
+      "bgPrimary": "#f8f9fa",
       "bgSecondary": "#ffffff",
       "bgScene": "#ffffff",
       "isLight": true,
       "textPrimary": "#1e293b",
       "textMuted": "#64748b",
-      "accentColor": "#64748b"
+      "accentColor": "#1a73e8"
     },
     {
       "id": "halo-slate",
@@ -25,13 +25,13 @@
     },
     {
       "id": "halo-dark",
-      "bgPrimary": "#0e0e10",
-      "bgSecondary": "#1c1c1f",
-      "bgScene": "#1c1c1f",
+      "bgPrimary": "#131314",
+      "bgSecondary": "#1e1f20",
+      "bgScene": "#1e1f20",
       "isLight": false,
-      "textPrimary": "#e8e8e8",
-      "textMuted": "#858585",
-      "accentColor": "#60a5fa"
+      "textPrimary": "#e3e3e3",
+      "textMuted": "#9aa0a6",
+      "accentColor": "#a8c7fa"
     },
     {
       "id": "halo-midnight",

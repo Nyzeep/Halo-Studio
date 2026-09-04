@@ -14,11 +14,12 @@
   position: relative;
   outline: none;
   user-select: none;
+  white-space: nowrap;
 
   background: var(--element-bg-base);
   color: var(--color-text-secondary);
   border: none;
-  border-radius: var(--size-radius-sm);
+  border-radius: var(--size-radius-full);
   transition: all var(--motion-fast) var(--easing-standard);
 
   &:focus-visible {
@@ -28,19 +29,19 @@
 
   &-sm {
     height: 32px;
-    padding: 0 var(--size-gap-3);
+    padding: 0 14px;
     font-size: var(--font-size-sm);
   }
 
   &-base {
     height: 40px;
-    padding: 0 var(--size-gap-4);
+    padding: 0 18px;
     font-size: var(--font-size-base);
   }
 
   &-lg {
     height: 48px;
-    padding: 0 var(--size-gap-6);
+    padding: 0 26px;
     font-size: var(--font-size-lg);
   }
 
@@ -172,7 +173,7 @@
   position: relative;
   outline: none;
   border: none;
-  border-radius: var(--size-radius-sm);
+  border-radius: var(--size-radius-full);
   transition: all var(--motion-fast) var(--easing-standard);
 
   background: var(--element-bg-base);

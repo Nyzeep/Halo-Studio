@@ -8,9 +8,9 @@
     <title>Halo Studio - 本地编码工作台</title>
     <script>
       (function () {
-        var dark = '#121214';
+        var dark = '#131314';
         /* Keep in sync with presets/light-theme.ts colors.background.primary */
-        var light = '#f3f3f5';
+        var light = '#f8f9fa';
         var m = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
         var root = document.documentElement;
         var fallbackMessages = {
@@ -81,11 +81,11 @@
       
       /* Fallback before inline script runs; align with dark / light theme primaries */
       html {
-        background-color: #121214;
+        background-color: #131314;
       }
       @media (prefers-color-scheme: light) {
         html {
-          background-color: #f3f3f5;
+          background-color: #f8f9fa;
         }
       }
       
