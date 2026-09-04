@@ -1299,6 +1299,60 @@ impl HaloWorkbenchRuntimeInner {
         self.state.lock().expect("Halo Workbench state lock").error = Some(error);
     }
 
+    /// Appends the committed reply summary fact at settlement. The settled
+    /// turn's accumulated assistant text seeds the fact identity so each
+    /// committed reply is exactly one fact; the summary itself stays a
+    /// Halo-owned constant.
+    fn append_settled_reply_fact(&self, generation: u64, session_id: &str) -> bool {
+        let reply = {
+            let state = self.state.lock().expect("Halo Workbench state lock");
+            state
+                .sessions
+                .get(session_id)
+                .filter(|session| session.mode == HaloWorkbenchSessionMode::Managed)
+                .and_then(|session| {
+                    session
+                        .messages
+                        .iter()
+                        .rev()
+                        .find(|message| message.role == HaloWorkbenchMessageRole::Assistant)
+                })
+                .map(|message| message.content.clone())
+        };
+        let Some(reply) = reply else {
+            return true;
+        };
+        if reply.is_empty() {
+            return true;
+        }
+        self.append_managed_session_fact(
+            generation,
+            session_id,
+            ManagedEventFactKind::AgentReplySummary,
+            "Managed agent reply summary received",
+            &reply,
+        )
+    }
+
+    /// Whether a managed session would currently accept the interrupted
+    /// terminal transition. Read-only pre-check so the interrupted fact only
+    /// lands when the cancellation actually does.
+    fn managed_session_accepts_interruption(&self, generation: u64, session_id: &str) -> bool {
+        let state = self.state.lock().expect("Halo Workbench state lock");
+        state.generation == generation
+            && state
+                .sessions
+                .get(session_id)
+                .is_some_and(|session| {
+                    session.mode == HaloWorkbenchSessionMode::Managed
+                        && session.accepts_terminal_adapter_event()
+                        && valid_session_transition(
+                            session.phase,
+                            HaloWorkbenchSessionPhase::Interrupted,
+                        )
+                })
+    }
+
     fn snapshot(&self) -> HaloWorkbenchSnapshot {
         let state = self.state.lock().expect("Halo Workbench state lock");
         HaloWorkbenchSnapshot {
@@ -1408,6 +1462,9 @@ impl HaloWorkbenchRuntimeInner {
                 );
             }
             PiRpcEvent::AgentSettled { session_id, .. } => {
+                if !self.append_settled_reply_fact(generation, &session_id) {
+                    return;
+                }
                 self.capture_settled_fingerprint(generation, &session_id);
                 self.set_session_phase(
                     generation,
@@ -1421,6 +1478,18 @@ impl HaloWorkbenchRuntimeInner {
                 cancellation_mode,
                 ..
             } => {
+                if self.managed_session_accepts_interruption(generation, &session_id) {
+                    // Cancellation lands as the delivered prefix plus the
+                    // interrupted marker; no completion fact follows
+                    // (ADR-0080).
+                    self.append_managed_session_fact(
+                        generation,
+                        &session_id,
+                        ManagedEventFactKind::TaskInterrupted,
+                        "Managed task interrupted; delivered prefix preserved",
+                        &format!("{session_id}\u{1}interrupted"),
+                    );
+                }
                 self.set_session_interrupted(generation, &session_id, cancellation_mode.into());
             }
             PiRpcEvent::SessionRunning { session_id, .. } => {
@@ -1446,20 +1515,32 @@ impl HaloWorkbenchRuntimeInner {
                     .filter(|session| session.mode == HaloWorkbenchSessionMode::Managed)
                     .map(|_| HaloWorkbenchSessionPhase::Interrupted)
                     .unwrap_or(HaloWorkbenchSessionPhase::Failed);
+                if phase == HaloWorkbenchSessionPhase::Interrupted {
+                    // A failed executor attempt is recorded as its own fact,
+                    // never merged back into a continuous history (ADR-0080).
+                    self.append_managed_session_fact(
+                        generation,
+                        &session_id,
+                        ManagedEventFactKind::AttemptFailed,
+                        &format!(
+                            "Managed attempt failed: {}",
+                            managed_executor_failure_label(reason)
+                        ),
+                        &format!(
+                            "{session_id}\u{1}attempt\u{1}{}",
+                            managed_executor_failure_label(reason)
+                        ),
+                    );
+                }
                 self.set_session_failure(generation, &session_id, adapter_failure(reason), phase);
             }
             PiRpcEvent::MessageUpdated {
                 session_id, text, ..
             } => {
-                if !self.append_managed_session_fact(
-                    generation,
-                    &session_id,
-                    ManagedEventFactKind::AgentReplySummary,
-                    "Managed agent reply summary received",
-                    &text,
-                ) {
-                    return;
-                }
+                // Token-level streaming frames are live activity only
+                // (ADR-0080): they update the activity session record and
+                // never append facts. The committed reply fact lands at
+                // settlement.
                 self.append_assistant_message(generation, &session_id, text);
             }
             PiRpcEvent::ToolExecutionStarted {
@@ -2041,7 +2122,8 @@ impl HaloWorkbenchRuntimeInner {
                             {
                                 Ok(PiRpcReply::Accepted)
                                 | Ok(PiRpcReply::Available { .. })
-                                | Ok(PiRpcReply::Ready { .. }) => Ok(()),
+                                | Ok(PiRpcReply::Ready { .. })
+                                | Ok(PiRpcReply::Entries { .. }) => Ok(()),
                                 Ok(PiRpcReply::Unavailable { .. }) => Err(HaloWorkbenchError::new(
                                     "cleanup_failed",
                                     "Workbench Runtime cleanup did not complete",
@@ -2658,7 +2740,7 @@ impl HaloWorkbenchRuntime {
                 }
                 summary
             }
-            Ok(PiRpcReply::Accepted) => {
+            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Entries { .. }) => {
                 let error = adapter_failure(PiRpcFailureKind::CapabilityMismatch);
                 self.inner
                     .fail_generation(generation, Some(request_id), error.clone());
@@ -2792,7 +2874,7 @@ impl HaloWorkbenchRuntime {
                 );
                 Ok(self.inner.receipt(request_id, None))
             }
-            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) => {
+            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) | Ok(PiRpcReply::Entries { .. }) => {
                 let error = adapter_failure(PiRpcFailureKind::CapabilityMismatch);
                 self.inner
                     .fail_generation(generation, Some(request_id), error.clone());
@@ -3792,7 +3874,8 @@ impl HaloWorkbenchRuntime {
         let error = match result {
             Ok(PiRpcReply::Accepted)
             | Ok(PiRpcReply::Available { .. })
-            | Ok(PiRpcReply::Ready { .. }) => return Ok(()),
+            | Ok(PiRpcReply::Ready { .. })
+            | Ok(PiRpcReply::Entries { .. }) => return Ok(()),
             Ok(PiRpcReply::Unavailable { reason }) => adapter_failure(reason),
             Err(error) => error,
         };
@@ -3928,7 +4011,8 @@ impl HaloWorkbenchRuntime {
         match result {
             Ok(PiRpcReply::Accepted)
             | Ok(PiRpcReply::Available { .. })
-            | Ok(PiRpcReply::Ready { .. }) => Ok(self.inner.receipt(request_id, Some(session_id))),
+            | Ok(PiRpcReply::Ready { .. })
+            | Ok(PiRpcReply::Entries { .. }) => Ok(self.inner.receipt(request_id, Some(session_id))),
             Ok(PiRpcReply::Unavailable { reason }) => {
                 let error = adapter_failure(reason);
                 self.restore_operation(generation, request_id, operation_id, &session_id);
@@ -5044,6 +5128,21 @@ fn port_failure(kind: PortErrorKind) -> HaloWorkbenchError {
             "The Workbench execution adapter is unavailable",
             "retry",
         ),
+    }
+}
+
+/// Executor-neutral failure label used by attempt facts. The wording mirrors
+/// the unified `ManagedExecutorFailureKind` vocabulary so facts stay
+/// executor-neutral even though this seam still speaks Pi events.
+fn managed_executor_failure_label(reason: PiRpcFailureKind) -> &'static str {
+    match reason {
+        PiRpcFailureKind::NotInstalled => "not_installed",
+        PiRpcFailureKind::UnsupportedVersion => "unsupported_version",
+        PiRpcFailureKind::CapabilityMismatch => "capability_mismatch",
+        PiRpcFailureKind::Authentication => "authentication",
+        PiRpcFailureKind::Transport => "transport",
+        PiRpcFailureKind::Protocol => "protocol",
+        PiRpcFailureKind::Internal => "internal",
     }
 }
 

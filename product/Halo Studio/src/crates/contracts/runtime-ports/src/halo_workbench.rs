@@ -626,6 +626,14 @@ pub enum PiRpcCommand {
         task_id: String,
         session_id: String,
     },
+    /// Reads the session's committed-entry facts (count plus redacted leaf
+    /// cursor) through the executor's native entry read. Entry payloads and
+    /// native entry ids stay in the adapter.
+    GetEntries {
+        generation: u64,
+        task_id: String,
+        session_id: String,
+    },
     ResolveOperation {
         generation: u64,
         task_id: String,
@@ -723,6 +731,16 @@ impl fmt::Debug for PiRpcCommand {
                 .field("task_id", task_id)
                 .field("session_id", session_id)
                 .finish(),
+            Self::GetEntries {
+                generation,
+                task_id,
+                session_id,
+            } => formatter
+                .debug_struct("GetEntries")
+                .field("generation", generation)
+                .field("task_id", task_id)
+                .field("session_id", session_id)
+                .finish(),
             Self::ResolveOperation {
                 generation,
                 task_id,
@@ -757,6 +775,12 @@ pub enum PiRpcReply {
     Available { summary: PiRpcAvailabilitySummary },
     Ready { summary: PiRpcAvailabilitySummary },
     Accepted,
+    /// Bounded committed-entry facts for a `GetEntries` command. The leaf
+    /// cursor is an adapter-redacted digest, never a native Pi entry id.
+    Entries {
+        entry_count: u32,
+        leaf_cursor: Option<String>,
+    },
     Unavailable { reason: PiRpcFailureKind },
 }
 

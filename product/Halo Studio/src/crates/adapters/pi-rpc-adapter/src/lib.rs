@@ -8,12 +8,17 @@
 
 mod configuration;
 mod framing;
+mod managed_executor;
 
 pub use halo_runtime_ports::PiRuntimeConfigurationView;
 pub use configuration::{
     validate_runtime_configuration_shape, JsonFilePiRuntimeConfigurationRepository,
     MemoryPiCredentialStore, MemoryPiRuntimeConfigurationRepository,
     PiRuntimeConfigurationRepository, PiRuntimeConfigurationService, StaticPiProviderCapabilities,
+};
+pub use managed_executor::{
+    managed_executor_failure_kind, normalize_pi_rpc_event, PiEventNormalization,
+    PiRpcManagedExecutor,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -106,16 +111,6 @@ pub const HALO_PI_EXTENSION_ID: &str = "halo-workbench-permission-gate";
 pub const HALO_PI_EXTENSION_VERSION: &str = "1.0.0";
 pub const HALO_PI_EXTENSION_PERMISSIONS: &str =
     "Pi tool_call interception and RPC extension_ui_request only";
-pub const HALO_PI_EXTENSION_SOURCE: &str =
-    "Halo Studio source: src/crates/adapters/pi-rpc-adapter/src/halo_permission_gate.ts";
-pub const HALO_PI_EXTENSION_DEPENDENCIES: &str =
-    "host-provided @earendil-works/pi-coding-agent ExtensionAPI; no extension runtime imports";
-pub const HALO_PI_EXTENSION_HOST_PERMISSIONS: &str =
-    "observe tool_call name/id; request one confirmation; return block/allow; no filesystem, process, network, credential, or renderer access";
-pub const HALO_PI_EXTENSION_UPDATE_OWNER: &str =
-    "Halo Studio maintainers; update only with source/hash/license re-audit";
-pub const HALO_PI_EXTENSION_LICENSE: &str =
-    "Halo Studio repository license policy; host Pi package license must remain separately audited";
 
 #[derive(Clone)]
 pub struct PiRpcConfig {
@@ -1170,6 +1165,32 @@ impl PiRpcPort for PiRpcAdapter {
                     session_id,
                 });
                 Ok(PiRpcReply::Accepted)
+            }
+            PiRpcCommand::GetEntries {
+                generation,
+                task_id,
+                session_id,
+            } => {
+                let session = self.session(generation, &task_id, &session_id).await?;
+                let entries = session
+                    .request("get_entries", json!({ "type": "get_entries" }))
+                    .await?;
+                let data = validate_entries_data(&entries).map_err(|_| {
+                    PortError::new(
+                        PortErrorKind::InvalidRequest,
+                        "Pi RPC entries response failed validation",
+                    )
+                })?;
+                // The leaf cursor is redacted the same way tool-call ids are:
+                // a stable per-session digest, never a native Pi entry id.
+                let leaf_cursor = data.leaf_id.map(|leaf_id| {
+                    redact_tool_call_id(generation, &task_id, &session_id, &leaf_id)
+                });
+                let entry_count = u32::try_from(data.ids.len()).unwrap_or(u32::MAX);
+                Ok(PiRpcReply::Entries {
+                    entry_count,
+                    leaf_cursor,
+                })
             }
             PiRpcCommand::ResolveOperation {
                 generation,

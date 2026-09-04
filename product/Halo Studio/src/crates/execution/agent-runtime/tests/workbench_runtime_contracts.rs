@@ -55,6 +55,8 @@ impl CommandKind {
             PiRpcCommand::EndSession { .. } => Some(Self::EndSession),
             PiRpcCommand::ResolveOperation { .. } => Some(Self::ResolveOperation),
             PiRpcCommand::Shutdown { .. } => Some(Self::Shutdown),
+            // Entry reads never originate from the Workbench Runtime.
+            PiRpcCommand::GetEntries { .. } => None,
         }
     }
 }
@@ -4510,4 +4512,356 @@ async fn finish_and_review_is_rejected_outside_waiting_developer() {
         .expect_err("finish must be rejected while running");
     assert_eq!(error.code, "delivery_review_not_ready");
     assert_eq!(adapter.count(CommandKind::EndSession), 0);
+}
+
+async fn managed_session_with_facts(
+    facts: &Arc<RecordingManagedFacts>,
+    prefix: &str,
+) -> (HaloWorkbenchRuntime, Arc<DeterministicPiRpc>, u64, String) {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = HaloWorkbenchRuntime::new_with_delivery_evidence_and_fact_store(
+        adapter.clone(),
+        Arc::new(TrustedWorkspaceFacts),
+        Arc::new(AvailableProviderReadiness),
+        Arc::new(FixedTaskBaseline),
+        Arc::new(FixedDeliveryEvidence::new("unused", Vec::new(), Vec::new(), Vec::new())),
+        facts.clone(),
+        Arc::new(FixedClock),
+    );
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        &format!("{prefix}-open"),
+        &format!("{prefix}-workspace"),
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: format!("{prefix}-confirm"),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: format!("{prefix}-workspace"),
+                root_path: PathBuf::from(format!("C:/work/{}-workspace", prefix)),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        &format!("{prefix}-create"),
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+    (runtime, adapter, generation, session_id)
+}
+
+async fn wait_for_fact_count(facts: &RecordingManagedFacts, count: usize) {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if facts.records().len() >= count {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("fact log reaches expected size");
+}
+
+#[tokio::test]
+async fn token_level_stream_frames_leave_the_fact_log_unchanged() {
+    let facts = Arc::new(RecordingManagedFacts::default());
+    let (runtime, adapter, generation, session_id) =
+        managed_session_with_facts(&facts, "stream").await;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "stream-prompt".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "stream prompt".to_string(),
+            },
+        })
+        .await
+        .expect("managed prompt accepted");
+    wait_for_fact_count(&facts, 3).await;
+    let before_frames = facts.records().len();
+
+    adapter
+        .emit(PiRpcEvent::MessageUpdated {
+            generation,
+            session_id: session_id.clone(),
+            text: "Solving".to_string(),
+        });
+    adapter
+        .emit(PiRpcEvent::MessageUpdated {
+            generation,
+            session_id: session_id.clone(),
+            text: " the bug.".to_string(),
+        });
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let reached = runtime
+                .snapshot()
+                .sessions
+                .iter()
+                .any(|session| {
+                    session.session_id == session_id
+                        && session
+                            .messages
+                            .last()
+                            .is_some_and(|message| message.content == "Solving the bug.")
+                });
+            if reached {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("live record shows both streamed frames");
+
+    // Token-level streaming frames only reach the activity session record.
+    assert_eq!(facts.records().len(), before_frames);
+}
+
+#[tokio::test]
+async fn settled_reply_lands_exactly_one_committed_reply_fact() {
+    let facts = Arc::new(RecordingManagedFacts::default());
+    let (runtime, adapter, generation, session_id) =
+        managed_session_with_facts(&facts, "settle").await;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "settle-prompt".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "settle prompt".to_string(),
+            },
+        })
+        .await
+        .expect("managed prompt accepted");
+    wait_for_fact_count(&facts, 3).await;
+
+    adapter
+        .emit(PiRpcEvent::MessageUpdated {
+            generation,
+            session_id: session_id.clone(),
+            text: "Solving".to_string(),
+        });
+    adapter
+        .emit(PiRpcEvent::MessageUpdated {
+            generation,
+            session_id: session_id.clone(),
+            text: " the bug.".to_string(),
+        });
+    adapter
+        .emit(PiRpcEvent::AgentSettled {
+            generation,
+            session_id: session_id.clone(),
+        });
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::WaitingDeveloper,
+    )
+    .await;
+    wait_for_fact_count(&facts, 4).await;
+
+    let replies = facts
+        .records()
+        .into_iter()
+        .filter(|record| record.kind == ManagedEventFactKind::AgentReplySummary)
+        .collect::<Vec<_>>();
+    assert_eq!(replies.len(), 1, "settlement commits exactly one reply fact");
+}
+
+#[tokio::test]
+async fn cancellation_lands_delivered_prefix_and_interrupted_marker_without_completion() {
+    let facts = Arc::new(RecordingManagedFacts::default());
+    let (runtime, adapter, generation, session_id) =
+        managed_session_with_facts(&facts, "cancel").await;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "cancel-prompt".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "cancel prompt".to_string(),
+            },
+        })
+        .await
+        .expect("managed prompt accepted");
+    wait_for_fact_count(&facts, 3).await;
+    adapter
+        .emit(PiRpcEvent::MessageUpdated {
+            generation,
+            session_id: session_id.clone(),
+            text: "partial reply".to_string(),
+        });
+    adapter
+        .emit(PiRpcEvent::AgentSettled {
+            generation,
+            session_id: session_id.clone(),
+        });
+    wait_for_fact_count(&facts, 4).await;
+    let before_cancel = facts.records();
+
+    adapter
+        .emit(PiRpcEvent::SessionStopped {
+            generation,
+            session_id: session_id.clone(),
+            cancellation_mode: PiRpcCancellationMode::Forced,
+        });
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Interrupted).await;
+    wait_for_fact_count(&facts, 5).await;
+
+    let records = facts.records();
+    // The delivered prefix stays recorded and the cancellation appends the
+    // interrupted lifecycle marker; nothing is rewritten into a completion.
+    assert_eq!(records.len(), before_cancel.len() + 1);
+    assert_eq!(
+        records.last().expect("interrupted fact").kind,
+        ManagedEventFactKind::TaskInterrupted
+    );
+    assert_eq!(
+        records[..records.len() - 1],
+        before_cancel,
+        "the delivered prefix is preserved unchanged"
+    );
+    let kinds = records
+        .iter()
+        .map(|record| record.kind)
+        .collect::<Vec<_>>();
+    assert!(kinds.contains(&ManagedEventFactKind::UserMessageSummary));
+    assert!(kinds.contains(&ManagedEventFactKind::AgentReplySummary));
+    assert!(!kinds.contains(&
+ ManagedEventFactKind::AttemptFailed));
+}
+
+#[tokio::test]
+async fn failed_managed_session_records_an_independent_attempt_fact() {
+    let facts = Arc::new(RecordingManagedFacts::default());
+    let (runtime, adapter, generation, session_id) =
+        managed_session_with_facts(&facts, "attempt").await;
+    wait_for_fact_count(&facts, 2).await;
+    let before_failure = facts.records();
+
+    adapter
+        .emit(PiRpcEvent::SessionFailed {
+            generation,
+            session_id: session_id.clone(),
+            reason: PiRpcFailureKind::Protocol,
+        });
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Interrupted).await;
+    wait_for_fact_count(&facts, 3).await;
+
+    let records = facts.records();
+    assert_eq!(records.len(), before_failure.len() + 1);
+    let attempt = records.last().expect("attempt fact");
+    assert_eq!(attempt.kind, ManagedEventFactKind::AttemptFailed);
+    assert!(
+        attempt.redacted_summary.contains("protocol"),
+        "the attempt fact records the failure reason"
+    );
+}
+
+#[test]
+fn attempt_and_interrupted_facts_stay_out_of_the_model_visible_rebuild() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let facts = Arc::new(RecordingManagedFacts::default());
+    *facts.records.lock().expect("facts lock") = vec![
+        ManagedEventFactRecord {
+            task_id: "task-recovered".to_string(),
+            fact_id: "fact-1".to_string(),
+            sequence: 1,
+            recorded_at_ms: 1_234,
+            schema_version: 2,
+            kind: ManagedEventFactKind::UserMessageSummary,
+            redacted_summary: "safe user summary".to_string(),
+        },
+        ManagedEventFactRecord {
+            task_id: "task-recovered".to_string(),
+            fact_id: "fact-2".to_string(),
+            sequence: 2,
+            recorded_at_ms: 1_235,
+            schema_version: 2,
+            kind: ManagedEventFactKind::AgentReplySummary,
+            redacted_summary: "safe reply summary".to_string(),
+        },
+        ManagedEventFactRecord {
+            task_id: "task-recovered".to_string(),
+            fact_id: "fact-3".to_string(),
+            sequence: 3,
+            recorded_at_ms: 1_236,
+            schema_version: 2,
+            kind: ManagedEventFactKind::AttemptFailed,
+            redacted_summary: "Managed attempt 1 failed: protocol".to_string(),
+        },
+        ManagedEventFactRecord {
+            task_id: "task-recovered".to_string(),
+            fact_id: "fact-4".to_string(),
+            sequence: 4,
+            recorded_at_ms: 1_237,
+            schema_version: 2,
+            kind: ManagedEventFactKind::TaskInterrupted,
+            redacted_summary: "Managed task interrupted; delivered prefix preserved".to_string(),
+        },
+    ];
+    let history = Arc::new(InMemoryInterruptionHistory {
+        sessions: Mutex::new(vec![HaloWorkbenchSessionSnapshot {
+            workspace_id: "workspace-recovered".to_string(),
+            task_id: "task-recovered".to_string(),
+            session_id: "session-recovered".to_string(),
+            mode: HaloWorkbenchSessionMode::Managed,
+            phase: HaloWorkbenchSessionPhase::Interrupted,
+            cancellation_mode: None,
+            baseline: None,
+            messages: Vec::new(),
+            activities: Vec::new(),
+            error: None,
+            delivery_review: None,
+        }]),
+        writes: AtomicUsize::new(0),
+    });
+    let runtime = HaloWorkbenchRuntime::try_new_with_delivery_evidence_and_fact_store_and_interruption_history(
+        adapter.clone(),
+        Arc::new(TrustedWorkspaceFacts),
+        Arc::new(AvailableProviderReadiness),
+        Arc::new(FixedTaskBaseline),
+        Arc::new(FixedDeliveryEvidence::new("unused", Vec::new(), Vec::new(), Vec::new())),
+        facts,
+        history,
+        Arc::new(FixedClock),
+    )
+    .expect("facts-aware recovery succeeds");
+    let session = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == "session-recovered")
+        .expect("recovered session is visible");
+
+    // Attempt and interrupted facts never enter the model-visible rebuild.
+    let message_contents = session
+        .messages
+        .iter()
+        .map(|message| message.content.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        message_contents,
+        vec!["safe user summary", "safe reply summary"]
+    );
+    assert!(session
+        .messages
+        .iter()
+        .all(|message| !message.content.contains("attempt")
+            && !message.content.contains("interrupted")));
+    assert!(session
+        .activities
+        .iter()
+        .all(|activity| !activity.label.contains("attempt")
+            && !activity.label.contains("interrupted")));
+    assert!(adapter.commands().is_empty(), "recovery must not replay Pi");
 }

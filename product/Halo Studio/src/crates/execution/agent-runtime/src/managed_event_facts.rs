@@ -12,11 +12,11 @@ use halo_runtime_ports::{
     ManagedEventFactRecord, ManagedEventFactStorePort,
 };
 
-/// Version zero is a known legacy envelope. It remains readable so local
-/// history can evolve additively, but Runtime writes always use the current
-/// schema version.
+/// Version zero and one are known legacy envelopes. They remain readable so
+/// local history can evolve additively, but Runtime writes always use the
+/// current schema version.
 pub(crate) const LEGACY_MANAGED_EVENT_FACT_SCHEMA_VERSION: u32 = 0;
-pub(crate) const MANAGED_EVENT_FACT_SCHEMA_VERSION: u32 = 1;
+pub(crate) const MANAGED_EVENT_FACT_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ManagedEventFactKind {
@@ -30,12 +30,18 @@ pub(crate) enum ManagedEventFactKind {
     TaskBaselineLinked,
     DeliveryEvidenceVersion,
     EvidenceFreshnessChanged,
+    /// One failed executor attempt, recorded independently and never merged
+    /// into the model-visible history rebuild (ADR-0080).
+    AttemptFailed,
+    /// Cancellation landed: the delivered prefix stays recorded and no
+    /// completion fact follows (ADR-0080).
+    TaskInterrupted,
 }
 
 /// A Runtime-owned summary which cannot be populated directly by an external
-/// executor payload. Ticket 04 adds the production normalizer that constructs
-/// this value after redaction and size limiting; this contract slice exposes
-/// only a test helper until the Runtime is connected.
+/// executor payload. The redaction rules live in the single
+/// `normalize_managed_event_summary` gate in `halo-runtime-ports`; values of
+/// this type can only be created through that gate or by tests.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ManagedEventFactSummary(String);
 
@@ -44,45 +50,21 @@ impl ManagedEventFactSummary {
         &self.0
     }
 
+    /// Wraps a summary that already passed the single redaction gate.
+    pub(crate) fn from_normalized(value: String) -> Self {
+        Self(value)
+    }
+
     #[cfg(test)]
     fn test_redacted(value: impl Into<String>) -> Self {
         Self(value.into())
     }
 }
 
-const MAX_MANAGED_EVENT_SUMMARY_BYTES: usize = 512;
-
 pub(crate) fn normalize_summary(value: &str) -> ManagedEventFactsResult<ManagedEventFactSummary> {
-    let lower = value.to_ascii_lowercase();
-    if value.contains('\0')
-        || lower.contains("jsonl")
-        || lower.contains("api_key")
-        || lower.contains("private_key")
-        || lower.contains("credential")
-        || lower.contains("\"prompt")
-        || lower.contains("\"response")
-        || lower.contains("\"tool")
-    {
-        return Err(ManagedEventFactsError::UnsafePayload);
-    }
-    let mut normalized = String::new();
-    for line in value.lines() {
-        let lower = line.to_ascii_lowercase();
-        if ["authorization", "cookie", "password", "secret", "token"]
-            .iter()
-            .any(|key| lower.contains(key))
-        {
-            normalized.push_str("[redacted]");
-        } else {
-            normalized.push_str(line);
-        }
-        normalized.push('\n');
-        if normalized.len() >= MAX_MANAGED_EVENT_SUMMARY_BYTES {
-            break;
-        }
-    }
-    normalized.truncate(normalized.floor_char_boundary(MAX_MANAGED_EVENT_SUMMARY_BYTES));
-    Ok(ManagedEventFactSummary(normalized.trim_end().to_string()))
+    halo_runtime_ports::normalize_managed_event_summary(value)
+        .map(ManagedEventFactSummary::from_normalized)
+        .map_err(|_| ManagedEventFactsError::UnsafePayload)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
@@ -255,6 +237,8 @@ fn to_port_kind(kind: ManagedEventFactKind) -> PortManagedEventFactKind {
         ManagedEventFactKind::EvidenceFreshnessChanged => {
             PortManagedEventFactKind::EvidenceFreshnessChanged
         }
+        ManagedEventFactKind::AttemptFailed => PortManagedEventFactKind::AttemptFailed,
+        ManagedEventFactKind::TaskInterrupted => PortManagedEventFactKind::TaskInterrupted,
     }
 }
 
@@ -280,6 +264,8 @@ fn from_port_kind(kind: PortManagedEventFactKind) -> ManagedEventFactKind {
         PortManagedEventFactKind::EvidenceFreshnessChanged => {
             ManagedEventFactKind::EvidenceFreshnessChanged
         }
+        PortManagedEventFactKind::AttemptFailed => ManagedEventFactKind::AttemptFailed,
+        PortManagedEventFactKind::TaskInterrupted => ManagedEventFactKind::TaskInterrupted,
     }
 }
 
@@ -415,7 +401,9 @@ fn validate_fact_id(fact_id: &str) -> ManagedEventFactsResult<()> {
 fn is_readable_schema_version(schema_version: u32) -> bool {
     matches!(
         schema_version,
-        LEGACY_MANAGED_EVENT_FACT_SCHEMA_VERSION | MANAGED_EVENT_FACT_SCHEMA_VERSION
+        LEGACY_MANAGED_EVENT_FACT_SCHEMA_VERSION
+            | 1
+            | MANAGED_EVENT_FACT_SCHEMA_VERSION
     )
 }
 
@@ -434,9 +422,56 @@ impl ManagedEventFact {
 mod tests {
     use super::{
         HaloFactId, HaloTaskId, InMemoryManagedEventFacts, ManagedEventFact, ManagedEventFactInput,
-        ManagedEventFactKind, ManagedEventFactSummary, ManagedEventFacts, ManagedEventFactsError,
-        MANAGED_EVENT_FACT_SCHEMA_VERSION,
+        ManagedEventFactKind, ManagedEventFactSummary, ManagedEventFacts,
+        ManagedEventFactsError, ManagedEventFactsPortAdapter, MANAGED_EVENT_FACT_SCHEMA_VERSION,
     };
+    use std::sync::Arc;
+
+    /// Store-port fake that echoes appends the way the production JSON file
+    /// store does, capturing the append requests for kind-level assertions.
+    #[derive(Default)]
+    struct CapturingManagedEventFactStore {
+        records: std::sync::Mutex<Vec<halo_runtime_ports::ManagedEventFactRecord>>,
+    }
+
+    impl halo_runtime_ports::ManagedEventFactStorePort for CapturingManagedEventFactStore {
+        fn append(
+            &self,
+            fact: halo_runtime_ports::ManagedEventFactAppend,
+        ) -> halo_runtime_ports::PortResult<halo_runtime_ports::ManagedEventFactRecord> {
+            let mut records = self.records.lock().expect("store lock");
+            let sequence = records
+                .iter()
+                .filter(|record| record.task_id == fact.task_id)
+                .count() as u64
+                + 1;
+            let record = halo_runtime_ports::ManagedEventFactRecord {
+                task_id: fact.task_id,
+                fact_id: fact.fact_id,
+                sequence,
+                recorded_at_ms: fact.recorded_at_ms,
+                schema_version: fact.schema_version,
+                kind: fact.kind,
+                redacted_summary: fact.redacted_summary,
+            };
+            records.push(record.clone());
+            Ok(record)
+        }
+
+        fn read_task(
+            &self,
+            task_id: &str,
+        ) -> halo_runtime_ports::PortResult<Vec<halo_runtime_ports::ManagedEventFactRecord>> {
+            Ok(self
+                .records
+                .lock()
+                .expect("store lock")
+                .iter()
+                .filter(|record| record.task_id == task_id)
+                .cloned()
+                .collect())
+        }
+    }
 
     fn task_fact(
         fact_id: &str,
@@ -471,7 +506,7 @@ mod tests {
 
         assert!(summary.as_str().starts_with("[redacted]"));
         assert!(!summary.as_str().contains("bearer"));
-        assert!(summary.as_str().len() <= super::MAX_MANAGED_EVENT_SUMMARY_BYTES);
+        assert!(summary.as_str().len() <= halo_runtime_ports::MAX_MANAGED_EVENT_SUMMARY_BYTES);
         assert!(summary.as_str().is_char_boundary(summary.as_str().len()));
     }
 
@@ -620,6 +655,122 @@ mod tests {
                 .read_task(&HaloTaskId::test("task-1"))
                 .expect("read task facts"),
             vec![legacy_fact]
+        );
+    }
+
+    #[test]
+    fn memory_adapter_reads_known_schema_one_history_alongside_current_appends() {
+        let schema_one_fact = ManagedEventFact {
+            fact_id: HaloFactId::test("fact-1"),
+            task_id: HaloTaskId::test("task-1"),
+            sequence: 1,
+            recorded_at_ms: 100,
+            schema_version: 1,
+            kind: ManagedEventFactKind::TaskLifecycle,
+            redacted_summary: ManagedEventFactSummary::test_redacted("Managed task created."),
+        };
+        let adapter = InMemoryManagedEventFacts::from_recorded_facts([schema_one_fact.clone()])
+            .expect("load a known schema one fact");
+        let facts: &dyn ManagedEventFacts = &adapter;
+
+        let appended = facts
+            .append(task_fact(
+                "fact-2",
+                200,
+                ManagedEventFactKind::TaskInterrupted,
+                "Managed task interrupted; delivered prefix preserved.",
+            ))
+            .expect("append current schema fact");
+
+        assert_eq!(
+            facts
+                .read_task(&HaloTaskId::test("task-1"))
+                .expect("read task facts"),
+            vec![schema_one_fact, appended]
+        );
+    }
+
+    #[test]
+    fn memory_adapter_records_attempt_and_interrupted_facts_as_first_class_kinds() {
+        let adapter = InMemoryManagedEventFacts::default();
+        let facts: &dyn ManagedEventFacts = &adapter;
+
+        let attempt = facts
+            .append(task_fact(
+                "fact-attempt",
+                100,
+                ManagedEventFactKind::AttemptFailed,
+                "Managed attempt 1 failed: protocol",
+            ))
+            .expect("append attempt fact");
+        let interrupted = facts
+            .append(task_fact(
+                "fact-interrupted",
+                200,
+                ManagedEventFactKind::TaskInterrupted,
+                "Managed task interrupted; delivered prefix preserved",
+            ))
+            .expect("append interrupted fact");
+
+        assert_eq!(attempt.kind, ManagedEventFactKind::AttemptFailed);
+        assert_eq!(interrupted.kind, ManagedEventFactKind::TaskInterrupted);
+        assert_eq!(
+            facts
+                .read_task(&HaloTaskId::test("task-1"))
+                .expect("read task facts"),
+            vec![attempt, interrupted]
+        );
+    }
+
+    #[test]
+    fn port_adapter_preserves_attempt_and_interrupted_kinds_across_the_store_port() {
+        let store = Arc::new(CapturingManagedEventFactStore::default());
+        let adapter = ManagedEventFactsPortAdapter::new(store.clone());
+        let facts: &dyn ManagedEventFacts = &adapter;
+
+        let attempt = facts
+            .append(ManagedEventFactInput {
+                fact_id: HaloFactId::test("fact-attempt"),
+                task_id: HaloTaskId::test("task-1"),
+                recorded_at_ms: 100,
+                schema_version: MANAGED_EVENT_FACT_SCHEMA_VERSION,
+                kind: ManagedEventFactKind::AttemptFailed,
+                redacted_summary: ManagedEventFactSummary::test_redacted(
+                    "Managed attempt 1 failed: transport",
+                ),
+            })
+            .expect("append attempt fact through the port");
+        let interrupted = facts
+            .append(ManagedEventFactInput {
+                fact_id: HaloFactId::test("fact-interrupted"),
+                task_id: HaloTaskId::test("task-1"),
+                recorded_at_ms: 200,
+                schema_version: MANAGED_EVENT_FACT_SCHEMA_VERSION,
+                kind: ManagedEventFactKind::TaskInterrupted,
+                redacted_summary: ManagedEventFactSummary::test_redacted(
+                    "Managed task interrupted; delivered prefix preserved",
+                ),
+            })
+            .expect("append interrupted fact through the port");
+
+        assert_eq!(
+            store
+                .records
+                .lock()
+                .expect("store lock")
+                .iter()
+                .map(|record| record.kind)
+                .collect::<Vec<_>>(),
+            vec![
+                halo_runtime_ports::ManagedEventFactKind::AttemptFailed,
+                halo_runtime_ports::ManagedEventFactKind::TaskInterrupted,
+            ]
+        );
+        assert_eq!(
+            facts
+                .read_task(&HaloTaskId::test("task-1"))
+                .expect("read task facts"),
+            vec![attempt, interrupted]
         );
     }
 
