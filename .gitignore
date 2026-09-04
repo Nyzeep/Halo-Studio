@@ -15,6 +15,7 @@
 /.scratch/
 /.agents/
 /用于参考的几个项目的代码/
+/BitFun-latest/
 /.superpowers/
 __pycache__/
 *.py[cod]
