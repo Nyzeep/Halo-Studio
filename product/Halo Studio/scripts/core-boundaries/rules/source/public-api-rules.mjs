@@ -284,6 +284,9 @@ export const piRpcAdapterPublicApiEntries = [
   piRpcAdapterEntry('PiEventNormalization'),
   piRpcAdapterEntry('normalize_pi_rpc_event'),
   piRpcAdapterEntry('managed_executor_failure_kind'),
+  piRpcAdapterEntry('PI_RPC_CONSUMED_COMMAND_TYPES'),
+  piRpcAdapterEntry('PiRpcInstallSource'),
+  piRpcAdapterEntry('pi_install_source_from_version_output'),
 ];
 
 function dshAdapterEntry(symbol) {

@@ -381,6 +381,8 @@ pub enum PiRpcVersion {
     V0_81_1,
     #[serde(rename = "0.83.0")]
     V0_83_0,
+    #[serde(rename = "0.85.0")]
+    V0_85_0,
 }
 
 impl PiRpcVersion {
@@ -388,6 +390,7 @@ impl PiRpcVersion {
         match self {
             Self::V0_81_1 => "0.81.1",
             Self::V0_83_0 => "0.83.0",
+            Self::V0_85_0 => "0.85.0",
         }
     }
 
@@ -395,6 +398,7 @@ impl PiRpcVersion {
         match self {
             Self::V0_81_1 => PiRpcCompatibilityProfile::PiRpc0811P0,
             Self::V0_83_0 => PiRpcCompatibilityProfile::PiRpc0830P0,
+            Self::V0_85_0 => PiRpcCompatibilityProfile::PiRpc0850P0,
         }
     }
 }
@@ -412,6 +416,8 @@ pub enum PiRpcCompatibilityProfile {
     PiRpc0811P0,
     #[serde(rename = "pi-rpc-0.83.0-p0")]
     PiRpc0830P0,
+    #[serde(rename = "pi-rpc-0.85.0-p0")]
+    PiRpc0850P0,
 }
 
 impl PiRpcCompatibilityProfile {
@@ -419,7 +425,21 @@ impl PiRpcCompatibilityProfile {
         match self {
             Self::PiRpc0811P0 => "pi-rpc-0.81.1-p0",
             Self::PiRpc0830P0 => "pi-rpc-0.83.0-p0",
+            Self::PiRpc0850P0 => "pi-rpc-0.85.0-p0",
         }
+    }
+
+    /// Resolves a compatibility profile from its public label. The label is
+    /// the single wire form (`pi-rpc-<version>-p0`); unknown labels are
+    /// `None` so callers fail closed instead of guessing a profile.
+    pub fn from_label(label: &str) -> Option<Self> {
+        [
+            Self::PiRpc0811P0,
+            Self::PiRpc0830P0,
+            Self::PiRpc0850P0,
+        ]
+        .into_iter()
+        .find(|profile| profile.as_str() == label)
     }
 }
 
@@ -608,6 +628,16 @@ pub enum PiRpcCommand {
         session_id: String,
         content: String,
     },
+    /// Steering correction into a currently running turn (pi 0.85.0 profile).
+    /// Delivered by Pi after the current assistant turn finishes its tool
+    /// calls, before the next LLM call. Adapters must refuse this command for
+    /// profiles that have not adopted steering.
+    Steer {
+        generation: u64,
+        task_id: String,
+        session_id: String,
+        content: String,
+    },
     StopSession {
         generation: u64,
         task_id: String,
@@ -696,6 +726,18 @@ impl fmt::Debug for PiRpcCommand {
                 ..
             } => formatter
                 .debug_struct("FollowUp")
+                .field("generation", generation)
+                .field("task_id", task_id)
+                .field("session_id", session_id)
+                .field("content", &"<redacted>")
+                .finish(),
+            Self::Steer {
+                generation,
+                task_id,
+                session_id,
+                ..
+            } => formatter
+                .debug_struct("Steer")
                 .field("generation", generation)
                 .field("task_id", task_id)
                 .field("session_id", session_id)
@@ -862,6 +904,15 @@ pub enum PiRpcEvent {
         generation: u64,
         session_id: String,
     },
+    /// The executor's pending steering/follow-up queue changed (pi 0.85.0
+    /// profile). Only bounded counts cross this port: queue message text
+    /// never leaves the adapter because Halo owns queueing (ADR-0078).
+    QueueUpdated {
+        generation: u64,
+        session_id: String,
+        steering_count: u32,
+        follow_up_count: u32,
+    },
 }
 
 impl PiRpcEvent {
@@ -881,7 +932,8 @@ impl PiRpcEvent {
             | Self::ToolExecutionStarted { generation, .. }
             | Self::ToolExecutionUpdated { generation, .. }
             | Self::ToolExecutionEnded { generation, .. }
-            | Self::AgentSettled { generation, .. } => *generation,
+            | Self::AgentSettled { generation, .. }
+            | Self::QueueUpdated { generation, .. } => *generation,
         }
     }
 }
@@ -891,6 +943,13 @@ pub trait PiRpcPort: Send + Sync {
     async fn execute(&self, command: PiRpcCommand) -> PortResult<PiRpcReply>;
 
     fn subscribe(&self) -> broadcast::Receiver<PiRpcEvent>;
+
+    /// The adapter's currently observed readiness facts, if a controlled
+    /// probe produced them. Capability profiles are derived from these facts,
+    /// never invented; `None` means no verified version evidence exists yet.
+    fn readiness(&self) -> Option<PiRpcAvailabilitySummary> {
+        None
+    }
 }
 
 /// Classification for a changed path in a read-only delivery review.

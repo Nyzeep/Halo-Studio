@@ -10,12 +10,14 @@ use async_trait::async_trait;
 use halo_pi_rpc_adapter::{normalize_pi_rpc_event, PiEventNormalization, PiRpcManagedExecutor};
 use halo_runtime_ports::{
     ManagedExecutorApprovalDecision, ManagedExecutorApprovalKind, ManagedExecutorApprovalOutcome,
-    ManagedExecutorCapabilityProfile, ManagedExecutorEvent, ManagedExecutorPort,
-    ManagedExecutorPromptRequest, ManagedExecutorSandboxEnforcement, ManagedExecutorSandboxFacts,
-    ManagedExecutorSandboxMode, ManagedExecutorTarget, ManagedExecutorToolPhase, ManagedEventFactKind,
-    PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind,
-    PiRpcOperationRiskLevel, PiRpcOperationSummary, PiRpcPort, PiRpcReply, PortErrorKind,
-    PortResult, project_managed_executor_event,
+    ManagedExecutorCapabilityProfile, ManagedExecutorEvent, ManagedExecutorKind,
+    ManagedExecutorPort, ManagedExecutorPromptRequest, ManagedExecutorSandboxEnforcement,
+    ManagedExecutorSandboxFacts, ManagedExecutorSandboxMode, ManagedExecutorTarget,
+    ManagedExecutorToolPhase, ManagedEventFactKind, PiRpcAvailabilitySummary, PiRpcCommand,
+    PiRpcCompatibilityProfile, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision,
+    PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcOperationSummary, PiRpcPort, PiRpcReply,
+    PiRpcVersion, PiRpcVersionEvidenceSource, PortErrorKind, PortResult,
+    project_managed_executor_event,
 };
 use tokio::sync::broadcast;
 
@@ -24,6 +26,18 @@ struct FakePiRpc {
     commands: Mutex<Vec<PiRpcCommand>>,
     replies: Mutex<VecDeque<PortResult<PiRpcReply>>>,
     events: Mutex<Option<broadcast::Sender<PiRpcEvent>>>,
+    readiness: Mutex<Option<PiRpcAvailabilitySummary>>,
+}
+
+/// Anchors a fake readiness fact on the probed compatibility profile so the
+/// wrapper derives its capability profile from real facts.
+fn probed_summary(profile: PiRpcCompatibilityProfile) -> PiRpcAvailabilitySummary {
+    let version = match profile {
+        PiRpcCompatibilityProfile::PiRpc0811P0 => PiRpcVersion::V0_81_1,
+        PiRpcCompatibilityProfile::PiRpc0830P0 => PiRpcVersion::V0_83_0,
+        PiRpcCompatibilityProfile::PiRpc0850P0 => PiRpcVersion::V0_85_0,
+    };
+    PiRpcAvailabilitySummary::new(version, PiRpcVersionEvidenceSource::LocalVersionProbe)
 }
 
 impl FakePiRpc {
@@ -33,6 +47,7 @@ impl FakePiRpc {
             commands: Mutex::new(Vec::new()),
             replies: Mutex::new(VecDeque::new()),
             events: Mutex::new(Some(events)),
+            readiness: Mutex::new(None),
         }
     }
 
@@ -52,6 +67,10 @@ impl FakePiRpc {
 
     fn push_reply(&self, reply: PortResult<PiRpcReply>) {
         self.replies.lock().expect("replies lock").push_back(reply);
+    }
+
+    fn probe_profile(&self, profile: PiRpcCompatibilityProfile) {
+        *self.readiness.lock().expect("readiness lock") = Some(probed_summary(profile));
     }
 }
 
@@ -74,6 +93,10 @@ impl PiRpcPort for FakePiRpc {
             .expect("event source")
             .subscribe()
     }
+
+    fn readiness(&self) -> Option<PiRpcAvailabilitySummary> {
+        self.readiness.lock().expect("readiness lock").clone()
+    }
 }
 
 fn target() -> ManagedExecutorTarget {
@@ -83,8 +106,12 @@ fn target() -> ManagedExecutorTarget {
     }
 }
 
-async fn executor_with_ready_generation(inner: &Arc<FakePiRpc>) -> PiRpcManagedExecutor {
-    let executor = PiRpcManagedExecutor::new(inner.clone(), "pi-rpc-0.83.0-p0");
+async fn executor_with_ready_generation(
+    inner: &Arc<FakePiRpc>,
+    profile: PiRpcCompatibilityProfile,
+) -> PiRpcManagedExecutor {
+    inner.probe_profile(profile);
+    let executor = PiRpcManagedExecutor::new(inner.clone());
     inner.emit(PiRpcEvent::Ready { generation: 9 });
     // The forwarder translates asynchronously; wait until the generation is
     // observed so the command calls below are deterministic.
@@ -117,7 +144,7 @@ where
 #[tokio::test]
 async fn executor_wrapper_fails_closed_before_the_executor_generation_is_observed() {
     let inner = Arc::new(FakePiRpc::new());
-    let executor = PiRpcManagedExecutor::new(inner.clone(), "pi-rpc-0.83.0-p0");
+    let executor = PiRpcManagedExecutor::new(inner.clone());
 
     let error = executor
         .prompt(ManagedExecutorPromptRequest {
@@ -136,7 +163,8 @@ async fn executor_wrapper_fails_closed_before_the_executor_generation_is_observe
 #[tokio::test]
 async fn executor_wrapper_forwards_prompt_follow_up_abort_and_entry_reads() {
     let inner = Arc::new(FakePiRpc::new());
-    let executor = executor_with_ready_generation(&inner).await;
+    let executor =
+        executor_with_ready_generation(&inner, PiRpcCompatibilityProfile::PiRpc0830P0).await;
     let _ = executor.subscribe();
 
     executor
@@ -190,7 +218,8 @@ async fn executor_wrapper_forwards_prompt_follow_up_abort_and_entry_reads() {
 #[tokio::test]
 async fn executor_wrapper_resolves_approvals_with_the_closed_outcome_vocabulary() {
     let inner = Arc::new(FakePiRpc::new());
-    let executor = executor_with_ready_generation(&inner).await;
+    let executor =
+        executor_with_ready_generation(&inner, PiRpcCompatibilityProfile::PiRpc0830P0).await;
     let _ = executor.subscribe();
 
     executor
@@ -245,7 +274,8 @@ async fn executor_wrapper_resolves_approvals_with_the_closed_outcome_vocabulary(
 #[tokio::test]
 async fn executor_wrapper_declares_pi_p0_capability_and_sandbox_facts_honestly() {
     let inner = Arc::new(FakePiRpc::new());
-    let executor = PiRpcManagedExecutor::new(inner.clone(), "pi-rpc-0.83.0-p0");
+    inner.probe_profile(PiRpcCompatibilityProfile::PiRpc0830P0);
+    let executor = PiRpcManagedExecutor::new(inner.clone());
 
     let profile = executor.capability_profile();
     assert_eq!(
@@ -253,8 +283,8 @@ async fn executor_wrapper_declares_pi_p0_capability_and_sandbox_facts_honestly()
         ManagedExecutorCapabilityProfile {
             adapter_identity: "pi-rpc-p0".to_string(),
             compatibility_profile: "pi-rpc-0.83.0-p0".to_string(),
-            // steer waits for the M3 pi profile upgrade; turn queueing stays
-            // owned by Halo; pi has no native sandbox mode enumeration.
+            // 0.83.0 has not adopted steering or native queue events; pi
+            // has no native sandbox mode enumeration.
             steer: false,
             queue_events: false,
             approval_channel: true,
@@ -568,7 +598,8 @@ fn pi_events_and_simulated_dsh_events_project_to_identical_fact_kinds() {
 #[tokio::test]
 async fn executor_wrapper_streams_translated_events_to_subscribers() {
     let inner = Arc::new(FakePiRpc::new());
-    let executor = executor_with_ready_generation(&inner).await;
+    let executor =
+        executor_with_ready_generation(&inner, PiRpcCompatibilityProfile::PiRpc0830P0).await;
     let mut rx = executor.subscribe();
 
     executor
@@ -621,4 +652,94 @@ async fn executor_wrapper_streams_translated_events_to_subscribers() {
         event,
         ManagedExecutorEvent::AgentReplyCommitted { summary, .. } if summary == "partialpartial"
     )));
+}
+
+#[tokio::test]
+async fn the_adopted_0850_profile_declares_steering_and_queue_event_capabilities() {
+    let inner = Arc::new(FakePiRpc::new());
+    inner.probe_profile(PiRpcCompatibilityProfile::PiRpc0850P0);
+    let executor = PiRpcManagedExecutor::new(inner.clone());
+
+    let profile = executor.capability_profile();
+    assert_eq!(profile.adapter_identity, "pi-rpc-p0");
+    assert_eq!(
+        profile.compatibility_profile,
+        "pi-rpc-0.85.0-p0",
+        "the 0.85.0 archive is selected by the readiness fact"
+    );
+    assert!(profile.steer, "steer is adopted by the 0.85.0 profile");
+    assert!(
+        profile.queue_events,
+        "queue_update projection is adopted by the 0.85.0 profile"
+    );
+    assert!(profile.approval_channel && profile.entry_read);
+    assert!(!profile.native_sandbox_modes);
+}
+
+#[tokio::test]
+async fn an_unprobed_executor_fails_closed_on_every_capability_claim() {
+    let inner = Arc::new(FakePiRpc::new());
+    let executor = PiRpcManagedExecutor::new(inner.clone());
+
+    let profile = executor.capability_profile();
+    assert_eq!(profile.compatibility_profile, "unprobed");
+    assert!(!profile.steer && !profile.queue_events);
+    assert!(!profile.approval_channel && !profile.entry_read);
+}
+
+#[tokio::test]
+async fn steering_forwards_the_pi_steer_command_for_the_adopted_profile() {
+    let inner = Arc::new(FakePiRpc::new());
+    inner.probe_profile(PiRpcCompatibilityProfile::PiRpc0850P0);
+    let executor =
+        executor_with_ready_generation(&inner, PiRpcCompatibilityProfile::PiRpc0850P0).await;
+
+    executor
+        .steer(ManagedExecutorPromptRequest {
+            target: target(),
+            content: "stop and fix the failing test first".to_string(),
+        })
+        .await
+        .expect("the adopted profile forwards steering");
+
+    assert!(
+        matches!(inner.commands().last(), Some(PiRpcCommand::Steer { .. })),
+        "steering must cross as the Pi steer command"
+    );
+}
+
+#[tokio::test]
+async fn steering_fails_closed_without_touching_the_executor_for_unadopted_profiles() {
+    let inner = Arc::new(FakePiRpc::new());
+    inner.probe_profile(PiRpcCompatibilityProfile::PiRpc0830P0);
+    let executor =
+        executor_with_ready_generation(&inner, PiRpcCompatibilityProfile::PiRpc0830P0).await;
+
+    let error = executor
+        .steer(ManagedExecutorPromptRequest {
+            target: target(),
+            content: "too early for this profile".to_string(),
+        })
+        .await
+        .expect_err("an unadopted profile must refuse steering");
+    assert_eq!(error.kind, PortErrorKind::InvalidRequest);
+    assert!(
+        inner.commands().is_empty(),
+        "refused steering must not reach the executor"
+    );
+}
+
+#[test]
+fn the_pi_execution_surface_never_consumes_the_bash_escape_hatch() {
+    // ADR-0078 M3 guard: `bash` and `abort_bash` are Pi's host-side shell
+    // escape hatch. The consumed-command allowlist the adapter enforces at
+    // its single outgoing chokepoint must never contain them.
+    for command in halo_pi_rpc_adapter::PI_RPC_CONSUMED_COMMAND_TYPES {
+        assert_ne!(*command, "bash", "bash must never be a consumed command");
+        assert_ne!(
+            *command, "abort_bash",
+            "abort_bash must never be a consumed command"
+        );
+    }
+    assert!(halo_pi_rpc_adapter::PI_RPC_CONSUMED_COMMAND_TYPES.contains(&"steer"));
 }

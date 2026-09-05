@@ -59,10 +59,10 @@ pub use managed_executor::{
     ManagedExecutorAbortOutcome, ManagedExecutorApprovalDecision, ManagedExecutorApprovalKind,
     ManagedExecutorApprovalOutcome, ManagedExecutorCapabilityProfile, ManagedExecutorEntryPage,
     ManagedExecutorEvent, ManagedExecutorFailureKind, ManagedExecutorFactDraft,
-    ManagedExecutorPort, ManagedExecutorPromptRequest, ManagedExecutorRiskLevel,
-    ManagedExecutorSandboxEnforcement, ManagedExecutorSandboxFacts, ManagedExecutorSandboxMode,
-    ManagedExecutorTarget, ManagedExecutorToolPhase, ManagedEventSummaryError,
-    MAX_MANAGED_EVENT_SUMMARY_BYTES,
+    ManagedExecutorKind, ManagedExecutorPort, ManagedExecutorPromptRequest,
+    ManagedExecutorRiskLevel, ManagedExecutorSandboxEnforcement, ManagedExecutorSandboxFacts,
+    ManagedExecutorSandboxMode, ManagedExecutorTarget, ManagedExecutorToolPhase,
+    ManagedEventSummaryError, MAX_MANAGED_EVENT_SUMMARY_BYTES,
 };
 #[cfg(feature = "permission")]
 pub use permission::{

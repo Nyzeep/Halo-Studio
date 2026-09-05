@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
-use crate::{ManagedEventFactKind, PortResult};
+use crate::{ManagedEventFactKind, PortError, PortErrorKind, PortResult};
 
 /// Upper bound, in bytes, for any managed event fact summary. Enforced by
 /// [`normalize_managed_event_summary`], the single redaction gate every fact
@@ -89,6 +89,34 @@ pub fn normalize_managed_event_summary(
 pub struct ManagedExecutorTarget {
     pub task_id: String,
     pub session_id: String,
+}
+
+/// The closed set of real production managed executors a task may select
+/// (ADR-0078 M3). The task-creation selector may only offer entries from
+/// [`ManagedExecutorKind::production_executors`]; an adapter without a
+/// production `ManagedExecutorPort` implementation is never listed, and a
+/// session's executor is fixed at task creation with no in-session switch.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedExecutorKind {
+    #[default]
+    PiRpc,
+    Dsh,
+}
+
+impl ManagedExecutorKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::PiRpc => "pi_rpc",
+            Self::Dsh => "dsh",
+        }
+    }
+
+    /// The real production adapters only. The M5 task-creation selector
+    /// renders exactly this list.
+    pub const fn production_executors() -> &'static [Self] {
+        &[Self::PiRpc, Self::Dsh]
+    }
 }
 
 /// One executor turn input. The content is the developer-facing text; the
@@ -464,6 +492,16 @@ pub trait ManagedExecutorPort: Send + Sync {
 
     /// Continues after the executor settled and is waiting for the developer.
     async fn follow_up(&self, request: ManagedExecutorPromptRequest) -> PortResult<()>;
+
+    /// Steers a currently running turn with developer input. Only executors
+    /// whose capability profile declares `steer` implement this; the default
+    /// implementation fails closed without touching the executor.
+    async fn steer(&self, _request: ManagedExecutorPromptRequest) -> PortResult<()> {
+        Err(PortError::new(
+            PortErrorKind::InvalidRequest,
+            "executor has not adopted steering for a running turn",
+        ))
+    }
 
     /// Aborts the running turn and reclaims the executor session.
     async fn abort(&self, target: ManagedExecutorTarget)

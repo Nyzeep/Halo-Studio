@@ -47,6 +47,21 @@ fn main() {
             println!("0.83.0");
             return;
         }
+        if mode == "version_probe_legacy" {
+            println!("0.73.1");
+            return;
+        }
+        if matches!(
+            mode.as_str(),
+            "version_probe_0850" | "steer_0850" | "queue_update_0850" | "tolerated_events_0850"
+        ) {
+            println!("0.85.0");
+            return;
+        }
+        if mode == "queue_update_0830" {
+            println!("0.83.0");
+            return;
+        }
         println!("0.81.1");
         return;
     }
@@ -496,6 +511,64 @@ fn main() {
                         }),
                     );
                 }
+                "steer_0850" => {
+                    respond(
+                        &mut stdout,
+                        request.get("id").and_then(Value::as_str),
+                        command,
+                        true,
+                        Value::Null,
+                    );
+                    send_event(&mut stdout, json!({ "type": "agent_start" }));
+                }
+                "queue_update_0850" | "queue_update_0830" => {
+                    respond(
+                        &mut stdout,
+                        request.get("id").and_then(Value::as_str),
+                        command,
+                        true,
+                        Value::Null,
+                    );
+                    send_event(&mut stdout, json!({ "type": "agent_start" }));
+                    send_event(
+                        &mut stdout,
+                        json!({
+                            "type": "queue_update",
+                            "steering": ["Focus on error handling"],
+                            "followUp": []
+                        }),
+                    );
+                    if mode == "queue_update_0850" {
+                        send_event(&mut stdout, json!({ "type": "agent_settled" }));
+                    }
+                }
+                "tolerated_events_0850" => {
+                    respond(
+                        &mut stdout,
+                        request.get("id").and_then(Value::as_str),
+                        command,
+                        true,
+                        Value::Null,
+                    );
+                    send_event(&mut stdout, json!({ "type": "agent_start" }));
+                    for event_type in [
+                        "turn_start",
+                        "turn_end",
+                        "message_start",
+                        "message_end",
+                        "bash_execution_update",
+                        "compaction_start",
+                        "compaction_end",
+                        "auto_retry_start",
+                        "auto_retry_end",
+                        "summarization_retry_scheduled",
+                        "summarization_retry_attempt_start",
+                        "summarization_retry_finished",
+                    ] {
+                        send_event(&mut stdout, json!({ "type": event_type }));
+                    }
+                    send_event(&mut stdout, json!({ "type": "agent_settled" }));
+                }
                 "extension"
                 | "extension_duplicate"
                 | "extension_timeout"
@@ -554,6 +627,19 @@ fn main() {
                     return;
                 }
                 if mode != "hang_abort" && mode != "agent_end_without_settled" {
+                    send_event(&mut stdout, json!({ "type": "agent_settled" }));
+                }
+            }
+            "steer" => {
+                respond(
+                    &mut stdout,
+                    request.get("id").and_then(Value::as_str),
+                    command,
+                    true,
+                    Value::Null,
+                );
+                if mode == "steer_0850" {
+                    send_event(&mut stdout, json!({ "type": "agent_end" }));
                     send_event(&mut stdout, json!({ "type": "agent_settled" }));
                 }
             }

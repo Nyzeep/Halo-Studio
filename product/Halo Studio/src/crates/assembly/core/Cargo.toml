@@ -144,6 +144,9 @@ halo-runtime-services = { path = "../../execution/runtime-services" }
 # Reviewed product-full plugin composition root.
 halo-opencode-adapter = { path = "../../adapters/opencode-adapter", optional = true }
 halo-pi-rpc-adapter = { path = "../../adapters/pi-rpc-adapter", optional = true }
+# Optional DSH managed-executor adapter (ADR-0078 M3). Disabled by default;
+# enable with the `dsh-executor` feature to offer DSH at task creation.
+halo-dsh-adapter = { path = "../../adapters/dsh-adapter", optional = true }
 halo-claude-code-adapter = { path = "../../adapters/claude-code-adapter", optional = true }
 halo-codex-adapter = { path = "../../adapters/codex-adapter", optional = true }
 halo-plugin-runtime-client = { path = "../../execution/plugin-runtime-client", optional = true }
@@ -203,6 +206,9 @@ ai-adapter-runtime = [
     "halo-ai-adapters/subscription-auth",
     "dep:reqwest",
 ]
+# ADR-0078 M3 executor selection: adds the DSH production adapter to the
+# task-creation selector. Default-off; the pi executor is always installed.
+dsh-executor = ["dep:halo-dsh-adapter"]
 product-capabilities = ["dep:halo-product-capabilities"]
 plugin-source = [
     "halo-services-integrations/plugin-source",

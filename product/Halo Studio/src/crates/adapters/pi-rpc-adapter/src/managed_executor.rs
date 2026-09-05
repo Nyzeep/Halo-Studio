@@ -3,10 +3,11 @@
 //!
 //! [`PiRpcManagedExecutor`] is a thin wrapper over [`PiRpcPort`]: it maps the
 //! port's common face onto the Pi RPC commands, translates Pi protocol events
-//! into the unified fact-bearing event vocabulary (ADR-0080), and declares the
-//! pi 0.83.0 capability profile and sandbox facts exactly as they are. Native
-//! Pi sessions, credentials, raw JSONL records and raw log payloads never
-//! cross this wrapper.
+//! into the unified fact-bearing event vocabulary (ADR-0080), and derives the
+//! capability profile (including the adopted 0.85.0 steer/queue-event flags)
+//! from the inner port's verified readiness facts. Native Pi sessions,
+//! credentials, raw JSONL records and raw log payloads never cross this
+//! wrapper.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,7 +19,8 @@ use halo_runtime_ports::{
     ManagedExecutorCapabilityProfile, ManagedExecutorEntryPage, ManagedExecutorEvent,
     ManagedExecutorFailureKind, ManagedExecutorPort, ManagedExecutorPromptRequest,
     ManagedExecutorRiskLevel, ManagedExecutorSandboxEnforcement, ManagedExecutorSandboxFacts,
-    ManagedExecutorSandboxMode, ManagedExecutorTarget, PiRpcCommand, PiRpcEvent, PiRpcFailureKind,
+    ManagedExecutorSandboxMode, ManagedExecutorTarget, PiRpcCommand, PiRpcCompatibilityProfile,
+    PiRpcEvent, PiRpcFailureKind,
     PiRpcOperationDecision, PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcPort, PiRpcReply,
     PortError, PortErrorKind, PortResult, PI_RPC_ADAPTER_IDENTITY,
 };
@@ -102,7 +104,10 @@ pub fn normalize_pi_rpc_event(
         | PiRpcEvent::SessionCreated { .. }
         | PiRpcEvent::SessionRunning { .. }
         | PiRpcEvent::SessionIdle { .. }
-        | PiRpcEvent::SessionEnded { .. } => Vec::new(),
+        | PiRpcEvent::SessionEnded { .. }
+        // Live queue activity stays in the adapter; Halo owns queueing and
+        // committed facts never derive from queue bookkeeping.
+        | PiRpcEvent::QueueUpdated { .. } => Vec::new(),
         PiRpcEvent::AgentSettled { session_id, .. } => {
             let summary = state
                 .accumulated_replies
@@ -238,21 +243,19 @@ pub fn normalize_pi_rpc_event(
 #[derive(Clone)]
 pub struct PiRpcManagedExecutor {
     inner: Arc<dyn PiRpcPort>,
-    compatibility_profile: String,
     events: broadcast::Sender<ManagedExecutorEvent>,
     state: Arc<Mutex<PiEventNormalization>>,
 }
 
 impl PiRpcManagedExecutor {
-    /// Wraps a Pi RPC port. The compatibility profile is injected from real
-    /// readiness facts by the assembler; the wrapper never invents one.
+    /// Wraps a Pi RPC port. The capability profile is derived from the
+    /// inner port's verified readiness facts; the wrapper never invents one.
     /// Must be called within a Tokio runtime: the event forwarder task is
     /// spawned here, after a synchronous subscription so no event is missed.
-    pub fn new(inner: Arc<dyn PiRpcPort>, compatibility_profile: impl Into<String>) -> Self {
+    pub fn new(inner: Arc<dyn PiRpcPort>) -> Self {
         let (events, _) = broadcast::channel(EVENT_CAPACITY);
         let executor = Self {
             inner,
-            compatibility_profile: compatibility_profile.into(),
             events,
             state: Arc::new(Mutex::new(PiEventNormalization::default())),
         };
@@ -309,17 +312,33 @@ impl PiRpcManagedExecutor {
 #[async_trait]
 impl ManagedExecutorPort for PiRpcManagedExecutor {
     fn capability_profile(&self) -> ManagedExecutorCapabilityProfile {
-        ManagedExecutorCapabilityProfile {
-            adapter_identity: PI_RPC_ADAPTER_IDENTITY.to_string(),
-            compatibility_profile: self.compatibility_profile.clone(),
-            // pi 0.83.0 honest profile: steer waits for the M3 profile
-            // upgrade, turn queueing stays owned by Halo, and pi has no
-            // native sandbox mode enumeration (a DSH-shaped capability).
-            steer: false,
-            queue_events: false,
-            approval_channel: true,
-            entry_read: true,
-            native_sandbox_modes: false,
+        match self.inner.readiness() {
+            Some(summary) => {
+                let profile = summary.version.profile;
+                let adopted_0850 = profile == PiRpcCompatibilityProfile::PiRpc0850P0;
+                ManagedExecutorCapabilityProfile {
+                    adapter_identity: PI_RPC_ADAPTER_IDENTITY.to_string(),
+                    compatibility_profile: profile.as_str().to_string(),
+                    // The 0.85.0 profile adopts steering and native queue
+                    // events (M3); older profiles honestly report false and
+                    // pi has no native sandbox mode enumeration.
+                    steer: adopted_0850,
+                    queue_events: adopted_0850,
+                    approval_channel: true,
+                    entry_read: true,
+                    native_sandbox_modes: false,
+                }
+            }
+            None => ManagedExecutorCapabilityProfile {
+                adapter_identity: PI_RPC_ADAPTER_IDENTITY.to_string(),
+                // No verified readiness facts yet: nothing is claimed.
+                compatibility_profile: "unprobed".to_string(),
+                steer: false,
+                queue_events: false,
+                approval_channel: false,
+                entry_read: false,
+                native_sandbox_modes: false,
+            },
         }
     }
 
@@ -358,6 +377,30 @@ impl ManagedExecutorPort for PiRpcManagedExecutor {
             })
             .await?;
         self.emit_user_message_committed(&request.target.session_id, &request.content);
+        Ok(())
+    }
+
+    /// Steers the running turn. Only the adopted 0.85.0 profile forwards a
+    /// Pi `steer`; every other readiness state fails closed before Pi stdin.
+    async fn steer(&self, request: ManagedExecutorPromptRequest) -> PortResult<()> {
+        let adopted = self.inner.readiness().is_some_and(|summary| {
+            summary.version.profile == PiRpcCompatibilityProfile::PiRpc0850P0
+        });
+        if !adopted {
+            return Err(PortError::new(
+                PortErrorKind::InvalidRequest,
+                "pi executor has not adopted steering for this profile",
+            ));
+        }
+        let generation = self.observed_generation().await?;
+        self.inner
+            .execute(PiRpcCommand::Steer {
+                generation,
+                task_id: request.target.task_id,
+                session_id: request.target.session_id,
+                content: request.content,
+            })
+            .await?;
         Ok(())
     }
 

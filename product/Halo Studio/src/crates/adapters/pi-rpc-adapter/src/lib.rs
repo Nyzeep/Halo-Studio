@@ -33,7 +33,8 @@ use async_trait::async_trait;
 use halo_runtime_ports::{
     PiCredentialSecret, PiCredentialStorePort, PiProviderCapability, PiProviderCapabilityPort,
     PiProviderCapabilityRequest, PiRpcAvailabilitySummary, PiRpcCancellationMode, PiRpcCommand,
-    PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision, PiRpcOperationKind,
+    PiRpcCompatibilityProfile, PiRpcEvent, PiRpcFailureKind, PiRpcOperationDecision,
+    PiRpcOperationKind,
     PiRpcOperationRiskLevel, PiRpcOperationSummary, PiRpcPort, PiRpcReply, PiRpcSessionMode,
     PiRpcVersion, PiRpcVersionEvidenceSource, PiRpcWorkspace, PiRuntimeConfiguration,
     PiRuntimeConfigurationPort, PortError, PortErrorKind, PortResult, PI_RPC_ADAPTER_IDENTITY,
@@ -66,6 +67,40 @@ const SESSION_TERMINAL_FAILED: u8 = 2;
 const SUPPORTED_PI_RPC_PROFILES: &[(&str, PiRpcVersion)] = &[
     ("0.81.1", PiRpcVersion::V0_81_1),
     ("0.83.0", PiRpcVersion::V0_83_0),
+    ("0.85.0", PiRpcVersion::V0_85_0),
+];
+/// Pi RPC command types Halo consumes. `bash` / `abort_bash` are Pi's
+/// host-side shell escape hatch; Halo managed execution never sends them so
+/// no managed session can bypass the Halo high-risk decision flow (ADR-0078
+/// M3 guard). Every outgoing request passes the
+/// [`ensure_consumed_command_type`] chokepoint.
+pub const PI_RPC_CONSUMED_COMMAND_TYPES: &[&str] = &[
+    "prompt",
+    "follow_up",
+    "steer",
+    "abort",
+    "get_state",
+    "get_entries",
+    "get_available_models",
+    "get_available_thinking_levels",
+    "set_model",
+];
+/// Pi 0.85.0 event types the adapter has verified against the upstream RPC
+/// document but deliberately does not consume. The 0.85.0 profile tolerates
+/// them without projecting Halo state; unknown types still fail closed.
+const TOLERATED_PI_0850_EVENT_TYPES: &[&str] = &[
+    "turn_start",
+    "turn_end",
+    "message_start",
+    "message_end",
+    "bash_execution_update",
+    "compaction_start",
+    "compaction_end",
+    "auto_retry_start",
+    "auto_retry_end",
+    "summarization_retry_scheduled",
+    "summarization_retry_attempt_start",
+    "summarization_retry_finished",
 ];
 const SUPPORTED_ASSISTANT_MESSAGE_EVENT_TYPES: &[&str] = &[
     "start",
@@ -170,6 +205,10 @@ pub struct PiRpcAdapter {
     state: Arc<Mutex<AdapterState>>,
     lifecycle: Arc<Mutex<()>>,
     config: PiRpcConfig,
+    /// Sync view of the verified readiness facts so capability profiles can
+    /// be derived without awaiting adapter state. Written only at the
+    /// controlled probe/handshake and shutdown boundaries.
+    readiness: Arc<std::sync::RwLock<Option<PiRpcAvailabilitySummary>>>,
 }
 
 #[derive(Default)]
@@ -177,7 +216,6 @@ struct AdapterState {
     generation: Option<u64>,
     workspace: Option<PiRpcWorkspace>,
     executable: Option<PathBuf>,
-    readiness_summary: Option<PiRpcAvailabilitySummary>,
     sessions: HashMap<String, Arc<PiSession>>,
 }
 
@@ -208,6 +246,10 @@ impl Drop for InstalledExtension {
 
 struct PiSession {
     generation: u64,
+    /// The verified compatibility profile this session's executable was
+    /// probed with. Gates which protocol events and commands the session
+    /// accepts so a newer Pi cannot silently drift past its profile.
+    profile: PiRpcCompatibilityProfile,
     task_id: Mutex<String>,
     session_id: Mutex<String>,
     is_readiness_probe: bool,
@@ -285,6 +327,7 @@ impl PiRpcAdapter {
             state: Arc::new(Mutex::new(AdapterState::default())),
             lifecycle: Arc::new(Mutex::new(())),
             config,
+            readiness: Arc::new(std::sync::RwLock::new(None)),
         }
     }
 
@@ -325,6 +368,12 @@ impl PiRpcAdapter {
         let executable = self.resolve_executable().await?;
         let output = self.probe_executable_version(&executable).await?;
         if !output.status.success() {
+            return Err(PiRpcFailureKind::UnsupportedVersion);
+        }
+        // Install-source pinning: the retired @mariozechner scope and any
+        // unpinned output are refused as unsupported versions so a stale or
+        // unknown install can never drift into a supported profile.
+        if version_output_source(&output) != PiRpcInstallSource::CurrentScope {
             return Err(PiRpcFailureKind::UnsupportedVersion);
         }
         // Version probing is only executable/version readiness. It does not
@@ -451,6 +500,7 @@ impl PiRpcAdapter {
         workspace: &PiRpcWorkspace,
         session_dir: Option<PathBuf>,
         executable: &Path,
+        profile: PiRpcCompatibilityProfile,
         extension: Option<InstalledExtension>,
         runtime_configuration: Option<&PiRuntimeConfiguration>,
         runtime_capability: Option<&PiProviderCapability>,
@@ -519,6 +569,7 @@ impl PiRpcAdapter {
         let stdout = child.take_stdout().ok_or(PiRpcFailureKind::Transport)?;
         let session = Arc::new(PiSession {
             generation,
+            profile,
             task_id: Mutex::new(task_id),
             session_id: Mutex::new(session_id),
             is_readiness_probe,
@@ -797,9 +848,8 @@ impl PiRpcAdapter {
             let state = self.state.lock().await;
             if state.generation == Some(generation) && state.workspace.as_ref() == Some(&workspace)
             {
-                return state
-                    .readiness_summary
-                    .clone()
+                return self
+                    .readiness()
                     .map(|summary| PiRpcReply::Ready { summary })
                     .unwrap_or(PiRpcReply::Unavailable {
                         reason: PiRpcFailureKind::CapabilityMismatch,
@@ -827,6 +877,7 @@ impl PiRpcAdapter {
                 &workspace,
                 None,
                 &executable,
+                resolved.summary.version.profile,
                 None,
                 None,
                 None,
@@ -848,7 +899,7 @@ impl PiRpcAdapter {
         state.generation = Some(generation);
         state.workspace = Some(workspace);
         state.executable = Some(executable);
-        state.readiness_summary = Some(readiness_summary.clone());
+        *self.readiness.write().expect("pi readiness lock") = Some(readiness_summary.clone());
         drop(state);
 
         self.emit(PiRpcEvent::Ready { generation });
@@ -864,7 +915,7 @@ impl PiRpcAdapter {
         session_id: String,
         mode: PiRpcSessionMode,
     ) -> Result<(), PiRpcFailureKind> {
-        let (workspace, executable) = {
+        let (workspace, executable, profile) = {
             let state = self.state.lock().await;
             if state.generation != Some(generation) {
                 return Err(PiRpcFailureKind::Transport);
@@ -877,6 +928,9 @@ impl PiRpcAdapter {
                 state
                     .executable
                     .clone()
+                    .ok_or(PiRpcFailureKind::Transport)?,
+                self.readiness()
+                    .map(|summary| summary.version.profile)
                     .ok_or(PiRpcFailureKind::Transport)?,
             )
         };
@@ -917,6 +971,7 @@ impl PiRpcAdapter {
                 &workspace,
                 standard_session_dir,
                 &executable,
+                profile,
                 Some(extension),
                 runtime_configuration
                     .as_ref()
@@ -1039,7 +1094,7 @@ impl PiRpcAdapter {
             state.generation = None;
             state.workspace = None;
             state.executable = None;
-            state.readiness_summary = None;
+            *self.readiness.write().expect("pi readiness lock") = None;
             state
                 .sessions
                 .drain()
@@ -1126,6 +1181,32 @@ impl PiRpcPort for PiRpcAdapter {
                     generation,
                     session_id,
                 });
+                Ok(PiRpcReply::Accepted)
+            }
+            PiRpcCommand::Steer {
+                generation,
+                task_id,
+                session_id,
+                content,
+            } => {
+                let session = self.session(generation, &task_id, &session_id).await?;
+                // Steering is a 0.85.0-profile capability; older profiles
+                // fail closed instead of sending an unknown command type.
+                if session.profile != PiRpcCompatibilityProfile::PiRpc0850P0 {
+                    return Err(PortError::new(
+                        PortErrorKind::InvalidRequest,
+                        "Pi RPC steering requires the pi-rpc-0.85.0-p0 profile",
+                    ));
+                }
+                if !session.running.load(Ordering::Acquire) {
+                    return Err(PortError::new(
+                        PortErrorKind::InvalidRequest,
+                        "Pi RPC steering requires a running turn",
+                    ));
+                }
+                session
+                    .request("steer", json!({ "type": "steer", "message": content }))
+                    .await?;
                 Ok(PiRpcReply::Accepted)
             }
             PiRpcCommand::StopSession {
@@ -1265,6 +1346,13 @@ impl PiRpcPort for PiRpcAdapter {
     fn subscribe(&self) -> broadcast::Receiver<PiRpcEvent> {
         self.events.subscribe()
     }
+
+    fn readiness(&self) -> Option<PiRpcAvailabilitySummary> {
+        self.readiness
+            .read()
+            .expect("pi readiness lock")
+            .clone()
+    }
 }
 
 impl PiSession {
@@ -1360,6 +1448,10 @@ impl PiSession {
         response_timeout: Duration,
         fail_closed_on_transport_error: bool,
     ) -> PortResult<Value> {
+        // Single chokepoint for every outgoing Pi request. The host-side
+        // shell escape hatch (`bash` / `abort_bash`) and any other
+        // unconsumed command type never reach Pi stdin.
+        ensure_consumed_command_type(command)?;
         let mut payload = payload.as_object().cloned().ok_or_else(|| {
             PortError::new(
                 PortErrorKind::InvalidRequest,
@@ -1775,6 +1867,34 @@ async fn handle_pi_message(session: &Arc<PiSession>, value: &Value) {
                 generation: session.generation,
                 session_id,
             });
+        }
+        Some("queue_update") => {
+            if session.profile != PiRpcCompatibilityProfile::PiRpc0850P0 {
+                session.fail_closed(PiRpcFailureKind::Protocol).await;
+                return;
+            }
+            let steering = value.get("steering").and_then(Value::as_array);
+            let follow_up = value.get("followUp").and_then(Value::as_array);
+            let (Some(steering), Some(follow_up)) = (steering, follow_up) else {
+                session.fail_closed(PiRpcFailureKind::Protocol).await;
+                return;
+            };
+            let session_id = session.current_session_id().await;
+            let _ = session.events.send(PiRpcEvent::QueueUpdated {
+                generation: session.generation,
+                session_id,
+                // Only bounded counts cross the port; queue message text
+                // stays inside the adapter because Halo owns queueing.
+                steering_count: u32::try_from(steering.len()).unwrap_or(u32::MAX),
+                follow_up_count: u32::try_from(follow_up.len()).unwrap_or(u32::MAX),
+            });
+        }
+        Some(event_type)
+            if session.profile == PiRpcCompatibilityProfile::PiRpc0850P0
+                && TOLERATED_PI_0850_EVENT_TYPES.contains(&event_type) =>
+        {
+            // Verified against the upstream 0.85 RPC surface but deliberately
+            // unconsumed: no Halo state is projected from these events.
         }
         Some("message_update") => {
             if !valid_message_update(value) {
@@ -2259,6 +2379,21 @@ fn next_input_command(prompt_sent: &AtomicBool) -> &'static str {
     }
 }
 
+/// The bash guard: Halo managed execution only ever sends command types on
+/// [`PI_RPC_CONSUMED_COMMAND_TYPES`]. `bash` and `abort_bash` are Pi's
+/// host-side shell escape hatch and are intentionally absent, so a managed
+/// session can never bypass the Halo high-risk decision flow.
+fn ensure_consumed_command_type(command: &str) -> PortResult<()> {
+    if PI_RPC_CONSUMED_COMMAND_TYPES.contains(&command) {
+        Ok(())
+    } else {
+        Err(PortError::new(
+            PortErrorKind::InvalidRequest,
+            "Pi RPC command type is not consumed by Halo managed execution",
+        ))
+    }
+}
+
 fn valid_cli_selection(value: &str) -> bool {
     !value.is_empty()
         && !value.starts_with('-')
@@ -2660,6 +2795,46 @@ fn parse_command_paths(bytes: &[u8]) -> Vec<PathBuf> {
         .filter(|line| !line.is_empty())
         .map(PathBuf::from)
         .collect()
+}
+
+/// The npm distribution scope detected for the local pi executable (M3
+/// install-source pinning). `@earendil-works/pi-coding-agent` is the only
+/// live distribution and the only source allowed through a Halo profile;
+/// the retired `@mariozechner/pi-coding-agent` scope stopped at 0.73.1 and is
+/// reported honestly, never silently accepted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PiRpcInstallSource {
+    /// The current `@earendil-works/pi-coding-agent` scope.
+    CurrentScope,
+    /// The retired `@mariozechner/pi-coding-agent` scope (final release
+    /// 0.73.1). Refused by the version probe.
+    LegacyScope,
+    /// No pinned source could be recognized from the version output.
+    Unknown,
+}
+
+/// Maps one `--version` output line onto the pinned install source. Versions
+/// that only the current scope ships map to [`PiRpcInstallSource::CurrentScope`];
+/// the legacy scope's final release maps to [`PiRpcInstallSource::LegacyScope`].
+pub fn pi_install_source_from_version_output(value: &str) -> PiRpcInstallSource {
+    match value.trim() {
+        "0.73.1" => PiRpcInstallSource::LegacyScope,
+        "0.81.1" | "0.83.0" | "0.85.0" => PiRpcInstallSource::CurrentScope,
+        _ => PiRpcInstallSource::Unknown,
+    }
+}
+
+/// The first non-empty `--version` output candidate and its pinned source.
+fn version_output_source(output: &std::process::Output) -> PiRpcInstallSource {
+    [output.stdout.as_slice(), output.stderr.as_slice()]
+        .into_iter()
+        .find_map(|bytes| {
+            let value = String::from_utf8(bytes.to_vec()).ok()?;
+            let value = value.trim();
+            (!value.is_empty())
+                .then(|| pi_install_source_from_version_output(value))
+        })
+        .unwrap_or(PiRpcInstallSource::Unknown)
 }
 
 fn availability_summary_from_version_output(

@@ -16,17 +16,17 @@ use halo_agent_runtime::halo_workbench::{
     HaloWorkbenchSessionPhase, HaloWorkbenchSessionSnapshot,
 };
 use halo_pi_rpc_adapter::{
-    JsonFilePiRuntimeConfigurationRepository, PiRpcAdapter, PiRpcConfig,
+    JsonFilePiRuntimeConfigurationRepository, PiRpcAdapter, PiRpcConfig, PiRpcManagedExecutor,
     PiRuntimeConfigurationService,
 };
 use halo_runtime_ports::{
-    PiCredentialSecret, PiCredentialStorePort, PiProviderReadiness, PiProviderReadinessPort,
-    PiRpcPort, PiRuntimeConfigurationManagementPort, PortError, PortErrorKind, PortResult,
-    WorkbenchDeliveryAttribution, WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence,
-    WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint,
-    WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
-    WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort,
-    WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest,
+    ManagedExecutorKind, PiCredentialSecret, PiCredentialStorePort, PiProviderReadiness,
+    PiProviderReadinessPort, PiRpcPort, PiRuntimeConfigurationManagementPort, PortError,
+    PortErrorKind, PortResult, WorkbenchDeliveryAttribution, WorkbenchDeliveryAttributionKind,
+    WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest,
+    WorkbenchDeliveryFingerprint, WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline,
+    WorkbenchTaskBaselinePort, WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFacts,
+    WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -907,7 +907,7 @@ pub fn build_halo_workbench_runtime_components(
         ),
     );
     let runtime = HaloWorkbenchRuntime::try_new_with_delivery_evidence_and_fact_store_and_interruption_history(
-        adapter,
+        adapter.clone(),
         Arc::new(CoreWorkbenchWorkspaceFacts::new(workspace_service)),
         Arc::new(PiRpcConfiguredReadinessGate {
             configuration: configuration.clone(),
@@ -919,6 +919,22 @@ pub fn build_halo_workbench_runtime_components(
         Arc::new(SystemProductClock),
     )
     .map_err(|error| error.to_string())?;
+    // ADR-0078 M3 executor selection: the sole P0 pi adapter is bound behind
+    // the unified ManagedExecutorPort wrapper (capability facts derived from
+    // verified readiness). The optional DSH executor joins the task-creation
+    // selector only under the `dsh-executor` feature; both are fixed per task
+    // with no in-session switch.
+    runtime.install_managed_executor(
+        ManagedExecutorKind::PiRpc,
+        Arc::new(PiRpcManagedExecutor::new(adapter)),
+    );
+    #[cfg(feature = "dsh-executor")]
+    runtime.install_managed_executor(
+        ManagedExecutorKind::Dsh,
+        Arc::new(halo_dsh_adapter::DshManagedExecutor::new(Arc::new(
+            halo_dsh_adapter::DshAdapter::with_config(Default::default()),
+        ))),
+    );
     let configuration: Arc<dyn PiRuntimeConfigurationManagementPort> = configuration;
     Ok(HaloWorkbenchRuntimeComponents {
         runtime,
