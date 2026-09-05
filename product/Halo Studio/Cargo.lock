@@ -3494,6 +3494,7 @@ dependencies = [
  "halo-claude-code-adapter",
  "halo-codex-adapter",
  "halo-core-types",
+ "halo-dsh-adapter",
  "halo-events",
  "halo-external-sources",
  "halo-harness",
