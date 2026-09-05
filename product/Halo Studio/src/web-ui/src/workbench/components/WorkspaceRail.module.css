@@ -1,0 +1,74 @@
+/* WorkspaceRail — token-only styles (M4/M5 token layer; no bare values). */
+
+.rail {
+  width: var(--workbench-rail-width);
+  flex: 0 0 var(--workbench-rail-width);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: var(--surface-container-low);
+  border-right: 1px solid var(--outline-variant);
+  overflow-y: auto;
+}
+
+.item,
+.newSlot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  text-align: left;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid transparent;
+  border-radius: var(--radius-medium);
+  background: transparent;
+  color: var(--on-surface);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-duration-short) var(--motion-easing-standard),
+    border-color var(--motion-duration-short) var(--motion-easing-standard);
+}
+
+.item:hover,
+.newSlot:hover {
+  background: var(--surface-container-high);
+}
+
+.itemActive {
+  background: var(--surface-container-high);
+  border-color: var(--outline-variant);
+}
+
+.newSlot {
+  margin-top: auto;
+  border-style: dashed;
+  border-color: var(--outline);
+  color: var(--on-surface-variant);
+}
+
+.newSlot:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.itemName {
+  font-size: var(--font-size-medium);
+  font-weight: 600;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemMeta {
+  font-size: var(--font-size-small);
+  color: var(--on-surface-variant);
+}
+
+.hint {
+  margin: 0;
+  padding: 0 var(--space-xs);
+  font-size: var(--font-size-small);
+  color: var(--on-surface-variant);
+}

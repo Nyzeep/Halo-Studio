@@ -31,6 +31,7 @@ import {
   isMacOSDesktopRuntime,
   isTauriRuntime,
 } from '@/infrastructure/runtime';
+import { isStripWorkbenchEnabled } from '@/workbench/workbenchGate';
 import { flowChatSessionConfigForWorkspace } from '../utils/projectSessionWorkspace';
 import {
   createWorkbenchRuntimeRequestId,
@@ -48,6 +49,8 @@ const AboutDialog = lazy(() =>
   import('../components/AboutDialog').then(module => ({ default: module.AboutDialog }))
 );
 const WorkspaceManager = lazy(() => import('../../tools/workspace/components/WorkspaceManager'));
+// M5 strip workbench (issue #57): lazy so the legacy path pays nothing for it.
+const StripWorkbenchView = lazy(() => import('@/workbench/StripWorkbenchView'));
 
 interface AppLayoutProps {
   className?: string;
@@ -112,6 +115,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
   const isMacOS = useMemo(() => {
     return isMacOSDesktopRuntime();
   }, []);
+
+  // M5 (issue #57): the strip workbench is the managed-mode main view; the
+  // legacy WorkspaceBody stays mounted path for rollback (workbenchGate).
+  const stripWorkbenchActive = isHaloLocalCodingScope() && isStripWorkbenchEnabled();
 
   const {
     handleMinimize,
@@ -592,14 +599,20 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
 
         {/* Main content — always render WorkspaceBody; WelcomeScene in viewport handles no-workspace state */}
         <main className="halo-app-main-workspace" data-testid="app-main-content">
-          <WorkspaceBody
-            onMinimize={canUseNativeWindowControls && !isMacOS ? handleMinimize : undefined}
-            onMaximize={canUseNativeWindowControls ? handleMaximize : undefined}
-            onClose={canUseNativeWindowControls && !isMacOS ? handleClose : undefined}
-            isMaximized={isMaximized}
-            isEntering={transitionDir === 'entering'}
-            isExiting={transitionDir === 'returning'}
-          />
+          {stripWorkbenchActive ? (
+            <Suspense fallback={null}>
+              <StripWorkbenchView />
+            </Suspense>
+          ) : (
+            <WorkspaceBody
+              onMinimize={canUseNativeWindowControls && !isMacOS ? handleMinimize : undefined}
+              onMaximize={canUseNativeWindowControls ? handleMaximize : undefined}
+              onClose={canUseNativeWindowControls && !isMacOS ? handleClose : undefined}
+              isMaximized={isMaximized}
+              isEntering={transitionDir === 'entering'}
+              isExiting={transitionDir === 'returning'}
+            />
+          )}
         </main>
 
       </div>

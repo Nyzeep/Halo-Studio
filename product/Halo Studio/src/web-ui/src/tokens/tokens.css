@@ -58,6 +58,15 @@
   --motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
   --motion-easing-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
   --motion-easing-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+
+  /*
+   * Strip workbench layout tokens (M5, ADR-0076; issue #57).
+   * The niri strip model needs two stable layout dimensions shared by the
+   * workspace rail and every task column: column width is FIXED (new columns
+   * never resize existing ones), so it lives here like the color roles.
+   */
+  --workbench-rail-width: 224px;
+  --workbench-column-width: 380px;
 }
 
 /*

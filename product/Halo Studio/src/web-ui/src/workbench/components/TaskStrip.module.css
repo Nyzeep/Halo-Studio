@@ -1,0 +1,55 @@
+/* TaskStrip — token-only styles (M4/M5 token layer; no bare values). */
+
+.stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.strip {
+  height: 100%;
+  display: flex;
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--outline-variant) transparent;
+}
+
+.newColumn {
+  flex: 0 0 56px;
+  align-self: stretch;
+  border: 1px dashed var(--outline);
+  border-radius: var(--radius-large);
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: var(--font-size-xlarge);
+  cursor: pointer;
+  transition:
+    color var(--motion-duration-short) var(--motion-easing-standard),
+    border-color var(--motion-duration-short) var(--motion-easing-standard);
+}
+
+.newColumn:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.emptyHint {
+  margin: auto;
+  border: 1px dashed var(--outline);
+  border-radius: var(--radius-large);
+  padding: var(--space-xl);
+  color: var(--on-surface-variant);
+  font-size: var(--font-size-medium);
+  line-height: 1.8;
+  text-align: center;
+}
+
+.emptyHint b {
+  color: var(--primary);
+}
