@@ -1,0 +1,28 @@
+[package]
+name = "halo-dsh-adapter"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Halo Workbench Runtime adapter for the DeepSeek Harness ACP and SDK profiles"
+
+[lib]
+name = "halo_dsh_adapter"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "dsh_acp_fixture"
+path = "src/bin/dsh_acp_fixture.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+halo-runtime-ports = { path = "../../contracts/runtime-ports" }
+halo-services-core = { path = "../../services/services-core", default-features = false }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+
+[lints]
+workspace = true

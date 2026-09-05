@@ -1287,8 +1287,11 @@ mod tests {
 
     #[test]
     fn canonical_remotes_collapse_origin_and_upstream_aliases_for_the_same_repository() {
+        // Both remotes must point at the same repository (case-insensitive
+        // project path) so the alias-collapse rule is exercised; the earlier
+        // BitFun/Halo mixed fixtures accidentally described two repos.
         let remotes = vec![
-            github_remote("upstream-id", "upstream", "GCWing/BitFun"),
+            github_remote("upstream-id", "upstream", "GCWing/Halo"),
             github_remote("origin-id", "origin", "gcwing/halo"),
         ];
 

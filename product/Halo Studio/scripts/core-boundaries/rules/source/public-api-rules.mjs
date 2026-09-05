@@ -258,7 +258,7 @@ function piRpcAdapterEntry(symbol) {
     contractSlice: contractSlices.haloWorkbenchPiRpcExecutionSeam,
     wireImpact: false,
     rationale:
-      'ADR-0072 keeps one Pi RPC production adapter behind PiRpcPort without exposing a generic executor selector or raw Pi protocol',
+      'ADR-0078 keeps two same-tier production adapters behind the audited seam (PiRpcPort / ManagedExecutorPort) without exposing a generic executor selector or raw executor protocol',
     exit:
       'remove only after a reviewed replacement for the accepted Pi RPC production adapter and equivalent Workbench seam tests',
   };
@@ -270,6 +270,61 @@ export const piRpcAdapterPublicApiEntries = [
   piRpcAdapterEntry('HALO_PI_EXTENSION_PERMISSIONS'),
   piRpcAdapterEntry('PiRpcConfig'),
   piRpcAdapterEntry('PiRpcAdapter'),
+  piRpcAdapterEntry('PiRuntimeConfigurationRepository'),
+  piRpcAdapterEntry('PiRuntimeConfigurationService'),
+  piRpcAdapterEntry('PiRuntimeConfigurationView'),
+  piRpcAdapterEntry('JsonFilePiRuntimeConfigurationRepository'),
+  piRpcAdapterEntry('MemoryPiRuntimeConfigurationRepository'),
+  piRpcAdapterEntry('MemoryPiCredentialStore'),
+  piRpcAdapterEntry('StaticPiProviderCapabilities'),
+  piRpcAdapterEntry('validate_runtime_configuration_shape'),
+  piRpcAdapterEntry('pi_rpc_arguments'),
+  piRpcAdapterEntry('pi_models_json_projection'),
+  piRpcAdapterEntry('PiRpcManagedExecutor'),
+  piRpcAdapterEntry('PiEventNormalization'),
+  piRpcAdapterEntry('normalize_pi_rpc_event'),
+  piRpcAdapterEntry('managed_executor_failure_kind'),
+  piRpcAdapterEntry('PI_RPC_CONSUMED_COMMAND_TYPES'),
+  piRpcAdapterEntry('PiRpcInstallSource'),
+  piRpcAdapterEntry('pi_install_source_from_version_output'),
+];
+
+function dshAdapterEntry(symbol) {
+  return {
+    symbol,
+    owner: 'dsh-adapter DSH ACP projection owner',
+    consumer: 'halo-core Halo Workbench product assembly',
+    verification:
+      'DSH adapter framing, profile, credential, lifecycle, fail-closed contract tests with a fake ACP child, Workbench runtime contract tests, and core-boundary public API budget checks',
+    p0: 'controlled dsh --profile acp execution projection for the Halo Workbench Runtime (ADR-0078 M2)',
+    contractSlice: contractSlices.haloWorkbenchPiRpcExecutionSeam,
+    wireImpact: false,
+    rationale:
+      'ADR-0078 keeps two same-tier production adapters behind the audited ManagedExecutorPort seam without exposing native executor sessions, credentials, or raw ACP wire records',
+    exit:
+      'remove only after a reviewed replacement for the accepted DSH production adapter and equivalent Workbench seam tests',
+  };
+}
+
+export const dshAdapterPublicApiEntries = [
+  dshAdapterEntry('DSH_ADAPTER_IDENTITY'),
+  dshAdapterEntry('DSH_COMPATIBILITY_PROFILE'),
+  dshAdapterEntry('DSH_API_KEY_ENV'),
+  dshAdapterEntry('DSH_HOME_ENV'),
+  dshAdapterEntry('DshAdapter'),
+  dshAdapterEntry('DshChannelKind'),
+  dshAdapterEntry('DshConfig'),
+  dshAdapterEntry('DshCredentialRef'),
+  dshAdapterEntry('DshCredentialStore'),
+  dshAdapterEntry('DshFailureKind'),
+  dshAdapterEntry('DshManagedExecutor'),
+  dshAdapterEntry('DshProfile'),
+  dshAdapterEntry('MemoryDshCredentialStore'),
+  dshAdapterEntry('SUPPORTED_DSH_PROFILES'),
+  dshAdapterEntry('build_child_environment'),
+  dshAdapterEntry('managed_executor_failure_kind'),
+  dshAdapterEntry('supported_profile'),
+  dshAdapterEntry('validate_initialize_result'),
 ];
 
 function staticHookAdapterEntry(symbol, owner, consumer) {
@@ -1097,6 +1152,12 @@ export const publicApiAllowlistRules = [
     reason:
       'Pi RPC adapter public API must stay limited to the audited Workbench process configuration, extension audit facts, and sole adapter type',
     allowedSymbolEntries: piRpcAdapterPublicApiEntries,
+  },
+  {
+    path: 'src/crates/adapters/dsh-adapter/src/lib.rs',
+    reason:
+      'DSH adapter public API must stay limited to the audited Workbench process configuration, anchored version profiles, credential references, and sole adapter types',
+    allowedSymbolEntries: dshAdapterPublicApiEntries,
   },
   {
     path: 'src/crates/adapters/claude-code-adapter/src/lib.rs',

@@ -1,0 +1,141 @@
+/* Overview — token-only styles (M4/M5 token layer; no bare values). */
+
+.overview {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  padding: var(--space-xl);
+  background: var(--surface);
+}
+
+.overviewHint {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--on-surface-variant);
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.rowLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  font-size: var(--font-size-medium);
+  color: var(--on-surface-variant);
+}
+
+.rowTitle b {
+  color: var(--on-surface);
+}
+
+.pageControls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-small);
+}
+
+.pageControls button {
+  background: transparent;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-small);
+  color: var(--on-surface);
+  cursor: pointer;
+  padding: 0 var(--space-sm);
+}
+
+.clip {
+  overflow: hidden;
+}
+
+.strip {
+  display: flex;
+  gap: var(--space-md);
+  height: 160px;
+  width: max-content;
+  transform-origin: top left;
+}
+
+.cell {
+  width: calc(var(--workbench-column-width) * 0.6);
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  text-align: left;
+  background: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-medium);
+  padding: var(--space-sm);
+  color: var(--on-surface);
+  cursor: pointer;
+}
+
+.cellSelected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+.cellTitle {
+  max-width: 100%;
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  font-size: var(--font-size-small);
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-sm);
+  line-height: 1.8;
+  white-space: nowrap;
+}
+
+.toneRunning {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.toneWaiting {
+  background: var(--warning-container);
+  color: var(--on-warning-container);
+}
+
+.toneReview {
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.toneAccepted {
+  background: var(--success-container);
+  color: var(--on-success-container);
+}
+
+.toneFailed {
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.toneIdle {
+  background: var(--surface-container-high);
+  color: var(--on-surface-variant);
+}
+
+.empty {
+  border: 1px dashed var(--outline);
+  border-radius: var(--radius-medium);
+  padding: var(--space-md);
+  color: var(--on-surface-variant);
+}

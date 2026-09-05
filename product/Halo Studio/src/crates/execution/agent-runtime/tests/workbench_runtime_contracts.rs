@@ -15,7 +15,9 @@ use halo_agent_runtime::halo_workbench::{
 };
 use halo_runtime_ports::{
     ClockPort, ManagedEventFactAppend, ManagedEventFactKind, ManagedEventFactRecord,
-    ManagedEventFactStorePort, PiProviderReadiness, PiProviderReadinessPort,
+    ManagedEventFactStorePort, ManagedExecutorKind, ManagedExecutorPort,
+    ManagedExecutorPromptRequest, ManagedExecutorTarget, PiProviderReadiness,
+    PiProviderReadinessPort,
     PiRpcAvailabilitySummary, PiRpcCancellationMode, PiRpcCommand, PiRpcEvent, PiRpcFailureKind,
     PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcOperationSummary, PiRpcPort, PiRpcReply,
     PiRpcVersion, PiRpcVersionEvidenceSource, PortError, PortErrorKind, PortResult,
@@ -51,10 +53,13 @@ impl CommandKind {
             PiRpcCommand::SendUserInput { .. } => Some(Self::SendUserInput),
             PiRpcCommand::FollowUp { .. } => Some(Self::FollowUp),
             PiRpcCommand::StopSession { .. } => Some(Self::StopSession),
+            PiRpcCommand::Steer { .. } => None,
             PiRpcCommand::AbortSession { .. } => Some(Self::AbortSession),
             PiRpcCommand::EndSession { .. } => Some(Self::EndSession),
             PiRpcCommand::ResolveOperation { .. } => Some(Self::ResolveOperation),
             PiRpcCommand::Shutdown { .. } => Some(Self::Shutdown),
+            // Entry reads never originate from the Workbench Runtime.
+            PiRpcCommand::GetEntries { .. } => None,
         }
     }
 }
@@ -752,6 +757,7 @@ async fn create_session_with_mode(
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: request_id.to_string(),
                 mode,
+                executor: None,
             },
         })
         .await
@@ -801,6 +807,71 @@ async fn wait_for_no_pending_operation(runtime: &HaloWorkbenchRuntime, operation
     .expect("operation leaves the pending set");
 }
 
+#[test]
+fn facts_aware_recovery_projects_safe_facts_without_pi_replay() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let facts = Arc::new(RecordingManagedFacts::default());
+    *facts.records.lock().expect("facts lock") = vec![
+        ManagedEventFactRecord {
+            task_id: "task-recovered".to_string(),
+            fact_id: "fact-1".to_string(),
+            sequence: 1,
+            recorded_at_ms: 1_234,
+            schema_version: 1,
+            kind: ManagedEventFactKind::UserMessageSummary,
+            redacted_summary: "safe user summary".to_string(),
+        },
+        ManagedEventFactRecord {
+            task_id: "task-recovered".to_string(),
+            fact_id: "fact-2".to_string(),
+            sequence: 2,
+            recorded_at_ms: 1_235,
+            schema_version: 1,
+            kind: ManagedEventFactKind::ToolActivity,
+            redacted_summary: "safe tool summary".to_string(),
+        },
+    ];
+    let history = Arc::new(InMemoryInterruptionHistory {
+        sessions: Mutex::new(vec![HaloWorkbenchSessionSnapshot {
+            workspace_id: "workspace-recovered".to_string(),
+            task_id: "task-recovered".to_string(),
+            session_id: "session-recovered".to_string(),
+            mode: HaloWorkbenchSessionMode::Managed,
+            phase: HaloWorkbenchSessionPhase::Interrupted,
+            executor: ManagedExecutorKind::PiRpc,
+            cancellation_mode: None,
+            baseline: None,
+            messages: Vec::new(),
+            activities: Vec::new(),
+            error: None,
+            delivery_review: None,
+        }]),
+        writes: AtomicUsize::new(0),
+    });
+    let runtime = HaloWorkbenchRuntime::try_new_with_delivery_evidence_and_fact_store_and_interruption_history(
+        adapter.clone(),
+        Arc::new(TrustedWorkspaceFacts),
+        Arc::new(AvailableProviderReadiness),
+        Arc::new(FixedTaskBaseline),
+        Arc::new(FixedDeliveryEvidence::new("unused", Vec::new(), Vec::new(), Vec::new())),
+        facts,
+        history,
+        Arc::new(FixedClock),
+    )
+    .expect("facts-aware recovery succeeds");
+    let session = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == "session-recovered")
+        .expect("recovered session is visible");
+    assert_eq!(session.phase, HaloWorkbenchSessionPhase::Interrupted);
+    assert_eq!(session.messages[0].role, HaloWorkbenchMessageRole::User);
+    assert_eq!(session.messages[0].content, "safe user summary");
+    assert_eq!(session.activities[0].label, "safe tool summary");
+    assert!(adapter.commands().is_empty(), "recovery must not replay Pi");
+}
+
 #[tokio::test]
 async fn managed_session_records_a_normalized_fact_before_pi_creation() {
     let adapter = Arc::new(DeterministicPiRpc::new());
@@ -833,15 +904,19 @@ async fn managed_session_records_a_normalized_fact_before_pi_creation() {
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "facts-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Managed,
+                executor: None,
             },
         })
         .await
         .expect("managed create accepted");
 
     let records = facts.records();
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0].task_id, "facts-task");
-    assert_eq!(records[0].kind, ManagedEventFactKind::TaskLifecycle);
+    assert_eq!(records.len(), 2);
+    let lifecycle = records
+        .iter()
+        .find(|record| record.kind == ManagedEventFactKind::TaskLifecycle)
+        .expect("task lifecycle fact is recorded");
+    assert_eq!(lifecycle.task_id, "facts-task");
     assert_eq!(adapter.count(CommandKind::CreateSession), 1);
 }
 
@@ -882,6 +957,7 @@ async fn managed_fact_failure_is_observable_and_prevents_session_and_pi_progress
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "facts-fail-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Managed,
+                executor: None,
             },
         })
         .await
@@ -1151,6 +1227,7 @@ async fn managed_task_requires_confirmation_and_records_existing_git_baseline_be
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "managed-baseline-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Managed,
+                executor: None,
             },
         })
         .await
@@ -1174,6 +1251,7 @@ async fn managed_task_requires_confirmation_and_records_existing_git_baseline_be
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "managed-baseline-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Managed,
+                executor: None,
             },
         })
         .await
@@ -1245,6 +1323,7 @@ async fn managed_task_rejects_a_baseline_from_a_different_workspace_before_start
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "mismatched-managed-baseline-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Managed,
+                executor: None,
             },
         })
         .await
@@ -1286,6 +1365,7 @@ async fn managed_first_turn_projects_redacted_activity_and_fences_late_events() 
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "managed-first-turn-projection-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Managed,
+                executor: None,
             },
         })
         .await
@@ -1484,6 +1564,7 @@ async fn session_snapshot_binds_workspace_task_and_session_and_rejects_duplicate
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "task-explicit-binding".to_string(),
                 mode: HaloWorkbenchSessionMode::Standard,
+                executor: None,
             },
         })
         .await
@@ -2147,6 +2228,7 @@ async fn operation_decision_remains_pending_until_the_adapter_confirms_it() {
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "operation-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Standard,
+                executor: None,
             },
         })
         .await
@@ -3577,6 +3659,7 @@ async fn concurrent_operation_decisions_cross_the_seam_exactly_once() {
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "decision-race-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Standard,
+                executor: None,
             },
         })
         .await
@@ -3646,6 +3729,7 @@ async fn operation_decisions_are_limited_to_one_time_allow_or_deny() {
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "decision-kind-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Standard,
+                executor: None,
             },
         })
         .await
@@ -3721,6 +3805,7 @@ async fn pending_operation_projects_redacted_summary_and_risk_level() {
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: "summary-risk-task".to_string(),
                 mode: HaloWorkbenchSessionMode::Standard,
+                executor: None,
             },
         })
         .await
@@ -3862,6 +3947,7 @@ async fn settle_managed_session(
             intent: HaloWorkbenchIntent::CreateSession {
                 task_id: task_id.to_string(),
                 mode: HaloWorkbenchSessionMode::Managed,
+                executor: None,
             },
         })
         .await
@@ -4443,4 +4529,678 @@ async fn finish_and_review_is_rejected_outside_waiting_developer() {
         .expect_err("finish must be rejected while running");
     assert_eq!(error.code, "delivery_review_not_ready");
     assert_eq!(adapter.count(CommandKind::EndSession), 0);
+}
+
+async fn managed_session_with_facts(
+    facts: &Arc<RecordingManagedFacts>,
+    prefix: &str,
+) -> (HaloWorkbenchRuntime, Arc<DeterministicPiRpc>, u64, String) {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = HaloWorkbenchRuntime::new_with_delivery_evidence_and_fact_store(
+        adapter.clone(),
+        Arc::new(TrustedWorkspaceFacts),
+        Arc::new(AvailableProviderReadiness),
+        Arc::new(FixedTaskBaseline),
+        Arc::new(FixedDeliveryEvidence::new("unused", Vec::new(), Vec::new(), Vec::new())),
+        facts.clone(),
+        Arc::new(FixedClock),
+    );
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        &format!("{prefix}-open"),
+        &format!("{prefix}-workspace"),
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: format!("{prefix}-confirm"),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: format!("{prefix}-workspace"),
+                root_path: PathBuf::from(format!("C:/work/{}-workspace", prefix)),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation accepted");
+    let session_id = create_session_with_mode(
+        &runtime,
+        &adapter,
+        generation,
+        &format!("{prefix}-create"),
+        HaloWorkbenchSessionMode::Managed,
+    )
+    .await;
+    (runtime, adapter, generation, session_id)
+}
+
+async fn wait_for_fact_count(facts: &RecordingManagedFacts, count: usize) {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if facts.records().len() >= count {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("fact log reaches expected size");
+}
+
+#[tokio::test]
+async fn token_level_stream_frames_leave_the_fact_log_unchanged() {
+    let facts = Arc::new(RecordingManagedFacts::default());
+    let (runtime, adapter, generation, session_id) =
+        managed_session_with_facts(&facts, "stream").await;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "stream-prompt".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "stream prompt".to_string(),
+            },
+        })
+        .await
+        .expect("managed prompt accepted");
+    wait_for_fact_count(&facts, 3).await;
+    let before_frames = facts.records().len();
+
+    adapter
+        .emit(PiRpcEvent::MessageUpdated {
+            generation,
+            session_id: session_id.clone(),
+            text: "Solving".to_string(),
+        });
+    adapter
+        .emit(PiRpcEvent::MessageUpdated {
+            generation,
+            session_id: session_id.clone(),
+            text: " the bug.".to_string(),
+        });
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let reached = runtime
+                .snapshot()
+                .sessions
+                .iter()
+                .any(|session| {
+                    session.session_id == session_id
+                        && session
+                            .messages
+                            .last()
+                            .is_some_and(|message| message.content == "Solving the bug.")
+                });
+            if reached {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("live record shows both streamed frames");
+
+    // Token-level streaming frames only reach the activity session record.
+    assert_eq!(facts.records().len(), before_frames);
+}
+
+#[tokio::test]
+async fn settled_reply_lands_exactly_one_committed_reply_fact() {
+    let facts = Arc::new(RecordingManagedFacts::default());
+    let (runtime, adapter, generation, session_id) =
+        managed_session_with_facts(&facts, "settle").await;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "settle-prompt".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "settle prompt".to_string(),
+            },
+        })
+        .await
+        .expect("managed prompt accepted");
+    wait_for_fact_count(&facts, 3).await;
+
+    adapter
+        .emit(PiRpcEvent::MessageUpdated {
+            generation,
+            session_id: session_id.clone(),
+            text: "Solving".to_string(),
+        });
+    adapter
+        .emit(PiRpcEvent::MessageUpdated {
+            generation,
+            session_id: session_id.clone(),
+            text: " the bug.".to_string(),
+        });
+    adapter
+        .emit(PiRpcEvent::AgentSettled {
+            generation,
+            session_id: session_id.clone(),
+        });
+    wait_for_session_phase(
+        &runtime,
+        &session_id,
+        HaloWorkbenchSessionPhase::WaitingDeveloper,
+    )
+    .await;
+    wait_for_fact_count(&facts, 4).await;
+
+    let replies = facts
+        .records()
+        .into_iter()
+        .filter(|record| record.kind == ManagedEventFactKind::AgentReplySummary)
+        .collect::<Vec<_>>();
+    assert_eq!(replies.len(), 1, "settlement commits exactly one reply fact");
+}
+
+#[tokio::test]
+async fn cancellation_lands_delivered_prefix_and_interrupted_marker_without_completion() {
+    let facts = Arc::new(RecordingManagedFacts::default());
+    let (runtime, adapter, generation, session_id) =
+        managed_session_with_facts(&facts, "cancel").await;
+
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "cancel-prompt".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id: session_id.clone(),
+                content: "cancel prompt".to_string(),
+            },
+        })
+        .await
+        .expect("managed prompt accepted");
+    wait_for_fact_count(&facts, 3).await;
+    adapter
+        .emit(PiRpcEvent::MessageUpdated {
+            generation,
+            session_id: session_id.clone(),
+            text: "partial reply".to_string(),
+        });
+    adapter
+        .emit(PiRpcEvent::AgentSettled {
+            generation,
+            session_id: session_id.clone(),
+        });
+    wait_for_fact_count(&facts, 4).await;
+    let before_cancel = facts.records();
+
+    adapter
+        .emit(PiRpcEvent::SessionStopped {
+            generation,
+            session_id: session_id.clone(),
+            cancellation_mode: PiRpcCancellationMode::Forced,
+        });
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Interrupted).await;
+    wait_for_fact_count(&facts, 5).await;
+
+    let records = facts.records();
+    // The delivered prefix stays recorded and the cancellation appends the
+    // interrupted lifecycle marker; nothing is rewritten into a completion.
+    assert_eq!(records.len(), before_cancel.len() + 1);
+    assert_eq!(
+        records.last().expect("interrupted fact").kind,
+        ManagedEventFactKind::TaskInterrupted
+    );
+    assert_eq!(
+        records[..records.len() - 1],
+        before_cancel,
+        "the delivered prefix is preserved unchanged"
+    );
+    let kinds = records
+        .iter()
+        .map(|record| record.kind)
+        .collect::<Vec<_>>();
+    assert!(kinds.contains(&ManagedEventFactKind::UserMessageSummary));
+    assert!(kinds.contains(&ManagedEventFactKind::AgentReplySummary));
+    assert!(!kinds.contains(&
+ ManagedEventFactKind::AttemptFailed));
+}
+
+#[tokio::test]
+async fn failed_managed_session_records_an_independent_attempt_fact() {
+    let facts = Arc::new(RecordingManagedFacts::default());
+    let (runtime, adapter, generation, session_id) =
+        managed_session_with_facts(&facts, "attempt").await;
+    wait_for_fact_count(&facts, 2).await;
+    let before_failure = facts.records();
+
+    adapter
+        .emit(PiRpcEvent::SessionFailed {
+            generation,
+            session_id: session_id.clone(),
+            reason: PiRpcFailureKind::Protocol,
+        });
+    wait_for_session_phase(&runtime, &session_id, HaloWorkbenchSessionPhase::Interrupted).await;
+    wait_for_fact_count(&facts, 3).await;
+
+    let records = facts.records();
+    assert_eq!(records.len(), before_failure.len() + 1);
+    let attempt = records.last().expect("attempt fact");
+    assert_eq!(attempt.kind, ManagedEventFactKind::AttemptFailed);
+    assert!(
+        attempt.redacted_summary.contains("protocol"),
+        "the attempt fact records the failure reason"
+    );
+}
+
+#[test]
+fn attempt_and_interrupted_facts_stay_out_of_the_model_visible_rebuild() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let facts = Arc::new(RecordingManagedFacts::default());
+    *facts.records.lock().expect("facts lock") = vec![
+        ManagedEventFactRecord {
+            task_id: "task-recovered".to_string(),
+            fact_id: "fact-1".to_string(),
+            sequence: 1,
+            recorded_at_ms: 1_234,
+            schema_version: 2,
+            kind: ManagedEventFactKind::UserMessageSummary,
+            redacted_summary: "safe user summary".to_string(),
+        },
+        ManagedEventFactRecord {
+            task_id: "task-recovered".to_string(),
+            fact_id: "fact-2".to_string(),
+            sequence: 2,
+            recorded_at_ms: 1_235,
+            schema_version: 2,
+            kind: ManagedEventFactKind::AgentReplySummary,
+            redacted_summary: "safe reply summary".to_string(),
+        },
+        ManagedEventFactRecord {
+            task_id: "task-recovered".to_string(),
+            fact_id: "fact-3".to_string(),
+            sequence: 3,
+            recorded_at_ms: 1_236,
+            schema_version: 2,
+            kind: ManagedEventFactKind::AttemptFailed,
+            redacted_summary: "Managed attempt 1 failed: protocol".to_string(),
+        },
+        ManagedEventFactRecord {
+            task_id: "task-recovered".to_string(),
+            fact_id: "fact-4".to_string(),
+            sequence: 4,
+            recorded_at_ms: 1_237,
+            schema_version: 2,
+            kind: ManagedEventFactKind::TaskInterrupted,
+            redacted_summary: "Managed task interrupted; delivered prefix preserved".to_string(),
+        },
+    ];
+    let history = Arc::new(InMemoryInterruptionHistory {
+        sessions: Mutex::new(vec![HaloWorkbenchSessionSnapshot {
+            workspace_id: "workspace-recovered".to_string(),
+            task_id: "task-recovered".to_string(),
+            session_id: "session-recovered".to_string(),
+            mode: HaloWorkbenchSessionMode::Managed,
+            phase: HaloWorkbenchSessionPhase::Interrupted,
+            executor: ManagedExecutorKind::PiRpc,
+            cancellation_mode: None,
+            baseline: None,
+            messages: Vec::new(),
+            activities: Vec::new(),
+            error: None,
+            delivery_review: None,
+        }]),
+        writes: AtomicUsize::new(0),
+    });
+    let runtime = HaloWorkbenchRuntime::try_new_with_delivery_evidence_and_fact_store_and_interruption_history(
+        adapter.clone(),
+        Arc::new(TrustedWorkspaceFacts),
+        Arc::new(AvailableProviderReadiness),
+        Arc::new(FixedTaskBaseline),
+        Arc::new(FixedDeliveryEvidence::new("unused", Vec::new(), Vec::new(), Vec::new())),
+        facts,
+        history,
+        Arc::new(FixedClock),
+    )
+    .expect("facts-aware recovery succeeds");
+    let session = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == "session-recovered")
+        .expect("recovered session is visible");
+
+    // Attempt and interrupted facts never enter the model-visible rebuild.
+    let message_contents = session
+        .messages
+        .iter()
+        .map(|message| message.content.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        message_contents,
+        vec!["safe user summary", "safe reply summary"]
+    );
+    assert!(session
+        .messages
+        .iter()
+        .all(|message| !message.content.contains("attempt")
+            && !message.content.contains("interrupted")));
+    assert!(session
+        .activities
+        .iter()
+        .all(|activity| !activity.label.contains("attempt")
+            && !activity.label.contains("interrupted")));
+    assert!(adapter.commands().is_empty(), "recovery must not replay Pi");
+}
+
+#[derive(Default)]
+struct RecordingExecutor {
+    prompts: Mutex<Vec<String>>,
+    follow_ups: Mutex<Vec<String>>,
+    aborts: Mutex<Vec<String>>,
+}
+
+impl RecordingExecutor {
+    fn prompt_count(&self) -> usize {
+        self.prompts.lock().expect("prompt lock").len()
+    }
+
+    fn prompts(&self) -> Vec<String> {
+        self.prompts.lock().expect("prompt lock").clone()
+    }
+}
+
+#[async_trait]
+impl ManagedExecutorPort for RecordingExecutor {
+    fn capability_profile(&self) -> halo_runtime_ports::ManagedExecutorCapabilityProfile {
+        halo_runtime_ports::ManagedExecutorCapabilityProfile {
+            adapter_identity: "recording-fake".to_string(),
+            compatibility_profile: "recording-fake-p0".to_string(),
+            steer: false,
+            queue_events: false,
+            approval_channel: true,
+            entry_read: false,
+            native_sandbox_modes: false,
+        }
+    }
+
+    fn sandbox_facts(&self) -> halo_runtime_ports::ManagedExecutorSandboxFacts {
+        halo_runtime_ports::ManagedExecutorSandboxFacts {
+            mode: halo_runtime_ports::ManagedExecutorSandboxMode::DangerFullAccess,
+            enforcement: halo_runtime_ports::ManagedExecutorSandboxEnforcement::Partial,
+        }
+    }
+
+    async fn prompt(&self, request: ManagedExecutorPromptRequest) -> PortResult<()> {
+        self.prompts
+            .lock()
+            .expect("prompt lock")
+            .push(request.content);
+        Ok(())
+    }
+
+    async fn follow_up(&self, request: ManagedExecutorPromptRequest) -> PortResult<()> {
+        self.follow_ups
+            .lock()
+            .expect("follow-up lock")
+            .push(request.content);
+        Ok(())
+    }
+
+    async fn abort(
+        &self,
+        target: ManagedExecutorTarget,
+    ) -> PortResult<halo_runtime_ports::ManagedExecutorAbortOutcome> {
+        self.aborts
+            .lock()
+            .expect("abort lock")
+            .push(target.session_id);
+        Ok(halo_runtime_ports::ManagedExecutorAbortOutcome::Cooperative)
+    }
+
+    async fn read_entries(
+        &self,
+        _target: ManagedExecutorTarget,
+    ) -> PortResult<halo_runtime_ports::ManagedExecutorEntryPage> {
+        Err(PortError::new(
+            PortErrorKind::NotAvailable,
+            "recording fake has no entry reads",
+        ))
+    }
+
+    async fn resolve_approval(
+        &self,
+        _decision: halo_runtime_ports::ManagedExecutorApprovalDecision,
+    ) -> PortResult<()> {
+        Err(PortError::new(
+            PortErrorKind::NotAvailable,
+            "recording fake has no approval resolution",
+        ))
+    }
+
+    fn subscribe(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<halo_runtime_ports::ManagedExecutorEvent> {
+        let (_, receiver) = tokio::sync::broadcast::channel(1);
+        receiver
+    }
+}
+
+#[tokio::test]
+async fn executor_selection_lists_installed_production_executors_and_defaults_to_pi() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+
+    assert_eq!(
+        runtime.workspace_default_executor(),
+        ManagedExecutorKind::PiRpc
+    );
+    assert_eq!(
+        runtime.available_managed_executors(),
+        vec![ManagedExecutorKind::PiRpc],
+        "only installed production executors are selectable"
+    );
+
+    let refused = runtime
+        .set_workspace_default_executor(ManagedExecutorKind::Dsh)
+        .expect_err("an uninstalled executor cannot become the workspace default");
+    assert_eq!(refused.code, "executor_unavailable");
+
+    runtime.install_managed_executor(
+        ManagedExecutorKind::Dsh,
+        Arc::new(RecordingExecutor::default()),
+    );
+    assert_eq!(
+        runtime.available_managed_executors(),
+        vec![ManagedExecutorKind::PiRpc, ManagedExecutorKind::Dsh]
+    );
+    runtime
+        .set_workspace_default_executor(ManagedExecutorKind::Dsh)
+        .expect("an installed executor becomes the workspace default");
+    assert_eq!(
+        runtime.workspace_default_executor(),
+        ManagedExecutorKind::Dsh
+    );
+}
+
+#[tokio::test]
+async fn task_creation_override_binds_the_executor_into_session_and_baseline() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let dsh = Arc::new(RecordingExecutor::default());
+    runtime.install_managed_executor(ManagedExecutorKind::Dsh, dsh.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-executor-binding",
+        "executor-binding",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-executor-binding".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "executor-binding".to_string(),
+                root_path: PathBuf::from("C:/work/executor-binding"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+
+    let receipt = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "create-executor-override-task".to_string(),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "executor-override-task".to_string(),
+                mode: HaloWorkbenchSessionMode::Managed,
+                executor: Some(ManagedExecutorKind::Dsh),
+            },
+        })
+        .await
+        .expect("managed session with an executor override is created");
+    let session_id = receipt.session_id.expect("managed session id");
+    let session = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("managed session is projected");
+    assert_eq!(session.executor, ManagedExecutorKind::Dsh);
+    let baseline = session.baseline.expect("managed baseline is captured");
+    assert_eq!(
+        baseline.executor, ManagedExecutorKind::Dsh,
+        "the task baseline records the selected executor"
+    );
+    assert_eq!(adapter.count(CommandKind::CreateSession), 1);
+
+    // No in-session switch: the binding is fixed for the task lifetime and
+    // the runtime exposes no intent that would rewrite it.
+    adapter.emit(PiRpcEvent::SessionIdle {
+        generation,
+        session_id: session_id.clone(),
+    });
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "prompt-executor-override-task".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id,
+                content: "run through the bound executor".to_string(),
+            },
+        })
+        .await
+        .expect("managed prompt is accepted");
+    assert_eq!(
+        dsh.prompt_count(),
+        1,
+        "the bound executor receives the prompt through the port"
+    );
+    assert_eq!(
+        adapter.count(CommandKind::SendUserInput),
+        0,
+        "a non-pi bound executor must not leak Pi commands"
+    );
+}
+
+#[tokio::test]
+async fn workspace_default_executor_receives_tasks_created_without_override() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let pi_recorder = Arc::new(RecordingExecutor::default());
+    // Replacing the default pi binding with a recording executor proves the
+    // runtime dispatches the managed execution face through the port.
+    runtime.install_managed_executor(ManagedExecutorKind::PiRpc, pi_recorder.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-executor-default",
+        "executor-default",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-executor-default".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "executor-default".to_string(),
+                root_path: PathBuf::from("C:/work/executor-default"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+
+    let receipt = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "create-executor-default-task".to_string(),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "executor-default-task".to_string(),
+                mode: HaloWorkbenchSessionMode::Managed,
+                executor: None,
+            },
+        })
+        .await
+        .expect("managed session with the workspace default is created");
+    let session_id = receipt.session_id.expect("managed session id");
+    let session = runtime
+        .snapshot()
+        .sessions
+        .into_iter()
+        .find(|session| session.session_id == session_id)
+        .expect("managed session is projected");
+    assert_eq!(session.executor, ManagedExecutorKind::PiRpc);
+
+    adapter.emit(PiRpcEvent::SessionIdle {
+        generation,
+        session_id: session_id.clone(),
+    });
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "prompt-executor-default-task".to_string(),
+            intent: HaloWorkbenchIntent::SendUserInput {
+                session_id,
+                content: "default executor prompt".to_string(),
+            },
+        })
+        .await
+        .expect("managed prompt is accepted");
+    assert_eq!(
+        pi_recorder.prompts(),
+        vec!["default executor prompt".to_string()],
+        "the workspace default executor receives the prompt"
+    );
+    assert_eq!(adapter.count(CommandKind::SendUserInput), 0);
+}
+
+#[tokio::test]
+async fn an_override_naming_an_uninstalled_executor_fails_closed() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    let generation = open_ready(
+        &runtime,
+        &adapter,
+        "open-executor-refusal",
+        "executor-refusal",
+    )
+    .await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "confirm-executor-refusal".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "executor-refusal".to_string(),
+                root_path: PathBuf::from("C:/work/executor-refusal"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation is accepted");
+
+    let error = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "create-uninstalled-executor-task".to_string(),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "uninstalled-executor-task".to_string(),
+                mode: HaloWorkbenchSessionMode::Managed,
+                executor: Some(ManagedExecutorKind::Dsh),
+            },
+        })
+        .await
+        .expect_err("an uninstalled executor override fails closed");
+    assert_eq!(error.code, "executor_unavailable");
+    assert_eq!(adapter.count(CommandKind::CreateSession), 0);
+    assert!(
+        runtime
+            .snapshot()
+            .sessions
+            .iter()
+            .all(|session| session.task_id != "uninstalled-executor-task"),
+        "no session state may remain for the refused executor"
+    );
 }

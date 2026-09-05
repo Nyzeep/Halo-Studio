@@ -13,11 +13,11 @@
 
 import React, { useRef, useState, useCallback, useEffect, useLayoutEffect, forwardRef, useImperativeHandle } from 'react';
 import {
-  Virtuoso,
-  VirtuosoHandle,
-  type Components,
-  type ContextProp,
-} from 'react-virtuoso';
+  FlowChatVirtualScroller,
+  type FlowChatVirtualScrollerComponents,
+  type FlowChatVirtualScrollerContextProp,
+  type FlowChatVirtualScrollerHandle,
+} from './FlowChatVirtualScroller';
 import { useTranslation } from 'react-i18next';
 import { useActiveSessionState } from '../../hooks/useActiveSessionState';
 import { VirtualItemRenderer } from './VirtualItemRenderer';
@@ -122,21 +122,21 @@ const COLLAPSE_INTENT_TTL_MS = FLOWCHAT_COLLAPSE_INTENT_TTL_MS;
 const AUTO_COLLAPSE_SETTLE_FRAMES = FLOWCHAT_AUTO_COLLAPSE_SETTLE_FRAMES;
 const STICKY_PIN_GROWTH_SETTLE_MS = 300;
 
-type FlowChatVirtuosoContext = {
+type FlowChatVirtualScrollerContext = {
   footerRef: React.RefCallback<HTMLDivElement>;
   previousHistoryBoundaryStatusNode: React.ReactNode;
   reserveSpaceForIndicator: boolean;
   showBreathingIndicator: boolean;
 };
 
-const FlowChatVirtuosoHeader = ({ context }: ContextProp<FlowChatVirtuosoContext>) => (
+const FlowChatVirtualScrollerHeader = ({ context }: FlowChatVirtualScrollerContextProp<FlowChatVirtualScrollerContext>) => (
   <>
     <div className="message-list-header" />
     {context.previousHistoryBoundaryStatusNode}
   </>
 );
 
-const FlowChatVirtuosoFooter = ({ context }: ContextProp<FlowChatVirtuosoContext>) => (
+const FlowChatVirtualScrollerFooter = ({ context }: FlowChatVirtualScrollerContextProp<FlowChatVirtualScrollerContext>) => (
   <>
     <ProcessingIndicator
       visible={context.showBreathingIndicator}
@@ -149,9 +149,9 @@ const FlowChatVirtuosoFooter = ({ context }: ContextProp<FlowChatVirtuosoContext
   </>
 );
 
-const FLOW_CHAT_VIRTUOSO_COMPONENTS: Components<VirtualItem, FlowChatVirtuosoContext> = {
-  Header: FlowChatVirtuosoHeader,
-  Footer: FlowChatVirtuosoFooter,
+const FLOW_CHAT_VIRTUAL_SCROLLER_COMPONENTS: FlowChatVirtualScrollerComponents<FlowChatVirtualScrollerContext> = {
+  Header: FlowChatVirtualScrollerHeader,
+  Footer: FlowChatVirtualScrollerFooter,
 };
 const FLOW_CHAT_VIRTUOSO_OVERSCAN = { main: 600, reverse: 600 } as const;
 const FLOW_CHAT_VIRTUOSO_VIEWPORT_INCREASE = { top: 600, bottom: 600 } as const;
@@ -375,7 +375,7 @@ const VirtualMessageListSession = forwardRef<VirtualMessageListRef, VirtualMessa
   onUserScrollIntent,
 }, ref) => {
   const { t } = useTranslation('flow-chat');
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const virtuosoRef = useRef<FlowChatVirtualScrollerHandle>(null);
   const virtualItems = useVirtualItems();
   const activeSession = useActiveSession();
   const virtuosoIndexStateRef = useRef<{
@@ -5842,7 +5842,7 @@ const VirtualMessageListSession = forwardRef<VirtualMessageListRef, VirtualMessa
     ) : null,
     [activeSessionId, previousHistoryBoundaryStatus, t],
   );
-  const virtuosoContext = React.useMemo<FlowChatVirtuosoContext>(() => ({
+  const virtuosoContext = React.useMemo<FlowChatVirtualScrollerContext>(() => ({
     // Reservation pixels are applied imperatively to the stable Footer node.
     // Keeping them out of context prevents a measurement-sensitive Virtuoso
     // render for every compensation update.
@@ -5936,15 +5936,13 @@ const VirtualMessageListSession = forwardRef<VirtualMessageListRef, VirtualMessa
           />
         </div>
       ) : (
-        <Virtuoso
+        <FlowChatVirtualScroller
           key={activeSessionId ?? 'no-active-session'}
           ref={virtuosoRef}
           data={virtualItems}
           computeItemKey={computeVirtuosoItemKey}
           itemContent={renderVirtuosoItem}
-          followOutput={false}
 
-          alignToBottom={false}
           firstItemIndex={virtuosoFirstItemIndex}
           // New mounts start near the latest user turn to avoid flashing older
           // content before sticky pin logic can finish.
@@ -5966,7 +5964,7 @@ const VirtualMessageListSession = forwardRef<VirtualMessageListRef, VirtualMessa
 
           scrollerRef={handleScrollerRef}
           context={virtuosoContext}
-          components={FLOW_CHAT_VIRTUOSO_COMPONENTS}
+          components={FLOW_CHAT_VIRTUAL_SCROLLER_COMPONENTS}
         />
       )}
 

@@ -1,0 +1,55 @@
+/* WorkbenchSurfaces — token-only styles (M4/M5 token layer; no bare values). */
+
+.surface {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(24rem, 80%);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-container-low);
+  border-left: 1px solid var(--outline-variant);
+  animation: surfaceIn var(--motion-duration-medium) var(--motion-easing-decelerate);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.title {
+  font-size: var(--font-size-large);
+  font-weight: 600;
+}
+
+.close {
+  background: transparent;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-small);
+  color: var(--on-surface);
+  cursor: pointer;
+  padding: 0 var(--space-sm);
+}
+
+.body {
+  margin: 0;
+  padding: var(--space-lg);
+  font-size: var(--font-size-medium);
+  color: var(--on-surface-variant);
+  line-height: 1.7;
+}
+
+@keyframes surfaceIn {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: none;
+  }
+}

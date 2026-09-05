@@ -1,9 +1,12 @@
 import React, { useCallback, useMemo, useRef, forwardRef } from 'react';
-import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
+import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual';
 import { VirtualFileTreeProps, FlatFileNode, FileSystemNode } from '../types';
 import { useI18n } from '@/infrastructure/i18n';
 import { expandedFoldersContains } from '@/shared/utils/pathUtils';
 import { FileTreeItem } from './FileTreeItem';
+
+/** Imperative handle exposed to parents (tanstack virtualizer instance). */
+export type VirtualFileTreeHandle = Virtualizer<HTMLDivElement, Element>;
 
 interface VirtualFileRowProps {
   node: FlatFileNode;
@@ -17,6 +20,8 @@ interface VirtualFileRowProps {
   renderContent?: (node: FileSystemNode, level: number) => React.ReactNode;
   renderActions?: (node: FileSystemNode) => React.ReactNode;
 }
+
+const FILE_TREE_ROW_ESTIMATED_HEIGHT_PX = 32;
 
 const VirtualFileRow = React.memo<VirtualFileRowProps>(({
   node,
@@ -65,7 +70,7 @@ const VirtualFileRow = React.memo<VirtualFileRowProps>(({
 
 VirtualFileRow.displayName = 'VirtualFileRow';
 
-export const VirtualFileTree = forwardRef<VirtuosoHandle, VirtualFileTreeProps>(({
+export const VirtualFileTree = forwardRef<VirtualFileTreeHandle, VirtualFileTreeProps>(({
   flatNodes,
   selectedFile,
   expandedFolders,
@@ -80,9 +85,19 @@ export const VirtualFileTree = forwardRef<VirtuosoHandle, VirtualFileTreeProps>(
   renderNodeActions,
 }, ref) => {
   const { t } = useI18n('tools');
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const scrollElementRef = useRef<HTMLDivElement | null>(null);
 
-  React.useImperativeHandle(ref, () => virtuosoRef.current!, []);
+  // Long-list virtualization is standardized on @tanstack/react-virtual
+  // (ADR-0077 虚拟化收敛; react-virtuoso was removed in issue #53).
+  const virtualizer = useVirtualizer({
+    count: flatNodes.length,
+    getScrollElement: () => scrollElementRef.current,
+    estimateSize: () => FILE_TREE_ROW_ESTIMATED_HEIGHT_PX,
+    getItemKey: (index) => flatNodes[index]?.path ?? index,
+    overscan: 20,
+  });
+
+  React.useImperativeHandle(ref, () => virtualizer, [virtualizer]);
 
   const handleNodeSelect = useCallback((node: FlatFileNode) => {
     onNodeSelect?.(node);
@@ -92,7 +107,7 @@ export const VirtualFileTree = forwardRef<VirtuosoHandle, VirtualFileTreeProps>(
     onToggleExpand?.(path);
   }, [onToggleExpand]);
 
-  const itemContent = useCallback((_index: number, node: FlatFileNode) => {
+  const renderRow = useCallback((node: FlatFileNode) => {
     const isSelected = selectedFile === node.path;
     const isExpanded = expandedFoldersContains(expandedFolders, node.path);
 
@@ -123,20 +138,47 @@ export const VirtualFileTree = forwardRef<VirtuosoHandle, VirtualFileTreeProps>(
   }
 
   return (
-    <div 
+    <div
       className={`halo-file-explorer__tree halo-file-explorer__tree--virtual ${className}`}
       style={{ height }}
       tabIndex={0}
     >
-      <Virtuoso
-        ref={virtuosoRef}
-        data={flatNodes}
-        itemContent={itemContent}
-        overscan={50}
-        increaseViewportBy={{ top: 100, bottom: 200 }}
-        style={{ height: '100%' }}
-        computeItemKey={(_index, node) => node.path}
-      />
+      <div
+        ref={scrollElementRef}
+        className="halo-file-explorer__tree-scroller"
+        style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden' }}
+      >
+        <div
+          style={{
+            height: virtualizer.getTotalSize(),
+            position: 'relative',
+            width: '100%',
+          }}
+        >
+          {virtualizer.getVirtualItems().map((virtualItem) => {
+            const node = flatNodes[virtualItem.index];
+            if (!node) {
+              return null;
+            }
+            return (
+              <div
+                key={virtualItem.key}
+                ref={virtualizer.measureElement}
+                data-index={virtualItem.index}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+              >
+                {renderRow(node)}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 });

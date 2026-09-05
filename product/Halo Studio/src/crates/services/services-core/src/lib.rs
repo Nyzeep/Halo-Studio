@@ -8,6 +8,8 @@ pub mod diff;
 mod file_lock;
 pub mod filesystem;
 pub mod json_store;
+#[cfg(feature = "managed-event-facts")]
+pub mod managed_event_facts;
 #[cfg(feature = "workspace-runtime")]
 pub mod local_runtime_ports;
 #[cfg(feature = "lsp")]

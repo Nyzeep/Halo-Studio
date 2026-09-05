@@ -1,5 +1,5 @@
 ---
-status: superseded by ADR-0066
+status: superseded by ADR-0066 and ADR-0079
 ---
 
 # 将 Halo Studio 一次性导入为可审计的 Halo 自有源码树

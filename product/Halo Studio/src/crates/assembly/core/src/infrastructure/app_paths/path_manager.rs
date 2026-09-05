@@ -844,13 +844,38 @@ mod tests {
     #[test]
     fn project_runtime_root_uses_human_readable_workspace_slug() {
         let pm = PathManager::default();
-        let runtime_root = pm.project_runtime_root(Path::new(r"E:\Projects\OpenHalo\Halo"));
+        // Use a deterministic fixture instead of a developer-machine path so the
+        // test asserts the slug rule itself rather than a specific checkout.
+        let fixture = tempfile::TempDir::new().expect("tempdir should be created");
+        let workspace = fixture.path().join("My Workspace");
+        std::fs::create_dir_all(&workspace).expect("workspace fixture should be created");
+
+        let runtime_root = pm.project_runtime_root(&workspace);
         let slug = runtime_root
             .file_name()
             .and_then(|value| value.to_str())
             .expect("runtime root should have terminal component");
 
-        assert!(slug.starts_with("e--projects-openbitfun-halo"));
+        // Human-readable slug: canonical workspace path lowercased, every
+        // non-alphanumeric character collapsed to '-', edge dashes trimmed.
+        let canonical = dunce::canonicalize(&workspace).expect("fixture should exist");
+        let expected: String = canonical
+            .to_string_lossy()
+            .chars()
+            .map(|ch| {
+                if ch.is_ascii_alphanumeric() {
+                    ch.to_ascii_lowercase()
+                } else {
+                    '-'
+                }
+            })
+            .collect();
+        let expected = expected.trim_matches('-');
+
+        assert_eq!(slug, expected);
+        assert!(!slug.is_empty());
+        assert!(!slug.starts_with('-'));
+        assert!(!slug.ends_with('-'));
         assert_eq!(runtime_root.parent(), Some(pm.projects_root().as_path()));
     }
 

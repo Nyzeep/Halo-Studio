@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
@@ -83,4 +83,106 @@ test('scans untracked text files whose Git paths need quoting', (t) => {
 
   assert.equal(result.status, 1, 'stdout:\n' + result.stdout + '\nstderr:\n' + result.stderr);
   assert.match(result.stderr, /受管路径\.rs:1 contains a local absolute path/u);
+});
+
+function commitFixtureRepository(directory, files) {
+  for (const [relativePath, content] of Object.entries(files)) {
+    const filePath = join(directory, relativePath);
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, content, 'utf8');
+  }
+  for (const args of [
+    ['init', '-q'],
+    ['add', '--', '.'],
+    ['-c', 'user.name=Halo Test', '-c', 'user.email=halo-test@example.invalid', 'commit', '-qm', 'fixture'],
+  ]) {
+    const git = spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+    assert.equal(git.status, 0, 'git ' + args.join(' ') + ' failed:\n' + git.stderr);
+  }
+}
+
+test('passes when frozen upstream snapshot paths stay untouched', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'halo-repo-hygiene-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+
+  commitFixtureRepository(directory, {
+    'README.md': 'fixture\n',
+    'product/Halo Studio/halo-scope.json': '{ "schemaVersion": 1 }\n',
+    'product/Halo Studio/vendor/cargo/fixture/src/lib.rs': 'fixture\n',
+    'product/Halo Studio/MiniApp/Demo/README.md': 'fixture\n',
+  });
+
+  const result = spawnSync(process.execPath, [scriptPath], {
+    cwd: directory,
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+});
+
+test('fails when frozen upstream snapshot paths have uncommitted changes', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'halo-repo-hygiene-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+
+  const vendorSource = join('product', 'Halo Studio', 'vendor', 'cargo', 'fixture', 'src');
+  commitFixtureRepository(directory, {
+    'README.md': 'fixture\n',
+    'product/Halo Studio/halo-scope.json': '{ "schemaVersion": 1 }\n',
+    [`${vendorSource.replaceAll('\\', '/')}/lib.rs`]: 'fixture\n',
+    [`${vendorSource.replaceAll('\\', '/')}/removed.rs`]: 'fixture\n',
+    'product/Halo Studio/MiniApp/Demo/README.md': 'fixture\n',
+  });
+
+  writeFileSync(join(directory, vendorSource, 'lib.rs'), 'changed\n', 'utf8');
+  rmSync(join(directory, vendorSource, 'removed.rs'));
+  writeFileSync(
+    join(directory, 'product', 'Halo Studio', 'halo-scope.json'),
+    '{ "schemaVersion": 2 }\n',
+    'utf8',
+  );
+  writeFileSync(
+    join(directory, 'product', 'Halo Studio', 'MiniApp', 'Demo', 'README.md'),
+    'changed\n',
+    'utf8',
+  );
+  writeFileSync(join(directory, vendorSource, 'untracked.rs'), 'fixture\n', 'utf8');
+  const trackedReference = join(directory, 'BitFun-latest', 'README.md');
+  mkdirSync(dirname(trackedReference), { recursive: true });
+  writeFileSync(trackedReference, 'fixture\n', 'utf8');
+  const forceAdd = spawnSync('git', ['add', '-f', '--', 'BitFun-latest'], {
+    cwd: directory,
+    encoding: 'utf8',
+  });
+  assert.equal(forceAdd.status, 0, 'git add -f failed:\n' + forceAdd.stderr);
+
+  const result = spawnSync(process.execPath, [scriptPath], {
+    cwd: directory,
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  assert.match(
+    result.stderr,
+    /vendor[\\/]cargo[\\/]fixture[\\/]src[\\/]lib\.rs belongs to the frozen upstream snapshot/u,
+  );
+  assert.match(
+    result.stderr,
+    /vendor[\\/]cargo[\\/]fixture[\\/]src[\\/]removed\.rs belongs to the frozen upstream snapshot/u,
+  );
+  assert.match(
+    result.stderr,
+    /vendor[\\/]cargo[\\/]fixture[\\/]src[\\/]untracked\.rs belongs to the frozen upstream snapshot/u,
+  );
+  assert.match(
+    result.stderr,
+    /product[\\/]Halo Studio[\\/]halo-scope\.json belongs to the frozen upstream snapshot/u,
+  );
+  assert.match(
+    result.stderr,
+    /product[\\/]Halo Studio[\\/]MiniApp[\\/]Demo[\\/]README\.md belongs to the frozen upstream snapshot/u,
+  );
+  assert.match(
+    result.stderr,
+    /BitFun-latest[\\/]README\.md belongs to BitFun-latest, which must stay an untracked reference snapshot\./u,
+  );
 });

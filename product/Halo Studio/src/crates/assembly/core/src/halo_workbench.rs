@@ -16,18 +16,17 @@ use halo_agent_runtime::halo_workbench::{
     HaloWorkbenchSessionPhase, HaloWorkbenchSessionSnapshot,
 };
 use halo_pi_rpc_adapter::{
-    JsonFilePiRuntimeConfigurationRepository, PiRpcAdapter, PiRpcConfig,
+    JsonFilePiRuntimeConfigurationRepository, PiRpcAdapter, PiRpcConfig, PiRpcManagedExecutor,
     PiRuntimeConfigurationService,
 };
 use halo_runtime_ports::{
-    ManagedEventFactAppend, ManagedEventFactRecord, ManagedEventFactStorePort, PiCredentialSecret,
-    PiCredentialStorePort, PiProviderReadiness, PiProviderReadinessPort, PiRpcPort,
-    PiRuntimeConfigurationManagementPort, PortError, PortErrorKind, PortResult,
-    WorkbenchDeliveryAttribution, WorkbenchDeliveryAttributionKind, WorkbenchDeliveryEvidence,
-    WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint,
-    WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
-    WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFacts, WorkbenchWorkspaceFactsPort,
-    WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest,
+    ManagedExecutorKind, PiCredentialSecret, PiCredentialStorePort, PiProviderReadiness,
+    PiProviderReadinessPort, PiRpcPort, PiRuntimeConfigurationManagementPort, PortError,
+    PortErrorKind, PortResult, WorkbenchDeliveryAttribution, WorkbenchDeliveryAttributionKind,
+    WorkbenchDeliveryEvidence, WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest,
+    WorkbenchDeliveryFingerprint, WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline,
+    WorkbenchTaskBaselinePort, WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFacts,
+    WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest, WorkbenchWorkspaceTrustRequest,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -780,108 +779,6 @@ impl HaloWorkbenchInterruptionHistoryPort for JsonFileHaloWorkbenchInterruptionH
     }
 }
 
-const HALO_WORKBENCH_MANAGED_EVENT_FACTS_SCHEMA_VERSION: u32 = 1;
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct HaloWorkbenchManagedEventFactsFile {
-    schema_version: u32,
-    facts: Vec<ManagedEventFactRecord>,
-}
-
-struct JsonFileHaloWorkbenchManagedEventFacts {
-    path: PathBuf,
-}
-
-impl JsonFileHaloWorkbenchManagedEventFacts {
-    fn new(path: PathBuf) -> Self {
-        Self { path }
-    }
-
-    fn load(&self) -> PortResult<Vec<ManagedEventFactRecord>> {
-        let bytes = match fs::read(&self.path) {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(_) => {
-                return Err(PortError::new(
-                    PortErrorKind::Backend,
-                    "managed facts could not be read",
-                ))
-            }
-        };
-        let file: HaloWorkbenchManagedEventFactsFile =
-            serde_json::from_slice(&bytes).map_err(|_| {
-                PortError::new(PortErrorKind::InvalidRequest, "managed facts are invalid")
-            })?;
-        if file.schema_version != HALO_WORKBENCH_MANAGED_EVENT_FACTS_SCHEMA_VERSION {
-            return Err(PortError::new(
-                PortErrorKind::InvalidRequest,
-                "managed facts schema is unsupported",
-            ));
-        }
-        Ok(file.facts)
-    }
-
-    fn save(&self, facts: Vec<ManagedEventFactRecord>) -> PortResult<()> {
-        let parent = self.path.parent().ok_or_else(|| {
-            PortError::new(PortErrorKind::Backend, "managed facts path has no parent")
-        })?;
-        fs::create_dir_all(parent).map_err(|_| {
-            PortError::new(
-                PortErrorKind::Backend,
-                "managed facts directory could not be prepared",
-            )
-        })?;
-        let bytes = serde_json::to_vec(&HaloWorkbenchManagedEventFactsFile {
-            schema_version: HALO_WORKBENCH_MANAGED_EVENT_FACTS_SCHEMA_VERSION,
-            facts,
-        })
-        .map_err(|_| {
-            PortError::new(PortErrorKind::Backend, "managed facts could not be encoded")
-        })?;
-        fs::write(&self.path, bytes).map_err(|_| {
-            PortError::new(PortErrorKind::Backend, "managed facts could not be written")
-        })
-    }
-}
-
-impl ManagedEventFactStorePort for JsonFileHaloWorkbenchManagedEventFacts {
-    fn append(&self, fact: ManagedEventFactAppend) -> PortResult<ManagedEventFactRecord> {
-        let mut facts = self.load()?;
-        if let Some(existing) = facts
-            .iter()
-            .find(|record| record.task_id == fact.task_id && record.fact_id == fact.fact_id)
-        {
-            return Ok(existing.clone());
-        }
-        let sequence = facts
-            .iter()
-            .filter(|record| record.task_id == fact.task_id)
-            .count() as u64
-            + 1;
-        let record = ManagedEventFactRecord {
-            task_id: fact.task_id,
-            fact_id: fact.fact_id,
-            sequence,
-            recorded_at_ms: fact.recorded_at_ms,
-            schema_version: fact.schema_version,
-            kind: fact.kind,
-            redacted_summary: fact.redacted_summary,
-        };
-        facts.push(record.clone());
-        self.save(facts)?;
-        Ok(record)
-    }
-
-    fn read_task(&self, task_id: &str) -> PortResult<Vec<ManagedEventFactRecord>> {
-        Ok(self
-            .load()?
-            .into_iter()
-            .filter(|record| record.task_id == task_id)
-            .collect())
-    }
-}
-
 #[cfg(not(windows))]
 fn replace_interruption_history_file(temporary: &Path, destination: &Path) -> PortResult<()> {
     fs::rename(temporary, destination).map_err(|_| {
@@ -1004,11 +901,13 @@ pub fn build_halo_workbench_runtime_components(
     let interruption_history = Arc::new(JsonFileHaloWorkbenchInterruptionHistory::new(
         halo_workbench_interruption_history_path()?,
     ));
-    let managed_event_facts = Arc::new(JsonFileHaloWorkbenchManagedEventFacts::new(
-        halo_workbench_managed_event_facts_path()?,
-    ));
+    let managed_event_facts = Arc::new(
+        halo_services_core::managed_event_facts::JsonFileManagedEventFacts::new(
+            halo_workbench_managed_event_facts_path()?,
+        ),
+    );
     let runtime = HaloWorkbenchRuntime::try_new_with_delivery_evidence_and_fact_store_and_interruption_history(
-        adapter,
+        adapter.clone(),
         Arc::new(CoreWorkbenchWorkspaceFacts::new(workspace_service)),
         Arc::new(PiRpcConfiguredReadinessGate {
             configuration: configuration.clone(),
@@ -1020,6 +919,22 @@ pub fn build_halo_workbench_runtime_components(
         Arc::new(SystemProductClock),
     )
     .map_err(|error| error.to_string())?;
+    // ADR-0078 M3 executor selection: the sole P0 pi adapter is bound behind
+    // the unified ManagedExecutorPort wrapper (capability facts derived from
+    // verified readiness). The optional DSH executor joins the task-creation
+    // selector only under the `dsh-executor` feature; both are fixed per task
+    // with no in-session switch.
+    runtime.install_managed_executor(
+        ManagedExecutorKind::PiRpc,
+        Arc::new(PiRpcManagedExecutor::new(adapter)),
+    );
+    #[cfg(feature = "dsh-executor")]
+    runtime.install_managed_executor(
+        ManagedExecutorKind::Dsh,
+        Arc::new(halo_dsh_adapter::DshManagedExecutor::new(Arc::new(
+            halo_dsh_adapter::DshAdapter::with_config(Default::default()),
+        ))),
+    );
     let configuration: Arc<dyn PiRuntimeConfigurationManagementPort> = configuration;
     Ok(HaloWorkbenchRuntimeComponents {
         runtime,

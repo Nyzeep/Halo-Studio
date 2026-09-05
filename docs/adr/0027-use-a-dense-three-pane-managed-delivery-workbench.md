@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0076
 ---
 
 # 使用高密度三栏受管交付工作台

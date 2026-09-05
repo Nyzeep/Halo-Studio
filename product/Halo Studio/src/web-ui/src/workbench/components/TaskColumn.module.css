@@ -1,0 +1,317 @@
+/* TaskColumn — token-only styles (M4/M5 token layer; no bare values). */
+
+.column {
+  flex: 0 0 var(--workbench-column-width);
+  min-width: var(--workbench-column-width);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-large);
+  overflow: hidden;
+}
+
+.columnFocused {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+  transition:
+    border-color var(--motion-duration-short) var(--motion-easing-standard),
+    box-shadow var(--motion-duration-short) var(--motion-easing-standard);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--font-size-large);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.executorBadge {
+  font-size: var(--font-size-small);
+  color: var(--on-surface-variant);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-sm);
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.badge {
+  font-size: var(--font-size-small);
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-sm);
+  line-height: 1.8;
+  white-space: nowrap;
+}
+
+.toneRunning {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.toneWaiting {
+  background: var(--warning-container);
+  color: var(--on-warning-container);
+}
+
+.toneReview {
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.toneAccepted {
+  background: var(--success-container);
+  color: var(--on-success-container);
+}
+
+.toneFailed {
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.toneIdle {
+  background: var(--surface-container-high);
+  color: var(--on-surface-variant);
+}
+
+.capabilityNotes {
+  margin: 0;
+  padding: var(--space-xs) var(--space-lg) 0;
+  font-size: var(--font-size-small);
+  color: var(--warning);
+}
+
+.messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.message {
+  max-width: 94%;
+  align-self: flex-start;
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+  border-radius: var(--radius-medium);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-medium);
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.messageUser {
+  align-self: flex-end;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.messageWho {
+  font-size: var(--font-size-small);
+  opacity: 0.72;
+}
+
+.messageText {
+  overflow-wrap: anywhere;
+}
+
+.streamEmpty {
+  font-size: var(--font-size-small);
+  color: var(--on-surface-variant);
+}
+
+.tools {
+  border-top: 1px solid var(--outline-variant);
+  padding: var(--space-sm) var(--space-lg);
+  max-height: 34%;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-content: flex-start;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-small);
+  padding: 0 var(--space-sm);
+  border-radius: var(--radius-full);
+  background: var(--surface-container-high);
+  color: var(--on-surface-variant);
+  border: 1px solid var(--outline-variant);
+  line-height: 1.8;
+  white-space: nowrap;
+}
+
+.chipDot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--outline);
+}
+
+.chipRun .chipDot {
+  background: var(--primary);
+  animation: chipPulse 1.2s var(--motion-easing-standard) infinite;
+}
+
+.chipOk .chipDot {
+  background: var(--success);
+}
+
+.chipFail {
+  background: var(--error-container);
+  border-color: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.chipFail .chipDot {
+  background: var(--error);
+}
+
+@keyframes chipPulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.operationCard {
+  margin: var(--space-sm) var(--space-lg);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-medium);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-container);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.operationTitle {
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.operationTool {
+  font-size: var(--font-size-medium);
+  color: var(--on-surface);
+}
+
+.operationArgs {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--on-surface-variant);
+}
+
+.actionRow {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.primaryAction {
+  background: var(--primary);
+  color: var(--on-primary);
+  border: none;
+  border-radius: var(--radius-small);
+  padding: var(--space-xs) var(--space-md);
+  cursor: pointer;
+  font-size: var(--font-size-small);
+}
+
+.secondaryAction {
+  background: transparent;
+  color: var(--on-surface);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-small);
+  padding: var(--space-xs) var(--space-md);
+  cursor: pointer;
+  font-size: var(--font-size-small);
+}
+
+.review {
+  border-top: 1px solid var(--outline-variant);
+  padding: var(--space-md) var(--space-lg);
+}
+
+.reviewBox {
+  border: 1px dashed var(--outline);
+  border-radius: var(--radius-medium);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-small);
+  color: var(--on-surface-variant);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.reviewPending {
+  border-style: solid;
+  border-color: var(--secondary);
+}
+
+.reviewAccepted {
+  border-style: solid;
+  border-color: var(--success);
+  background: var(--success-container);
+  color: var(--on-success-container);
+}
+
+.reviewRejected {
+  border-style: solid;
+  border-color: var(--error);
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.reviewTitle {
+  font-size: var(--font-size-medium);
+  font-weight: 600;
+  color: inherit;
+}
+
+.reviewSummary {
+  margin: 0;
+}
+
+.evidence {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.evidenceRow {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.evidenceRow dt {
+  color: inherit;
+  opacity: 0.72;
+  flex: 0 0 auto;
+}
+
+.evidenceRow dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

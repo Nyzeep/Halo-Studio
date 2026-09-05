@@ -597,8 +597,11 @@ mod tests {
         assert!(comment.contains("default=\"B\""));
 
         let docx_skill = embedded_skill_text("docx/SKILL.md");
+        // ADR-0013: the outward product brand is "Halo Studio", matching the
+        // bundled docx/SKILL.md copy. (comment.py's upstream "Halo" script
+        // defaults above stay asserted as-is; they are behavior, not copy.)
         assert!(docx_skill.contains(
-            "Use \"Halo\" as the author for tracked changes and comments unless the user explicitly requests a different name."
+            "Use \"Halo Studio\" as the author for tracked changes and comments unless the user explicitly requests a different name."
         ));
 
         let xlsx_skill = embedded_skill_text("xlsx/SKILL.md");

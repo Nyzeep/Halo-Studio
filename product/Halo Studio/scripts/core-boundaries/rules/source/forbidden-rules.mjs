@@ -4117,6 +4117,9 @@ export const forbiddenContentUnderRules = [
           /\b(?:use\s+halo_pi_rpc_adapter\b|extern\s+crate\s+halo_pi_rpc_adapter\b|halo_pi_rpc_adapter::)/,
         allowPaths: [
           'src/crates/assembly/core/src/halo_workbench.rs',
+          'src/crates/adapters/pi-rpc-adapter/tests/pi_configuration_contract.rs',
+          'src/crates/adapters/pi-rpc-adapter/tests/pi_rpc_contract.rs',
+          'src/crates/adapters/pi-rpc-adapter/tests/managed_executor_contracts.rs',
         ],
         message:
           'only Halo Workbench product assembly may import the Pi RPC adapter; other layers consume the stable Workbench execution seam',
@@ -4404,6 +4407,9 @@ export const forbiddenContentUnderRules = [
           /\b(?:use\s+halo_pi_rpc_adapter\b|extern\s+crate\s+halo_pi_rpc_adapter\b|halo_pi_rpc_adapter::)/,
         allowPaths: [
           'src/crates/assembly/core/src/halo_workbench.rs',
+          'src/crates/adapters/pi-rpc-adapter/tests/pi_configuration_contract.rs',
+          'src/crates/adapters/pi-rpc-adapter/tests/pi_rpc_contract.rs',
+          'src/crates/adapters/pi-rpc-adapter/tests/managed_executor_contracts.rs',
         ],
         message:
           'only Halo Workbench product assembly may import halo-pi-rpc-adapter; other layers consume the stable PiRpcPort seam',

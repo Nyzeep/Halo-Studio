@@ -2368,3 +2368,278 @@ fn terminate_fake_fixture_process(pid: u32) {
     // SAFETY: `handle` is no longer used after this call.
     let _ = unsafe { CloseHandle(handle) };
 }
+
+async fn send_steer(
+    adapter: &PiRpcAdapter,
+    generation: u64,
+    content: &str,
+) -> halo_runtime_ports::PortResult<PiRpcReply> {
+    adapter
+        .execute(PiRpcCommand::Steer {
+            generation,
+            task_id: "session-contract".to_string(),
+            session_id: "session-contract".to_string(),
+            content: content.to_string(),
+        })
+        .await
+}
+
+#[tokio::test]
+async fn the_0850_profile_is_probeable_and_startable() {
+    let _environment = fixture_environment("version_probe_0850");
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+
+    let reply = adapter
+        .execute(PiRpcCommand::Probe {
+            generation: 851,
+            workspace: workspace(),
+        })
+        .await
+        .expect("probe crosses the port");
+    let summary = match reply {
+        PiRpcReply::Available { summary } => summary,
+        other => panic!("0.85.0 must be available, got {other:?}"),
+    };
+    assert_eq!(summary.version.version, PiRpcVersion::V0_85_0);
+    assert_eq!(
+        summary.version.profile,
+        PiRpcCompatibilityProfile::PiRpc0850P0
+    );
+    assert_eq!(
+        summary.capabilities.required,
+        PiRpcCapability::required_p0().to_vec()
+    );
+
+    assert_eq!(start(&adapter, 852).await, PiRpcReply::Accepted);
+    shutdown(&adapter, 852).await;
+}
+
+#[tokio::test]
+async fn the_retired_legacy_install_scope_is_refused_by_the_version_probe() {
+    let _environment = fixture_environment("version_probe_legacy");
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+
+    let reply = adapter
+        .execute(PiRpcCommand::Probe {
+            generation: 853,
+            workspace: workspace(),
+        })
+        .await
+        .expect("probe crosses the port");
+    assert_eq!(
+        reply,
+        PiRpcReply::Unavailable {
+            reason: PiRpcFailureKind::UnsupportedVersion,
+        },
+        "the retired @mariozechner scope must be reported as unsupported"
+    );
+}
+
+#[test]
+fn install_source_pinning_recognizes_the_current_and_legacy_scopes() {
+    use halo_pi_rpc_adapter::{pi_install_source_from_version_output, PiRpcInstallSource};
+
+    for version in ["0.81.1", "0.83.0", "0.85.0"] {
+        assert_eq!(
+            pi_install_source_from_version_output(version),
+            PiRpcInstallSource::CurrentScope,
+            "{version} is only shipped by @earendil-works/pi-coding-agent"
+        );
+    }
+    assert_eq!(
+        pi_install_source_from_version_output("0.73.1"),
+        PiRpcInstallSource::LegacyScope,
+        "0.73.1 is the final release of the retired @mariozechner scope"
+    );
+    assert_eq!(
+        pi_install_source_from_version_output(" 0.85.0\n"),
+        PiRpcInstallSource::CurrentScope,
+        "probe output is trimmed before pinning"
+    );
+    assert_eq!(
+        pi_install_source_from_version_output("9.99.0"),
+        PiRpcInstallSource::Unknown
+    );
+    assert_eq!(
+        pi_install_source_from_version_output("pi-development-build"),
+        PiRpcInstallSource::Unknown
+    );
+}
+
+#[tokio::test]
+async fn steering_is_accepted_for_a_running_0850_turn_and_settles_after_delivery() {
+    let _environment = fixture_environment("steer_0850");
+    let generation = 854;
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+    let mut events = adapter.subscribe();
+
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "run the migration").await,
+        PiRpcReply::Accepted
+    );
+    wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::SessionRunning { .. })
+    })
+    .await;
+
+    assert_eq!(
+        send_steer(&adapter, generation, "stop and fix the failing test first")
+            .await
+            .expect("steering crosses the port"),
+        PiRpcReply::Accepted
+    );
+
+    wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::AgentSettled { .. })
+    })
+    .await;
+    shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn steering_fails_closed_for_a_profile_that_has_not_adopted_it() {
+    let _environment = fixture_environment("happy");
+    let generation = 855;
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    let error = send_steer(&adapter, generation, "not adopted")
+        .await
+        .expect_err("0.81.1 sessions refuse steering before Pi stdin");
+    assert_eq!(error.kind, PortErrorKind::InvalidRequest);
+    shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn queue_update_projects_bounded_counts_for_the_0850_profile() {
+    let _environment = fixture_environment("queue_update_0850");
+    let generation = 856;
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+    let mut events = adapter.subscribe();
+
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "queued steering").await,
+        PiRpcReply::Accepted
+    );
+
+    let queued = wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::QueueUpdated { .. })
+    })
+    .await;
+    match queued {
+        PiRpcEvent::QueueUpdated {
+            session_id,
+            steering_count,
+            follow_up_count,
+            ..
+        } => {
+            assert_eq!(session_id, "session-contract");
+            assert_eq!(steering_count, 1);
+            assert_eq!(follow_up_count, 0);
+        }
+        other => panic!("expected a queue projection, got {other:?}"),
+    }
+    // The queue projection never masks settlement: the run still settles.
+    wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::AgentSettled { .. })
+    })
+    .await;
+    shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn queue_update_fails_closed_for_profiles_that_do_not_declare_it() {
+    let _environment = fixture_environment("queue_update_0830");
+    let generation = 857;
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+    let mut events = adapter.subscribe();
+
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "unexpected queue event").await,
+        PiRpcReply::Accepted
+    );
+
+    assert!(matches!(
+        wait_for_event(&mut events, |event| matches!(
+            event,
+            PiRpcEvent::SessionFailed {
+                reason: PiRpcFailureKind::Protocol,
+                ..
+            }
+        ))
+        .await,
+        PiRpcEvent::SessionFailed { .. }
+    ));
+    shutdown(&adapter, generation).await;
+}
+
+#[tokio::test]
+async fn verified_but_unconsumed_0850_events_never_break_settlement() {
+    let _environment = fixture_environment("tolerated_events_0850");
+    let generation = 858;
+    let adapter = make_adapter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    );
+    let mut events = adapter.subscribe();
+
+    assert_eq!(start(&adapter, generation).await, PiRpcReply::Accepted);
+    assert_eq!(
+        create_session(&adapter, generation).await,
+        PiRpcReply::Accepted
+    );
+    assert_eq!(
+        send_input(&adapter, generation, "tolerated upstream events").await,
+        PiRpcReply::Accepted
+    );
+
+    wait_for_event(&mut events, |event| {
+        matches!(event, PiRpcEvent::AgentSettled { .. })
+    })
+    .await;
+    shutdown(&adapter, generation).await;
+}

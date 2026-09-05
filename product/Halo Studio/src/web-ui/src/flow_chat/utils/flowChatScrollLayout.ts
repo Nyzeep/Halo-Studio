@@ -16,13 +16,13 @@ const FALLBACK_INPUT_BLOCK_ACTIVE_PX = 96;
 const NORMAL_INPUT_BLOCK_SAFE_PX = 96;
 
 /**
- * Height of the Virtuoso footer spacer needed so the last message clears the floating input.
+ * Height of the virtual list footer spacer needed so the last message clears the floating input.
  * `measuredInputHeight` is the drop-zone `offsetHeight` from ChatInput (excluding the viewport bottom inset in `CHAT_INPUT_DROP_ZONE_BOTTOM_PX`).
  *
  * When `isInputActive` transitions from `true` to `false` (user sends a message,
  * input collapses to capsule), the ResizeObserver on the drop-zone fires with the
  * *new* collapsed height on the same microtask. If we use that new height
- * immediately, the Virtuoso footer shrinks by ~40 px in one frame, the browser
+ * immediately, the virtual list footer shrinks by ~40 px in one frame, the browser
  * clamps `scrollTop` downward, and the viewport briefly shows blank space at the
  * top ("white screen"). The user must scroll up to see content again.
  *

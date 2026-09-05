@@ -11,12 +11,14 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use crate::managed_event_facts::{
-    normalize_summary, HaloFactId, HaloTaskId, ManagedEventFactInput, ManagedEventFactKind,
-    ManagedEventFacts, ManagedEventFactsPortAdapter,
+    normalize_summary, HaloFactId, HaloTaskId, InMemoryManagedEventFacts, ManagedEventFact,
+    ManagedEventFactInput, ManagedEventFactKind, ManagedEventFacts, ManagedEventFactsPortAdapter,
 };
 
 use halo_runtime_ports::{
-    ClockPort, ManagedEventFactStorePort, PiProviderReadinessPort, PiRpcAvailabilitySummary,
+    ClockPort, ManagedEventFactStorePort, ManagedExecutorKind, ManagedExecutorPort,
+    ManagedExecutorPromptRequest, ManagedExecutorTarget, PiProviderReadinessPort,
+    PiRpcAvailabilitySummary,
     PiRpcCancellationMode, PiRpcCapability, PiRpcCommand, PiRpcEvent, PiRpcFailureKind,
     PiRpcOperationDecision, PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcPort, PiRpcReply,
     PiRpcSessionMode, PiRpcVersionEvidenceSource, PiRpcVersionSummary, PiRpcWorkspace,
@@ -239,6 +241,12 @@ pub struct HaloWorkbenchTaskBaselineSnapshot {
     pub existing_changed_files: Vec<String>,
     pub working_tree_fingerprint: String,
     pub captured_at_ms: i64,
+    /// The managed executor this task is bound to for its whole lifetime
+    /// (ADR-0078 M3). Recorded in the baseline so every later fact and
+    /// review attributes to the selected executor; there is no in-session
+    /// switch.
+    #[serde(default)]
+    pub executor: ManagedExecutorKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -397,6 +405,11 @@ pub struct HaloWorkbenchSessionSnapshot {
     pub session_id: String,
     pub mode: HaloWorkbenchSessionMode,
     pub phase: HaloWorkbenchSessionPhase,
+    /// The managed executor fixed at task creation (ADR-0078 M3). Standard
+    /// sessions report the workspace default without dispatching through a
+    /// managed executor port.
+    #[serde(default)]
+    pub executor: ManagedExecutorKind,
     pub cancellation_mode: Option<HaloWorkbenchCancellationMode>,
     pub baseline: Option<HaloWorkbenchTaskBaselineSnapshot>,
     pub messages: Vec<HaloWorkbenchMessageSnapshot>,
@@ -763,6 +776,11 @@ pub enum HaloWorkbenchIntent {
     CreateSession {
         task_id: String,
         mode: HaloWorkbenchSessionMode,
+        /// Optional task-creation executor override (ADR-0078 M3). `None`
+        /// selects the workspace default executor. There is no in-session
+        /// switch: the resolved executor is fixed on the session and its
+        /// baseline for the whole task lifetime.
+        executor: Option<ManagedExecutorKind>,
     },
     SendUserInput {
         session_id: String,
@@ -812,10 +830,15 @@ impl fmt::Debug for HaloWorkbenchIntent {
                 .field("workspace_id", workspace_id)
                 .field("root_path", &"<redacted>")
                 .finish(),
-            Self::CreateSession { task_id, mode } => formatter
+            Self::CreateSession {
+                task_id,
+                mode,
+                executor,
+            } => formatter
                 .debug_struct("CreateSession")
                 .field("task_id", task_id)
                 .field("mode", mode)
+                .field("executor", executor)
                 .finish(),
             Self::SendUserInput { session_id, .. } => formatter
                 .debug_struct("SendUserInput")
@@ -1006,6 +1029,77 @@ impl RuntimeState {
         }
         Ok(state)
     }
+
+    fn from_fact_history(
+        sessions: Vec<HaloWorkbenchSessionSnapshot>,
+        facts_by_task: BTreeMap<String, Vec<ManagedEventFact>>,
+    ) -> Result<Self, HaloWorkbenchError> {
+        let mut state = Self::default();
+        for session in sessions {
+            let facts = facts_by_task
+                .get(&session.task_id)
+                .ok_or_else(HaloWorkbenchError::managed_event_facts_unavailable)?;
+            let mut session = session;
+            session.phase = HaloWorkbenchSessionPhase::Interrupted;
+            session.messages = facts
+                .iter()
+                .filter_map(|fact| match fact.kind {
+                    ManagedEventFactKind::UserMessageSummary => {
+                        Some(HaloWorkbenchMessageSnapshot {
+                            role: HaloWorkbenchMessageRole::User,
+                            content: fact.redacted_summary.as_str().to_string(),
+                        })
+                    }
+                    ManagedEventFactKind::AgentReplySummary => Some(HaloWorkbenchMessageSnapshot {
+                        role: HaloWorkbenchMessageRole::Assistant,
+                        content: fact.redacted_summary.as_str().to_string(),
+                    }),
+                    _ => None,
+                })
+                .collect();
+            session.activities = facts
+                .iter()
+                .filter_map(|fact| match fact.kind {
+                    ManagedEventFactKind::ToolActivity => {
+                        let summary = fact.redacted_summary.as_str();
+                        let (status, is_error) = if summary.contains("failed") {
+                            (HaloWorkbenchActivityStatus::Failed, true)
+                        } else if summary.contains("started") {
+                            (HaloWorkbenchActivityStatus::Started, false)
+                        } else if summary.contains("updated") {
+                            (HaloWorkbenchActivityStatus::Updated, false)
+                        } else {
+                            (HaloWorkbenchActivityStatus::Completed, false)
+                        };
+                        Some(HaloWorkbenchActivitySnapshot {
+                            activity_id: format!("fact-{}", fact.sequence),
+                            kind: HaloWorkbenchActivityKind::Tool,
+                            label: summary.to_string(),
+                            status,
+                            is_error,
+                        })
+                    }
+                    _ => None,
+                })
+                .collect();
+            if session.workspace_id.is_empty()
+                || session.task_id.is_empty()
+                || session.session_id.is_empty()
+                || session.mode != HaloWorkbenchSessionMode::Managed
+                || session.phase != HaloWorkbenchSessionPhase::Interrupted
+            {
+                return Err(HaloWorkbenchError::interruption_history_unavailable());
+            }
+            if state
+                .sessions
+                .insert(session.session_id.clone(), session)
+                .is_some()
+            {
+                return Err(HaloWorkbenchError::interruption_history_unavailable());
+            }
+        }
+        Ok(state)
+    }
 }
 
 struct InterruptionHistoryState {
@@ -1049,6 +1143,14 @@ struct HaloWorkbenchRuntimeInner {
     interruption_history: Arc<dyn HaloWorkbenchInterruptionHistoryPort>,
     provider_readiness: Arc<dyn PiProviderReadinessPort>,
     clock: Arc<dyn ClockPort>,
+    /// Managed executor bindings installed behind the unified port
+    /// (ADR-0078 M3). The default constructor binds the injected Pi RPC
+    /// port through the runtime bridge; the composition root replaces it
+    /// with the production adapter wrapper and may add further executors.
+    managed_executors: Mutex<HashMap<ManagedExecutorKind, Arc<dyn ManagedExecutorPort>>>,
+    /// The workspace default executor used when task creation passes no
+    /// override. Only installed executors are selectable.
+    workspace_default_executor: Mutex<ManagedExecutorKind>,
     managed_event_facts: Mutex<Option<Arc<dyn ManagedEventFacts>>>,
     state: Mutex<RuntimeState>,
     interruption_history_state: Mutex<InterruptionHistoryState>,
@@ -1070,6 +1172,132 @@ struct ManagedWorkspaceConfirmation {
 }
 
 struct UnavailableTaskBaselinePort;
+
+/// The runtime-internal default pi binding: it exposes the injected
+/// `PiRpcPort` behind the unified `ManagedExecutorPort` (ADR-0078). The
+/// composition root replaces this bridge with the production adapter
+/// wrapper; the bridge exists so managed dispatch always crosses the
+/// executor-neutral seam, including in contract fakes.
+struct PiRpcPortExecutorBridge {
+    adapter: Arc<dyn PiRpcPort>,
+    /// Reads the runtime's active adapter generation at dispatch time.
+    generation: Arc<dyn Fn() -> Option<u64> + Send + Sync>,
+}
+
+impl PiRpcPortExecutorBridge {
+    fn current_generation(&self) -> halo_runtime_ports::PortResult<u64> {
+        (self.generation)().ok_or_else(|| {
+            halo_runtime_ports::PortError::new(
+                PortErrorKind::NotAvailable,
+                "The Workbench adapter generation is not active",
+            )
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl ManagedExecutorPort for PiRpcPortExecutorBridge {
+    fn capability_profile(&self) -> halo_runtime_ports::ManagedExecutorCapabilityProfile {
+        halo_runtime_ports::ManagedExecutorCapabilityProfile {
+            adapter_identity: PI_RPC_ADAPTER_IDENTITY.to_string(),
+            compatibility_profile: self
+                .adapter
+                .readiness()
+                .map(|summary| summary.version.profile.as_str().to_string())
+                .unwrap_or_else(|| "unprobed".to_string()),
+            // The bridge is a pass-through for the execution face; steering
+            // and queue-event adoption stay with the production adapter
+            // wrapper.
+            steer: false,
+            queue_events: false,
+            approval_channel: true,
+            entry_read: true,
+            native_sandbox_modes: false,
+        }
+    }
+
+    fn sandbox_facts(&self) -> halo_runtime_ports::ManagedExecutorSandboxFacts {
+        halo_runtime_ports::ManagedExecutorSandboxFacts {
+            mode: halo_runtime_ports::ManagedExecutorSandboxMode::DangerFullAccess,
+            enforcement: halo_runtime_ports::ManagedExecutorSandboxEnforcement::Partial,
+        }
+    }
+
+    async fn prompt(&self, request: ManagedExecutorPromptRequest) -> PortResult<()> {
+        let generation = self.current_generation()?;
+        self.adapter
+            .execute(PiRpcCommand::SendUserInput {
+                generation,
+                task_id: request.target.task_id,
+                session_id: request.target.session_id,
+                content: request.content,
+            })
+            .await
+            .map(|_| ())
+    }
+
+    async fn follow_up(&self, request: ManagedExecutorPromptRequest) -> PortResult<()> {
+        let generation = self.current_generation()?;
+        self.adapter
+            .execute(PiRpcCommand::FollowUp {
+                generation,
+                task_id: request.target.task_id,
+                session_id: request.target.session_id,
+                content: request.content,
+            })
+            .await
+            .map(|_| ())
+    }
+
+    async fn abort(
+        &self,
+        target: ManagedExecutorTarget,
+    ) -> PortResult<halo_runtime_ports::ManagedExecutorAbortOutcome> {
+        let generation = self.current_generation()?;
+        self.adapter
+            .execute(PiRpcCommand::AbortSession {
+                generation,
+                task_id: target.task_id,
+                session_id: target.session_id,
+            })
+            .await
+            .map(|_| halo_runtime_ports::ManagedExecutorAbortOutcome::Cooperative)
+    }
+
+    async fn read_entries(
+        &self,
+        _target: ManagedExecutorTarget,
+    ) -> PortResult<halo_runtime_ports::ManagedExecutorEntryPage> {
+        // The bridge exposes only the execution face; entry reads keep their
+        // dedicated adapter path in the Workbench Runtime.
+        Err(halo_runtime_ports::PortError::new(
+            PortErrorKind::NotAvailable,
+            "the runtime bridge does not expose entry reads",
+        ))
+    }
+
+    async fn resolve_approval(
+        &self,
+        _decision: halo_runtime_ports::ManagedExecutorApprovalDecision,
+    ) -> PortResult<()> {
+        // The bridge exposes only the execution face; approval resolution
+        // keeps its dedicated adapter path in the Workbench Runtime.
+        Err(halo_runtime_ports::PortError::new(
+            PortErrorKind::NotAvailable,
+            "the runtime bridge does not expose approval resolution",
+        ))
+    }
+
+    fn subscribe(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<halo_runtime_ports::ManagedExecutorEvent> {
+        // The runtime derives its facts from the adapter event stream
+        // directly; the bridge never forwards unified events. The dropped
+        // sender turns receivers into clean `Closed` states.
+        let (_, receiver) = tokio::sync::broadcast::channel(1);
+        receiver
+    }
+}
 
 #[async_trait::async_trait]
 impl WorkbenchTaskBaselinePort for UnavailableTaskBaselinePort {
@@ -1163,6 +1391,7 @@ impl HaloWorkbenchRuntimeInner {
         task_id: &str,
         kind: ManagedEventFactKind,
         summary: &str,
+        identity: &str,
     ) -> Result<(), HaloWorkbenchError> {
         let store = self
             .managed_event_facts
@@ -1174,7 +1403,15 @@ impl HaloWorkbenchRuntimeInner {
         };
         store
             .append(ManagedEventFactInput {
-                fact_id: HaloFactId::from_runtime(Uuid::new_v4().to_string()),
+                fact_id: HaloFactId::from_runtime({
+                    let mut digest = Sha256::new();
+                    digest.update(task_id.as_bytes());
+                    digest.update([0]);
+                    digest.update(identity.as_bytes());
+                    digest.update([0]);
+                    digest.update(format!("{kind:?}").as_bytes());
+                    format!("halo-fact-{}", hex::encode(digest.finalize()))
+                }),
                 task_id: HaloTaskId::from_runtime(task_id.to_string()),
                 recorded_at_ms: self.clock.now_unix_millis(),
                 schema_version: crate::managed_event_facts::MANAGED_EVENT_FACT_SCHEMA_VERSION,
@@ -1186,8 +1423,91 @@ impl HaloWorkbenchRuntimeInner {
             .map_err(|_| HaloWorkbenchError::managed_event_facts_unavailable())
     }
 
+    fn append_managed_session_fact(
+        &self,
+        generation: u64,
+        session_id: &str,
+        kind: ManagedEventFactKind,
+        summary: &str,
+        identity: &str,
+    ) -> bool {
+        let task_id = self
+            .state
+            .lock()
+            .expect("Halo Workbench state lock")
+            .sessions
+            .get(session_id)
+            .filter(|session| session.mode == HaloWorkbenchSessionMode::Managed)
+            .map(|session| session.task_id.clone());
+        let Some(task_id) = task_id else {
+            return true;
+        };
+        match self.append_managed_task_fact(&task_id, kind, summary, identity) {
+            Ok(()) => true,
+            Err(error) => {
+                self.expose_error(error);
+                let _ = generation;
+                false
+            }
+        }
+    }
+
     fn expose_error(&self, error: HaloWorkbenchError) {
         self.state.lock().expect("Halo Workbench state lock").error = Some(error);
+    }
+
+    /// Appends the committed reply summary fact at settlement. The settled
+    /// turn's accumulated assistant text seeds the fact identity so each
+    /// committed reply is exactly one fact; the summary itself stays a
+    /// Halo-owned constant.
+    fn append_settled_reply_fact(&self, generation: u64, session_id: &str) -> bool {
+        let reply = {
+            let state = self.state.lock().expect("Halo Workbench state lock");
+            state
+                .sessions
+                .get(session_id)
+                .filter(|session| session.mode == HaloWorkbenchSessionMode::Managed)
+                .and_then(|session| {
+                    session
+                        .messages
+                        .iter()
+                        .rev()
+                        .find(|message| message.role == HaloWorkbenchMessageRole::Assistant)
+                })
+                .map(|message| message.content.clone())
+        };
+        let Some(reply) = reply else {
+            return true;
+        };
+        if reply.is_empty() {
+            return true;
+        }
+        self.append_managed_session_fact(
+            generation,
+            session_id,
+            ManagedEventFactKind::AgentReplySummary,
+            "Managed agent reply summary received",
+            &reply,
+        )
+    }
+
+    /// Whether a managed session would currently accept the interrupted
+    /// terminal transition. Read-only pre-check so the interrupted fact only
+    /// lands when the cancellation actually does.
+    fn managed_session_accepts_interruption(&self, generation: u64, session_id: &str) -> bool {
+        let state = self.state.lock().expect("Halo Workbench state lock");
+        state.generation == generation
+            && state
+                .sessions
+                .get(session_id)
+                .is_some_and(|session| {
+                    session.mode == HaloWorkbenchSessionMode::Managed
+                        && session.accepts_terminal_adapter_event()
+                        && valid_session_transition(
+                            session.phase,
+                            HaloWorkbenchSessionPhase::Interrupted,
+                        )
+                })
     }
 
     fn snapshot(&self) -> HaloWorkbenchSnapshot {
@@ -1298,7 +1618,13 @@ impl HaloWorkbenchRuntimeInner {
                     "Workbench session is idle",
                 );
             }
+            // Live queue bookkeeping stays in the adapter; Halo owns
+            // queueing and derives settlement from `agent_settled`.
+            PiRpcEvent::QueueUpdated { .. } => {}
             PiRpcEvent::AgentSettled { session_id, .. } => {
+                if !self.append_settled_reply_fact(generation, &session_id) {
+                    return;
+                }
                 self.capture_settled_fingerprint(generation, &session_id);
                 self.set_session_phase(
                     generation,
@@ -1312,6 +1638,18 @@ impl HaloWorkbenchRuntimeInner {
                 cancellation_mode,
                 ..
             } => {
+                if self.managed_session_accepts_interruption(generation, &session_id) {
+                    // Cancellation lands as the delivered prefix plus the
+                    // interrupted marker; no completion fact follows
+                    // (ADR-0080).
+                    self.append_managed_session_fact(
+                        generation,
+                        &session_id,
+                        ManagedEventFactKind::TaskInterrupted,
+                        "Managed task interrupted; delivered prefix preserved",
+                        &format!("{session_id}\u{1}interrupted"),
+                    );
+                }
                 self.set_session_interrupted(generation, &session_id, cancellation_mode.into());
             }
             PiRpcEvent::SessionRunning { session_id, .. } => {
@@ -1337,11 +1675,32 @@ impl HaloWorkbenchRuntimeInner {
                     .filter(|session| session.mode == HaloWorkbenchSessionMode::Managed)
                     .map(|_| HaloWorkbenchSessionPhase::Interrupted)
                     .unwrap_or(HaloWorkbenchSessionPhase::Failed);
+                if phase == HaloWorkbenchSessionPhase::Interrupted {
+                    // A failed executor attempt is recorded as its own fact,
+                    // never merged back into a continuous history (ADR-0080).
+                    self.append_managed_session_fact(
+                        generation,
+                        &session_id,
+                        ManagedEventFactKind::AttemptFailed,
+                        &format!(
+                            "Managed attempt failed: {}",
+                            managed_executor_failure_label(reason)
+                        ),
+                        &format!(
+                            "{session_id}\u{1}attempt\u{1}{}",
+                            managed_executor_failure_label(reason)
+                        ),
+                    );
+                }
                 self.set_session_failure(generation, &session_id, adapter_failure(reason), phase);
             }
             PiRpcEvent::MessageUpdated {
                 session_id, text, ..
             } => {
+                // Token-level streaming frames are live activity only
+                // (ADR-0080): they update the activity session record and
+                // never append facts. The committed reply fact lands at
+                // settlement.
                 self.append_assistant_message(generation, &session_id, text);
             }
             PiRpcEvent::ToolExecutionStarted {
@@ -1350,6 +1709,15 @@ impl HaloWorkbenchRuntimeInner {
                 tool_name,
                 ..
             } => {
+                if !self.append_managed_session_fact(
+                    generation,
+                    &session_id,
+                    ManagedEventFactKind::ToolActivity,
+                    "Managed tool activity started",
+                    &format!("{}:started", redacted_tool_call_id),
+                ) {
+                    return;
+                }
                 self.update_tool_activity(
                     generation,
                     &session_id,
@@ -1365,6 +1733,15 @@ impl HaloWorkbenchRuntimeInner {
                 tool_name,
                 ..
             } => {
+                if !self.append_managed_session_fact(
+                    generation,
+                    &session_id,
+                    ManagedEventFactKind::ToolActivity,
+                    "Managed tool activity updated",
+                    &format!("{}:updated", redacted_tool_call_id),
+                ) {
+                    return;
+                }
                 self.update_tool_activity(
                     generation,
                     &session_id,
@@ -1381,6 +1758,15 @@ impl HaloWorkbenchRuntimeInner {
                 is_error,
                 ..
             } => {
+                if !self.append_managed_session_fact(
+                    generation,
+                    &session_id,
+                    ManagedEventFactKind::ToolActivity,
+                    "Managed tool activity ended",
+                    &format!("{}:ended", redacted_tool_call_id),
+                ) {
+                    return;
+                }
                 self.update_tool_activity(
                     generation,
                     &session_id,
@@ -1401,6 +1787,15 @@ impl HaloWorkbenchRuntimeInner {
                 summary,
                 ..
             } => {
+                if !self.append_managed_session_fact(
+                    generation,
+                    &session_id,
+                    ManagedEventFactKind::AgentOperationRequest,
+                    "Managed operation request received",
+                    &operation_id,
+                ) {
+                    return;
+                }
                 let event_session_id = session_id.clone();
                 let event_operation_id = operation_id.clone();
                 self.publish_transition(
@@ -1445,6 +1840,15 @@ impl HaloWorkbenchRuntimeInner {
                 operation_id,
                 ..
             } => {
+                if !self.append_managed_session_fact(
+                    generation,
+                    &session_id,
+                    ManagedEventFactKind::AgentOperationDecision,
+                    "Managed operation decision received",
+                    &operation_id,
+                ) {
+                    return;
+                }
                 let event_session_id = session_id.clone();
                 let event_operation_id = operation_id.clone();
                 self.publish_transition(
@@ -1878,7 +2282,8 @@ impl HaloWorkbenchRuntimeInner {
                             {
                                 Ok(PiRpcReply::Accepted)
                                 | Ok(PiRpcReply::Available { .. })
-                                | Ok(PiRpcReply::Ready { .. }) => Ok(()),
+                                | Ok(PiRpcReply::Ready { .. })
+                                | Ok(PiRpcReply::Entries { .. }) => Ok(()),
                                 Ok(PiRpcReply::Unavailable { .. }) => Err(HaloWorkbenchError::new(
                                     "cleanup_failed",
                                     "Workbench Runtime cleanup did not complete",
@@ -2049,10 +2454,13 @@ impl HaloWorkbenchRuntime {
         let restored_sessions = interruption_history
             .load_interrupted_sessions()
             .map_err(|_| HaloWorkbenchError::interruption_history_unavailable())?;
+        let fact_adapter = ManagedEventFactsPortAdapter::new(fact_store.clone());
+        let mut facts_by_task = BTreeMap::new();
         for session in &restored_sessions {
-            fact_store
-                .read_task(&session.task_id)
+            let facts = fact_adapter
+                .read_task(&HaloTaskId::from_runtime(session.task_id.clone()))
                 .map_err(|_| HaloWorkbenchError::managed_event_facts_unavailable())?;
+            facts_by_task.insert(session.task_id.clone(), facts);
         }
         let runtime = Self::try_new_with_delivery_evidence_and_interruption_history(
             adapter,
@@ -2063,6 +2471,12 @@ impl HaloWorkbenchRuntime {
             interruption_history,
             clock,
         )?;
+        let state = RuntimeState::from_fact_history(restored_sessions, facts_by_task)?;
+        *runtime
+            .inner
+            .state
+            .lock()
+            .expect("Halo Workbench state lock") = state;
         runtime.inner.install_managed_event_fact_store(fact_store);
         Ok(runtime)
     }
@@ -2084,8 +2498,7 @@ impl HaloWorkbenchRuntime {
             .map_err(|_| HaloWorkbenchError::interruption_history_unavailable())?;
         let state = RuntimeState::from_interruption_history(restored_interruption_history.clone())?;
         let (events, _) = broadcast::channel(256);
-        Ok(Self {
-            inner: Arc::new(HaloWorkbenchRuntimeInner {
+        let inner = Arc::new(HaloWorkbenchRuntimeInner {
                 adapter,
                 workspace_facts,
                 task_baseline,
@@ -2093,7 +2506,11 @@ impl HaloWorkbenchRuntime {
                 interruption_history,
                 provider_readiness,
                 clock,
-                managed_event_facts: Mutex::new(None),
+                managed_executors: Mutex::new(HashMap::new()),
+                workspace_default_executor: Mutex::new(ManagedExecutorKind::PiRpc),
+                managed_event_facts: Mutex::new(Some(Arc::new(
+                    InMemoryManagedEventFacts::default(),
+                ))),
                 state: Mutex::new(state),
                 interruption_history_state: Mutex::new(InterruptionHistoryState::new(
                     restored_interruption_history,
@@ -2106,12 +2523,108 @@ impl HaloWorkbenchRuntime {
                 events,
                 adapter_events_started: AtomicBool::new(false),
                 shutdown_result: OnceCell::new(),
+            });
+        // M3 executor binding default: the injected Pi RPC port is exposed
+        // behind the unified ManagedExecutorPort through the runtime bridge.
+        // The composition root replaces it with the production adapter
+        // wrapper via `install_managed_executor`.
+        let inner_for_bridge = Arc::downgrade(&inner);
+        inner.managed_executors.lock().expect("executor registry").insert(
+            ManagedExecutorKind::PiRpc,
+            Arc::new(PiRpcPortExecutorBridge {
+                adapter: inner.adapter.clone(),
+                generation: Arc::new(move || {
+                    let inner = inner_for_bridge.upgrade()?;
+                    let state = inner.state.lock().expect("Halo Workbench state lock");
+                    if state.terminated {
+                        None
+                    } else {
+                        state.adapter_generation
+                    }
+                }),
             }),
-        })
+        );
+        Ok(Self { inner })
     }
 
     pub fn snapshot(&self) -> HaloWorkbenchSnapshot {
         self.inner.snapshot()
+    }
+
+    /// Installs one production managed executor behind the unified port
+    /// (ADR-0078 M3). Called by the composition root only; re-installation
+    /// for an already-bound executor replaces the binding, but running
+    /// sessions keep the executor fixed at their task creation.
+    pub fn install_managed_executor(
+        &self,
+        kind: ManagedExecutorKind,
+        executor: Arc<dyn ManagedExecutorPort>,
+    ) {
+        self.inner
+            .managed_executors
+            .lock()
+            .expect("executor registry")
+            .insert(kind, executor);
+    }
+
+    /// The executors a task-creation selector may offer: only real
+    /// production adapters that are actually installed in this runtime.
+    pub fn available_managed_executors(&self) -> Vec<ManagedExecutorKind> {
+        let registry = self.inner.managed_executors.lock().expect("executor registry");
+        ManagedExecutorKind::production_executors()
+            .iter()
+            .copied()
+            .filter(|kind| registry.contains_key(kind))
+            .collect()
+    }
+
+    /// The workspace default executor for tasks created without an override.
+    pub fn workspace_default_executor(&self) -> ManagedExecutorKind {
+        *self
+            .inner
+            .workspace_default_executor
+            .lock()
+            .expect("workspace default executor")
+    }
+
+    /// Sets the workspace default executor. Fails closed when the executor
+    /// is not installed; already running sessions never switch (ADR-0078 M3).
+    pub fn set_workspace_default_executor(
+        &self,
+        kind: ManagedExecutorKind,
+    ) -> Result<(), HaloWorkbenchError> {
+        if !self.available_managed_executors().contains(&kind) {
+            return Err(HaloWorkbenchError::new(
+                "executor_unavailable",
+                "The requested managed executor is not installed",
+                "select_installed_executor",
+            ));
+        }
+        *self
+            .inner
+            .workspace_default_executor
+            .lock()
+            .expect("workspace default executor") = kind;
+        Ok(())
+    }
+
+    fn resolve_managed_executor(
+        &self,
+        kind: ManagedExecutorKind,
+    ) -> Result<Arc<dyn ManagedExecutorPort>, HaloWorkbenchError> {
+        self.inner
+            .managed_executors
+            .lock()
+            .expect("executor registry")
+            .get(&kind)
+            .cloned()
+            .ok_or_else(|| {
+                HaloWorkbenchError::new(
+                    "executor_unavailable",
+                    "The requested managed executor is not installed",
+                    "select_installed_executor",
+                )
+            })
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<HaloWorkbenchEvent> {
@@ -2303,9 +2816,11 @@ impl HaloWorkbenchRuntime {
                 self.confirm_managed_workspace(request_id, workspace_id, root_path)
                     .await
             }
-            HaloWorkbenchIntent::CreateSession { task_id, mode } => {
-                self.create_session(request_id, task_id, mode).await
-            }
+            HaloWorkbenchIntent::CreateSession {
+                task_id,
+                mode,
+                executor,
+            } => self.create_session(request_id, task_id, mode, executor).await,
             HaloWorkbenchIntent::SendUserInput {
                 session_id,
                 content,
@@ -2484,7 +2999,7 @@ impl HaloWorkbenchRuntime {
                 }
                 summary
             }
-            Ok(PiRpcReply::Accepted) => {
+            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Entries { .. }) => {
                 let error = adapter_failure(PiRpcFailureKind::CapabilityMismatch);
                 self.inner
                     .fail_generation(generation, Some(request_id), error.clone());
@@ -2618,7 +3133,7 @@ impl HaloWorkbenchRuntime {
                 );
                 Ok(self.inner.receipt(request_id, None))
             }
-            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) => {
+            Ok(PiRpcReply::Accepted) | Ok(PiRpcReply::Available { .. }) | Ok(PiRpcReply::Entries { .. }) => {
                 let error = adapter_failure(PiRpcFailureKind::CapabilityMismatch);
                 self.inner
                     .fail_generation(generation, Some(request_id), error.clone());
@@ -2854,10 +3369,26 @@ impl HaloWorkbenchRuntime {
         request_id: &str,
         task_id: String,
         mode: HaloWorkbenchSessionMode,
+        executor: Option<ManagedExecutorKind>,
     ) -> IntentResult {
         validate_task_id(&task_id)?;
         let session_id = Uuid::new_v4().to_string();
         let generation = self.ready_generation()?;
+        // ADR-0078 M3: the executor is resolved once, at task creation. The
+        // override must name an installed production executor; otherwise the
+        // workspace default is used. The session and its baseline record the
+        // resolved executor for the whole task lifetime.
+        let executor_kind = match executor {
+            Some(kind) => {
+                self.resolve_managed_executor(kind)?;
+                kind
+            }
+            None => {
+                let default_kind = self.workspace_default_executor();
+                self.resolve_managed_executor(default_kind)?;
+                default_kind
+            }
+        };
         let workspace_id = {
             let state = self.inner.state.lock().expect("Halo Workbench state lock");
             state
@@ -2878,6 +3409,7 @@ impl HaloWorkbenchRuntime {
                 &task_id,
                 ManagedEventFactKind::TaskLifecycle,
                 "Managed task session is being created",
+                request_id,
             )?;
         }
         if !self.inner.publish_transition(
@@ -2905,6 +3437,7 @@ impl HaloWorkbenchRuntime {
                         session_id: state_session_id,
                         mode,
                         phase: HaloWorkbenchSessionPhase::Creating,
+                        executor: executor_kind,
                         cancellation_mode: None,
                         baseline: None,
                         messages: Vec::new(),
@@ -2941,8 +3474,21 @@ impl HaloWorkbenchRuntime {
                     return Err(error);
                 }
             };
+            let baseline = HaloWorkbenchTaskBaselineSnapshot {
+                executor: executor_kind,
+                ..baseline
+            };
             if !self.attach_session_baseline(generation, &session_id, baseline) {
                 return Err(HaloWorkbenchError::session_not_found());
+            }
+            if !self.inner.append_managed_session_fact(
+                generation,
+                &session_id,
+                ManagedEventFactKind::TaskBaselineLinked,
+                "Managed task baseline linked",
+                request_id,
+            ) {
+                return Err(HaloWorkbenchError::managed_event_facts_unavailable());
             }
         }
         let result = self
@@ -2967,6 +3513,60 @@ impl HaloWorkbenchRuntime {
             HaloWorkbenchSessionPhase::Failed,
         )?;
         Ok(self.inner.receipt(request_id, Some(session_id)))
+    }
+
+    /// Routes the managed execution face through the session's bound
+    /// executor. Returns `Ok(None)` for commands that have no executor-port
+    /// face (session teardown, entry reads, approval resolution) so they
+    /// keep their adapter path.
+    async fn dispatch_managed_executor_action(
+        &self,
+        generation: u64,
+        task_id: &str,
+        session_id: &str,
+        command: &PiRpcCommand,
+    ) -> Result<Option<PiRpcReply>, HaloWorkbenchError> {
+        let kind = self.session_executor_kind(generation, session_id);
+        let executor = self.resolve_managed_executor(kind)?;
+        let target = ManagedExecutorTarget {
+            task_id: task_id.to_string(),
+            session_id: session_id.to_string(),
+        };
+        let dispatched = match command {
+            PiRpcCommand::SendUserInput { content, .. } => executor
+                .prompt(ManagedExecutorPromptRequest {
+                    target,
+                    content: content.clone(),
+                })
+                .await
+                .map(|_| PiRpcReply::Accepted),
+            PiRpcCommand::FollowUp { content, .. } => executor
+                .follow_up(ManagedExecutorPromptRequest {
+                    target,
+                    content: content.clone(),
+                })
+                .await
+                .map(|_| PiRpcReply::Accepted),
+            PiRpcCommand::AbortSession { .. } => {
+                executor.abort(target).await.map(|_| PiRpcReply::Accepted)
+            }
+            _ => return Ok(None),
+        };
+        dispatched
+            .map(Some)
+            .map_err(|error| port_failure(error.kind))
+    }
+
+    fn session_executor_kind(&self, generation: u64, session_id: &str) -> ManagedExecutorKind {
+        let state = self.inner.state.lock().expect("Halo Workbench state lock");
+        if state.generation != generation {
+            return ManagedExecutorKind::PiRpc;
+        }
+        state
+            .sessions
+            .get(session_id)
+            .map(|session| session.executor)
+            .unwrap_or(ManagedExecutorKind::PiRpc)
     }
 
     async fn ensure_managed_workspace_confirmed(
@@ -3052,6 +3652,9 @@ impl HaloWorkbenchRuntime {
             existing_changed_files: baseline.existing_changed_files,
             working_tree_fingerprint: baseline.working_tree_fingerprint,
             captured_at_ms: baseline.captured_at_ms,
+            // The session resolves the real executor binding right after the
+            // capture and stamps it onto this snapshot before attaching it.
+            executor: ManagedExecutorKind::default(),
         })
     }
 
@@ -3135,6 +3738,7 @@ impl HaloWorkbenchRuntime {
                         &task_id,
                         ManagedEventFactKind::UserMessageSummary,
                         "Managed user message received",
+                        request_id,
                     )?;
                 }
                 self.append_user_message(generation, session_id, &content)?;
@@ -3157,6 +3761,7 @@ impl HaloWorkbenchRuntime {
                         &task_id,
                         ManagedEventFactKind::UserMessageSummary,
                         "Managed follow-up message received",
+                        request_id,
                     )?;
                 }
                 self.append_user_message(generation, session_id, &content)?;
@@ -3270,6 +3875,17 @@ impl HaloWorkbenchRuntime {
             self.ensure_managed_workspace_trusted(generation).await?;
         }
         self.ensure_session_transport_allowed(generation, task_id, session_id)?;
+        // ADR-0078 M3: managed sessions dispatch the execution face
+        // (prompt / follow-up / abort) through the unified
+        // ManagedExecutorPort bound to the session's fixed executor.
+        if managed {
+            if let Some(dispatched) = self
+                .dispatch_managed_executor_action(generation, task_id, session_id, &command)
+                .await?
+            {
+                return Ok(dispatched);
+            }
+        }
         let result = if matches!(&command, PiRpcCommand::AbortSession { .. }) {
             // A running prompt can legitimately wait for a Pi response. Abort
             // must still reach that session before the bounded response wait
@@ -3606,7 +4222,8 @@ impl HaloWorkbenchRuntime {
         let error = match result {
             Ok(PiRpcReply::Accepted)
             | Ok(PiRpcReply::Available { .. })
-            | Ok(PiRpcReply::Ready { .. }) => return Ok(()),
+            | Ok(PiRpcReply::Ready { .. })
+            | Ok(PiRpcReply::Entries { .. }) => return Ok(()),
             Ok(PiRpcReply::Unavailable { reason }) => adapter_failure(reason),
             Err(error) => error,
         };
@@ -3742,7 +4359,8 @@ impl HaloWorkbenchRuntime {
         match result {
             Ok(PiRpcReply::Accepted)
             | Ok(PiRpcReply::Available { .. })
-            | Ok(PiRpcReply::Ready { .. }) => Ok(self.inner.receipt(request_id, Some(session_id))),
+            | Ok(PiRpcReply::Ready { .. })
+            | Ok(PiRpcReply::Entries { .. }) => Ok(self.inner.receipt(request_id, Some(session_id))),
             Ok(PiRpcReply::Unavailable { reason }) => {
                 let error = adapter_failure(reason);
                 self.restore_operation(generation, request_id, operation_id, &session_id);
@@ -4391,6 +5009,7 @@ mod interruption_history_tests {
             session_id: session_id.to_string(),
             mode: HaloWorkbenchSessionMode::Managed,
             phase: HaloWorkbenchSessionPhase::Interrupted,
+            executor: ManagedExecutorKind::PiRpc,
             cancellation_mode: None,
             baseline: None,
             messages: Vec::new(),
@@ -4858,6 +5477,21 @@ fn port_failure(kind: PortErrorKind) -> HaloWorkbenchError {
             "The Workbench execution adapter is unavailable",
             "retry",
         ),
+    }
+}
+
+/// Executor-neutral failure label used by attempt facts. The wording mirrors
+/// the unified `ManagedExecutorFailureKind` vocabulary so facts stay
+/// executor-neutral even though this seam still speaks Pi events.
+fn managed_executor_failure_label(reason: PiRpcFailureKind) -> &'static str {
+    match reason {
+        PiRpcFailureKind::NotInstalled => "not_installed",
+        PiRpcFailureKind::UnsupportedVersion => "unsupported_version",
+        PiRpcFailureKind::CapabilityMismatch => "capability_mismatch",
+        PiRpcFailureKind::Authentication => "authentication",
+        PiRpcFailureKind::Transport => "transport",
+        PiRpcFailureKind::Protocol => "protocol",
+        PiRpcFailureKind::Internal => "internal",
     }
 }
 

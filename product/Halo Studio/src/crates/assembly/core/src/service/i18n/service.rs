@@ -320,17 +320,20 @@ mod tests {
         let service = I18nService::new();
         service.initialize().await.unwrap();
 
+        // ADR-0013: "Halo Studio" is the sole outward product brand, so the
+        // legacy `app-name` Fluent id must alias to the shared `product.name`
+        // term ("Halo Studio") in every locale.
         assert_eq!(
             service
                 .translate_with_locale(&LocaleId::EnUS, "app-name", None)
                 .await,
-            "Halo"
+            "Halo Studio"
         );
         assert_eq!(
             service
                 .translate_with_locale(&LocaleId::ZhTW, "app-name", None)
                 .await,
-            "Halo"
+            "Halo Studio"
         );
     }
 

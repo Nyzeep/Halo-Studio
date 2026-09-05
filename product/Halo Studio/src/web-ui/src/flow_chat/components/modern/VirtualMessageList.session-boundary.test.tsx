@@ -69,8 +69,13 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('react-virtuoso', () => ({
-  Virtuoso: React.forwardRef((props: any, ref) => {
+// The virtualization engine is the @tanstack/react-virtual-based
+// FlowChatVirtualScroller adapter (M4 虚拟化收敛); the fake below preserves the
+// contract VirtualMessageList relies on: scrollerRef, atBottomStateChange,
+// Header/Footer components, firstItemIndex-relative scrollToIndex, and
+// data-virtual-index rendering within a bounded range.
+vi.mock('./FlowChatVirtualScroller', () => ({
+  FlowChatVirtualScroller: React.forwardRef((props: any, ref) => {
     const scrollerRef = React.useRef<HTMLDivElement | null>(null);
     const [, rerender] = React.useReducer((value: number) => value + 1, 0);
     React.useImperativeHandle(ref, () => ({

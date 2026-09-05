@@ -18,6 +18,7 @@ pub use halo_core_types::{
 
 mod halo_workbench;
 mod local_workspace_snapshot;
+mod managed_executor;
 #[cfg(feature = "permission")]
 mod permission;
 mod plugin;
@@ -52,6 +53,16 @@ pub use halo_workbench::{
 pub use local_workspace_snapshot::{
     LocalWorkspaceSnapshotPort, LocalWorkspaceSnapshotSessionRequest, LocalWorkspaceSnapshotStats,
     LocalWorkspaceSnapshotTurnRequest,
+};
+pub use managed_executor::{
+    normalize_managed_event_summary, project_managed_executor_event,
+    ManagedExecutorAbortOutcome, ManagedExecutorApprovalDecision, ManagedExecutorApprovalKind,
+    ManagedExecutorApprovalOutcome, ManagedExecutorCapabilityProfile, ManagedExecutorEntryPage,
+    ManagedExecutorEvent, ManagedExecutorFailureKind, ManagedExecutorFactDraft,
+    ManagedExecutorKind, ManagedExecutorPort, ManagedExecutorPromptRequest,
+    ManagedExecutorRiskLevel, ManagedExecutorSandboxEnforcement, ManagedExecutorSandboxFacts,
+    ManagedExecutorSandboxMode, ManagedExecutorTarget, ManagedExecutorToolPhase,
+    ManagedEventSummaryError, MAX_MANAGED_EVENT_SUMMARY_BYTES,
 };
 #[cfg(feature = "permission")]
 pub use permission::{
@@ -120,6 +131,10 @@ impl std::fmt::Display for PortError {
 impl std::error::Error for PortError {}
 
 /// Closed Halo-owned fact kinds persisted by the Workbench Runtime.
+///
+/// The vocabulary is executor-neutral (ADR-0080): every managed executor
+/// adapter normalizes its protocol events into these kinds. Adding a kind
+/// bumps the managed event fact schema version.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ManagedEventFactKind {
@@ -133,6 +148,12 @@ pub enum ManagedEventFactKind {
     TaskBaselineLinked,
     DeliveryEvidenceVersion,
     EvidenceFreshnessChanged,
+    /// One failed executor attempt. Failed attempts are recorded
+    /// independently and never enter the model-visible history rebuild.
+    AttemptFailed,
+    /// The task was cancelled: the delivered prefix stays recorded and this
+    /// lifecycle marker lands instead of any completion fact.
+    TaskInterrupted,
 }
 
 /// A normalized, bounded fact append request. External executor payloads and

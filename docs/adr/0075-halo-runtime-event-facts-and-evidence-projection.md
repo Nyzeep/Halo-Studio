@@ -1,5 +1,6 @@
 ---
 status: accepted
+amended by: 0080 运行事实「不虚构历史」总原则与单一脱敏闸门
 related: 0065 Halo Workbench Runtime seam; 0072 Pi RPC P0 Adapter
 ---
 

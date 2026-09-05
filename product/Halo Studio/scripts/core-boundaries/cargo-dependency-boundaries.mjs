@@ -6,12 +6,21 @@ const SKIPPED_DIRECTORIES = new Set([
   '.git',
   '.targets',
   '.worktrees',
+  'Halo-Installer',
   'node_modules',
   'target',
+  'vendor',
 ]);
+// Halo-Installer is a standalone installer workspace: it resolves dependencies
+// outside the product vendor config and is not part of the product crate
+// layering model this check guards. Its source still goes through the
+// forbidden-import rules (see forbidden-rules.mjs).
 
 const ALLOWED_TARGET_LAYERS = new Map([
-  ['apps', new Set(['interfaces', 'assembly', 'adapters', 'services', 'execution', 'contracts'])],
+  // apps may compose apps: the Tauri shell (halo-tauri-desktop) composes the
+  // desktop application logic crate (halo-desktop); this is composition-root
+  // wiring, not a layering violation (ADR-0077).
+  ['apps', new Set(['apps', 'interfaces', 'assembly', 'adapters', 'services', 'execution', 'contracts'])],
   ['interfaces', new Set(['interfaces', 'assembly', 'adapters', 'services', 'execution', 'contracts'])],
   ['assembly', new Set(['assembly', 'adapters', 'services', 'execution', 'contracts'])],
   ['adapters', new Set(['adapters', 'services', 'execution', 'contracts'])],
@@ -62,13 +71,23 @@ export function findCargoLayerViolations(
   { root, crateLayoutRules },
   resolvedDependencies = null,
 ) {
+  // Layer subjects are the product crates in this repository. Resolved
+  // registry dependencies (manifest_path under vendor/) and the standalone
+  // installer workspace are not layer subjects; edges to them are external
+  // dependencies and are always allowed.
+  const isLayerSubject = (pkg) => {
+    const path = normalizedPath(pkg.manifest_path);
+    return !path.includes('/vendor/') && !path.includes('/Halo-Installer/');
+  };
+  const layerPackages = packages.filter((pkg) => isLayerSubject(pkg));
+
   const packageByManifest = new Map(
-    packages.map((pkg) => [normalizedPath(pkg.manifest_path), pkg]),
+    layerPackages.map((pkg) => [normalizedPath(pkg.manifest_path), pkg]),
   );
   const layerByManifest = new Map();
   const violations = [];
 
-  for (const pkg of packages) {
+  for (const pkg of layerPackages) {
     const layer = layerForManifest(pkg.manifest_path, { root, crateLayoutRules });
     layerByManifest.set(normalizedPath(pkg.manifest_path), layer);
     if (!layer) {
@@ -82,7 +101,7 @@ export function findCargoLayerViolations(
   }
 
   const declaredDependencies = [];
-  for (const sourcePackage of packages) {
+  for (const sourcePackage of layerPackages) {
     for (const dependency of sourcePackage.dependencies ?? []) {
       if (!dependency.path || repositoryPath(root, dependency.path) === null) {
         continue;

@@ -1375,11 +1375,17 @@ export function runManifestParserSelfTest({
   const piRpcSourceAllowPaths = piRpcSourceRules
     .find((rule) => rule.path === 'src')
     ?.patterns?.[0]?.allowPaths;
+  const expectedPiRpcSourceAllowPaths = [
+    'src/crates/assembly/core/src/halo_workbench.rs',
+    'src/crates/adapters/pi-rpc-adapter/tests/pi_configuration_contract.rs',
+    'src/crates/adapters/pi-rpc-adapter/tests/pi_rpc_contract.rs',
+    'src/crates/adapters/pi-rpc-adapter/tests/managed_executor_contracts.rs',
+  ];
   if (
     piRpcSourceAllowPaths?.join(',')
-    !== 'src/crates/assembly/core/src/halo_workbench.rs'
+    !== expectedPiRpcSourceAllowPaths.join(',')
   ) {
-    throw new Error('only the Halo Workbench product assembly module may import the Pi RPC adapter');
+    throw new Error('only the Halo Workbench product assembly module and the adapter contract tests may import the Pi RPC adapter');
   }
   const piRpcLightweightRule = lightweightBoundaryRules.find(
     (rule) => rule.crateName === 'pi-rpc-adapter',
@@ -1422,11 +1428,32 @@ export function runManifestParserSelfTest({
   const piRpcPublicApiRule = publicApiAllowlistRules.find(
     (rule) => rule.path === 'src/crates/adapters/pi-rpc-adapter/src/lib.rs',
   );
+  const expectedPiRpcPublicApiSymbols = [
+    'HALO_PI_EXTENSION_ID',
+    'HALO_PI_EXTENSION_VERSION',
+    'HALO_PI_EXTENSION_PERMISSIONS',
+    'PiRpcConfig',
+    'PiRpcAdapter',
+    'PiRuntimeConfigurationRepository',
+    'PiRuntimeConfigurationService',
+    'PiRuntimeConfigurationView',
+    'JsonFilePiRuntimeConfigurationRepository',
+    'MemoryPiRuntimeConfigurationRepository',
+    'MemoryPiCredentialStore',
+    'StaticPiProviderCapabilities',
+    'validate_runtime_configuration_shape',
+    'pi_rpc_arguments',
+    'pi_models_json_projection',
+    'PiRpcManagedExecutor',
+    'PiEventNormalization',
+    'normalize_pi_rpc_event',
+    'managed_executor_failure_kind',
+  ];
   if (
     piRpcPublicApiRule?.allowedSymbolEntries?.map((entry) => entry.symbol).join(',')
-    !== 'HALO_PI_EXTENSION_ID,HALO_PI_EXTENSION_VERSION,HALO_PI_EXTENSION_PERMISSIONS,PiRpcConfig,PiRpcAdapter'
+    !== expectedPiRpcPublicApiSymbols.join(',')
   ) {
-    throw new Error('Pi RPC adapter public API must expose only PiRpcAdapter');
+    throw new Error('Pi RPC adapter public API must match the audited seam allowlist (ADR-0078)');
   }
   const runtimeServicesRule = lightweightBoundaryRules.find(
     (rule) => rule.crateName === 'runtime-services',
