@@ -286,6 +286,44 @@ export const piRpcAdapterPublicApiEntries = [
   piRpcAdapterEntry('managed_executor_failure_kind'),
 ];
 
+function dshAdapterEntry(symbol) {
+  return {
+    symbol,
+    owner: 'dsh-adapter DSH ACP projection owner',
+    consumer: 'halo-core Halo Workbench product assembly',
+    verification:
+      'DSH adapter framing, profile, credential, lifecycle, fail-closed contract tests with a fake ACP child, Workbench runtime contract tests, and core-boundary public API budget checks',
+    p0: 'controlled dsh --profile acp execution projection for the Halo Workbench Runtime (ADR-0078 M2)',
+    contractSlice: contractSlices.haloWorkbenchPiRpcExecutionSeam,
+    wireImpact: false,
+    rationale:
+      'ADR-0078 keeps two same-tier production adapters behind the audited ManagedExecutorPort seam without exposing native executor sessions, credentials, or raw ACP wire records',
+    exit:
+      'remove only after a reviewed replacement for the accepted DSH production adapter and equivalent Workbench seam tests',
+  };
+}
+
+export const dshAdapterPublicApiEntries = [
+  dshAdapterEntry('DSH_ADAPTER_IDENTITY'),
+  dshAdapterEntry('DSH_COMPATIBILITY_PROFILE'),
+  dshAdapterEntry('DSH_API_KEY_ENV'),
+  dshAdapterEntry('DSH_HOME_ENV'),
+  dshAdapterEntry('DshAdapter'),
+  dshAdapterEntry('DshChannelKind'),
+  dshAdapterEntry('DshConfig'),
+  dshAdapterEntry('DshCredentialRef'),
+  dshAdapterEntry('DshCredentialStore'),
+  dshAdapterEntry('DshFailureKind'),
+  dshAdapterEntry('DshManagedExecutor'),
+  dshAdapterEntry('DshProfile'),
+  dshAdapterEntry('MemoryDshCredentialStore'),
+  dshAdapterEntry('SUPPORTED_DSH_PROFILES'),
+  dshAdapterEntry('build_child_environment'),
+  dshAdapterEntry('managed_executor_failure_kind'),
+  dshAdapterEntry('supported_profile'),
+  dshAdapterEntry('validate_initialize_result'),
+];
+
 function staticHookAdapterEntry(symbol, owner, consumer) {
   return {
     symbol,
@@ -1111,6 +1149,12 @@ export const publicApiAllowlistRules = [
     reason:
       'Pi RPC adapter public API must stay limited to the audited Workbench process configuration, extension audit facts, and sole adapter type',
     allowedSymbolEntries: piRpcAdapterPublicApiEntries,
+  },
+  {
+    path: 'src/crates/adapters/dsh-adapter/src/lib.rs',
+    reason:
+      'DSH adapter public API must stay limited to the audited Workbench process configuration, anchored version profiles, credential references, and sole adapter types',
+    allowedSymbolEntries: dshAdapterPublicApiEntries,
   },
   {
     path: 'src/crates/adapters/claude-code-adapter/src/lib.rs',

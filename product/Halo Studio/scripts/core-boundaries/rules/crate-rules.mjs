@@ -66,6 +66,11 @@ const piRpcAdapterForbiddenDeps = [
   'tool-runtime',
 ];
 
+const dshAdapterForbiddenDeps = [
+  ...piRpcAdapterForbiddenDeps,
+  'halo-pi-rpc-adapter',
+];
+
 export const noCoreDependencyCrates = [
   'core-types',
   'events',
@@ -89,6 +94,7 @@ export const noCoreDependencyCrates = [
   'codex-adapter',
   'opencode-adapter',
   'pi-rpc-adapter',
+  'dsh-adapter',
   'static-hook-support',
   'external-sources',
   'terminal',
@@ -142,6 +148,16 @@ export const forbiddenManifestDependencyRules = [
     message:
       'only halo-core Halo Workbench product assembly may select halo-pi-rpc-adapter; apps, contracts, execution owners, and sibling adapters consume the Workbench seam instead',
   },
+  {
+    dependencyNames: ['halo-dsh-adapter'],
+    scanRoots: ['src/apps', 'src/crates', 'Halo-Installer/src-tauri'],
+    workspaceManifestPath: 'Cargo.toml',
+    allowManifestPaths: ['src/crates/assembly/core/Cargo.toml'],
+    reason:
+      'the DSH ACP execution adapter has one reviewed Halo Workbench product composition root (M3 wiring)',
+    message:
+      'only halo-core Halo Workbench product assembly may select halo-dsh-adapter; apps, contracts, execution owners, and sibling adapters consume the Workbench seam instead',
+  },
   ...[
     ['halo-claude-code-adapter', 'claude-code-adapter'],
     ['halo-codex-adapter', 'codex-adapter'],
@@ -183,6 +199,12 @@ export const lightweightBoundaryRules = [
     reason:
       'pi-rpc-adapter is the Pi RPC projection for the Halo Workbench execution seam, not a runtime owner, product selector, ACP path, or generic executor registry',
     forbiddenDeps: piRpcAdapterForbiddenDeps,
+  },
+  {
+    crateName: 'dsh-adapter',
+    reason:
+      'dsh-adapter is the DeepSeek Harness ACP projection for the Halo Workbench execution seam (ADR-0078), not a runtime owner, product selector, or generic executor registry',
+    forbiddenDeps: dshAdapterForbiddenDeps,
   },
   {
     crateName: 'core-types',

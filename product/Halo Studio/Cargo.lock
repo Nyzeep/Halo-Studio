@@ -3638,6 +3638,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "halo-dsh-adapter"
+version = "0.2.14"
+dependencies = [
+ "async-trait",
+ "halo-runtime-ports",
+ "halo-services-core",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "halo-events"
 version = "0.2.14"
 dependencies = [
