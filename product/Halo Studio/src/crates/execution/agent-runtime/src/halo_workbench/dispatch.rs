@@ -1196,12 +1196,7 @@ impl HaloWorkbenchRuntime {
                 generation,
                 &task_id,
                 &session_id,
-                PiRpcCommand::CreateSession {
-                    generation,
-                    task_id: task_id.clone(),
-                    session_id: session_id.clone(),
-                    mode: mode.into(),
-                },
+                SessionAdapterAction::CreateSession { mode },
                 false,
             )
             .await;
@@ -1216,15 +1211,18 @@ impl HaloWorkbenchRuntime {
     }
 
     /// Routes the managed execution face through the session's bound
-    /// executor. Returns `Ok(None)` for commands that have no executor-port
-    /// face (session teardown, entry reads, approval resolution) so they
-    /// keep their adapter path.
-    async fn dispatch_managed_executor_action(
+    /// executor. The prompt / follow-up / abort face is intent-native: the
+    /// Halo intent resolves straight onto the port without constructing a
+    /// transport command (ADR-0078 step ③). Returns `Ok(None)` for actions
+    /// without a port face — session creation and teardown stay registered
+    /// on the transport until session lifecycle ownership crosses the port
+    /// (decision ticket #60).
+    async fn dispatch_managed_execution_face(
         &self,
         generation: u64,
         task_id: &str,
         session_id: &str,
-        command: &PiRpcCommand,
+        action: &SessionAdapterAction,
     ) -> Result<Option<PiRpcReply>, HaloWorkbenchError> {
         let kind = self.session_executor_kind(generation, session_id);
         let executor = self.resolve_managed_executor(kind)?;
@@ -1232,29 +1230,73 @@ impl HaloWorkbenchRuntime {
             task_id: task_id.to_string(),
             session_id: session_id.to_string(),
         };
-        let dispatched = match command {
-            PiRpcCommand::SendUserInput { content, .. } => executor
+        let dispatched = match action {
+            SessionAdapterAction::Prompt { content } => executor
                 .prompt(ManagedExecutorPromptRequest {
                     target,
                     content: content.clone(),
                 })
                 .await
                 .map(|_| PiRpcReply::Accepted),
-            PiRpcCommand::FollowUp { content, .. } => executor
+            SessionAdapterAction::FollowUp { content } => executor
                 .follow_up(ManagedExecutorPromptRequest {
                     target,
                     content: content.clone(),
                 })
                 .await
                 .map(|_| PiRpcReply::Accepted),
-            PiRpcCommand::AbortSession { .. } => {
+            SessionAdapterAction::Abort => {
                 executor.abort(target).await.map(|_| PiRpcReply::Accepted)
             }
-            _ => return Ok(None),
+            SessionAdapterAction::End | SessionAdapterAction::CreateSession { .. } => {
+                return Ok(None);
+            }
         };
         dispatched
             .map(Some)
             .map_err(|error| port_failure(error.kind))
+    }
+
+    /// Projects a session adapter action onto the Pi transport command
+    /// vocabulary for the transport-registered faces (standard sessions and
+    /// managed session creation/teardown).
+    fn transport_session_command(
+        &self,
+        generation: u64,
+        task_id: &str,
+        session_id: &str,
+        action: SessionAdapterAction,
+    ) -> PiRpcCommand {
+        match action {
+            SessionAdapterAction::Prompt { content } => PiRpcCommand::SendUserInput {
+                generation,
+                task_id: task_id.to_string(),
+                session_id: session_id.to_string(),
+                content,
+            },
+            SessionAdapterAction::FollowUp { content } => PiRpcCommand::FollowUp {
+                generation,
+                task_id: task_id.to_string(),
+                session_id: session_id.to_string(),
+                content,
+            },
+            SessionAdapterAction::Abort => PiRpcCommand::AbortSession {
+                generation,
+                task_id: task_id.to_string(),
+                session_id: session_id.to_string(),
+            },
+            SessionAdapterAction::End => PiRpcCommand::EndSession {
+                generation,
+                task_id: task_id.to_string(),
+                session_id: session_id.to_string(),
+            },
+            SessionAdapterAction::CreateSession { mode } => PiRpcCommand::CreateSession {
+                generation,
+                task_id: task_id.to_string(),
+                session_id: session_id.to_string(),
+                mode: mode.into(),
+            },
+        }
     }
 
     fn session_executor_kind(&self, generation: u64, session_id: &str) -> ManagedExecutorKind {
@@ -1431,7 +1473,7 @@ impl HaloWorkbenchRuntime {
         let task_id = self.session_task_id(generation, session_id)?;
         let facts_managed = self.session_requires_managed_trust(generation, session_id)?;
         let allow_session_removal = matches!(&intent, SessionIntent::End);
-        let command = match intent {
+        let action = match intent {
             SessionIntent::Prompt(content) => {
                 if facts_managed {
                     self.inner.append_managed_task_fact(
@@ -1448,12 +1490,7 @@ impl HaloWorkbenchRuntime {
                     session_id,
                     HaloWorkbenchSessionPhase::Idle,
                 )?;
-                PiRpcCommand::SendUserInput {
-                    generation,
-                    task_id: task_id.clone(),
-                    session_id: session_id.to_string(),
-                    content,
-                }
+                SessionAdapterAction::Prompt { content }
             }
             SessionIntent::FollowUp(content) => {
                 if facts_managed {
@@ -1471,12 +1508,7 @@ impl HaloWorkbenchRuntime {
                     session_id,
                     HaloWorkbenchSessionPhase::WaitingDeveloper,
                 )?;
-                PiRpcCommand::FollowUp {
-                    generation,
-                    task_id: task_id.clone(),
-                    session_id: session_id.to_string(),
-                    content,
-                }
+                SessionAdapterAction::FollowUp { content }
             }
             SessionIntent::Abort => {
                 self.mark_session_stopping(
@@ -1485,27 +1517,19 @@ impl HaloWorkbenchRuntime {
                     session_id,
                     SessionIntent::Abort,
                 )?;
-                PiRpcCommand::AbortSession {
-                    generation,
-                    task_id: task_id.clone(),
-                    session_id: session_id.to_string(),
-                }
+                SessionAdapterAction::Abort
             }
             SessionIntent::End => {
                 self.mark_session_stopping(generation, request_id, session_id, SessionIntent::End)?;
-                PiRpcCommand::EndSession {
-                    generation,
-                    task_id: task_id.clone(),
-                    session_id: session_id.to_string(),
-                }
+                SessionAdapterAction::End
             }
-        };
+            };
         let result = self
             .execute_session_adapter_action(
                 generation,
                 &task_id,
                 session_id,
-                command,
+                action,
                 allow_session_removal,
             )
             .await;
@@ -1566,7 +1590,7 @@ impl HaloWorkbenchRuntime {
         generation: u64,
         task_id: &str,
         session_id: &str,
-        command: PiRpcCommand,
+        action: SessionAdapterAction,
         allow_session_removal: bool,
     ) -> Result<PiRpcReply, HaloWorkbenchError> {
         self.ensure_workspace_available(generation).await?;
@@ -1575,17 +1599,21 @@ impl HaloWorkbenchRuntime {
             self.ensure_managed_workspace_trusted(generation).await?;
         }
         self.ensure_session_transport_allowed(generation, task_id, session_id)?;
-        // ADR-0078 M3: managed sessions dispatch the execution face
+        // ADR-0078 M3 / step ③: managed sessions dispatch the execution face
         // (prompt / follow-up / abort) through the unified
-        // ManagedExecutorPort bound to the session's fixed executor.
+        // ManagedExecutorPort bound to the session's fixed executor, straight
+        // from the Halo intent. Session creation and teardown keep their
+        // transport registration until session lifecycle ownership crosses
+        // the port (decision ticket #60).
         if managed {
             if let Some(dispatched) = self
-                .dispatch_managed_executor_action(generation, task_id, session_id, &command)
+                .dispatch_managed_execution_face(generation, task_id, session_id, &action)
                 .await?
             {
                 return Ok(dispatched);
             }
         }
+        let command = self.transport_session_command(generation, task_id, session_id, action);
         let result = if matches!(&command, PiRpcCommand::AbortSession { .. }) {
             // A running prompt can legitimately wait for a Pi response. Abort
             // must still reach that session before the bounded response wait
@@ -2497,11 +2525,7 @@ impl HaloWorkbenchRuntime {
                 generation,
                 &task_id,
                 session_id,
-                PiRpcCommand::EndSession {
-                    generation,
-                    task_id: task_id.clone(),
-                    session_id: session_id.to_string(),
-                },
+                SessionAdapterAction::End,
                 true,
             )
             .await;
@@ -2572,6 +2596,20 @@ enum SessionIntent {
     FollowUp(String),
     Abort,
     End,
+}
+
+/// One session adapter action resolved from a session intent or session
+/// creation. The managed execution face (prompt / follow-up / abort) crosses
+/// the bound `ManagedExecutorPort` straight from this action; session
+/// creation and teardown have no port face and project onto the transport
+/// command vocabulary until session lifecycle ownership crosses the port
+/// (decision ticket #60).
+enum SessionAdapterAction {
+    Prompt { content: String },
+    FollowUp { content: String },
+    Abort,
+    End,
+    CreateSession { mode: HaloWorkbenchSessionMode },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
