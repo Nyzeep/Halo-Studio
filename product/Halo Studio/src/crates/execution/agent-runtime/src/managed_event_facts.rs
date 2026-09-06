@@ -242,7 +242,7 @@ fn to_port_kind(kind: ManagedEventFactKind) -> PortManagedEventFactKind {
     }
 }
 
-fn from_port_kind(kind: PortManagedEventFactKind) -> ManagedEventFactKind {
+pub(crate) fn from_port_kind(kind: PortManagedEventFactKind) -> ManagedEventFactKind {
     match kind {
         PortManagedEventFactKind::TaskLifecycle => ManagedEventFactKind::TaskLifecycle,
         PortManagedEventFactKind::UserMessageSummary => ManagedEventFactKind::UserMessageSummary,

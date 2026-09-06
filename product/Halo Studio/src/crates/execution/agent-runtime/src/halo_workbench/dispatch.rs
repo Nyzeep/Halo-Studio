@@ -191,6 +191,7 @@ impl HaloWorkbenchRuntime {
                 prompt_actions: tokio::sync::Mutex::new(()),
                 events,
                 adapter_events_started: AtomicBool::new(false),
+                executor_fact_pumps_started: Mutex::new(std::collections::HashSet::new()),
                 shutdown_result: OnceCell::new(),
             });
         // M3 executor binding default: the injected Pi RPC port is exposed
@@ -234,6 +235,9 @@ impl HaloWorkbenchRuntime {
             .lock()
             .expect("executor registry")
             .insert(kind, executor);
+        if tokio::runtime::Handle::try_current().is_ok() {
+            self.inner.ensure_executor_fact_pumps();
+        }
     }
 
     /// The executors a task-creation selector may offer: only real
@@ -493,6 +497,7 @@ impl HaloWorkbenchRuntime {
                 }
             }
         });
+        self.inner.ensure_executor_fact_pumps();
     }
 
     async fn execute_intent(&self, request_id: &str, intent: HaloWorkbenchIntent) -> IntentResult {

@@ -12,12 +12,14 @@ use crate::managed_event_facts::{
 };
 
 use halo_runtime_ports::{
-    ClockPort, ManagedEventFactStorePort, ManagedExecutorKind, ManagedExecutorPort,
-    ManagedExecutorPromptRequest, ManagedExecutorTarget, PiProviderReadinessPort, PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcPort, PiRpcReply,
+    ClockPort, ManagedEventFactStorePort, ManagedExecutorEvent, ManagedExecutorKind,
+    ManagedExecutorPort, ManagedExecutorPromptRequest, ManagedExecutorTarget, PiProviderReadinessPort,
+    PiRpcCommand, PiRpcEvent, PiRpcFailureKind, PiRpcPort, PiRpcReply,
     PortErrorKind, PortResult, WorkbenchDeliveryEvidence,
     WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint,
     WorkbenchDeliveryFingerprintRequest, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
     WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFactsPort, PI_RPC_ADAPTER_IDENTITY,
+    project_managed_executor_event,
 };
 use sha2::{Digest, Sha256};
 use tokio::sync::{broadcast, watch, OnceCell};
@@ -274,6 +276,11 @@ pub(super) struct HaloWorkbenchRuntimeInner {
     pub(super) prompt_actions: tokio::sync::Mutex<()>,
     pub(super) events: broadcast::Sender<HaloWorkbenchEvent>,
     pub(super) adapter_events_started: AtomicBool,
+    /// Executor kinds whose unified event pump is already running. The
+    /// transport event pump stays the single owner of Pi RPC dialect facts
+    /// until the unified pump owns every executor (ADR-0078 step ②; see
+    /// decision ticket #60).
+    pub(super) executor_fact_pumps_started: Mutex<HashSet<ManagedExecutorKind>>,
     pub(super) shutdown_result: OnceCell<Result<(), HaloWorkbenchError>>,
 }
 
@@ -561,6 +568,96 @@ impl HaloWorkbenchRuntimeInner {
                 self.expose_error(error);
                 let _ = generation;
                 false
+            }
+        }
+    }
+
+    /// Spawns one unified-event fact pump per installed executor that does
+    /// not yet have one (ADR-0078 step ②).
+    ///
+    /// Transitional seam ownership: the Pi RPC facts keep flowing through the
+    /// transport event pump, which owns the Pi dialect generation model, so
+    /// the Pi RPC executor is skipped here. Every other production executor
+    /// (today: DSH) gets its unified `ManagedExecutorEvent` stream projected
+    /// into the managed fact log through the single port projection. The
+    /// remaining unification — generation correlation, fact identity format
+    /// and the live-activity boundary — is tracked on decision ticket #60.
+    pub(super) fn ensure_executor_fact_pumps(self: &Arc<Self>) {
+        let executors: Vec<(ManagedExecutorKind, Arc<dyn ManagedExecutorPort>)> = {
+            let registry = self.managed_executors.lock().expect("executor registry");
+            registry
+                .iter()
+                .map(|(kind, executor)| (*kind, Arc::clone(executor)))
+                .collect()
+        };
+        for (kind, executor) in executors {
+            if kind == ManagedExecutorKind::PiRpc {
+                continue;
+            }
+            let newly_started = self
+                .executor_fact_pumps_started
+                .lock()
+                .expect("executor fact pump lock")
+                .insert(kind);
+            if !newly_started {
+                continue;
+            }
+            let mut events = executor.subscribe();
+            let inner = Arc::downgrade(self);
+            tokio::spawn(async move {
+                loop {
+                    match events.recv().await {
+                        Ok(event) => {
+                            let Some(inner) = inner.upgrade() else {
+                                break;
+                            };
+                            inner.append_executor_fact(&event);
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            // Executor events are committed-granularity; a
+                            // lagged receiver drops facts, so the gap is
+                            // surfaced instead of silently skipped.
+                            let Some(inner) = inner.upgrade() else {
+                                break;
+                            };
+                            inner.expose_error(HaloWorkbenchError::new(
+                                "executor_event_gap",
+                                "The managed executor event stream dropped events",
+                                "restart_task",
+                            ));
+                        }
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    }
+                }
+            });
+        }
+    }
+
+    /// Projects one unified executor event into the managed fact log. The
+    /// event's session must exist in the active generation as a managed
+    /// session; stale events from a replaced workspace generation drop
+    /// without recording.
+    fn append_executor_fact(&self, event: &ManagedExecutorEvent) {
+        let session_id = managed_executor_event_session_id(event);
+        let task_id = {
+            let state = self.state.lock().expect("Halo Workbench state lock");
+            if state.phase != HaloWorkbenchPhase::Ready || state.terminated {
+                return;
+            }
+            state
+                .sessions
+                .get(session_id)
+                .filter(|session| session.mode == HaloWorkbenchSessionMode::Managed)
+                .map(|session| session.task_id.clone())
+        };
+        let Some(task_id) = task_id else {
+            return;
+        };
+        for draft in project_managed_executor_event(&task_id, event) {
+            if let Err(error) =
+                self.append_managed_task_fact(&task_id, crate::managed_event_facts::from_port_kind(draft.kind), &draft.redacted_summary, &draft.identity)
+            {
+                self.expose_error(error);
             }
         }
     }
@@ -1727,5 +1824,18 @@ pub(super) fn adapter_failure(reason: PiRpcFailureKind) -> HaloWorkbenchError {
             "The Pi RPC adapter reported an internal failure",
             "restart_runtime",
         ),
+    }
+}
+
+/// The session correlation carried by every unified executor event variant.
+pub(super) fn managed_executor_event_session_id(event: &ManagedExecutorEvent) -> &str {
+    match event {
+        ManagedExecutorEvent::UserMessageCommitted { session_id, .. }
+        | ManagedExecutorEvent::AgentReplyCommitted { session_id, .. }
+        | ManagedExecutorEvent::ToolActivityCommitted { session_id, .. }
+        | ManagedExecutorEvent::ApprovalAsked { session_id, .. }
+        | ManagedExecutorEvent::ApprovalDecided { session_id, .. }
+        | ManagedExecutorEvent::AttemptFailed { session_id, .. }
+        | ManagedExecutorEvent::Interrupted { session_id } => session_id,
     }
 }

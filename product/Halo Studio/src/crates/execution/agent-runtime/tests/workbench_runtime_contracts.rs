@@ -15,8 +15,8 @@ use halo_agent_runtime::halo_workbench::{
 };
 use halo_runtime_ports::{
     ClockPort, ManagedEventFactAppend, ManagedEventFactKind, ManagedEventFactRecord,
-    ManagedEventFactStorePort, ManagedExecutorKind, ManagedExecutorPort,
-    ManagedExecutorPromptRequest, ManagedExecutorTarget, PiProviderReadiness,
+    ManagedEventFactStorePort, ManagedExecutorEvent, ManagedExecutorKind, ManagedExecutorPort,
+    ManagedExecutorPromptRequest, ManagedExecutorTarget, ManagedExecutorToolPhase, PiProviderReadiness,
     PiProviderReadinessPort,
     PiRpcAvailabilitySummary, PiRpcCancellationMode, PiRpcCommand, PiRpcEvent, PiRpcFailureKind,
     PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcOperationSummary, PiRpcPort, PiRpcReply,
@@ -5249,5 +5249,180 @@ async fn an_override_naming_an_uninstalled_executor_fails_closed() {
             .iter()
             .all(|session| session.task_id != "uninstalled-executor-task"),
         "no session state may remain for the refused executor"
+    );
+}
+
+/// A fake non-Pi managed executor whose unified event stream the test
+/// controls directly.
+struct BroadcastingExecutor {
+    events: broadcast::Sender<ManagedExecutorEvent>,
+}
+
+impl BroadcastingExecutor {
+    fn new() -> (Arc<Self>, broadcast::Sender<ManagedExecutorEvent>) {
+        let (events, _) = broadcast::channel(64);
+        let executor = Arc::new(Self { events });
+        let sender = executor.events.clone();
+        (executor, sender)
+    }
+}
+
+#[async_trait]
+impl ManagedExecutorPort for BroadcastingExecutor {
+    fn capability_profile(&self) -> halo_runtime_ports::ManagedExecutorCapabilityProfile {
+        halo_runtime_ports::ManagedExecutorCapabilityProfile {
+            adapter_identity: "broadcast-fake".to_string(),
+            compatibility_profile: "broadcast-fake-p0".to_string(),
+            steer: false,
+            queue_events: false,
+            approval_channel: true,
+            entry_read: false,
+            native_sandbox_modes: false,
+        }
+    }
+
+    fn sandbox_facts(&self) -> halo_runtime_ports::ManagedExecutorSandboxFacts {
+        halo_runtime_ports::ManagedExecutorSandboxFacts {
+            mode: halo_runtime_ports::ManagedExecutorSandboxMode::DangerFullAccess,
+            enforcement: halo_runtime_ports::ManagedExecutorSandboxEnforcement::Partial,
+        }
+    }
+
+    async fn prompt(&self, _request: ManagedExecutorPromptRequest) -> PortResult<()> {
+        Err(PortError::new(
+            PortErrorKind::NotAvailable,
+            "broadcast fake has no prompt",
+        ))
+    }
+
+    async fn follow_up(&self, _request: ManagedExecutorPromptRequest) -> PortResult<()> {
+        Err(PortError::new(
+            PortErrorKind::NotAvailable,
+            "broadcast fake has no follow-up",
+        ))
+    }
+
+    async fn abort(
+        &self,
+        _target: ManagedExecutorTarget,
+    ) -> PortResult<halo_runtime_ports::ManagedExecutorAbortOutcome> {
+        Err(PortError::new(
+            PortErrorKind::NotAvailable,
+            "broadcast fake has no abort",
+        ))
+    }
+
+    async fn read_entries(
+        &self,
+        _target: ManagedExecutorTarget,
+    ) -> PortResult<halo_runtime_ports::ManagedExecutorEntryPage> {
+        Err(PortError::new(
+            PortErrorKind::NotAvailable,
+            "broadcast fake has no entry reads",
+        ))
+    }
+
+    async fn resolve_approval(
+        &self,
+        _decision: halo_runtime_ports::ManagedExecutorApprovalDecision,
+    ) -> PortResult<()> {
+        Err(PortError::new(
+            PortErrorKind::NotAvailable,
+            "broadcast fake has no approval resolution",
+        ))
+    }
+
+    fn subscribe(&self) -> broadcast::Receiver<ManagedExecutorEvent> {
+        self.events.subscribe()
+    }
+}
+
+#[tokio::test]
+async fn executor_event_stream_projects_facts_for_non_pi_executors() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let facts = Arc::new(RecordingManagedFacts::default());
+    let runtime = HaloWorkbenchRuntime::new_with_delivery_evidence_and_fact_store(
+        adapter.clone(),
+        Arc::new(TrustedWorkspaceFacts),
+        Arc::new(AvailableProviderReadiness),
+        Arc::new(FixedTaskBaseline),
+        Arc::new(FixedDeliveryEvidence::new("diff", vec![], vec![], vec![])),
+        facts.clone(),
+        Arc::new(FixedClock),
+    );
+    let (executor, sender) = BroadcastingExecutor::new();
+    runtime.install_managed_executor(ManagedExecutorKind::Dsh, executor);
+
+    open_ready(&runtime, &adapter, "dsh-facts-open", "dsh-facts-workspace").await;
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "dsh-facts-confirm".to_string(),
+            intent: HaloWorkbenchIntent::ConfirmManagedWorkspace {
+                workspace_id: "dsh-facts-workspace".to_string(),
+                root_path: PathBuf::from("C:/work/dsh-facts-workspace"),
+            },
+        })
+        .await
+        .expect("managed workspace confirmation accepted");
+    let receipt = runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "dsh-facts-create".to_string(),
+            intent: HaloWorkbenchIntent::CreateSession {
+                task_id: "dsh-facts-task".to_string(),
+                mode: HaloWorkbenchSessionMode::Managed,
+                executor: Some(ManagedExecutorKind::Dsh),
+            },
+        })
+        .await
+        .expect("managed session with a dsh executor is created");
+    let session_id = receipt.session_id.expect("managed session id");
+    let before = facts.records().len();
+
+    sender
+        .send(ManagedExecutorEvent::UserMessageCommitted {
+            session_id: session_id.clone(),
+            summary: "dsh session input".to_string(),
+        })
+        .expect("the executor event pump is alive");
+    sender
+        .send(ManagedExecutorEvent::ToolActivityCommitted {
+            session_id: session_id.clone(),
+            call_id: "call-1".to_string(),
+            phase: ManagedExecutorToolPhase::Started,
+            tool_name: "bash".to_string(),
+            is_error: false,
+        })
+        .expect("the executor event pump is alive");
+    // An event for a session outside the active generation drops without
+    // recording a fact.
+    sender
+        .send(ManagedExecutorEvent::UserMessageCommitted {
+            session_id: "unknown-session".to_string(),
+            summary: "stray".to_string(),
+        })
+        .expect("the executor event pump is alive");
+
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            // Sleep before checking so the executor fact pump task is polled.
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            if facts.records().len() >= before + 2 {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("executor facts are projected into the fact log");
+    let records = facts.records();
+    assert_eq!(
+        records.len(),
+        before + 2,
+        "only the two committed executor events record facts; the stray session drops"
+    );
+    assert!(
+        records
+            .iter()
+            .all(|record| record.task_id == "dsh-facts-task"),
+        "every projected fact stays attributed to the task"
     );
 }
