@@ -895,9 +895,6 @@ export function runManifestParserSelfTest({
   const claudeHookAdapterPublicApiRule = publicApiAllowlistRules.find(
     (rule) => rule.path === 'src/crates/adapters/claude-code-adapter/src/lib.rs',
   );
-  const codexHookAdapterPublicApiRule = publicApiAllowlistRules.find(
-    (rule) => rule.path === 'src/crates/adapters/codex-adapter/src/lib.rs',
-  );
   const staticHookSupportPublicApiRule = publicApiAllowlistRules.find(
     (rule) => rule.path === 'src/crates/adapters/static-hook-support/src/lib.rs',
   );
@@ -1055,7 +1052,6 @@ export function runManifestParserSelfTest({
   }
   for (const [label, rule, requiredSymbols] of [
     ['Claude Code Hook adapter', claudeHookAdapterPublicApiRule, ['ClaudeCodeHookProvider', 'ClaudeCodeHookProviderOptions']],
-    ['Codex Hook adapter', codexHookAdapterPublicApiRule, ['CodexHookProvider', 'CodexHookProviderOptions']],
     ['static Hook support', staticHookSupportPublicApiRule, ['read_bounded_file', 'regular_file_exists', 'redacted_parse_content_version', 'parse_hook_document']],
   ]) {
     if (!rule || requiredSymbols.some((symbol) => !rule.allowedSymbolEntries.some(
@@ -1259,7 +1255,6 @@ export function runManifestParserSelfTest({
   }
   for (const dependencyName of [
     'halo-claude-code-adapter',
-    'halo-codex-adapter',
     'halo-static-hook-support',
   ]) {
     if (!forbiddenManifestDependencyRules.some(
@@ -1396,7 +1391,6 @@ export function runManifestParserSelfTest({
     'halo-agent-runtime-ipc',
     'halo-ai-adapters',
     'halo-claude-code-adapter',
-    'halo-codex-adapter',
     'halo-core',
     'halo-opencode-adapter',
     'halo-plugin-runtime-client',
@@ -1479,7 +1473,7 @@ export function runManifestParserSelfTest({
   if (!noCoreDependencyCrates.includes('plugin-runtime-client')) {
     throw new Error('plugin-runtime-client must be covered by the no-core dependency guard');
   }
-  for (const adapterCrate of ['claude-code-adapter', 'codex-adapter', 'static-hook-support']) {
+  for (const adapterCrate of ['claude-code-adapter', 'static-hook-support']) {
     if (crateLayoutRules.find((rule) => rule.crateName === adapterCrate)?.layer !== 'adapters') {
       throw new Error(`${adapterCrate} must be registered in the adapter crate layout`);
     }

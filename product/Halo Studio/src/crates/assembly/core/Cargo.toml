@@ -148,7 +148,6 @@ halo-pi-rpc-adapter = { path = "../../adapters/pi-rpc-adapter", optional = true 
 # enable with the `dsh-executor` feature to offer DSH at task creation.
 halo-dsh-adapter = { path = "../../adapters/dsh-adapter", optional = true }
 halo-claude-code-adapter = { path = "../../adapters/claude-code-adapter", optional = true }
-halo-codex-adapter = { path = "../../adapters/codex-adapter", optional = true }
 halo-plugin-runtime-client = { path = "../../execution/plugin-runtime-client", optional = true }
 
 # Transport layer dependency
@@ -187,7 +186,6 @@ product-full = [
     "dep:halo-opencode-adapter",
     "dep:halo-pi-rpc-adapter",
     "dep:halo-claude-code-adapter",
-    "dep:halo-codex-adapter",
     "dep:halo-external-sources",
     "dep:halo-plugin-runtime-client",
     "dep:indexmap",

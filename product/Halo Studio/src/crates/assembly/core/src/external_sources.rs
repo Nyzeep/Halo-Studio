@@ -55,7 +55,6 @@ use crate::service::config::{subscribe_config_updates, ConfigUpdateEvent};
 use halo_claude_code_adapter::{
     ClaudeCodeCommandProvider, ClaudeCodeMcpProvider, ClaudeCodeSubagentProvider,
 };
-use halo_codex_adapter::{CodexMcpProvider, CodexSubagentProvider};
 use halo_external_sources::{
     DeferredDiscovery, ExternalMcpDiscoveryResult, ExternalSourceControlPlane,
     ExternalSourceCoordinator, ExternalSourceDiscoveryResult, ExternalSubagentDiscoveryResult,
@@ -94,7 +93,6 @@ const EXTERNAL_SOURCE_PREFERENCES_FILE: &str = "external-sources.json";
 const SUBAGENT_CONFLICT_RESELECTION_REQUIRED: &str = "__halo_reselection_required__";
 const OPENCODE_ECOSYSTEM_ID: &str = "opencode";
 const CLAUDE_CODE_ECOSYSTEM_ID: &str = "claude-code";
-const CODEX_ECOSYSTEM_ID: &str = "codex";
 pub const EXTERNAL_CAPABILITY_COMMAND: &str = "command";
 pub const EXTERNAL_CAPABILITY_TOOL: &str = "tool";
 pub const EXTERNAL_CAPABILITY_SUBAGENT: &str = "subagent";
@@ -255,32 +253,6 @@ fn default_external_integration_registry() -> Vec<ExternalEcosystemRegistration>
             tool_provider: None,
             subagent_provider: Some(Arc::new(ClaudeCodeSubagentProvider::default())),
             mcp_provider: Some(Arc::new(ClaudeCodeMcpProvider::default())),
-        },
-        ExternalEcosystemRegistration {
-            descriptor: ExternalIntegrationEcosystemDescriptor {
-                ecosystem_id: EcosystemId::new(CODEX_ECOSYSTEM_ID)
-                    .expect("Codex ecosystem id is valid"),
-                display_name: "Codex".to_string(),
-                adapter_revision: "1".to_string(),
-                capabilities: vec![
-                    external_capability_descriptor(
-                        EXTERNAL_CAPABILITY_SUBAGENT,
-                        ExternalIntegrationAccess::AskBeforeUse,
-                        ExternalIntegrationAccess::AskBeforeUse,
-                    ),
-                    external_capability_descriptor(
-                        EXTERNAL_CAPABILITY_MCP,
-                        ExternalIntegrationAccess::AskBeforeUse,
-                        ExternalIntegrationAccess::AskBeforeUse,
-                    ),
-                ],
-            },
-            contract_major: EXTERNAL_ADAPTER_CONTRACT_MAJOR,
-            upstream_format_revision: "codex-config-v1",
-            command_provider: None,
-            tool_provider: None,
-            subagent_provider: Some(Arc::new(CodexSubagentProvider::default())),
-            mcp_provider: Some(Arc::new(CodexMcpProvider::default())),
         },
     ]
 }
@@ -6763,7 +6735,7 @@ mod tests {
     #[test]
     fn default_registry_exposes_only_each_ecosystems_supported_asset_kinds() {
         let registrations = default_external_integration_registry();
-        assert_eq!(registrations.len(), 3);
+        assert_eq!(registrations.len(), 2);
 
         let expected = BTreeMap::from([
             (
@@ -6782,10 +6754,6 @@ mod tests {
                     EXTERNAL_CAPABILITY_SUBAGENT,
                     EXTERNAL_CAPABILITY_MCP,
                 ]),
-            ),
-            (
-                "codex",
-                BTreeSet::from([EXTERNAL_CAPABILITY_SUBAGENT, EXTERNAL_CAPABILITY_MCP]),
             ),
         ]);
 

@@ -15,7 +15,6 @@ use crate::external_sources::{host_execution_domain_id, normalize_workspace_root
 #[cfg(feature = "service-integrations")]
 use crate::service::workspace::{global_worktree_topology_service, WorktreeTopologyFreshness};
 use halo_claude_code_adapter::{ClaudeCodeHookProvider, ClaudeCodeHookProviderOptions};
-use halo_codex_adapter::{CodexHookProvider, CodexHookProviderOptions};
 use halo_external_sources::ExternalHookCatalogCoordinator;
 use halo_opencode_adapter::{OpenCodeHookProvider, OpenCodeHookProviderOptions};
 use halo_product_domains::external_hook_catalog::ExternalHookSourceProvider;
@@ -225,9 +224,6 @@ pub(crate) async fn service_for(
     let project_boundary = project_topology
         .as_ref()
         .map(|topology| topology.current_root.clone());
-    let primary_checkout_root = project_topology
-        .as_ref()
-        .and_then(|topology| topology.primary_root.clone());
     let service = Arc::new(
         WorkspaceExternalHookCatalogService::new(
             ExternalSourceContext {
@@ -248,11 +244,6 @@ pub(crate) async fn service_for(
                 Arc::new(ClaudeCodeHookProvider::new(ClaudeCodeHookProviderOptions {
                     project_root_override: project_boundary.clone(),
                     ..ClaudeCodeHookProviderOptions::default()
-                })),
-                Arc::new(CodexHookProvider::new(CodexHookProviderOptions {
-                    project_root_override: project_boundary,
-                    project_hooks_root_override: primary_checkout_root,
-                    ..CodexHookProviderOptions::default()
                 })),
             ],
         )

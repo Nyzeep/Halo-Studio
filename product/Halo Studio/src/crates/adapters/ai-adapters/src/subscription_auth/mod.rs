@@ -9,7 +9,6 @@
 //! There is no upgrade path for the previous Codex/Gemini CLI disk-scan import.
 
 mod antigravity;
-mod codex;
 mod jwt;
 mod oauth_server;
 mod opencode;
@@ -73,7 +72,8 @@ impl SubscriptionProvider {
 
     fn suggested(self) -> (&'static str, &'static str, &'static str) {
         match self {
-            Self::Codex => codex::suggested(),
+            // Codex subscription support was removed; nothing is suggested.
+            Self::Codex => ("responses", "", ""),
             Self::Antigravity => antigravity::suggested(),
             Self::Opencode => opencode::suggested(),
         }
@@ -392,7 +392,7 @@ pub async fn start_login(
     let begin = async {
         match provider {
             SubscriptionProvider::Codex => {
-                codex::begin_login(cancel.clone(), expected_revision).await
+                Err(anyhow!("codex subscription login support was removed"))
             }
             SubscriptionProvider::Antigravity => {
                 antigravity::begin_login(cancel.clone(), expected_revision).await
@@ -647,7 +647,9 @@ pub async fn logout(provider: SubscriptionProvider) -> Result<SubscriptionLogout
 /// Resolves a runtime credential for a provider, refreshing tokens if needed.
 pub async fn resolve(provider: SubscriptionProvider) -> Result<ResolvedCredential> {
     match provider {
-        SubscriptionProvider::Codex => codex::resolve().await,
+        SubscriptionProvider::Codex => {
+            Err(anyhow!("codex subscription support was removed"))
+        }
         SubscriptionProvider::Antigravity => antigravity::resolve().await,
         SubscriptionProvider::Opencode => opencode::resolve().await,
     }

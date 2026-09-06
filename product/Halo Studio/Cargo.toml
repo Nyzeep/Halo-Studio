@@ -17,7 +17,6 @@ members = [
     "src/crates/adapters/dsh-adapter",
     "src/crates/adapters/opencode-adapter",
     "src/crates/adapters/claude-code-adapter",
-    "src/crates/adapters/codex-adapter",
     "src/crates/adapters/static-hook-support",
     "src/crates/adapters/webdriver",
     "src/crates/adapters/transport",

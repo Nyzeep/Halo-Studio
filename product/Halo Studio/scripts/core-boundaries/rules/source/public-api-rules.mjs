@@ -403,26 +403,6 @@ export const claudeCodeAdapterPublicApiEntries = [
   contractSlice,
 )));
 
-export const codexAdapterPublicApiEntries = [
-  'CodexHookProvider',
-  'CodexHookProviderOptions',
-].map((symbol) => staticHookAdapterEntry(
-  symbol,
-  'codex-adapter static Hook owner',
-  'halo-core composition root and Codex Hook fixtures',
-)).concat([
-  ['CodexSubagentProvider', 'subagent', contractSlices.externalSourceSubagentContract],
-  ['CodexSubagentProviderOptions', 'subagent', contractSlices.externalSourceSubagentContract],
-  ['CodexMcpProvider', 'MCP', contractSlices.externalSourceMcpContract],
-  ['CodexMcpProviderOptions', 'MCP', contractSlices.externalSourceMcpContract],
-].map(([symbol, capability, contractSlice]) => declarativeSourceAdapterEntry(
-  symbol,
-  'codex-adapter declarative source owner',
-  `halo-core composition root and Codex ${capability} fixtures`,
-  capability,
-  contractSlice,
-)));
-
 export const staticHookSupportPublicApiEntries = [
   'BoundedFileRead',
   'read_bounded_file',
@@ -1163,11 +1143,6 @@ export const publicApiAllowlistRules = [
     path: 'src/crates/adapters/claude-code-adapter/src/lib.rs',
     reason: 'Claude Code adapter public API is limited to reviewed declarative source providers',
     allowedSymbolEntries: claudeCodeAdapterPublicApiEntries,
-  },
-  {
-    path: 'src/crates/adapters/codex-adapter/src/lib.rs',
-    reason: 'Codex adapter public API is limited to reviewed declarative source providers',
-    allowedSymbolEntries: codexAdapterPublicApiEntries,
   },
   {
     path: 'src/crates/adapters/static-hook-support/src/lib.rs',
