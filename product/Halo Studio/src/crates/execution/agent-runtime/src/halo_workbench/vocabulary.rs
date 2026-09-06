@@ -188,6 +188,27 @@ pub struct HaloWorkbenchAdapterSnapshot {
     pub readiness: Option<HaloWorkbenchAdapterReadiness>,
 }
 
+/// One installed managed executor's honest, executor-neutral profile facts
+/// crossing the public seam (ADR-0078).
+///
+/// Contract owner: `HaloWorkbenchRuntime`; consumers are the Tauri task
+/// creation surface and contract tests. Sourced from the installed
+/// `ManagedExecutorPort` implementation's capability profile: an executor
+/// without a production port is never listed, and a flag is never asserted
+/// true because a caller would like it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedExecutorProfileSummary {
+    pub kind: ManagedExecutorKind,
+    pub adapter_identity: String,
+    pub compatibility_profile: String,
+    pub steer: bool,
+    pub queue_events: bool,
+    pub approval_channel: bool,
+    pub entry_read: bool,
+    pub native_sandbox_modes: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HaloWorkbenchWorkspaceSnapshot {

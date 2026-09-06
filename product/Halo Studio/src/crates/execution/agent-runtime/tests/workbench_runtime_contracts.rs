@@ -5015,6 +5015,53 @@ async fn executor_selection_lists_installed_production_executors_and_defaults_to
 }
 
 #[tokio::test]
+async fn managed_executor_profiles_report_installed_executors_with_honest_flags() {
+    let adapter = Arc::new(DeterministicPiRpc::new());
+    let runtime = build_runtime(adapter.clone());
+    runtime.install_managed_executor(
+        ManagedExecutorKind::Dsh,
+        Arc::new(RecordingExecutor::default()),
+    );
+
+    let profiles = runtime.managed_executor_profiles();
+    assert_eq!(
+        profiles
+            .iter()
+            .map(|profile| profile.kind)
+            .collect::<Vec<_>>(),
+        vec![ManagedExecutorKind::PiRpc, ManagedExecutorKind::Dsh],
+        "only installed production executors cross the seam, in production order"
+    );
+    let dsh = profiles
+        .iter()
+        .find(|profile| profile.kind == ManagedExecutorKind::Dsh)
+        .expect("installed dsh executor is listed");
+    assert_eq!(dsh.adapter_identity, "recording-fake");
+    assert_eq!(dsh.compatibility_profile, "recording-fake-p0");
+    assert!(
+        dsh.approval_channel,
+        "the profile reports the fake's declared approval channel"
+    );
+    assert!(
+        !dsh.steer,
+        "a capability the executor does not provide is never asserted true"
+    );
+    assert!(
+        !dsh.native_sandbox_modes,
+        "sandbox facts stay honest until an executor exposes them"
+    );
+
+    let uninstalled = build_runtime(adapter.clone());
+    assert!(
+        uninstalled
+            .managed_executor_profiles()
+            .iter()
+            .all(|profile| profile.kind != ManagedExecutorKind::Dsh),
+        "an uninstalled executor is never listed"
+    );
+}
+
+#[tokio::test]
 async fn task_creation_override_binds_the_executor_into_session_and_baseline() {
     let adapter = Arc::new(DeterministicPiRpc::new());
     let runtime = build_runtime(adapter.clone());

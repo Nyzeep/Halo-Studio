@@ -247,6 +247,32 @@ impl HaloWorkbenchRuntime {
             .collect()
     }
 
+    /// The installed managed executors with their honest capability profiles
+    /// (ADR-0078). The task-creation selector renders exactly these entries
+    /// and degrades against the flags as-is; an executor without a production
+    /// port never crosses the seam.
+    pub fn managed_executor_profiles(&self) -> Vec<ManagedExecutorProfileSummary> {
+        let registry = self.inner.managed_executors.lock().expect("executor registry");
+        ManagedExecutorKind::production_executors()
+            .iter()
+            .copied()
+            .filter_map(|kind| {
+                let executor = registry.get(&kind)?;
+                let profile = executor.capability_profile();
+                Some(ManagedExecutorProfileSummary {
+                    kind,
+                    adapter_identity: profile.adapter_identity,
+                    compatibility_profile: profile.compatibility_profile,
+                    steer: profile.steer,
+                    queue_events: profile.queue_events,
+                    approval_channel: profile.approval_channel,
+                    entry_read: profile.entry_read,
+                    native_sandbox_modes: profile.native_sandbox_modes,
+                })
+            })
+            .collect()
+    }
+
     /// The workspace default executor for tasks created without an override.
     pub fn workspace_default_executor(&self) -> ManagedExecutorKind {
         *self

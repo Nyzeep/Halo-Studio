@@ -2,7 +2,7 @@
 
 use halo_agent_runtime::halo_workbench::{
     HaloWorkbenchError, HaloWorkbenchIntent, HaloWorkbenchIntentReceipt,
-    HaloWorkbenchIntentRequest, HaloWorkbenchSnapshot,
+    HaloWorkbenchIntentRequest, HaloWorkbenchSnapshot, ManagedExecutorProfileSummary,
 };
 use halo_core::service::workspace::WorkspaceKind;
 use serde::{Deserialize, Serialize};
@@ -97,6 +97,18 @@ pub async fn halo_workbench_runtime_snapshot(
 ) -> Result<HaloWorkbenchSnapshot, HaloWorkbenchCommandError> {
     ensure_active_workspace_is_local(&state).await?;
     Ok(runtime.halo_workbench().snapshot())
+}
+
+/// The installed managed executors with their honest capability profiles
+/// (ADR-0078). The task-creation surface renders exactly these entries and
+/// degrades per flag as-is instead of hardcoding executor availability.
+#[tauri::command]
+pub async fn halo_workbench_managed_executors(
+    state: State<'_, AppState>,
+    runtime: State<'_, DesktopRuntimeContext>,
+) -> Result<Vec<ManagedExecutorProfileSummary>, HaloWorkbenchCommandError> {
+    ensure_active_workspace_is_local(&state).await?;
+    Ok(runtime.halo_workbench().managed_executor_profiles())
 }
 
 #[tauri::command]

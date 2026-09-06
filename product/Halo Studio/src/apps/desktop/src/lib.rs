@@ -1260,6 +1260,8 @@ pub async fn run_with_context_and_options(
             #[cfg(feature = "halo-local-coding")]
             api::workbench_runtime_api::halo_workbench_runtime_snapshot,
             #[cfg(feature = "halo-local-coding")]
+            api::workbench_runtime_api::halo_workbench_managed_executors,
+            #[cfg(feature = "halo-local-coding")]
             api::workbench_runtime_api::halo_workbench_runtime_submit_intent,
             #[cfg(feature = "halo-local-coding")]
             api::pi_configuration_api::halo_pi_credential_write,
