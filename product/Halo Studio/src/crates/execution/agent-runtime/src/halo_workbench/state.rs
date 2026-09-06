@@ -398,14 +398,64 @@ impl ManagedExecutorPort for PiRpcPortExecutorBridge {
 
     async fn resolve_approval(
         &self,
-        _decision: halo_runtime_ports::ManagedExecutorApprovalDecision,
+        decision: halo_runtime_ports::ManagedExecutorApprovalDecision,
     ) -> PortResult<()> {
-        // The bridge exposes only the execution face; approval resolution
-        // keeps its dedicated adapter path in the Workbench Runtime.
-        Err(halo_runtime_ports::PortError::new(
-            PortErrorKind::NotAvailable,
-            "the runtime bridge does not expose approval resolution",
-        ))
+        // The closed outcome vocabulary is fail-closed: outcomes this
+        // executor cannot express never reach Pi and never get rewritten
+        // into an allow or deny.
+        let forwarded = match decision.outcome {
+            halo_runtime_ports::ManagedExecutorApprovalOutcome::AllowedOnce => {
+                halo_runtime_ports::PiRpcOperationDecision::AllowOnce
+            }
+            halo_runtime_ports::ManagedExecutorApprovalOutcome::Rejected => {
+                halo_runtime_ports::PiRpcOperationDecision::Deny
+            }
+            halo_runtime_ports::ManagedExecutorApprovalOutcome::Cancelled
+            | halo_runtime_ports::ManagedExecutorApprovalOutcome::Unavailable => {
+                return Err(halo_runtime_ports::PortError::new(
+                    PortErrorKind::InvalidRequest,
+                    "pi cannot express this approval outcome; the decision was not forwarded",
+                ));
+            }
+        };
+        let generation = self.current_generation()?;
+        self.adapter
+            .execute(halo_runtime_ports::PiRpcCommand::ResolveOperation {
+                generation,
+                task_id: decision.target.task_id,
+                session_id: decision.target.session_id,
+                operation_id: decision.call_id,
+                decision: forwarded,
+            })
+            .await
+            .map(|_| ())
+    }
+
+    async fn create_session(&self, target: ManagedExecutorTarget) -> PortResult<()> {
+        // The bridge backs managed Pi sessions with the injected transport,
+        // so session registration forwards onto the transport face (ADR-0081).
+        let generation = self.current_generation()?;
+        self.adapter
+            .execute(halo_runtime_ports::PiRpcCommand::CreateSession {
+                generation,
+                task_id: target.task_id,
+                session_id: target.session_id,
+                mode: halo_runtime_ports::PiRpcSessionMode::Managed,
+            })
+            .await
+            .map(|_| ())
+    }
+
+    async fn release_session(&self, target: ManagedExecutorTarget) -> PortResult<()> {
+        let generation = self.current_generation()?;
+        self.adapter
+            .execute(halo_runtime_ports::PiRpcCommand::EndSession {
+                generation,
+                task_id: target.task_id,
+                session_id: target.session_id,
+            })
+            .await
+            .map(|_| ())
     }
 
     fn subscribe(

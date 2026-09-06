@@ -13,7 +13,8 @@ use crate::managed_event_facts::{
 
 use halo_runtime_ports::{
     ClockPort, ManagedEventFactStorePort, ManagedExecutorKind, ManagedExecutorPort,
-    ManagedExecutorPromptRequest, ManagedExecutorTarget, PiProviderReadinessPort,
+    ManagedExecutorApprovalDecision, ManagedExecutorPromptRequest, ManagedExecutorTarget,
+    PiProviderReadinessPort,
     PiRpcAvailabilitySummary, PiRpcCapability, PiRpcCommand, PiRpcFailureKind, PiRpcPort, PiRpcReply, PiRpcVersionEvidenceSource, PiRpcWorkspace, WorkbenchDeliveryEvidence,
     WorkbenchDeliveryEvidencePort, WorkbenchDeliveryEvidenceRequest, WorkbenchDeliveryFingerprint, WorkbenchTaskBaseline, WorkbenchTaskBaselinePort,
     WorkbenchTaskBaselineRequest, WorkbenchWorkspaceFactsPort, WorkbenchWorkspaceFactsRequest,
@@ -1210,20 +1211,20 @@ impl HaloWorkbenchRuntime {
         Ok(self.inner.receipt(request_id, Some(session_id)))
     }
 
-    /// Routes the managed execution face through the session's bound
-    /// executor. The prompt / follow-up / abort face is intent-native: the
-    /// Halo intent resolves straight onto the port without constructing a
-    /// transport command (ADR-0078 step ③). Returns `Ok(None)` for actions
-    /// without a port face — session creation and teardown stay registered
-    /// on the transport until session lifecycle ownership crosses the port
-    /// (decision ticket #60).
+    /// Routes the managed session face through the session's bound executor.
+    /// Every action is intent-native: the Halo intent resolves straight onto
+    /// the port without constructing a transport command (ADR-0078 step ③ /
+    /// ADR-0081). Session creation and teardown cross the port through the
+    /// lifecycle registration face; only standard (non-managed) sessions
+    /// project onto the transport command vocabulary.
     async fn dispatch_managed_execution_face(
         &self,
         generation: u64,
         task_id: &str,
         session_id: &str,
         action: &SessionAdapterAction,
-    ) -> Result<Option<PiRpcReply>, HaloWorkbenchError> {
+    ) -> Result<PiRpcReply, HaloWorkbenchError> {
+        let _ = generation;
         let kind = self.session_executor_kind(generation, session_id);
         let executor = self.resolve_managed_executor(kind)?;
         let target = ManagedExecutorTarget {
@@ -1248,13 +1249,29 @@ impl HaloWorkbenchRuntime {
             SessionAdapterAction::Abort => {
                 executor.abort(target).await.map(|_| PiRpcReply::Accepted)
             }
-            SessionAdapterAction::End | SessionAdapterAction::CreateSession { .. } => {
-                return Ok(None);
-            }
+            SessionAdapterAction::End => executor
+                .release_session(target)
+                .await
+                .map(|_| PiRpcReply::Accepted),
+            SessionAdapterAction::CreateSession { .. } => executor
+                .create_session(target)
+                .await
+                .map(|_| {
+                    // ADR-0081: a non-transport executor owns its session
+                    // lifecycle, so the Runtime marks the session idle
+                    // directly instead of waiting for a transport
+                    // SessionCreated event. Transport-backed executors
+                    // re-confirm the same phase from their event stream.
+                    self.inner.set_session_phase(
+                        generation,
+                        session_id,
+                        HaloWorkbenchSessionPhase::Idle,
+                        "Workbench session is idle",
+                    );
+                    PiRpcReply::Accepted
+                }),
         };
-        dispatched
-            .map(Some)
-            .map_err(|error| port_failure(error.kind))
+        dispatched.map_err(|error| port_failure(error.kind))
     }
 
     /// Projects a session adapter action onto the Pi transport command
@@ -1599,19 +1616,16 @@ impl HaloWorkbenchRuntime {
             self.ensure_managed_workspace_trusted(generation).await?;
         }
         self.ensure_session_transport_allowed(generation, task_id, session_id)?;
-        // ADR-0078 M3 / step ③: managed sessions dispatch the execution face
-        // (prompt / follow-up / abort) through the unified
-        // ManagedExecutorPort bound to the session's fixed executor, straight
-        // from the Halo intent. Session creation and teardown keep their
-        // transport registration until session lifecycle ownership crosses
-        // the port (decision ticket #60).
+        // ADR-0078 M3 / step ③ / ADR-0081: managed sessions dispatch their
+        // whole session face (prompt / follow-up / abort / lifecycle
+        // registration / teardown) through the unified ManagedExecutorPort
+        // bound to the session's fixed executor, straight from the Halo
+        // intent. Only standard (non-managed) sessions speak the transport
+        // command vocabulary.
         if managed {
-            if let Some(dispatched) = self
+            return self
                 .dispatch_managed_execution_face(generation, task_id, session_id, &action)
-                .await?
-            {
-                return Ok(dispatched);
-            }
+                .await;
         }
         let command = self.transport_session_command(generation, task_id, session_id, action);
         let result = if matches!(&command, PiRpcCommand::AbortSession { .. }) {
@@ -2065,19 +2079,39 @@ impl HaloWorkbenchRuntime {
             if !operation_is_claimed {
                 return Err(HaloWorkbenchError::operation_not_found());
             }
-            let result = self
-                .inner
-                .adapter
-                .execute(PiRpcCommand::ResolveOperation {
-                    generation,
-                    task_id: task_id.clone(),
-                    session_id: session_id.clone(),
-                    operation_id: operation_id.to_string(),
-                    decision: decision.into(),
-                })
-                .await
-                .map_err(|error| port_failure(error.kind));
-            result
+            // ADR-0078 / ADR-0081: managed sessions resolve decisions through
+            // the port's one-shot approval flow on their bound executor;
+            // standard sessions keep the transport decision path.
+            let managed = self.session_requires_managed_trust(generation, &session_id)?;
+            let session_result = if managed {
+                let kind = self.session_executor_kind(generation, &session_id);
+                let executor = self.resolve_managed_executor(kind)?;
+                executor
+                    .resolve_approval(ManagedExecutorApprovalDecision {
+                        target: ManagedExecutorTarget {
+                            task_id: task_id.clone(),
+                            session_id: session_id.clone(),
+                        },
+                        call_id: operation_id.to_string(),
+                        outcome: decision.into(),
+                    })
+                    .await
+                    .map(|_| PiRpcReply::Accepted)
+                    .map_err(|error| port_failure(error.kind))
+            } else {
+                self.inner
+                    .adapter
+                    .execute(PiRpcCommand::ResolveOperation {
+                        generation,
+                        task_id: task_id.clone(),
+                        session_id: session_id.clone(),
+                        operation_id: operation_id.to_string(),
+                        decision: decision.into(),
+                    })
+                    .await
+                    .map_err(|error| port_failure(error.kind))
+            };
+            session_result
         };
         self.ensure_workspace_available(generation).await?;
         if self.session_requires_managed_trust(generation, &session_id)? {

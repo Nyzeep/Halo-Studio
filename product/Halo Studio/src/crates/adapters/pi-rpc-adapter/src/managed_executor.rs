@@ -22,7 +22,7 @@ use halo_runtime_ports::{
     ManagedExecutorSandboxMode, ManagedExecutorTarget, PiRpcCommand, PiRpcCompatibilityProfile,
     PiRpcEvent, PiRpcFailureKind,
     PiRpcOperationDecision, PiRpcOperationKind, PiRpcOperationRiskLevel, PiRpcPort, PiRpcReply,
-    PortError, PortErrorKind, PortResult, PI_RPC_ADAPTER_IDENTITY,
+    PiRpcSessionMode, PortError, PortErrorKind, PortResult, PI_RPC_ADAPTER_IDENTITY,
 };
 use tokio::sync::{broadcast, Mutex};
 
@@ -350,6 +350,36 @@ impl ManagedExecutorPort for PiRpcManagedExecutor {
             mode: ManagedExecutorSandboxMode::DangerFullAccess,
             enforcement: ManagedExecutorSandboxEnforcement::Partial,
         }
+    }
+
+    /// Registers a managed session with the Pi transport (ADR-0081). The
+    /// Pi executor is transport-backed: its prompts target the transport
+    /// session, so lifecycle registration forwards onto the transport face
+    /// with the wrapper's observed adapter generation.
+    async fn create_session(&self, target: ManagedExecutorTarget) -> PortResult<()> {
+        let generation = self.observed_generation().await?;
+        self.inner
+            .execute(PiRpcCommand::CreateSession {
+                generation,
+                task_id: target.task_id,
+                session_id: target.session_id,
+                mode: PiRpcSessionMode::Managed,
+            })
+            .await
+            .map(|_| ())
+    }
+
+    /// Releases the transport session for a managed Pi session.
+    async fn release_session(&self, target: ManagedExecutorTarget) -> PortResult<()> {
+        let generation = self.observed_generation().await?;
+        self.inner
+            .execute(PiRpcCommand::EndSession {
+                generation,
+                task_id: target.task_id,
+                session_id: target.session_id,
+            })
+            .await
+            .map(|_| ())
     }
 
     async fn prompt(&self, request: ManagedExecutorPromptRequest) -> PortResult<()> {

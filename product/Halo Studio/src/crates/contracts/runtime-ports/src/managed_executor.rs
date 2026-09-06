@@ -472,9 +472,9 @@ const fn phase_str(phase: ManagedExecutorToolPhase) -> &'static str {
 }
 
 /// The common execution face every production managed executor adapter
-/// implements (ADR-0078): prompt / follow-up / abort / entry read / the
-/// one-shot approval decision flow / the unified event projection plus the
-/// honest capability and sandbox facts.
+/// implements (ADR-0078): prompt / follow-up / abort / session lifecycle
+/// registration / entry read / the one-shot approval decision flow / the
+/// unified event projection plus the honest capability and sandbox facts.
 ///
 /// Implementations must keep native executor sessions, credentials and raw
 /// protocol records behind the port and must answer `resolve_approval` only
@@ -486,6 +486,24 @@ pub trait ManagedExecutorPort: Send + Sync {
 
     /// The executor's sandbox reality, contract layer only.
     fn sandbox_facts(&self) -> ManagedExecutorSandboxFacts;
+
+    /// Registers a managed session with the executor (ADR-0081). The
+    /// Runtime calls this exactly once per managed session, before the
+    /// first prompt. Transport-backed executors register the session with
+    /// their transport; executors that own their session lifecycle
+    /// internally (a session starts on the first prompt) accept the
+    /// registration as a no-op. The port stays generation-neutral: session
+    /// correlation is the `ManagedExecutorTarget` alone.
+    async fn create_session(&self, _target: ManagedExecutorTarget) -> PortResult<()> {
+        Ok(())
+    }
+
+    /// Releases a managed session. The executor reclaims its resources and
+    /// reports teardown failure through the port error; the Runtime decides
+    /// the session disposition.
+    async fn release_session(&self, _target: ManagedExecutorTarget) -> PortResult<()> {
+        Ok(())
+    }
 
     /// Starts a managed turn with developer input.
     async fn prompt(&self, request: ManagedExecutorPromptRequest) -> PortResult<()>;

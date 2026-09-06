@@ -9,7 +9,8 @@ use halo_runtime_ports::{
     PiRpcAvailabilitySummary,
     PiRpcCancellationMode, PiRpcCapability,
     PiRpcOperationDecision, PiRpcOperationKind, PiRpcOperationRiskLevel,
-    PiRpcSessionMode, PiRpcVersionSummary, PortResult, WorkbenchDeliveryAttributionKind,
+    ManagedExecutorApprovalOutcome, PiRpcSessionMode, PiRpcVersionSummary, PortResult,
+    WorkbenchDeliveryAttributionKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -751,6 +752,15 @@ impl fmt::Debug for HaloWorkbenchOperationDecision {
         match self {
             Self::AllowOnce => formatter.write_str("AllowOnce"),
             Self::Deny => formatter.write_str("Deny"),
+        }
+    }
+}
+
+impl From<HaloWorkbenchOperationDecision> for ManagedExecutorApprovalOutcome {
+    fn from(decision: HaloWorkbenchOperationDecision) -> Self {
+        match decision {
+            HaloWorkbenchOperationDecision::AllowOnce => Self::AllowedOnce,
+            HaloWorkbenchOperationDecision::Deny => Self::Rejected,
         }
     }
 }

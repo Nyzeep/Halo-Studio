@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use halo_pi_rpc_adapter::{normalize_pi_rpc_event, PiEventNormalization, PiRpcManagedExecutor};
 use halo_runtime_ports::{
     ManagedExecutorApprovalDecision, ManagedExecutorApprovalKind, ManagedExecutorApprovalOutcome,
-    ManagedExecutorCapabilityProfile, ManagedExecutorEvent, ManagedExecutorKind,
+    ManagedExecutorCapabilityProfile, ManagedExecutorEvent,
     ManagedExecutorPort, ManagedExecutorPromptRequest, ManagedExecutorSandboxEnforcement,
     ManagedExecutorSandboxFacts, ManagedExecutorSandboxMode, ManagedExecutorTarget,
     ManagedExecutorToolPhase, ManagedEventFactKind, PiRpcAvailabilitySummary, PiRpcCommand,

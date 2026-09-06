@@ -1278,7 +1278,10 @@ async fn managed_task_requires_confirmation_and_records_existing_git_baseline_be
             "untracked-note.txt".to_string(),
         ]
     );
-    assert_eq!(session.phase, HaloWorkbenchSessionPhase::Creating);
+    // ADR-0081: the managed session face crosses the port, so the runtime
+    // marks the session idle as soon as the executor accepts registration;
+    // the transport re-confirms the same phase from its event stream.
+    assert_eq!(session.phase, HaloWorkbenchSessionPhase::Idle);
     assert_eq!(adapter.count(CommandKind::CreateSession), 1);
     assert!(adapter.commands().iter().any(|command| {
         matches!(
@@ -5109,7 +5112,9 @@ async fn task_creation_override_binds_the_executor_into_session_and_baseline() {
         baseline.executor, ManagedExecutorKind::Dsh,
         "the task baseline records the selected executor"
     );
-    assert_eq!(adapter.count(CommandKind::CreateSession), 1);
+    // ADR-0081: a session bound to a non-transport executor registers with
+    // that executor alone; the Pi transport never sees the session.
+    assert_eq!(adapter.count(CommandKind::CreateSession), 0);
 
     // No in-session switch: the binding is fixed for the task lifetime and
     // the runtime exposes no intent that would rewrite it.
@@ -5211,7 +5216,7 @@ async fn workspace_default_executor_receives_tasks_created_without_override() {
 async fn an_override_naming_an_uninstalled_executor_fails_closed() {
     let adapter = Arc::new(DeterministicPiRpc::new());
     let runtime = build_runtime(adapter.clone());
-    let generation = open_ready(
+    let _generation = open_ready(
         &runtime,
         &adapter,
         "open-executor-refusal",
@@ -5253,17 +5258,32 @@ async fn an_override_naming_an_uninstalled_executor_fails_closed() {
 }
 
 /// A fake non-Pi managed executor whose unified event stream the test
-/// controls directly.
+/// controls directly. Lifecycle registration is recorded so tests can
+/// assert the port face ran instead of the Pi transport.
 struct BroadcastingExecutor {
     events: broadcast::Sender<ManagedExecutorEvent>,
+    created: Mutex<Vec<ManagedExecutorTarget>>,
+    released: Mutex<Vec<ManagedExecutorTarget>>,
 }
 
 impl BroadcastingExecutor {
     fn new() -> (Arc<Self>, broadcast::Sender<ManagedExecutorEvent>) {
         let (events, _) = broadcast::channel(64);
-        let executor = Arc::new(Self { events });
+        let executor = Arc::new(Self {
+            events,
+            created: Mutex::new(Vec::new()),
+            released: Mutex::new(Vec::new()),
+        });
         let sender = executor.events.clone();
         (executor, sender)
+    }
+
+    fn created(&self) -> Vec<ManagedExecutorTarget> {
+        self.created.lock().expect("created lock").clone()
+    }
+
+    fn released(&self) -> Vec<ManagedExecutorTarget> {
+        self.released.lock().expect("released lock").clone()
     }
 }
 
@@ -5286,6 +5306,22 @@ impl ManagedExecutorPort for BroadcastingExecutor {
             mode: halo_runtime_ports::ManagedExecutorSandboxMode::DangerFullAccess,
             enforcement: halo_runtime_ports::ManagedExecutorSandboxEnforcement::Partial,
         }
+    }
+
+    async fn create_session(&self, target: ManagedExecutorTarget) -> PortResult<()> {
+        self.created
+            .lock()
+            .expect("created lock")
+            .push(target);
+        Ok(())
+    }
+
+    async fn release_session(&self, target: ManagedExecutorTarget) -> PortResult<()> {
+        self.released
+            .lock()
+            .expect("released lock")
+            .push(target);
+        Ok(())
     }
 
     async fn prompt(&self, _request: ManagedExecutorPromptRequest) -> PortResult<()> {
@@ -5351,7 +5387,7 @@ async fn executor_event_stream_projects_facts_for_non_pi_executors() {
         Arc::new(FixedClock),
     );
     let (executor, sender) = BroadcastingExecutor::new();
-    runtime.install_managed_executor(ManagedExecutorKind::Dsh, executor);
+    runtime.install_managed_executor(ManagedExecutorKind::Dsh, executor.clone());
 
     open_ready(&runtime, &adapter, "dsh-facts-open", "dsh-facts-workspace").await;
     runtime
@@ -5377,6 +5413,13 @@ async fn executor_event_stream_projects_facts_for_non_pi_executors() {
         .expect("managed session with a dsh executor is created");
     let session_id = receipt.session_id.expect("managed session id");
     let before = facts.records().len();
+    // ADR-0081: the non-transport executor owns the session lifecycle, so
+    // the port face records the registration and the Pi transport never
+    // sees the session.
+    assert_eq!(executor.created().len(), 1);
+    assert_eq!(executor.created()[0].task_id, "dsh-facts-task");
+    assert_eq!(executor.created()[0].session_id, session_id);
+    assert_eq!(adapter.count(CommandKind::CreateSession), 0);
 
     sender
         .send(ManagedExecutorEvent::UserMessageCommitted {
@@ -5425,4 +5468,17 @@ async fn executor_event_stream_projects_facts_for_non_pi_executors() {
             .all(|record| record.task_id == "dsh-facts-task"),
         "every projected fact stays attributed to the task"
     );
+
+    // Session teardown crosses the port's release face, not the transport.
+    runtime
+        .submit(HaloWorkbenchIntentRequest {
+            request_id: "dsh-facts-end".to_string(),
+            intent: HaloWorkbenchIntent::EndSession {
+                session_id: session_id.clone(),
+            },
+        })
+        .await
+        .expect("managed session end is accepted");
+    assert_eq!(executor.released().len(), 1);
+    assert_eq!(adapter.count(CommandKind::EndSession), 0);
 }
